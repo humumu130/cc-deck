@@ -11,12 +11,24 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
 var __commonJS = (cb2, mod) => function __require2() {
   try {
     return mod || (0, cb2[__getOwnPropNames(cb2)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   } catch (e) {
     throw mod = 0, e;
   }
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to2, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -2256,6 +2268,2840 @@ var require_nacl_fast = __commonJS({
         }
       })();
     })(typeof module !== "undefined" && module.exports ? module.exports : self.nacl = self.nacl || {});
+  }
+});
+
+// src/storage/sqlite.ts
+import { mkdirSync as mkdirSync4 } from "node:fs";
+import { join as join5 } from "node:path";
+import { createRequire } from "node:module";
+function loadSqliteDriver() {
+  if (driverOverride !== void 0) return driverOverride;
+  if (driverCache !== void 0) return driverCache;
+  try {
+    const mod = requireCjs("better-sqlite3");
+    const ctor = typeof mod === "function" ? mod : mod.default;
+    if (typeof ctor !== "function") {
+      driverCache = { ok: false, ctor: null, error: "better-sqlite3 \u5BFC\u51FA\u5F62\u6001\u5F02\u5E38\uFF08\u975E\u6784\u9020\u51FD\u6570\uFF09", code: null };
+    } else {
+      const throwaway = new ctor(":memory:");
+      throwaway.close();
+      driverCache = { ok: true, ctor, error: null, code: null };
+    }
+  } catch (err) {
+    const code = err.code ?? null;
+    driverCache = { ok: false, ctor: null, error: err instanceof Error ? err.message : String(err), code };
+  }
+  return driverCache;
+}
+function resetSqliteDriverForTest(override) {
+  driverCache = void 0;
+  driverOverride = override;
+}
+function createSqlitePort(options) {
+  return new SqliteStorage(options.dataDir, options.filename ?? DEFAULT_DB_FILENAME);
+}
+var DEFAULT_DB_FILENAME, requireCjs, driverCache, driverOverride, SqliteStorage;
+var init_sqlite = __esm({
+  "src/storage/sqlite.ts"() {
+    "use strict";
+    DEFAULT_DB_FILENAME = "cc-deck.sqlite3";
+    requireCjs = createRequire(import.meta.url);
+    SqliteStorage = class {
+      constructor(dir, filename) {
+        this.dir = dir;
+        this._path = join5(dir, filename);
+      }
+      dir;
+      db = null;
+      _path = "";
+      _open = false;
+      get path() {
+        return this._path;
+      }
+      get isOpen() {
+        return this._open;
+      }
+      open() {
+        if (this._open) throw new Error(`StoragePort.open: \u5DF2\u6253\u5F00\uFF08${this._path}\uFF09\u2014\u2014\u91CD\u590D open \u5C5E\u7F16\u7A0B\u9519\u8BEF`);
+        const driver = loadSqliteDriver();
+        if (!driver.ok || driver.ctor === null) {
+          throw new Error(`StoragePort.open: better-sqlite3 \u4E0D\u53EF\u7528\uFF08${driver.code ?? "\u65E0\u9519\u8BEF\u7801"}\uFF1A${driver.error}\uFF09\u2014\u2014\u539F\u751F\u4E8C\u8FDB\u5236\u7F3A\u5931\u6216\u5E73\u53F0\u4E0D\u5339\u914D\uFF0C\u8BFB\u9762\u5E94\u964D\u7EA7 json \u6863`);
+        }
+        mkdirSync4(this.dir, { recursive: true });
+        this.db = new driver.ctor(this._path);
+        this.db.pragma("journal_mode = WAL");
+        this.db.pragma("foreign_keys = ON");
+        this.db.pragma("synchronous = NORMAL");
+        this._open = true;
+      }
+      close() {
+        if (!this.db || !this._open) throw new Error("StoragePort.close: \u672A\u6253\u5F00\u2014\u2014close \u524D\u987B open");
+        this.db.close();
+        this.db = null;
+        this._open = false;
+      }
+      /** #292-B2：连接是否处于未结事务（better-sqlite3 inTransaction 直通）——写口事务
+       * 自愈清场用（导入器偶发遗留未结事务的防御，遗留疑点见 org-write-tx 头注）。 */
+      get inTransaction() {
+        return this.requireDb("inTransaction").inTransaction;
+      }
+      begin() {
+        this.requireDb("begin").exec("BEGIN IMMEDIATE");
+      }
+      commit() {
+        this.requireDb("commit").exec("COMMIT");
+      }
+      rollback() {
+        this.requireDb("rollback").exec("ROLLBACK");
+      }
+      exec(sql, params) {
+        const db2 = this.requireDb("exec");
+        if (params === void 0) {
+          db2.exec(sql);
+          return;
+        }
+        db2.prepare(sql).run(...params);
+      }
+      query(sql, params) {
+        const db2 = this.requireDb("query");
+        if (params === void 0) return db2.prepare(sql).all();
+        return db2.prepare(sql).all(...params);
+      }
+      /** 取已打开的连接句柄；未打开抛错（TS 收窄靠返回值而非断言）。 */
+      requireDb(op2) {
+        if (!this.db || !this._open) throw new Error(`StoragePort.${op2}: \u672A\u6253\u5F00\u2014\u2014open \u524D\u7F6E`);
+        return this.db;
+      }
+    };
+  }
+});
+
+// src/storage/migrator.ts
+function currentVersion(port) {
+  const row = port.query("PRAGMA user_version")[0];
+  const v = row?.user_version;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+    throw new Error(`migrator: user_version \u4E0D\u53EF\u5224\u5B9A\uFF08${String(v)}\uFF09\u2014\u2014\u975E\u672C runner \u7BA1\u7406\u7684\u5E93\uFF1F`);
+  }
+  return v;
+}
+function setVersion(port, version) {
+  port.exec(`PRAGMA user_version = ${version}`);
+}
+function assertWellFormed(migrations2) {
+  migrations2.forEach((m, i) => {
+    if (m.version !== i + 1) {
+      throw new Error(`migrator: \u8FC1\u79FB\u5217\u8868\u987B\u4ECE 1 \u8FDE\u7EED\u5347\u5E8F\uFF08\u7B2C ${i} \u9879 version=${m.version}\uFF09`);
+    }
+  });
+}
+function runMigrations(port, migrations2) {
+  assertWellFormed(migrations2);
+  const from = currentVersion(port);
+  const applied = [];
+  for (const migration of migrations2) {
+    if (migration.version <= from) continue;
+    port.begin();
+    try {
+      migration.up(port);
+      setVersion(port, migration.version);
+      port.commit();
+    } catch (err) {
+      port.rollback();
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`migrator: v${migration.version}(${migration.name}) \u8FC1\u79FB\u5931\u8D25\uFF0C\u5DF2\u56DE\u6EDA\u4FDD\u7559 v${from + applied.length} \u5B8C\u6574\u6001\u2014\u2014${reason}`);
+    }
+    applied.push(migration.version);
+  }
+  return { from, to: currentVersion(port), applied };
+}
+var init_migrator = __esm({
+  "src/storage/migrator.ts"() {
+    "use strict";
+  }
+});
+
+// src/storage/checkpoint.ts
+function writeCheckpoint(port, key) {
+  if (!Number.isInteger(key.offset) || key.offset < 0 || key.offset > key.lineCount) {
+    throw new Error(`checkpoint.writeCheckpoint: offset(${key.offset}) \u8D8A\u754C [0, lineCount(${key.lineCount})]\u2014\u2014\u7F16\u7A0B\u9519\u8BEF`);
+  }
+  const now = Date.now();
+  port.exec(
+    `INSERT INTO import_checkpoint (path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(path) DO UPDATE SET
+       mtime_ms = excluded.mtime_ms, mtime_ns = excluded.mtime_ns, line_count = excluded.line_count,
+       line_offset = excluded.line_offset, schema_version = excluded.schema_version,
+       updated_at = excluded.updated_at`,
+    [key.path, key.mtimeMs, key.mtimeNs ?? null, key.lineCount, key.offset, key.schemaVersion, now]
+  );
+}
+function readCheckpoint(port, path6, current) {
+  const row = port.query("SELECT path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at FROM import_checkpoint WHERE path = ?", [path6])[0];
+  if (!row) return null;
+  const checkpoint = {
+    path: row.path,
+    mtimeMs: row.mtime_ms,
+    ...row.mtime_ns != null ? { mtimeNs: row.mtime_ns } : {},
+    lineCount: row.line_count,
+    offset: row.line_offset,
+    schemaVersion: row.schema_version,
+    updatedAt: row.updated_at
+  };
+  if (checkpoint.mtimeMs !== current.mtimeMs || checkpoint.lineCount !== current.lineCount || checkpoint.schemaVersion !== current.schemaVersion) {
+    return null;
+  }
+  if (checkpoint.mtimeNs !== void 0 && current.mtimeNs !== void 0 && checkpoint.mtimeNs !== current.mtimeNs) {
+    return null;
+  }
+  return checkpoint;
+}
+var init_checkpoint = __esm({
+  "src/storage/checkpoint.ts"() {
+    "use strict";
+  }
+});
+
+// src/storage/import-util.ts
+import { createHash } from "node:crypto";
+import { readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
+function sha12(s) {
+  return createHash("sha1").update(s).digest("hex").slice(0, 12);
+}
+function statThenRead(file) {
+  const st2 = statSync2(file);
+  const mtimeMs = Math.round(st2.mtimeMs);
+  const mtimeNs = statSync2(file, { bigint: true }).mtimeNs.toString();
+  const hit = OBS_MEMO.get(file);
+  if (hit !== void 0 && hit.mtimeNs === mtimeNs && hit.size === st2.size) {
+    return { mtimeMs, mtimeNs, text: hit.text };
+  }
+  const text = readFileSync6(file, "utf8");
+  if (st2.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st2.size, text });
+  else OBS_MEMO.delete(file);
+  return { mtimeMs, mtimeNs, text };
+}
+var OBS_MEMO, SIZE_MEMO_MAX_BYTES;
+var init_import_util = __esm({
+  "src/storage/import-util.ts"() {
+    "use strict";
+    OBS_MEMO = /* @__PURE__ */ new Map();
+    SIZE_MEMO_MAX_BYTES = 2 * 1024 * 1024;
+  }
+});
+
+// src/storage/loss-report.ts
+function appendLoss(port, record) {
+  const excerpt = record.excerpt.length > EXCERPT_MAX ? `${record.excerpt.slice(0, EXCERPT_MAX - 1)}\u2026` : record.excerpt;
+  port.exec(
+    "INSERT INTO import_loss (source_path, line_no, reason, excerpt, created_at) VALUES (?, ?, ?, ?, ?)",
+    [record.sourcePath, record.lineNo, record.reason, excerpt, Date.now()]
+  );
+}
+var EXCERPT_MAX;
+var init_loss_report = __esm({
+  "src/storage/loss-report.ts"() {
+    "use strict";
+    EXCERPT_MAX = 512;
+  }
+});
+
+// src/storage/import-org.ts
+import { createHash as createHash2 } from "node:crypto";
+import { existsSync as existsSync5 } from "node:fs";
+import { join as join6 } from "node:path";
+function observe(file, name) {
+  if (!existsSync5(file)) return { name, file, mtimeMs: 0, mtimeNs: void 0, lineCount: 0, text: null };
+  const obs = statThenRead(file);
+  const lines = obs.text.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return { name, file, mtimeMs: obs.mtimeMs, mtimeNs: obs.mtimeNs, lineCount: lines.length, text: obs.text };
+}
+function countAll(port) {
+  const n = (sql) => port.query(sql)[0]?.n ?? -1;
+  return {
+    project: n("SELECT COUNT(*) AS n FROM project"),
+    group: n(`SELECT COUNT(*) AS n FROM "group"`),
+    member: n("SELECT COUNT(*) AS n FROM member"),
+    groupMember: n("SELECT COUNT(*) AS n FROM group_member"),
+    orgConfirm: n("SELECT COUNT(*) AS n FROM org_confirm")
+  };
+}
+function importOrg(port, orgDir2, opts) {
+  const schemaVersion = opts?.schemaVersion ?? ORG_IMPORT_SCHEMA_VERSION;
+  const sources = [
+    observe(join6(orgDir2, "org.json"), "org.json"),
+    observe(join6(orgDir2, "projects.json"), "projects.json"),
+    observe(join6(orgDir2, "confirms.json"), "confirms.json")
+  ];
+  const current = (s) => ({ mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, schemaVersion });
+  const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
+  if (allValid) {
+    return { skipped: true, counts: countAll(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
+  }
+  const losses = [];
+  const groups = [];
+  const validGroupIds = /* @__PURE__ */ new Set();
+  const groupLineNo = /* @__PURE__ */ new Map();
+  const headcountRefs = [];
+  const confirms = [];
+  const orgSrc = sources[0];
+  let leader2 = null;
+  if (orgSrc.text !== null) {
+    try {
+      const a = JSON.parse(orgSrc.text);
+      if (a.version !== 1 || typeof a.leader_session_id !== "string" || !a.leader_session_id) {
+        losses.push({ source: orgSrc, lineNo: 1, reason: "bad-field", excerpt: orgSrc.text.slice(0, 200) });
+      } else {
+        const identity = `${orgDir2}@leader@`;
+        leader2 = {
+          id: `mem-${sha12(identity)}`,
+          stableIdentity: identity,
+          displayName: "Leader",
+          role: "leader",
+          engine: null,
+          provider: null,
+          model: null,
+          externalSid: a.leader_session_id,
+          joinedAt: typeof a.created_at === "number" ? a.created_at : 0,
+          ts: typeof a.created_at === "number" ? a.created_at : 0,
+          groupIds: []
+        };
+      }
+    } catch {
+      losses.push({ source: orgSrc, lineNo: 1, reason: "bad-json", excerpt: orgSrc.text.slice(0, 200) });
+    }
+  }
+  const projectsSrc = sources[1];
+  if (projectsSrc.text !== null) {
+    try {
+      const pf = JSON.parse(projectsSrc.text);
+      if (!Array.isArray(pf.groups)) throw new Error("groups \u975E\u6570\u7EC4");
+      pf.groups.forEach((raw, idx) => {
+        const lineNo = idx + 1;
+        const g2 = raw;
+        let groupValid = true;
+        if (typeof g2.id !== "string" || !g2.id || typeof g2.name !== "string" || typeof g2.anchor_dir !== "string" || !g2.anchor_dir) {
+          losses.push({ source: projectsSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify(g2).slice(0, 200) });
+          groupValid = false;
+        } else if (typeof g2.status !== "string" || !GROUP_STATUS.has(g2.status) || typeof g2.tier !== "string" || !GROUP_TIER.has(g2.tier)) {
+          losses.push({ source: projectsSrc, lineNo, reason: "bad-field", excerpt: JSON.stringify({ id: g2.id, status: g2.status, tier: g2.tier }) });
+          groupValid = false;
+        }
+        const createdAt = typeof g2.created_at === "number" ? g2.created_at : 0;
+        const updatedAt = typeof g2.updated_at === "number" ? g2.updated_at : createdAt;
+        if (groupValid && typeof g2.id === "string") {
+          groups.push({
+            id: g2.id,
+            projectRef: g2.anchor_dir,
+            name: g2.name,
+            anchorDir: g2.anchor_dir,
+            status: g2.status,
+            tier: g2.tier,
+            singleCard: g2.single_card === true ? 1 : 0,
+            headcountJson: JSON.stringify(Array.isArray(g2.headcount) ? g2.headcount : []),
+            roleDefaultsJson: JSON.stringify(g2.role_defaults ?? {}),
+            holdSuggestedAt: typeof g2.hold_suggested_at === "number" ? g2.hold_suggested_at : null,
+            archiveNote: typeof g2.archive_note === "string" ? g2.archive_note : null,
+            createdAt,
+            updatedAt
+          });
+          validGroupIds.add(g2.id);
+          groupLineNo.set(g2.id, lineNo);
+        }
+        if (Array.isArray(g2.headcount)) {
+          g2.headcount.forEach((h) => {
+            const e = h;
+            if (typeof e.role !== "string" || !e.role) {
+              losses.push({ source: projectsSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify({ gid: g2.id, entry: e }).slice(0, 200) });
+              return;
+            }
+            headcountRefs.push({
+              gid: typeof g2.id === "string" ? g2.id : "",
+              role: e.role,
+              engine: typeof e.engine === "string" ? e.engine : "",
+              sessionId: typeof e.session_id === "string" ? e.session_id : null,
+              provider: typeof e.provider === "string" ? e.provider : null,
+              model: typeof e.model === "string" ? e.model : null,
+              groupCreatedAt: createdAt,
+              groupUpdatedAt: updatedAt
+            });
+          });
+        }
+      });
+    } catch {
+      losses.push({ source: projectsSrc, lineNo: 1, reason: "bad-json", excerpt: projectsSrc.text.slice(0, 200) });
+    }
+  }
+  const projectByAnchor = /* @__PURE__ */ new Map();
+  for (const g2 of groups) {
+    const seen = projectByAnchor.get(g2.anchorDir);
+    if (seen) {
+      if (g2.createdAt < seen.ts) {
+        seen.ts = g2.createdAt;
+        seen.name = g2.name;
+      }
+      continue;
+    }
+    projectByAnchor.set(g2.anchorDir, { id: `proj-${sha12(g2.anchorDir)}`, name: g2.name, ts: g2.createdAt });
+  }
+  const memberByIdentity = /* @__PURE__ */ new Map();
+  for (const h of headcountRefs) {
+    const identity = `${orgDir2}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
+    const id2 = `mem-${sha12(identity)}`;
+    const seen = memberByIdentity.get(identity);
+    if (seen) {
+      seen.ts = Math.max(seen.ts, h.groupUpdatedAt);
+      if (!seen.groupIds.includes(h.gid)) seen.groupIds.push(h.gid);
+      continue;
+    }
+    memberByIdentity.set(identity, {
+      id: id2,
+      stableIdentity: identity,
+      displayName: h.role,
+      role: h.role,
+      engine: h.engine === "" ? null : h.engine,
+      provider: h.provider,
+      model: h.model,
+      externalSid: h.sessionId,
+      joinedAt: h.groupCreatedAt,
+      ts: h.groupUpdatedAt,
+      groupIds: [h.gid]
+    });
+  }
+  const confirmsSrc = sources[2];
+  if (confirmsSrc.text !== null) {
+    try {
+      const cf2 = JSON.parse(confirmsSrc.text);
+      const confirmList = Array.isArray(cf2) ? cf2 : cf2 !== null && typeof cf2 === "object" && Array.isArray(cf2.confirms) ? cf2.confirms : null;
+      if (confirmList === null) throw new Error("\u6839\u975E\u6570\u7EC4\u4E14\u975E {confirms:[\u2026]} \u5305\u88F9\u5F62");
+      confirmList.forEach((raw, idx) => {
+        const lineNo = idx + 1;
+        const c = raw;
+        const missing = typeof c.id !== "string" || !c.id || typeof c.kind !== "string" || typeof c.status !== "string" || typeof c.title !== "string" || typeof c.reason !== "string" || typeof c.created_at !== "number";
+        const kindBad = typeof c.kind === "string" && !CONFIRM_KIND.has(c.kind);
+        const statusBad = typeof c.status === "string" && !CONFIRM_STATUS.has(c.status);
+        if (missing || kindBad || statusBad) {
+          losses.push({ source: confirmsSrc, lineNo, reason: missing ? "missing-field" : "bad-field", excerpt: JSON.stringify(c).slice(0, 200) });
+          return;
+        }
+        const gid = typeof c.payload?.gid === "string" ? c.payload.gid : null;
+        let groupId = null;
+        if (gid !== null) {
+          if (validGroupIds.has(gid)) groupId = gid;
+          else losses.push({ source: confirmsSrc, lineNo, reason: "dangling-ref", excerpt: JSON.stringify({ id: c.id, gid }).slice(0, 200) });
+        } else {
+          losses.push({ source: confirmsSrc, lineNo, reason: "missing-attribution", excerpt: JSON.stringify({ id: c.id }).slice(0, 200) });
+        }
+        let decidedBy = typeof c.decided_by === "string" && c.decided_by ? c.decided_by : null;
+        if (decidedBy === "leader" && leader2 !== null) decidedBy = leader2.id;
+        const cid = c.id;
+        const kind = c.kind;
+        const status = c.status;
+        const title = c.title;
+        const reason = c.reason;
+        const createdAt = c.created_at;
+        confirms.push({
+          id: cid,
+          kind,
+          groupId,
+          title,
+          reason,
+          payloadJson: JSON.stringify(c.payload ?? {}),
+          status,
+          createdAt,
+          decidedAt: typeof c.decided_at === "number" ? c.decided_at : null,
+          decidedBy
+        });
+      });
+    } catch {
+      losses.push({ source: confirmsSrc, lineNo: 1, reason: "bad-json", excerpt: confirmsSrc.text.slice(0, 200) });
+    }
+  }
+  port.begin();
+  try {
+    port.exec("DELETE FROM group_member");
+    port.exec("DELETE FROM org_confirm");
+    port.exec("DELETE FROM member");
+    port.exec(`DELETE FROM "group"`);
+    port.exec("DELETE FROM project");
+    port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?, ?)", [orgSrc.file, projectsSrc.file, confirmsSrc.file]);
+    for (const [anchorDir, p] of projectByAnchor) {
+      port.exec(
+        "INSERT INTO project (id, name, dir_fingerprint, anchor_dir, is_default, is_hidden, deleted_at, ts) VALUES (?, ?, ?, ?, 0, 0, NULL, ?)",
+        [p.id, p.name, createHash2("sha1").update(anchorDir).digest("hex"), anchorDir, p.ts]
+      );
+    }
+    for (const g2 of groups) {
+      const p = projectByAnchor.get(g2.anchorDir);
+      port.exec(
+        `INSERT INTO "group" (id, project_id, name, anchor_dir, status, tier, single_card, headcount_json, role_defaults_json, hold_suggested_at, archive_note, workflow_profile, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'engineering', ?, ?)`,
+        [g2.id, p?.id ?? null, g2.name, g2.anchorDir, g2.status, g2.tier, g2.singleCard, g2.headcountJson, g2.roleDefaultsJson, g2.holdSuggestedAt, g2.archiveNote, g2.createdAt, g2.updatedAt]
+      );
+    }
+    const allMembers = leader2 !== null ? [leader2, ...memberByIdentity.values()] : [...memberByIdentity.values()];
+    for (const m of allMembers) {
+      const validGroups = m.groupIds.filter((gid) => validGroupIds.has(gid));
+      port.exec(
+        `INSERT INTO member (id, stable_identity, display_name, business_role, command_role, task_participation, engine, provider, model, external_sid, joined_at, retired_at, last_heartbeat_at, last_business_log_at, status, archive_json, ts)
+         VALUES (?, ?, ?, ?, ?, 'unknown', ?, ?, ?, ?, ?, NULL, NULL, NULL, 'active', ?, ?)`,
+        [
+          m.id,
+          m.stableIdentity,
+          m.displayName,
+          m.role,
+          m.role,
+          m.engine,
+          m.provider,
+          m.model,
+          m.externalSid,
+          m.joinedAt,
+          validGroups.length > 1 ? JSON.stringify({ groups: validGroups }) : "{}",
+          m.ts
+        ]
+      );
+    }
+    const seenRef = /* @__PURE__ */ new Set();
+    for (const h of headcountRefs) {
+      if (!validGroupIds.has(h.gid)) {
+        losses.push({ source: projectsSrc, lineNo: groupLineNo.get(h.gid) ?? 0, reason: "dangling-ref", excerpt: JSON.stringify({ gid: h.gid, role: h.role, engine: h.engine }).slice(0, 200) });
+        continue;
+      }
+      const identity = `${orgDir2}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
+      const memId = `mem-${sha12(identity)}`;
+      const gmKey = `${h.gid}@${memId}`;
+      if (seenRef.has(gmKey)) continue;
+      seenRef.add(gmKey);
+      port.exec(
+        "INSERT INTO group_member (group_id, member_id, command_role, task_participation, joined_at, retired_at, archive_json) VALUES (?, ?, ?, NULL, ?, NULL, '{}')",
+        [h.gid, memId, h.role, h.groupCreatedAt]
+      );
+    }
+    for (const c of confirms) {
+      port.exec(
+        "INSERT INTO org_confirm (id, kind, group_id, title, reason, payload_json, status, created_at, decided_at, decided_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [c.id, c.kind, c.groupId, c.title, c.reason, c.payloadJson, c.status, c.createdAt, c.decidedAt, c.decidedBy]
+      );
+    }
+    for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
+    for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
+    port.commit();
+  } catch (err) {
+    port.rollback();
+    throw new Error(`import-org: \u7EC4\u7EC7\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+  }
+  return { skipped: false, counts: countAll(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
+}
+var ORG_IMPORT_SCHEMA_VERSION, GROUP_STATUS, GROUP_TIER, CONFIRM_KIND, CONFIRM_STATUS;
+var init_import_org = __esm({
+  "src/storage/import-org.ts"() {
+    "use strict";
+    init_import_util();
+    init_checkpoint();
+    init_loss_report();
+    ORG_IMPORT_SCHEMA_VERSION = 1;
+    GROUP_STATUS = /* @__PURE__ */ new Set(["pending", "active", "parked", "archived"]);
+    GROUP_TIER = /* @__PURE__ */ new Set(["\u8F7B\u7ACB\u9879", "\u6B63\u7ECF\u7ACB\u9879"]);
+    CONFIRM_KIND = /* @__PURE__ */ new Set(["project-create", "tier-change", "suggest-hold", "archive", "revive"]);
+    CONFIRM_STATUS = /* @__PURE__ */ new Set(["pending", "approved", "rejected"]);
+  }
+});
+
+// src/storage/import-notification.ts
+import { existsSync as existsSync6 } from "node:fs";
+import { join as join7 } from "node:path";
+function observe2(file, name) {
+  if (!existsSync6(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
+  const obs = statThenRead(file);
+  const lines = obs.text.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return { name, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, text: obs.text };
+}
+function countAll2(port) {
+  return {
+    notification: port.query("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? -1,
+    clientState: port.query("SELECT COUNT(*) AS n FROM notification_client_state")[0]?.n ?? -1
+  };
+}
+function deriveLevel(actionable, kind, resolvedAt) {
+  if (!actionable || kind === "system") return "info";
+  return resolvedAt !== null ? "done" : "waiting";
+}
+function importNotifications(port, dataDir3, opts) {
+  const schemaVersion = opts?.schemaVersion ?? NOTIFICATION_IMPORT_SCHEMA_VERSION;
+  const sources = [
+    observe2(join7(dataDir3, "notifications.json"), "notifications.json"),
+    observe2(join7(dataDir3, "decision-notifications.json"), "decision-notifications.json")
+  ];
+  const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
+  const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
+  if (allValid) {
+    return { skipped: true, counts: countAll2(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
+  }
+  const losses = [];
+  const byKey = /* @__PURE__ */ new Map();
+  const projSrc = sources[0];
+  if (projSrc.text !== null) {
+    try {
+      const pf = JSON.parse(projSrc.text);
+      if (!Array.isArray(pf.notifications)) throw new Error("notifications \u975E\u6570\u7EC4");
+      pf.notifications.forEach((raw, idx) => {
+        const lineNo = idx + 1;
+        const x = raw;
+        if (typeof x.key !== "string" || !x.key || typeof x.kind !== "string" || typeof x.created_at !== "number") {
+          losses.push({ source: projSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify(x).slice(0, 200) });
+          return;
+        }
+        if (byKey.has(x.key)) {
+          losses.push({ source: projSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: x.key }).slice(0, 200) });
+          return;
+        }
+        const resolvedAt = typeof x.resolved_at === "number" ? x.resolved_at : null;
+        const handledAt = typeof x.handled_at === "number" ? x.handled_at : typeof x.dismissed_at === "number" ? x.dismissed_at : null;
+        const actionable = x.actionable === true;
+        const sc2 = x.sourceContext ?? {};
+        const clientStates = /* @__PURE__ */ new Map();
+        if (Array.isArray(x.client_states)) {
+          x.client_states.forEach((cs2) => {
+            const c = cs2;
+            if (typeof c.client_id !== "string" || !c.client_id) {
+              losses.push({ source: projSrc, lineNo, reason: "missing-attribution", excerpt: JSON.stringify({ key: x.key, client_state: c }).slice(0, 200) });
+              return;
+            }
+            if (clientStates.has(c.client_id)) {
+              losses.push({ source: projSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: x.key, client_id: c.client_id }).slice(0, 200) });
+            }
+            clientStates.set(c.client_id, {
+              clientId: c.client_id,
+              readAt: typeof c.read_at === "number" ? c.read_at : null,
+              dismissedAt: typeof c.dismissed_at === "number" ? c.dismissed_at : null
+            });
+          });
+        }
+        const returnPath = typeof sc2.returnPath === "string" ? sc2.returnPath : "";
+        if (returnPath) losses.push({ source: projSrc, lineNo, reason: "unmapped-field", excerpt: JSON.stringify({ key: x.key, return_path: returnPath }).slice(0, 300) });
+        byKey.set(x.key, {
+          id: `ntf-${sha12(x.key)}`,
+          key: x.key,
+          origin: "proj",
+          category: x.kind,
+          level: typeof x.severity === "string" ? x.severity : deriveLevel(actionable, x.kind, resolvedAt),
+          sessionId: typeof sc2.sessionId === "string" && sc2.sessionId ? sc2.sessionId : null,
+          payload: {
+            title: x.title ?? "",
+            body: x.body ?? "",
+            actionable,
+            group: x.group ?? null,
+            source_context: sc2
+          },
+          handledAt,
+          resolvedAt,
+          conditionKey: x.key,
+          createdAt: x.created_at,
+          clientStates: [...clientStates.values()]
+        });
+      });
+    } catch {
+      losses.push({ source: projSrc, lineNo: 1, reason: "bad-json", excerpt: projSrc.text.slice(0, 200) });
+    }
+  }
+  const ledgerSrc = sources[1];
+  if (ledgerSrc.text !== null) {
+    try {
+      const lf = JSON.parse(ledgerSrc.text);
+      if (!Array.isArray(lf)) throw new Error("\u6839\u975E\u6570\u7EC4");
+      lf.forEach((raw, idx) => {
+        const lineNo = idx + 1;
+        const d2 = raw;
+        if (typeof d2.key !== "string" || !d2.key || typeof d2.kind !== "string" || typeof d2.created_at !== "number") {
+          losses.push({ source: ledgerSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify(d2).slice(0, 200) });
+          return;
+        }
+        const resolvedAt = typeof d2.resolved_at === "number" ? d2.resolved_at : null;
+        const handledAt = typeof d2.handled_at === "number" ? d2.handled_at : typeof d2.dismissed_at === "number" ? d2.dismissed_at : null;
+        const actionable = d2.actionable === true;
+        const sc2 = d2.source_context ?? null;
+        const sessionId = typeof sc2?.sessionId === "string" && sc2.sessionId ? sc2.sessionId : typeof d2.source_session_id === "string" && d2.source_session_id ? d2.source_session_id : null;
+        const returnPath = typeof sc2?.returnPath === "string" ? sc2.returnPath : "";
+        const ledgerExtra = {
+          ...typeof d2.first_sent_at === "number" ? { first_sent_at: d2.first_sent_at } : {},
+          ...typeof d2.reminded_at === "number" ? { reminded_at: d2.reminded_at } : {},
+          ...typeof d2.revision === "string" ? { revision: d2.revision } : {}
+        };
+        const existing = byKey.get(d2.key);
+        if (existing !== void 0) {
+          if (existing.origin !== "proj") {
+            losses.push({ source: ledgerSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: d2.key }).slice(0, 200) });
+            return;
+          }
+          if (returnPath) losses.push({ source: ledgerSrc, lineNo, reason: "unmapped-field", excerpt: JSON.stringify({ key: d2.key, return_path: returnPath }).slice(0, 300) });
+          existing.sessionId = existing.sessionId ?? sessionId;
+          existing.createdAt = Math.min(existing.createdAt, d2.created_at);
+          existing.handledAt = existing.handledAt !== null && handledAt !== null ? Math.min(existing.handledAt, handledAt) : existing.handledAt ?? handledAt;
+          existing.resolvedAt = existing.resolvedAt !== null && resolvedAt !== null ? Math.min(existing.resolvedAt, resolvedAt) : existing.resolvedAt ?? resolvedAt;
+          if (Object.keys(ledgerExtra).length > 0) existing.payload.ledger = ledgerExtra;
+          existing.origin = "merged";
+          return;
+        }
+        if (returnPath) losses.push({ source: ledgerSrc, lineNo, reason: "unmapped-field", excerpt: JSON.stringify({ key: d2.key, return_path: returnPath }).slice(0, 300) });
+        byKey.set(d2.key, {
+          id: `ntf-${sha12(d2.key)}`,
+          key: d2.key,
+          origin: "ledger",
+          category: d2.kind,
+          level: deriveLevel(actionable, d2.kind, resolvedAt),
+          sessionId,
+          payload: {
+            title: "",
+            body: "",
+            actionable,
+            group: d2.group ?? null,
+            source_context: sc2 ?? { domain: d2.kind, entityId: d2.key, alertId: d2.key, returnPath: "" },
+            ...Object.keys(ledgerExtra).length > 0 ? { ledger: ledgerExtra } : {}
+          },
+          handledAt,
+          resolvedAt,
+          conditionKey: d2.key,
+          createdAt: d2.created_at,
+          clientStates: []
+        });
+      });
+    } catch {
+      losses.push({ source: ledgerSrc, lineNo: 1, reason: "bad-json", excerpt: ledgerSrc.text.slice(0, 200) });
+    }
+  }
+  port.begin();
+  try {
+    port.exec("DELETE FROM notification_client_state");
+    port.exec("DELETE FROM notification");
+    port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [projSrc.file, ledgerSrc.file]);
+    for (const n of byKey.values()) {
+      port.exec(
+        "INSERT INTO notification (id, project_id, group_id, session_id, level, category, payload_json, handled_at, resolved_at, condition_key, created_at) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [n.id, n.sessionId, n.level, n.category, JSON.stringify(n.payload), n.handledAt, n.resolvedAt, n.conditionKey, n.createdAt]
+      );
+      for (const cs2 of n.clientStates) {
+        port.exec(
+          "INSERT INTO notification_client_state (notification_id, client_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)",
+          [n.id, cs2.clientId, cs2.readAt, cs2.dismissedAt]
+        );
+      }
+    }
+    for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
+    for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
+    port.commit();
+  } catch (err) {
+    port.rollback();
+    throw new Error(`import-notification: \u901A\u77E5\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+  }
+  return { skipped: false, counts: countAll2(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
+}
+var NOTIFICATION_IMPORT_SCHEMA_VERSION;
+var init_import_notification = __esm({
+  "src/storage/import-notification.ts"() {
+    "use strict";
+    init_import_util();
+    init_checkpoint();
+    init_loss_report();
+    NOTIFICATION_IMPORT_SCHEMA_VERSION = 1;
+  }
+});
+
+// src/storage/import-session-task.ts
+import { existsSync as existsSync7, readdirSync, readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
+import { join as join8 } from "node:path";
+function appendLossOnce(port, record) {
+  const dup = port.query(
+    "SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ? AND line_no = ? AND reason = ?",
+    [record.sourcePath, record.lineNo, record.reason]
+  )[0]?.n ?? 0;
+  if (dup === 0) appendLoss(port, record);
+}
+function observeNdjson(file) {
+  if (!existsSync7(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
+  const obs = statThenRead(file);
+  const lines = obs.text.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
+}
+function observeTasksDir(dir) {
+  if (!existsSync7(dir)) return { mtimeMs: 0, count: 0, files: [] };
+  const files = [];
+  let maxMtime = 0;
+  for (const sid of readdirSync(dir).sort()) {
+    const sub = join8(dir, sid);
+    let tids;
+    try {
+      tids = readdirSync(sub).sort();
+    } catch {
+      continue;
+    }
+    for (const name of tids) {
+      if (!name.endsWith(".json")) continue;
+      const file = join8(sub, name);
+      let st2;
+      try {
+        st2 = statSync3(file);
+      } catch {
+        continue;
+      }
+      const m = Math.round(st2.mtimeMs);
+      if (m > maxMtime) maxMtime = m;
+      files.push({ sid, tid: name.slice(0, -5), file, mtimeMs: m });
+    }
+  }
+  return { mtimeMs: maxMtime, count: files.length, files };
+}
+function observeAcceptanceDir(dir) {
+  if (!existsSync7(dir)) return { mtimeMs: 0, count: 0, sheets: [] };
+  const sheets = [];
+  let maxMtime = 0;
+  for (const name of readdirSync(dir).sort()) {
+    if (!name.endsWith(".json") || name.endsWith(".results.json")) continue;
+    const file = join8(dir, name);
+    let st2;
+    try {
+      st2 = statSync3(file);
+    } catch {
+      continue;
+    }
+    const m = Math.round(st2.mtimeMs);
+    if (m > maxMtime) maxMtime = m;
+    let doc = null;
+    let raw = "";
+    try {
+      raw = readFileSync7(file, "utf8");
+      doc = JSON.parse(raw);
+    } catch {
+      doc = null;
+    }
+    sheets.push({ file, doc, raw });
+  }
+  return { mtimeMs: maxMtime, count: sheets.length, sheets };
+}
+function applyEvent(port, ev2, lineNo, srcPath, groupByAnchor, losses) {
+  const src = srcPath;
+  const excerpt = JSON.stringify(ev2).slice(0, 200);
+  if (typeof ev2.session_id !== "string" || !ev2.session_id || typeof ev2.type !== "string") {
+    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+    return;
+  }
+  if (typeof ev2.ts !== "number" || !Number.isFinite(ev2.ts)) {
+    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+    return;
+  }
+  const sid = ev2.session_id;
+  const ts2 = ev2.ts;
+  const type = ev2.type;
+  const payload = typeof ev2.payload === "object" && ev2.payload !== null ? ev2.payload : {};
+  if (type === "SESSION_LOG" || type === "SESSION_ACTIVITY" || type === "SESSION_HEARTBEAT") {
+    return;
+  }
+  const existing = port.query(
+    "SELECT runtime_state_json, started_at, deleted_at FROM session WHERE id = ?",
+    [sid]
+  )[0];
+  if (type === "SESSION_DELETED") {
+    if (existing) {
+      if (process.env.CCR_SESSION_IMPORT !== "off") port.exec("UPDATE session SET deleted_at = ?, updated_at = ? WHERE id = ?", [ts2, ts2, sid]);
+    }
+    return;
+  }
+  let nextStatus = null;
+  if (type === "SESSION_CREATED") nextStatus = "WORKING";
+  else if (type === "SESSION_WAITING") nextStatus = "WAITING";
+  else if (type === "SESSION_WAITING_RESOLVED") nextStatus = "WORKING";
+  else if (type === "SESSION_ERROR") nextStatus = "ERROR";
+  else if (type === "SESSION_DONE") nextStatus = "DONE";
+  else if (type === "SESSION_UPDATED") {
+    const p = payload.status;
+    if (typeof p === "string" && SESSION_STATUS.has(p)) nextStatus = p;
+  }
+  let runtimeJson = existing?.runtime_state_json ?? "{}";
+  if (type === "SESSION_ERROR" && typeof payload.last_error === "string") {
+    runtimeJson = JSON.stringify({ ...safeParse(runtimeJson), last_error: payload.last_error });
+  } else if (type === "SESSION_DONE") {
+    const patch = {};
+    if (typeof payload.done_reason === "string") patch.done_reason = payload.done_reason;
+    if (typeof payload.duration_ms === "number") patch.duration_ms = payload.duration_ms;
+    if (Object.keys(patch).length > 0) runtimeJson = JSON.stringify({ ...safeParse(runtimeJson), ...patch });
+  }
+  if (!existing) {
+    if (type !== "SESSION_CREATED") {
+      losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+      return;
+    }
+    const cwd = typeof payload.cwd === "string" && payload.cwd ? payload.cwd : "";
+    if (!cwd) {
+      losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+      return;
+    }
+    const status = nextStatus ?? "WORKING";
+    const row = {
+      id: sid,
+      relaySessionId: typeof payload.relay_session_id === "string" ? payload.relay_session_id : null,
+      groupId: groupByAnchor.get(cwd) ?? null,
+      engine: null,
+      provider: null,
+      model: typeof payload.model === "string" ? payload.model : null,
+      cwd,
+      status,
+      runtimeStateJson: runtimeJson,
+      startedAt: ts2,
+      updatedAt: ts2,
+      deletedAt: null
+    };
+    if (process.env.CCR_SESSION_IMPORT !== "off") {
+      port.exec(SESSION_INSERT, [
+        row.id,
+        row.relaySessionId,
+        row.groupId,
+        row.model,
+        row.cwd,
+        row.status,
+        row.runtimeStateJson,
+        row.startedAt,
+        row.updatedAt,
+        row.deletedAt
+      ]);
+    }
+    return;
+  }
+  if (nextStatus !== null) {
+    if (process.env.CCR_SESSION_IMPORT !== "off") port.exec("UPDATE session SET status = ?, updated_at = ?, runtime_state_json = ? WHERE id = ?", [
+      nextStatus,
+      ts2,
+      runtimeJson,
+      sid
+    ]);
+  } else {
+    if (process.env.CCR_SESSION_IMPORT !== "off") port.exec("UPDATE session SET updated_at = ?, runtime_state_json = ? WHERE id = ?", [ts2, runtimeJson, sid]);
+  }
+}
+function safeParse(s) {
+  try {
+    const v = JSON.parse(s);
+    return typeof v === "object" && v !== null ? v : {};
+  } catch {
+    return {};
+  }
+}
+function parseTaskFile(ref, lossSource, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses) {
+  let doc;
+  try {
+    doc = JSON.parse(readFileSync7(ref.file, "utf8"));
+  } catch {
+    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "bad-json", excerpt: JSON.stringify({ file: ref.file }).slice(0, 200) });
+    return null;
+  }
+  const excerpt = JSON.stringify({ sid: ref.sid, tid: ref.tid, subject: doc.subject, status: doc.status }).slice(0, 200);
+  if (typeof doc.subject !== "string" || !doc.subject) {
+    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "missing-field", excerpt });
+    return null;
+  }
+  if (typeof doc.status !== "string" || !(doc.status in TASK_STATUS_MAP)) {
+    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "bad-field", excerpt });
+    return null;
+  }
+  const mapped = TASK_STATUS_MAP[doc.status];
+  const taskRef = `${ref.sid}/${ref.tid}`;
+  const cwd = sessionCwd.get(ref.sid);
+  const reviewRequired = cwd !== void 0 && reviewCwds.has(cwd) ? 1 : 0;
+  const groupId = cwd !== void 0 ? groupByAnchor.get(cwd) ?? null : null;
+  if (cwd === void 0) {
+    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "dangling-ref", excerpt });
+  }
+  const projectId = groupId !== null ? groupProject.get(groupId) ?? null : null;
+  const dependsOn = Array.isArray(doc.blockedBy) ? doc.blockedBy.filter((x) => typeof x === "string").map((t) => `${ref.sid}/${t}`) : [];
+  return {
+    id: `task-${sha12(taskRef)}`,
+    projectId,
+    groupId,
+    sessionId: cwd !== void 0 ? ref.sid : null,
+    origin: "user",
+    externalTaskFileId: ref.tid,
+    taskRef,
+    title: doc.subject,
+    description: typeof doc.description === "string" ? doc.description : "",
+    dependsOnJson: JSON.stringify(dependsOn),
+    reviewRequired,
+    reviewStatus: reviewRequired === 1 ? "pending" : "not_required",
+    status: mapped === "done" && reviewRequired === 1 ? "submitted" : mapped,
+    ts: ref.mtimeMs
+  };
+}
+function importSessionTask(port, sources, opts) {
+  const schemaVersion = opts?.schemaVersion ?? SESSION_TASK_IMPORT_SCHEMA_VERSION;
+  const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE;
+  const obsEvents = observeNdjson(sources.eventsFile);
+  const obsTasks = observeTasksDir(sources.tasksDir);
+  const obsAccept = observeAcceptanceDir(sources.acceptanceDir);
+  const current = { schemaVersion };
+  const cpEvents = obsEvents.lines !== null ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount }) : null;
+  const cpTasks = readCheckpoint(port, sources.tasksDir, { ...current, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count });
+  const accCpKey = `${sources.acceptanceDir}${ACC_DIR_CP_SUFFIX}`;
+  const cpAccept = readCheckpoint(port, accCpKey, { ...current, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count });
+  if (cpEvents !== null && cpEvents.offset >= obsEvents.lineCount && cpTasks !== null && cpAccept !== null) {
+    const n2 = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
+    return {
+      skipped: true,
+      counts: { session: n2("SELECT COUNT(*) AS n FROM session"), task: n2("SELECT COUNT(*) AS n FROM task") },
+      loss: n2(
+        "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)",
+        sources.eventsFile,
+        sources.tasksDir,
+        sources.acceptanceDir
+      ),
+      rescanned: [],
+      eventsProcessed: 0
+    };
+  }
+  const groupByAnchor = /* @__PURE__ */ new Map();
+  for (const r of port.query(`SELECT id, anchor_dir FROM "group"`)) {
+    groupByAnchor.set(r.anchor_dir, r.id);
+  }
+  const losses = [];
+  let eventsProcessed = 0;
+  if (obsEvents.lines !== null) {
+    const fromLine = cpEvents !== null ? cpEvents.offset : 0;
+    if (fromLine === 0) {
+      port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.eventsFile]);
+    }
+    let batch = [];
+    const flushBatch = () => {
+      if (batch.length === 0) return;
+      port.begin();
+      try {
+        let lastLine = fromLine;
+        for (const b of batch) {
+          if (b.ev !== null) applyEvent(port, b.ev, b.lineNo, sources.eventsFile, groupByAnchor, losses);
+          lastLine = b.lineNo;
+        }
+        for (const l of losses.splice(0)) appendLossOnce(port, l);
+        writeCheckpoint(port, {
+          path: sources.eventsFile,
+          mtimeMs: obsEvents.mtimeMs,
+          lineCount: obsEvents.lineCount,
+          offset: lastLine,
+          schemaVersion
+        });
+        port.commit();
+      } catch (err) {
+        port.rollback();
+        throw new Error(`import-session-task: events \u6279\u5904\u7406\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08offset \u505C\u7559\u524D\u6279\u5C3E\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+      }
+      eventsProcessed += batch.length;
+      batch = [];
+    };
+    for (let i = fromLine; i < obsEvents.lines.length; i++) {
+      const line = obsEvents.lines[i];
+      const lineNo = i + 1;
+      let ev2 = null;
+      if (line.trim() !== "") {
+        try {
+          ev2 = JSON.parse(line);
+        } catch {
+          losses.push({ sourcePath: sources.eventsFile, lineNo, reason: "bad-json", excerpt: line.slice(0, 200) });
+        }
+      }
+      batch.push({ ev: ev2, lineNo });
+      if (batch.length >= batchSize) flushBatch();
+    }
+    flushBatch();
+    if (obsEvents.lineCount === 0 && fromLine === 0) {
+      port.begin();
+      try {
+        port.exec("DELETE FROM import_loss WHERE source_path = ?", ["events"]);
+        writeCheckpoint(port, { path: sources.eventsFile, mtimeMs: obsEvents.mtimeMs, lineCount: 0, offset: 0, schemaVersion });
+        port.commit();
+      } catch (err) {
+        port.rollback();
+        throw new Error(`import-session-task: \u7A7A events checkpoint \u5199\u5165\u5931\u8D25\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+  if (cpEvents === null || cpTasks === null || cpAccept === null) {
+    const reviewCwds = /* @__PURE__ */ new Set();
+    for (const s of obsAccept.sheets) {
+      if (s.doc === null) {
+        losses.push({ sourcePath: sources.acceptanceDir, lineNo: 1, reason: "bad-json", excerpt: s.raw.slice(0, 200) });
+        continue;
+      }
+      if (typeof s.doc.cwd === "string" && s.doc.cwd) reviewCwds.add(s.doc.cwd);
+    }
+    const sessionCwd = new Map(
+      port.query("SELECT id, cwd FROM session").map((r) => [r.id, r.cwd])
+    );
+    const groupProject = new Map(
+      port.query(`SELECT id, project_id FROM "group"`).map((r) => [r.id, r.project_id ?? ""])
+    );
+    port.begin();
+    try {
+      port.exec("DELETE FROM task");
+      port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [sources.tasksDir, sources.acceptanceDir]);
+      const rows = [];
+      for (const ref of obsTasks.files) {
+        const row = parseTaskFile(ref, sources.tasksDir, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses);
+        if (row !== null) {
+          if (!TASK_STATUS.has(row.status)) {
+            throw new Error(`\u6620\u5C04\u4EA7\u7269\u72B6\u6001\u8D8A\u8BCD\u8868\uFF08${row.taskRef} \u2192 ${row.status}\uFF09`);
+          }
+          rows.push(row);
+        }
+      }
+      for (const r of rows) {
+        port.exec(
+          `INSERT INTO task (id, project_id, group_id, session_id, parent_task_id, origin, external_sid, external_task_file_id,
+             task_ref, title, description, scope_json, handoff, assignee_id, branch, artifact_id, depends_on_json,
+             gate_reason, gate_opened_at, review_required, review_status, workflow_profile, status, deleted_at, ts)
+           VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, '{}', NULL, NULL, NULL, NULL, ?, NULL, NULL, ?, ?, NULL, ?, NULL, ?)`,
+          [
+            r.id,
+            r.projectId,
+            r.groupId,
+            r.sessionId,
+            r.origin,
+            r.externalTaskFileId,
+            r.taskRef,
+            r.title,
+            r.description,
+            r.dependsOnJson,
+            r.reviewRequired,
+            r.reviewStatus,
+            r.status,
+            r.ts
+          ]
+        );
+      }
+      for (const l of losses.splice(0)) appendLossOnce(port, l);
+      writeCheckpoint(port, { path: sources.tasksDir, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count, offset: obsTasks.count, schemaVersion });
+      writeCheckpoint(port, { path: accCpKey, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count, offset: obsAccept.count, schemaVersion });
+      port.commit();
+    } catch (err) {
+      port.rollback();
+      throw new Error(`import-session-task: task \u57DF\u91CD\u704C\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7 task \u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
+  return {
+    skipped: false,
+    counts: { session: n("SELECT COUNT(*) AS n FROM session"), task: n("SELECT COUNT(*) AS n FROM task") },
+    loss: n(
+      "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)",
+      sources.eventsFile,
+      sources.tasksDir,
+      sources.acceptanceDir
+    ),
+    rescanned: [sources.eventsFile, sources.tasksDir, sources.acceptanceDir],
+    eventsProcessed
+  };
+}
+var SESSION_TASK_IMPORT_SCHEMA_VERSION, DEFAULT_BATCH_SIZE, ACC_DIR_CP_SUFFIX, TASK_STATUS, TASK_STATUS_MAP, SESSION_STATUS, SESSION_INSERT;
+var init_import_session_task = __esm({
+  "src/storage/import-session-task.ts"() {
+    "use strict";
+    init_import_util();
+    init_checkpoint();
+    init_loss_report();
+    SESSION_TASK_IMPORT_SCHEMA_VERSION = 1;
+    DEFAULT_BATCH_SIZE = 500;
+    ACC_DIR_CP_SUFFIX = "#tasks-view";
+    TASK_STATUS = /* @__PURE__ */ new Set(["backlog", "claimed", "submitted", "ready_to_install", "done"]);
+    TASK_STATUS_MAP = {
+      todo: "backlog",
+      pending: "backlog",
+      doing: "claimed",
+      in_progress: "claimed",
+      done: "done",
+      completed: "done"
+    };
+    SESSION_STATUS = /* @__PURE__ */ new Set(["WORKING", "WAITING", "ERROR", "DONE"]);
+    SESSION_INSERT = `INSERT OR REPLACE INTO session
+  (id, relay_session_id, group_id, member_id, external_sid, engine, provider, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at)
+  VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`;
+  }
+});
+
+// src/storage/import-acceptance.ts
+import { existsSync as existsSync8, readdirSync as readdirSync2 } from "node:fs";
+import { basename, join as join9 } from "node:path";
+function observeAcceptanceDir2(dir) {
+  const out = { mtimeMs: 0, fileCount: 0, sheets: [], results: [] };
+  if (!existsSync8(dir)) return out;
+  for (const name of readdirSync2(dir).sort()) {
+    if (!name.endsWith(".json")) continue;
+    const file = join9(dir, name);
+    let obs;
+    try {
+      obs = statThenRead(file);
+    } catch {
+      continue;
+    }
+    const raw = obs.text;
+    if (obs.mtimeMs > out.mtimeMs) out.mtimeMs = obs.mtimeMs;
+    out.fileCount++;
+    if (name.endsWith(".results.json")) {
+      const id2 = name.slice(0, -13);
+      let doc = null;
+      try {
+        const p = JSON.parse(raw);
+        const history = Array.isArray(p.history) ? p.history : null;
+        if (history !== null) {
+          doc = {
+            id: id2,
+            raw,
+            history: history.map((h) => ({
+              at: h.at,
+              ua: h.ua,
+              rows: Array.isArray(h.rows) ? h.rows : []
+            }))
+          };
+        }
+      } catch {
+        doc = null;
+      }
+      out.results.push({ file, doc });
+    } else {
+      const id2 = name.slice(0, -5);
+      let doc = null;
+      try {
+        const p = JSON.parse(raw);
+        doc = {
+          id: typeof p.id === "string" && p.id ? p.id : id2,
+          title: p.title,
+          created_at: p.created_at,
+          cwd: p.cwd,
+          sheet_key: p.sheet_key,
+          rows: Array.isArray(p.rows) ? p.rows : [],
+          raw
+        };
+      } catch {
+        doc = null;
+      }
+      out.sheets.push({ file, doc });
+    }
+  }
+  return out;
+}
+function importAcceptance(port, acceptanceDir2, opts) {
+  const schemaVersion = opts?.schemaVersion ?? ACCEPTANCE_IMPORT_SCHEMA_VERSION;
+  const obs = observeAcceptanceDir2(acceptanceDir2);
+  const cp2 = readCheckpoint(port, acceptanceDir2, { mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, schemaVersion });
+  if (cp2 !== null) {
+    const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
+    return {
+      skipped: true,
+      counts: {
+        sheet: n("SELECT COUNT(*) AS n FROM acceptance_sheet"),
+        item: n("SELECT COUNT(*) AS n FROM acceptance_item"),
+        result: n("SELECT COUNT(*) AS n FROM acceptance_result")
+      },
+      loss: n("SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ?", acceptanceDir2),
+      // COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）
+      rescanned: []
+    };
+  }
+  const losses = [];
+  const sheets = [];
+  const items = [];
+  const results = [];
+  const sheetById = /* @__PURE__ */ new Map();
+  const groupByAnchor = /* @__PURE__ */ new Map();
+  for (const r of port.query(`SELECT id, anchor_dir FROM "group"`)) {
+    groupByAnchor.set(r.anchor_dir, r.id);
+  }
+  const sheetIdSeen = /* @__PURE__ */ new Map();
+  for (const s of obs.sheets) {
+    if (s.doc === null) {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "bad-json", excerpt: `sheet \u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF1A${s.file}`.slice(0, 200) });
+      continue;
+    }
+    const d2 = s.doc;
+    const excerpt = JSON.stringify({ id: d2.id, title: d2.title }).slice(0, 200);
+    if (!SHEET_ID_RE.test(d2.id)) {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "bad-field", excerpt: JSON.stringify({ id: d2.id, why: "\u975E 32hex\uFF08\u7EBF\u4E0A ACCEPTANCE_ID_RE \u540C\u8BCD\u8868\u62D2\u5165\uFF09" }).slice(0, 200) });
+      continue;
+    }
+    if (typeof d2.title !== "string" || !d2.title || typeof d2.created_at !== "number") {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "missing-field", excerpt });
+      continue;
+    }
+    const firstSeen = sheetIdSeen.get(d2.id);
+    if (firstSeen !== void 0) {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "duplicate-id", excerpt: JSON.stringify({ id: d2.id, first: basename(firstSeen), dup: basename(s.file) }).slice(0, 200) });
+      continue;
+    }
+    sheetIdSeen.set(d2.id, s.file);
+    const cwd = typeof d2.cwd === "string" && d2.cwd ? d2.cwd : null;
+    const groupId = cwd !== null ? groupByAnchor.get(cwd) ?? null : null;
+    if (groupId === null) {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "missing-attribution", excerpt: JSON.stringify({ id: d2.id, cwd }).slice(0, 200) });
+    }
+    const row = {
+      id: d2.id,
+      groupId,
+      title: d2.title,
+      createdAt: d2.created_at,
+      sheetKey: typeof d2.sheet_key === "string" && d2.sheet_key ? d2.sheet_key : null
+    };
+    const sheetItems = [];
+    d2.rows.forEach((raw, idx) => {
+      const itemIndex = idx + 1;
+      const r = raw;
+      const iExcerpt = JSON.stringify({ id: d2.id, item_index: itemIndex, task: r.task }).slice(0, 200);
+      if (typeof r.task !== "string" || !r.task || typeof r.item !== "string" || typeof r.criteria !== "string") {
+        losses.push({ sourcePath: acceptanceDir2, lineNo: itemIndex, reason: "missing-field", excerpt: iExcerpt });
+        return;
+      }
+      const item = {
+        id: `itm-${sha12(`${d2.id}/${itemIndex}`)}`,
+        sheetId: d2.id,
+        itemIndex,
+        task: r.task,
+        item: r.item,
+        criteria: r.criteria
+      };
+      sheetItems.push(item);
+    });
+    sheets.push(row);
+    items.push(...sheetItems);
+    sheetById.set(d2.id, { items: sheetItems });
+  }
+  for (const r of obs.results) {
+    if (r.doc === null) {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "bad-json", excerpt: `results \u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF1A${r.file}`.slice(0, 200) });
+      continue;
+    }
+    const d2 = r.doc;
+    const sheetEntry = sheetById.get(d2.id);
+    if (sheetEntry === void 0) {
+      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "dangling-ref", excerpt: JSON.stringify({ results_id: d2.id, why: "\u65E0\u5BF9\u5E94 sheet" }).slice(0, 200) });
+      continue;
+    }
+    const itemByIndex = new Map(sheetEntry.items.map((it2) => [it2.itemIndex, it2]));
+    const seenResults = /* @__PURE__ */ new Set();
+    d2.history.forEach((h, hIdx) => {
+      const hExcerpt = JSON.stringify({ results_id: d2.id, h: hIdx }).slice(0, 200);
+      if (typeof h.at !== "number") {
+        losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "missing-field", excerpt: hExcerpt });
+        return;
+      }
+      const actor = typeof h.ua === "string" && h.ua ? h.ua : IMPORT_ACTOR;
+      for (const row of h.rows) {
+        if (typeof row.i !== "number" || !Number.isInteger(row.i) || row.i < 0) {
+          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d2.id, row }).slice(0, 200) });
+          continue;
+        }
+        const itemIndex = row.i + 1;
+        const item = itemByIndex.get(itemIndex);
+        if (item === void 0) {
+          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "dangling-ref", excerpt: JSON.stringify({ results_id: d2.id, item_index: itemIndex }).slice(0, 200) });
+          continue;
+        }
+        let verdict = null;
+        if (typeof row.verdict === "string") {
+          if (!VERDICTS.has(row.verdict)) {
+            losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d2.id, verdict: row.verdict }).slice(0, 200) });
+            continue;
+          }
+          verdict = row.verdict;
+        } else if (row.verdict !== null && row.verdict !== void 0) {
+          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d2.id, verdict: row.verdict }).slice(0, 200) });
+          continue;
+        }
+        const resultKey = `${hIdx}/${itemIndex}`;
+        if (seenResults.has(resultKey)) {
+          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ results_id: d2.id, h: hIdx, item_index: itemIndex, why: "\u540C\u6279\u6B21\u91CD\u590D\u5224\u5B9A\u4FDD\u9996" }).slice(0, 200) });
+          continue;
+        }
+        seenResults.add(resultKey);
+        results.push({
+          id: `res-${sha12(`${d2.id}/h${hIdx}/i${itemIndex}`)}`,
+          itemId: item.id,
+          verdict,
+          note: typeof row.note === "string" ? row.note : "",
+          actor,
+          createdAt: h.at
+        });
+      }
+    });
+  }
+  port.begin();
+  try {
+    port.exec("DELETE FROM acceptance_result");
+    port.exec("DELETE FROM acceptance_item");
+    port.exec("DELETE FROM acceptance_sheet");
+    port.exec("DELETE FROM import_loss WHERE source_path = ?", [acceptanceDir2]);
+    for (const s of sheets) {
+      port.exec(
+        "INSERT INTO acceptance_sheet (id, task_id, group_id, title, created_at, sheet_key) VALUES (?, NULL, ?, ?, ?, ?)",
+        [s.id, s.groupId, s.title, s.createdAt, s.sheetKey]
+      );
+    }
+    for (const it2 of items) {
+      port.exec(
+        "INSERT INTO acceptance_item (id, sheet_id, item_index, task, item, criteria) VALUES (?, ?, ?, ?, ?, ?)",
+        [it2.id, it2.sheetId, it2.itemIndex, it2.task, it2.item, it2.criteria]
+      );
+    }
+    for (const r of results) {
+      port.exec(
+        "INSERT INTO acceptance_result (id, item_id, verdict, note, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [r.id, r.itemId, r.verdict, r.note, r.actor, r.createdAt]
+      );
+    }
+    for (const l of losses) appendLoss(port, l);
+    writeCheckpoint(port, { path: acceptanceDir2, mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, offset: obs.fileCount, schemaVersion });
+    port.commit();
+  } catch (err) {
+    port.rollback();
+    throw new Error(`import-acceptance: \u9A8C\u6536\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+  }
+  const n2 = (sql) => port.query(sql)[0]?.n ?? -1;
+  return {
+    skipped: false,
+    counts: {
+      sheet: n2("SELECT COUNT(*) AS n FROM acceptance_sheet"),
+      item: n2("SELECT COUNT(*) AS n FROM acceptance_item"),
+      result: n2("SELECT COUNT(*) AS n FROM acceptance_result")
+    },
+    loss: losses.length,
+    rescanned: obs.fileCount > 0 ? [acceptanceDir2] : []
+  };
+}
+var ACCEPTANCE_IMPORT_SCHEMA_VERSION, IMPORT_ACTOR, SHEET_ID_RE, VERDICTS;
+var init_import_acceptance = __esm({
+  "src/storage/import-acceptance.ts"() {
+    "use strict";
+    init_import_util();
+    init_checkpoint();
+    init_loss_report();
+    ACCEPTANCE_IMPORT_SCHEMA_VERSION = 1;
+    IMPORT_ACTOR = "import-migration";
+    SHEET_ID_RE = /^[0-9a-f]{32}$/;
+    VERDICTS = /* @__PURE__ */ new Set(["pass", "fail"]);
+  }
+});
+
+// src/storage/import-artifact.ts
+import { createHash as createHash3 } from "node:crypto";
+import { existsSync as existsSync9 } from "node:fs";
+import { normalize } from "node:path";
+function observeFile(file, key) {
+  if (!existsSync9(file)) return { key, file, mtimeMs: 0, lineCount: 0, records: null, badJson: null };
+  const obs = statThenRead(file);
+  const lines = obs.text.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  let records = null;
+  let badJson = null;
+  try {
+    const parsed = JSON.parse(obs.text);
+    if (Array.isArray(parsed)) records = parsed;
+    else badJson = "\u6839\u975E\u6570\u7EC4";
+  } catch {
+    badJson = obs.text.slice(0, 200);
+  }
+  return { key, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, records, badJson };
+}
+function observeInline(records, key) {
+  const fingerprint = parseInt(createHash3("sha1").update(JSON.stringify(records)).digest("hex").slice(0, 8), 16);
+  return { key, file: null, mtimeMs: fingerprint, lineCount: records.length, records, badJson: null };
+}
+function normalizedSourceId(...values) {
+  for (const v of values) {
+    if (v === void 0 || v === null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return "local";
+}
+function normalizedArtifactPath(path6) {
+  const value = normalize(path6 || ".").replaceAll("\\", "/");
+  if (value.length > 1) return value.replace(/\/+$/, "");
+  return value;
+}
+function existenceStateOf(rec) {
+  if (rec.unverified === true) return "unknown";
+  if (typeof rec.exists === "boolean") return rec.exists ? "exists" : "missing";
+  return "unknown";
+}
+function firstString(...values) {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return null;
+}
+function tableHas(port, table, id2) {
+  return (port.query(`SELECT COUNT(*) AS n FROM ${table} WHERE id = ?`, [id2])[0]?.n ?? 0) > 0;
+}
+function parseRecord(port, raw, sourceIdResolved, attribution, lineNo, sourceKey, losses) {
+  const bad = (reason, excerpt) => {
+    losses.push({ sourceKey, lineNo, reason, excerpt: excerpt.slice(0, 200) });
+    return null;
+  };
+  if (typeof raw !== "object" || raw === null) return bad("missing-field", JSON.stringify(raw));
+  const rec = raw;
+  const rawPath = typeof rec.path === "string" ? rec.path : typeof rec.normalized_path === "string" ? rec.normalized_path : null;
+  if (!rawPath) return bad("missing-field", JSON.stringify(rec));
+  const createdAt = typeof rec.first_at === "number" ? rec.first_at : typeof rec.ts === "number" ? rec.ts : null;
+  if (createdAt === null) return bad("missing-field", JSON.stringify(rec));
+  const sessionId = firstString(rec.session_id, rec.sid, attribution?.session_id);
+  if (sessionId === null && rec.sid !== void 0 && typeof rec.sid !== "string") {
+    return bad("missing-attribution", JSON.stringify(rec));
+  }
+  if (sessionId === null && typeof rec.ts === "number" && rec.session_id === void 0 && attribution?.session_id === void 0) {
+    return bad("missing-attribution", JSON.stringify(rec));
+  }
+  const attr = (id2, table) => {
+    if (typeof id2 !== "string" || !id2) return null;
+    if (!tableHas(port, table, id2)) {
+      losses.push({ sourceKey, lineNo, reason: "dangling-ref", excerpt: JSON.stringify({ path: rawPath, [table]: id2 }).slice(0, 200) });
+      return null;
+    }
+    return id2;
+  };
+  const projectId = attr(firstString(attribution?.project_id), "project");
+  const groupId = attr(firstString(attribution?.group_id), `"group"`);
+  const sessionIdOk = sessionId === null ? null : attr(sessionId, "session");
+  const taskId = attr(firstString(attribution?.task_id), "task");
+  const updatedAt = typeof rec.last_at === "number" ? rec.last_at : createdAt;
+  const sourceId = normalizedSourceId(rec.source_id, rec.sourceId, sourceIdResolved);
+  const kind = firstString(rec.kind, rec.op) ?? (rec.sid !== void 0 || rec.session_id !== void 0 ? "deliverable" : "artifact");
+  return {
+    sourceId,
+    normalizedPath: normalizedArtifactPath(rawPath),
+    projectId,
+    groupId,
+    sessionId: sessionIdOk,
+    taskId,
+    deliveryGroupKey: firstString(rec.delivery_group_key, rec.deliveryGroupKey),
+    size: typeof rec.size === "number" ? rec.size : null,
+    kind,
+    existenceState: existenceStateOf(rec),
+    createdAt,
+    updatedAt
+  };
+}
+function importArtifacts(port, sources, opts) {
+  const schemaVersion = opts?.schemaVersion ?? ARTIFACT_IMPORT_SCHEMA_VERSION;
+  const deleteChunk = Math.max(1, opts?.deleteChunkSize ?? ARTIFACT_DELETE_CHUNK);
+  const observed = sources.map((s, idx) => {
+    const resolvedId = normalizedSourceId(s.id, s.sourceId);
+    if (s.file !== void 0) return { src: s, obs: observeFile(s.file, s.file), resolvedId };
+    return { src: s, obs: observeInline(s.records ?? [], `inline:${idx}`), resolvedId };
+  });
+  const current = (o) => ({ mtimeMs: o.mtimeMs, lineCount: o.lineCount, schemaVersion });
+  const allValid = observed.length > 0 && observed.every(({ obs }) => readCheckpoint(port, obs.key, current(obs)) !== null);
+  const sourceKeys = observed.map(({ obs }) => obs.key);
+  if (allValid) {
+    return {
+      skipped: true,
+      counts: { artifact: port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: 0 },
+      // loss 计数走 COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）；
+      // allValid 已保证 sourceKeys 非空（上方 observed.length > 0），IN 占位动态拼安全
+      loss: port.query(`SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(", ")})`, sourceKeys)[0]?.n ?? 0,
+      rescanned: []
+    };
+  }
+  const losses = [];
+  const rowsBySource = [];
+  for (const { obs, resolvedId, src } of observed) {
+    const rows = [];
+    const seen = /* @__PURE__ */ new Map();
+    if (obs.records !== null) {
+      obs.records.forEach((raw, idx) => {
+        const row = parseRecord(port, raw, resolvedId, src.attribution, idx + 1, obs.key, losses);
+        if (row === null) return;
+        const key = JSON.stringify([row.sourceId, row.normalizedPath]);
+        if (seen.has(key)) {
+          losses.push({ sourceKey: obs.key, lineNo: idx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ source_id: row.sourceId, path: row.normalizedPath }).slice(0, 200) });
+          seen.delete(key);
+        }
+        seen.set(key, row);
+      });
+    }
+    rows.push(...seen.values());
+    if (obs.badJson !== null) losses.push({ sourceKey: obs.key, lineNo: 1, reason: "bad-json", excerpt: obs.badJson });
+    rowsBySource.push({ obs, resolvedId, rows });
+  }
+  const planMap = /* @__PURE__ */ new Map();
+  for (const { rows, resolvedId } of rowsBySource) {
+    if (!planMap.has(resolvedId)) planMap.set(resolvedId, /* @__PURE__ */ new Set());
+    for (const r of rows) {
+      let keep = planMap.get(r.sourceId);
+      if (keep === void 0) {
+        keep = /* @__PURE__ */ new Set();
+        planMap.set(r.sourceId, keep);
+      }
+      keep.add(r.normalizedPath);
+    }
+  }
+  port.begin();
+  try {
+    for (const [sourceId, keep] of planMap) {
+      if (keep.size === 0) {
+        port.exec("DELETE FROM artifact WHERE source_id = ?", [sourceId]);
+      } else {
+        const stale = port.query("SELECT normalized_path FROM artifact WHERE source_id = ?", [sourceId]).map((r) => r.normalized_path).filter((p) => !keep.has(p));
+        for (let i = 0; i < stale.length; i += deleteChunk) {
+          const chunk = stale.slice(i, i + deleteChunk);
+          port.exec(
+            `DELETE FROM artifact WHERE source_id = ? AND normalized_path IN (${chunk.map(() => "?").join(",")})`,
+            [sourceId, ...chunk]
+          );
+        }
+      }
+    }
+    for (const { rows } of rowsBySource) {
+      for (const r of rows) {
+        port.exec(
+          `INSERT INTO artifact (source_id, normalized_path, project_id, group_id, session_id, task_id, delivery_group_key, size, kind, existence_state, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(source_id, normalized_path) DO UPDATE SET
+             project_id=excluded.project_id, group_id=excluded.group_id, session_id=excluded.session_id,
+             task_id=excluded.task_id, delivery_group_key=excluded.delivery_group_key, size=excluded.size,
+             kind=excluded.kind, existence_state=excluded.existence_state, created_at=excluded.created_at,
+             updated_at=excluded.updated_at`,
+          [r.sourceId, r.normalizedPath, r.projectId, r.groupId, r.sessionId, r.taskId, r.deliveryGroupKey, r.size, r.kind, r.existenceState, r.createdAt, r.updatedAt]
+        );
+      }
+    }
+    if (sourceKeys.length > 0) {
+      port.exec(`DELETE FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(",")})`, sourceKeys);
+    }
+    for (const l of losses) appendLoss(port, { sourcePath: l.sourceKey, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
+    for (const { obs } of rowsBySource) writeCheckpoint(port, { path: obs.key, mtimeMs: obs.mtimeMs, lineCount: obs.lineCount, offset: obs.lineCount, schemaVersion });
+    port.commit();
+  } catch (err) {
+    port.rollback();
+    throw new Error(`import-artifact: \u4EA7\u7269\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+  }
+  return {
+    skipped: false,
+    counts: { artifact: port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: rowsBySource.reduce((n, x) => n + x.rows.length, 0) },
+    loss: losses.length,
+    rescanned: sourceKeys
+  };
+}
+var ARTIFACT_IMPORT_SCHEMA_VERSION, ARTIFACT_DELETE_CHUNK;
+var init_import_artifact = __esm({
+  "src/storage/import-artifact.ts"() {
+    "use strict";
+    init_import_util();
+    init_checkpoint();
+    init_loss_report();
+    ARTIFACT_IMPORT_SCHEMA_VERSION = 1;
+    ARTIFACT_DELETE_CHUNK = 500;
+  }
+});
+
+// src/storage/import-dispatch-lesson.ts
+import { existsSync as existsSync10, readdirSync as readdirSync3, readFileSync as readFileSync8, statSync as statSync4 } from "node:fs";
+import { join as join10 } from "node:path";
+function observeNdjson2(file) {
+  if (!existsSync10(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
+  const obs = statThenRead(file);
+  const lines = obs.text.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
+}
+function observeBoardsDir(dir) {
+  if (!existsSync10(dir)) return { mtimeMs: 0, count: 0, files: [] };
+  const files = [];
+  let maxMtime = 0;
+  for (const name of readdirSync3(dir).sort()) {
+    if (!name.endsWith(".json")) continue;
+    const file = join10(dir, name);
+    let st2;
+    try {
+      st2 = statSync4(file);
+    } catch {
+      continue;
+    }
+    const m = Math.round(st2.mtimeMs);
+    if (m > maxMtime) maxMtime = m;
+    let doc = null;
+    try {
+      doc = JSON.parse(readFileSync8(file, "utf8"));
+    } catch {
+      doc = null;
+    }
+    files.push({ gid: name.slice(0, -5), file, mtimeMs: m, doc });
+  }
+  return { mtimeMs: maxMtime, count: files.length, files };
+}
+function appendLossOnce2(port, record) {
+  const dup = port.query(
+    "SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ? AND line_no = ? AND reason = ?",
+    [record.sourcePath, record.lineNo, record.reason]
+  )[0]?.n ?? 0;
+  if (dup === 0) appendLoss(port, record);
+}
+function restoreSegs(port) {
+  const rows = port.query(
+    "SELECT id, attempt_no, status, parent_dispatch_id FROM dispatch"
+  );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const segs = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    let root = r.id;
+    let guard = 0;
+    while (guard++ < 1e3) {
+      const parent = byId.get(root)?.parent_dispatch_id ?? null;
+      if (parent === null) break;
+      root = parent;
+    }
+    const prev = segs.get(root);
+    if (!prev || r.attempt_no > prev.attemptNo) {
+      segs.set(root, { segId: r.id, attemptNo: r.attempt_no, terminal: TERMINAL_STATUS.has(r.status) });
+    }
+  }
+  return segs;
+}
+function applyDispatchLine(port, e, lineNo, srcPath, segs, groupByAnchor, sessionMember, dispatchIds, losses) {
+  const src = srcPath;
+  const excerpt = JSON.stringify(e).slice(0, 200);
+  if (typeof e.id !== "string" || !e.id) {
+    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+    return;
+  }
+  if (typeof e.status !== "string" || !DISPATCH_STATUS.has(e.status)) {
+    losses.push({ sourcePath: src, lineNo, reason: e.status === void 0 ? "missing-field" : "bad-field", excerpt });
+    return;
+  }
+  if (typeof e.ts !== "number" || !Number.isFinite(e.ts)) {
+    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+    return;
+  }
+  if (typeof e.tier !== "string" || e.tier === "") {
+    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+    return;
+  }
+  const anchor = typeof e.project_anchor === "string" ? e.project_anchor : "";
+  const groupId = anchor === "" ? null : groupByAnchor.get(anchor) ?? null;
+  if (anchor !== "" && groupId === null) {
+    losses.push({ sourcePath: src, lineNo, reason: "dangling-ref", excerpt });
+  }
+  const sid = typeof e.session_id === "string" ? e.session_id : "";
+  const sourceSessionId = sid === "" ? null : sessionMember.has(sid) ? sid : null;
+  if (sid !== "" && sourceSessionId === null) {
+    losses.push({ sourcePath: src, lineNo, reason: "dangling-ref", excerpt });
+  }
+  const target = typeof e.target === "string" ? e.target : "";
+  const targetMemberId = target !== "" && sessionMember.has(target) ? sessionMember.get(target) ?? null : null;
+  const actor = typeof e.actor === "string" ? e.actor : "";
+  if (e.actor !== void 0 && typeof e.actor !== "string") {
+    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
+  }
+  const receipt = typeof e.receipt === "string" ? e.receipt : "";
+  const seg = segs.get(e.id);
+  if (!seg) {
+    port.exec(
+      `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
+         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), 1, NULL, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
+      [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? ""]
+      /* W-SMIMPL ② v4 列 + #G3/#G5 三列透传（NULLIF 空串=不带键） */
+    );
+    segs.set(e.id, { segId: e.id, attemptNo: 1, terminal: TERMINAL_STATUS.has(e.status) });
+    dispatchIds.add(e.id);
+    return;
+  }
+  if (seg.terminal) {
+    const nextAttempt = seg.attemptNo + 1;
+    const segId = `${e.id}#r${nextAttempt}`;
+    if (dispatchIds.has(segId)) {
+      losses.push({ sourcePath: src, lineNo, reason: "duplicate-id", excerpt });
+      return;
+    }
+    port.exec(
+      `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
+         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
+      [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? ""]
+      /* W-SMIMPL ② v4 列 + #G3/#G5 三列（重投新段按本行重置） */
+    );
+    segs.set(e.id, { segId, attemptNo: nextAttempt, terminal: TERMINAL_STATUS.has(e.status) });
+    dispatchIds.add(segId);
+    return;
+  }
+  port.exec(
+    `UPDATE dispatch SET status = ?, tier = ?, group_id = ?, target_member_id = ?, source_session_id = ?,
+       actor = ?, receipt = COALESCE(NULLIF(?, ''), receipt), receipt_missing = ?, failure_reason = COALESCE(NULLIF(?, ''), failure_reason), retry_of = COALESCE(NULLIF(?, ''), retry_of), priority = COALESCE(NULLIF(?, ''), priority), updated_at = ? WHERE id = ?`,
+    [e.status, e.tier, groupId, targetMemberId, sourceSessionId, actor, receipt, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? "", e.ts, seg.segId]
+    /* W-SMIMPL ② v4 列 + #G3/#G5 三列（同段末行覆盖，非空才覆） */
+  );
+  segs.get(e.id).terminal = TERMINAL_STATUS.has(e.status);
+}
+function importBoardLessons(port, ref, srcDir, groupIds, dispatchIds, seenLessonIds, losses) {
+  void port;
+  void ref;
+  void srcDir;
+  void groupIds;
+  void dispatchIds;
+  void seenLessonIds;
+  void losses;
+}
+function importDispatchLesson(port, sources, opts) {
+  const schemaVersion = opts?.schemaVersion ?? DISPATCH_LESSON_IMPORT_SCHEMA_VERSION;
+  const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE2;
+  const obsLog = observeNdjson2(sources.dispatchLogFile);
+  const obsBoards = observeBoardsDir(sources.boardsDir);
+  const current = { schemaVersion };
+  const cpLog = obsLog.lines !== null ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }) : null;
+  const cpBoards = readCheckpoint(port, sources.boardsDir, { ...current, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count });
+  if (cpLog !== null && cpLog.offset >= obsLog.lineCount && cpBoards !== null) {
+    const n2 = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
+    return {
+      skipped: true,
+      counts: { dispatch: n2("SELECT COUNT(*) AS n FROM dispatch"), lesson: n2("SELECT COUNT(*) AS n FROM lesson") },
+      loss: n2(
+        "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)",
+        sources.dispatchLogFile,
+        sources.boardsDir
+      ),
+      rescanned: [],
+      dispatchProcessed: 0
+    };
+  }
+  const losses = [];
+  let dispatchProcessed = 0;
+  const rescanned = [];
+  if (obsLog.lines !== null) {
+    const replay = cpLog === null;
+    const fromLine = replay ? 0 : cpLog.offset;
+    const groupByAnchor = new Map(
+      port.query(`SELECT id, anchor_dir FROM "group"`).map((r) => [r.anchor_dir, r.id])
+    );
+    const sessionMember = new Map(
+      port.query("SELECT id, member_id FROM session").map((r) => [r.id, r.member_id])
+    );
+    const segs = replay ? /* @__PURE__ */ new Map() : restoreSegs(port);
+    const dispatchIds = replay ? /* @__PURE__ */ new Set() : new Set(port.query("SELECT id FROM dispatch").map((r) => r.id));
+    let batch = [];
+    let cleared = false;
+    const flushBatch = () => {
+      if (batch.length === 0) return;
+      port.begin();
+      try {
+        if (replay && !cleared) {
+          port.exec("DELETE FROM lesson");
+          port.exec("DELETE FROM dispatch");
+          port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.dispatchLogFile]);
+          cleared = true;
+        }
+        let lastLine = fromLine;
+        for (const b of batch) {
+          if (b.ev !== null) {
+            applyDispatchLine(port, b.ev, b.lineNo, sources.dispatchLogFile, segs, groupByAnchor, sessionMember, dispatchIds, losses);
+          }
+          lastLine = b.lineNo;
+        }
+        for (const l of losses.splice(0)) appendLossOnce2(port, l);
+        writeCheckpoint(port, {
+          path: sources.dispatchLogFile,
+          mtimeMs: obsLog.mtimeMs,
+          lineCount: obsLog.lineCount,
+          offset: lastLine,
+          schemaVersion
+        });
+        port.commit();
+      } catch (err) {
+        port.rollback();
+        throw new Error(`import-dispatch-lesson: dispatch \u6279\u5904\u7406\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08offset \u505C\u7559\u524D\u6279\u5C3E\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+      }
+      dispatchProcessed += batch.length;
+      batch = [];
+    };
+    for (let i = fromLine; i < obsLog.lines.length; i++) {
+      const line = obsLog.lines[i];
+      const lineNo = i + 1;
+      let ev2 = null;
+      if (line.trim() !== "") {
+        try {
+          ev2 = JSON.parse(line);
+        } catch {
+          losses.push({ sourcePath: sources.dispatchLogFile, lineNo, reason: "bad-json", excerpt: line.slice(0, 200) });
+        }
+      }
+      batch.push({ ev: ev2, lineNo });
+      if (batch.length >= batchSize) flushBatch();
+    }
+    flushBatch();
+    if (obsLog.lineCount === 0 && fromLine === 0) {
+      port.begin();
+      try {
+        port.exec("DELETE FROM lesson");
+        port.exec("DELETE FROM dispatch");
+        port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.dispatchLogFile]);
+        writeCheckpoint(port, { path: sources.dispatchLogFile, mtimeMs: obsLog.mtimeMs, lineCount: 0, offset: 0, schemaVersion });
+        port.commit();
+      } catch (err) {
+        port.rollback();
+        throw new Error(`import-dispatch-lesson: \u7A7A dispatch-log checkpoint \u5199\u5165\u5931\u8D25\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (replay || dispatchProcessed > 0) rescanned.push(sources.dispatchLogFile);
+  }
+  if (cpBoards === null || cpLog === null) {
+    const groupIds = new Set(port.query(`SELECT id FROM "group"`).map((r) => r.id));
+    const dispatchIds = new Set(port.query("SELECT id FROM dispatch").map((r) => r.id));
+    port.begin();
+    try {
+      port.exec("DELETE FROM lesson");
+      port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.boardsDir]);
+      const seenLessonIds = /* @__PURE__ */ new Set();
+      for (const ref of obsBoards.files) {
+        importBoardLessons(port, ref, sources.boardsDir, groupIds, dispatchIds, seenLessonIds, losses);
+      }
+      for (const l of losses.splice(0)) appendLossOnce2(port, l);
+      writeCheckpoint(port, { path: sources.boardsDir, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count, offset: obsBoards.count, schemaVersion });
+      port.commit();
+    } catch (err) {
+      port.rollback();
+      throw new Error(`import-dispatch-lesson: lesson \u57DF\u91CD\u704C\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7 lesson \u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+    }
+    rescanned.push(sources.boardsDir);
+  }
+  const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
+  return {
+    skipped: false,
+    counts: { dispatch: n("SELECT COUNT(*) AS n FROM dispatch"), lesson: n("SELECT COUNT(*) AS n FROM lesson") },
+    loss: n(
+      "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)",
+      sources.dispatchLogFile,
+      sources.boardsDir
+    ),
+    rescanned,
+    dispatchProcessed
+  };
+}
+var DISPATCH_LESSON_IMPORT_SCHEMA_VERSION, DEFAULT_BATCH_SIZE2, DISPATCH_STATUS, TERMINAL_STATUS;
+var init_import_dispatch_lesson = __esm({
+  "src/storage/import-dispatch-lesson.ts"() {
+    "use strict";
+    init_import_util();
+    init_checkpoint();
+    init_loss_report();
+    DISPATCH_LESSON_IMPORT_SCHEMA_VERSION = 1;
+    DEFAULT_BATCH_SIZE2 = 500;
+    DISPATCH_STATUS = /* @__PURE__ */ new Set(["dispatched", "running", "done", "failed"]);
+    TERMINAL_STATUS = /* @__PURE__ */ new Set(["done", "failed"]);
+  }
+});
+
+// src/storage/schema.ts
+var BASELINE_15_TABLES_DDL, IMPORT_LEDGER_DDL, PERMISSION_AUDIT_DDL, migrations;
+var init_schema = __esm({
+  "src/storage/schema.ts"() {
+    "use strict";
+    BASELINE_15_TABLES_DDL = `
+CREATE TABLE project (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, dir_fingerprint TEXT NOT NULL UNIQUE,
+  anchor_dir TEXT NOT NULL, is_default INTEGER NOT NULL DEFAULT 0,
+  is_hidden INTEGER NOT NULL DEFAULT 0, deleted_at INTEGER, ts INTEGER NOT NULL
+);
+CREATE TABLE member (
+  id TEXT PRIMARY KEY, stable_identity TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL, business_role TEXT NOT NULL,
+  command_role TEXT NOT NULL, task_participation TEXT NOT NULL,
+  engine TEXT, provider TEXT, model TEXT, external_sid TEXT,
+  joined_at INTEGER NOT NULL, retired_at INTEGER,
+  last_heartbeat_at INTEGER, last_business_log_at INTEGER,
+  status TEXT NOT NULL, archive_json TEXT NOT NULL DEFAULT '{}', ts INTEGER NOT NULL
+);
+CREATE TABLE "group" (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES project(id),
+  name TEXT NOT NULL, anchor_dir TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending','active','parked','archived')),
+  tier TEXT NOT NULL CHECK(tier IN ('\u8F7B\u7ACB\u9879','\u6B63\u7ECF\u7ACB\u9879')), single_card INTEGER NOT NULL,
+  headcount_json TEXT NOT NULL DEFAULT '[]', role_defaults_json TEXT NOT NULL DEFAULT '{}',
+  hold_suggested_at INTEGER, archive_note TEXT,
+  workflow_profile TEXT NOT NULL DEFAULT 'engineering', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE TABLE group_member (
+  group_id TEXT NOT NULL REFERENCES "group"(id), member_id TEXT NOT NULL REFERENCES member(id),
+  command_role TEXT, task_participation TEXT, joined_at INTEGER NOT NULL,
+  retired_at INTEGER, archive_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY(group_id, member_id)
+);
+CREATE TABLE session (
+  id TEXT PRIMARY KEY, relay_session_id TEXT, group_id TEXT REFERENCES "group"(id),
+  member_id TEXT REFERENCES member(id), external_sid TEXT, engine TEXT, provider TEXT, model TEXT,
+  cwd TEXT NOT NULL, status TEXT NOT NULL, runtime_state_json TEXT NOT NULL DEFAULT '{}',
+  started_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
+);
+CREATE TABLE task (
+  id TEXT PRIMARY KEY, project_id TEXT REFERENCES project(id), group_id TEXT REFERENCES "group"(id),
+  session_id TEXT REFERENCES session(id), parent_task_id TEXT REFERENCES task(id),
+  origin TEXT NOT NULL, external_sid TEXT, external_task_file_id TEXT,
+  task_ref TEXT NOT NULL UNIQUE, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+  scope_json TEXT NOT NULL DEFAULT '{}', handoff TEXT, assignee_id TEXT REFERENCES member(id),
+  branch TEXT, artifact_id TEXT, depends_on_json TEXT NOT NULL DEFAULT '[]',
+  gate_reason TEXT, gate_opened_at INTEGER, review_required INTEGER NOT NULL DEFAULT 0,
+  review_status TEXT CHECK(review_status IN ('pending','passed','not_required')),
+  workflow_profile TEXT, status TEXT NOT NULL CHECK(status IN ('backlog','claimed','submitted','ready_to_install','done')),
+  deleted_at INTEGER, ts INTEGER NOT NULL
+);
+CREATE TABLE dispatch (
+  id TEXT PRIMARY KEY, task_id TEXT REFERENCES task(id), group_id TEXT REFERENCES "group"(id),
+  tier TEXT NOT NULL, target_member_id TEXT REFERENCES member(id),
+  source_session_id TEXT REFERENCES session(id), actor TEXT NOT NULL, command_id TEXT,
+  status TEXT NOT NULL CHECK(status IN ('dispatched','running','done','failed')),
+  receipt TEXT, attempt_no INTEGER NOT NULL DEFAULT 1,
+  parent_dispatch_id TEXT REFERENCES dispatch(id), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE TABLE lesson (
+  id TEXT PRIMARY KEY, group_id TEXT REFERENCES "group"(id), task_id TEXT REFERENCES task(id),
+  text TEXT NOT NULL, tags_json TEXT NOT NULL DEFAULT '[]',
+  source_dispatch_id TEXT REFERENCES dispatch(id), created_at INTEGER NOT NULL
+);
+CREATE TABLE org_confirm (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, group_id TEXT REFERENCES "group"(id),
+  title TEXT NOT NULL, reason TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),
+  created_at INTEGER NOT NULL, decided_at INTEGER, decided_by TEXT
+);
+CREATE TABLE acceptance_sheet (
+  id TEXT PRIMARY KEY, task_id TEXT REFERENCES task(id), group_id TEXT REFERENCES "group"(id),
+  title TEXT NOT NULL, created_at INTEGER NOT NULL, sheet_key TEXT
+);
+CREATE TABLE acceptance_item (
+  id TEXT PRIMARY KEY, sheet_id TEXT NOT NULL REFERENCES acceptance_sheet(id),
+  item_index INTEGER NOT NULL, task TEXT NOT NULL, item TEXT NOT NULL, criteria TEXT NOT NULL,
+  UNIQUE(sheet_id,item_index)
+);
+CREATE TABLE acceptance_result (
+  id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES acceptance_item(id),
+  verdict TEXT CHECK(verdict IN ('pass','fail') OR verdict IS NULL), note TEXT NOT NULL DEFAULT '',
+  actor TEXT NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE TABLE artifact (
+  source_id TEXT NOT NULL, normalized_path TEXT NOT NULL,
+  project_id TEXT REFERENCES project(id), group_id TEXT REFERENCES "group"(id),
+  session_id TEXT REFERENCES session(id), task_id TEXT REFERENCES task(id),
+  delivery_group_key TEXT, size INTEGER, kind TEXT NOT NULL,
+  existence_state TEXT NOT NULL CHECK(existence_state IN ('exists','missing','unknown')),
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  PRIMARY KEY(source_id, normalized_path)
+);
+CREATE TABLE notification (
+  id TEXT PRIMARY KEY, project_id TEXT, group_id TEXT, session_id TEXT,
+  level TEXT NOT NULL, category TEXT NOT NULL, payload_json TEXT NOT NULL,
+  handled_at INTEGER, resolved_at INTEGER, condition_key TEXT, created_at INTEGER NOT NULL
+);
+CREATE TABLE notification_client_state (
+  notification_id TEXT NOT NULL REFERENCES notification(id), client_id TEXT NOT NULL,
+  read_at INTEGER, dismissed_at INTEGER, PRIMARY KEY(notification_id, client_id)
+);
+CREATE INDEX idx_task_ready ON task(group_id,status,gate_reason);
+CREATE INDEX idx_dispatch_open ON dispatch(group_id,status);
+CREATE INDEX idx_confirm_pending ON org_confirm(status) WHERE status='pending';
+CREATE INDEX idx_artifact_attr ON artifact(project_id,group_id,session_id,task_id);
+CREATE INDEX idx_notification_action ON notification(level,resolved_at,handled_at);
+CREATE INDEX idx_acceptance_task ON acceptance_sheet(task_id,group_id);
+`;
+    IMPORT_LEDGER_DDL = `
+CREATE TABLE import_checkpoint (
+  path TEXT PRIMARY KEY,
+  mtime_ms INTEGER NOT NULL,
+  line_count INTEGER NOT NULL,
+  line_offset INTEGER NOT NULL,
+  schema_version INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE import_loss (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_path TEXT NOT NULL,
+  line_no INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  excerpt TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+`;
+    PERMISSION_AUDIT_DDL = `
+CREATE TABLE permission_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requested_mode TEXT, normalized_mode TEXT,
+  effective_mode TEXT NOT NULL, native_mode TEXT,
+  capability_state TEXT, engine TEXT,
+  reason TEXT NOT NULL, policy_source TEXT,
+  environment TEXT, dir_scope TEXT,
+  tier TEXT, actor TEXT, session_id TEXT, command_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_permission_audit_created ON permission_audit(created_at);
+`;
+    migrations = [
+      {
+        version: 1,
+        name: "baseline-15-tables",
+        up: (p) => p.exec(BASELINE_15_TABLES_DDL)
+      },
+      {
+        version: 2,
+        name: "import-ledger",
+        up: (p) => p.exec(IMPORT_LEDGER_DDL)
+      },
+      {
+        version: 3,
+        name: "permission-audit",
+        up: (p) => p.exec(PERMISSION_AUDIT_DDL)
+      },
+      {
+        // W-SMIMPL ②：dispatch 表补回执缺失标记列（done 无「结果：」行=worker 静默收工的
+        // 观测标记）。v1 基线不动（迁移惯例），既有库/新库统一经 v4 增量；0/1 布尔，
+        // null/0 读侧不带键（宽容口径与 DispatchEntry.receipt_missing?: boolean 对齐）。
+        version: 4,
+        name: "dispatch-receipt-missing",
+        up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN receipt_missing INTEGER")
+      },
+      {
+        // #G3+#G5 板卡富模型+失败分类学：dispatch 表补三列（failure_reason 失败枚举/
+        // retry_of 自动重试标记/priority 优先级透传）。v4 同款增量惯例；三列全可空
+        //（旧行/未标注不带键，与 DispatchEntry 可选字段对齐——投影不再丢新字段）。
+        version: 5,
+        name: "dispatch-rich-model",
+        up: (p) => {
+          p.exec("ALTER TABLE dispatch ADD COLUMN failure_reason TEXT");
+          p.exec("ALTER TABLE dispatch ADD COLUMN retry_of TEXT");
+          p.exec("ALTER TABLE dispatch ADD COLUMN priority TEXT");
+        }
+      },
+      {
+        version: 6,
+        name: "#292-B2 import_checkpoint.mtime_ns\uFF08B \u8DEF\u5BA1\u67E5\u771F\u6839\u4FEE\uFF1Ams \u53D6\u6574\u5728\u7B49\u957F\u8986\u76D6\u5199\u5F62\u6001\u4E0B\u540C\u6BEB\u79D2\u78B0\u649E=checkpoint \u5047\u6709\u6548=\u6295\u5F71\u9648\u65E7=\u5199\u56DE\u62B9\u5199\uFF1Borg \u4E09\u6E90\u5148\u884C\u63A5\u5165\uFF0C\u5176\u4F59\u516D\u57DF\u9010\u6279\u8865\u4F20\u53C2\uFF09",
+        up: (p) => p.exec("ALTER TABLE import_checkpoint ADD COLUMN mtime_ns TEXT")
+      }
+    ];
+  }
+});
+
+// src/storage/read-mode.ts
+var read_mode_exports = {};
+__export(read_mode_exports, {
+  READ_MODE_ENV: () => READ_MODE_ENV,
+  SHADOW_DIFF_FILE: () => SHADOW_DIFF_FILE,
+  compareDomain: () => compareDomain,
+  currentReadMode: () => currentReadMode,
+  diffProjection: () => diffProjection,
+  dispatchEntriesFromDb: () => dispatchEntriesFromDb,
+  ensureStore: () => ensureStore,
+  ensureStoreQuiet: () => ensureStoreQuiet,
+  importAllForShadow: () => importAllForShadow,
+  isSqliteDegradationNotifiedForTest: () => isSqliteDegradationNotifiedForTest,
+  lessonsFromDb: () => lessonsFromDb,
+  orgConfirmsFromDb: () => orgConfirmsFromDb,
+  probeSqliteDriverAtBoot: () => probeSqliteDriverAtBoot,
+  projectGroupsFromDb: () => projectGroupsFromDb,
+  readShadowDiff: () => readShadowDiff,
+  resetReadModeForTest: () => resetReadModeForTest,
+  resetSqliteDegradationFlagForTest: () => resetSqliteDegradationFlagForTest,
+  resolveDirs: () => resolveDirs,
+  resolveReadMode: () => resolveReadMode,
+  runShadowCompare: () => runShadowCompare,
+  viaReadMode: () => viaReadMode,
+  writeShadowDiff: () => writeShadowDiff
+});
+import { existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync9, readdirSync as readdirSync4, writeFileSync as writeFileSync4 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { basename as basename2, join as join11 } from "node:path";
+function resolveReadMode(raw) {
+  if (raw === void 0 || raw === null || raw.trim() === "") return "sqlite";
+  const v = raw.trim();
+  if (READ_MODES.includes(v)) return v;
+  throw new Error(`[read-mode] \u65E0\u6548 ${READ_MODE_ENV}="${raw}"\uFF08\u6709\u6548\u503C\uFF1A${READ_MODES.join("/")}\uFF09\u2014\u2014boot fail-fast\uFF0C\u4E0D\u9759\u9ED8\u56DE\u9000`);
+}
+function currentReadMode() {
+  return resolveReadMode(process.env[READ_MODE_ENV]);
+}
+function resolveDirs(override) {
+  const dataDir3 = override?.dataDir ?? process.env.CCR_DATA_DIR ?? join11(process.cwd(), "data");
+  return {
+    dataDir: dataDir3,
+    orgDir: override?.orgDir ?? process.env.CCR_ORG_DIR ?? join11(homedir3(), ".cc-deck", "org"),
+    tasksDir: override?.tasksDir ?? join11(dataDir3, "tasks")
+  };
+}
+function warnSqliteDegradedOnce(reason, code, context) {
+  if (degradationNotified) return;
+  degradationNotified = true;
+  console.error(`[read-mode] \u26A0\uFE0F  sqlite \u4E0D\u53EF\u7528\uFF0C\u5DF2\u964D\u7EA7 json \u6863\uFF08${context}\uFF1B\u9519\u8BEF\u7801 ${code ?? "\u65E0"}\uFF1B\u5E73\u53F0 ${process.platform}-${process.arch}\uFF09`);
+  console.error(`[read-mode] \u26A0\uFE0F  \u539F\u56E0: ${reason}`);
+  console.error(`[read-mode] \u8BFB\u9762\u884C\u4E3A\u540C CCR_STORAGE_READ_MODE=json\uFF0Crelay \u7EE7\u7EED\u542F\u52A8\uFF088787 \u7167\u5E38\u76D1\u542C\uFF09\u2014\u2014\u4FEE\u590D\u539F\u751F\u4E8C\u8FDB\u5236\u540E\u81EA\u52A8\u6062\u590D sqlite \u6863`);
+}
+function probeSqliteDriverAtBoot() {
+  const mode = currentReadMode();
+  if (mode === "json") return;
+  const driver = loadSqliteDriver();
+  if (driver.ok) return;
+  warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `boot \u63A2\u6D4B\uFF1A\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u9A71\u52A8\u52A0\u8F7D\u5931\u8D25`);
+}
+function isSqliteDegradationNotifiedForTest() {
+  return degradationNotified;
+}
+function resetSqliteDegradationFlagForTest() {
+  degradationNotified = false;
+}
+function ensureStore(dirs) {
+  const cached2 = portCache.get(dirs.dataDir);
+  if (cached2) {
+    importAllForShadow(cached2, dirs);
+    return cached2;
+  }
+  const port = createSqlitePort({ dataDir: dirs.dataDir });
+  port.open();
+  runMigrations(port, migrations);
+  importAllForShadow(port, dirs);
+  portCache.set(dirs.dataDir, port);
+  return port;
+}
+function ensureStoreQuiet(dirs) {
+  const cached2 = portCache.get(dirs.dataDir);
+  if (cached2) return cached2;
+  const port = createSqlitePort({ dataDir: dirs.dataDir });
+  port.open();
+  runMigrations(port, migrations);
+  portCache.set(dirs.dataDir, port);
+  return port;
+}
+function orgRescanPending(port, orgDirPath) {
+  const sources = ["org.json", "projects.json", "confirms.json"].map((f) => join11(orgDirPath, f));
+  for (const file of sources) {
+    let mtimeMs = 0;
+    let mtimeNs;
+    let lineCount = 0;
+    if (existsSync11(file)) {
+      const obs = statThenRead(file);
+      mtimeMs = obs.mtimeMs;
+      mtimeNs = obs.mtimeNs;
+      const lines = obs.text.split("\n");
+      if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+      lineCount = lines.length;
+    }
+    if (readCheckpoint(port, file, { mtimeMs, mtimeNs, lineCount, schemaVersion: ORG_IMPORT_SCHEMA_VERSION }) === null) return true;
+  }
+  return false;
+}
+function importAllForShadow(port, dirs) {
+  const failures = [];
+  const orgSources = ["org.json", "projects.json", "confirms.json"].map((f) => join11(dirs.orgDir, f));
+  if (orgRescanPending(port, dirs.orgDir)) {
+    port.begin();
+    try {
+      port.exec("PRAGMA defer_foreign_keys = ON");
+      const downstream = process.env.CCR_SESSION_IMPORT === "off" ? DOWNSTREAM_TABLES.filter((t) => t !== "session") : DOWNSTREAM_TABLES;
+      for (const t of downstream) port.exec(`DELETE FROM ${t}`);
+      port.exec(
+        `DELETE FROM import_checkpoint WHERE path NOT IN (?, ?, ?)`,
+        orgSources
+      );
+      port.commit();
+    } catch (err) {
+      port.rollback();
+      throw new Error(`[read-mode] org \u91CD\u626B\u8054\u52A8\u7684\u4E0B\u6E38\u4F5C\u5E9F\u5931\u8D25\u5DF2\u56DE\u6EDA\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  const steps = [
+    { domain: "org", run: () => importOrg(port, dirs.orgDir) },
+    {
+      domain: "session-task",
+      run: () => importSessionTask(port, {
+        eventsFile: join11(dirs.dataDir, "events.ndjson"),
+        tasksDir: dirs.tasksDir,
+        acceptanceDir: join11(dirs.dataDir, "acceptances")
+      })
+    },
+    {
+      domain: "dispatch-lesson",
+      run: () => importDispatchLesson(port, {
+        dispatchLogFile: join11(dirs.orgDir, "dispatch-log.ndjson"),
+        boardsDir: join11(dirs.orgDir, "boards")
+      })
+    },
+    { domain: "acceptance", run: () => importAcceptance(port, join11(dirs.dataDir, "acceptances")) },
+    { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
+    // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
+    // 扫描源路径 G2 再接——备案见头注降级条目）。
+    {
+      domain: "artifact",
+      run: () => {
+        const f = join11(dirs.dataDir, "deliverables.json");
+        return importArtifacts(port, existsSync11(f) ? [{ id: "deliverables", file: f }] : []);
+      }
+    }
+  ];
+  for (const { domain, run: run2 } of steps) {
+    try {
+      run2();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failures.push({ domain, error: msg });
+      console.warn(`[read-mode] \u5BFC\u5165\u5668 ${domain} \u5931\u8D25\uFF08\u4E0D\u963B\u65AD\u4ED6\u57DF\uFF09: ${msg}`);
+    }
+  }
+  return failures;
+}
+function projectGroupsFromDb(port) {
+  return port.query(`SELECT id, name, anchor_dir, status, tier, single_card, headcount_json, role_defaults_json, hold_suggested_at, archive_note, created_at, updated_at FROM "group" ORDER BY created_at, id`).map((g2) => ({
+    id: g2.id,
+    name: g2.name,
+    anchor_dir: g2.anchor_dir,
+    status: g2.status,
+    tier: g2.tier,
+    headcount: safeParseArray(g2.headcount_json),
+    role_defaults: safeParseObject(g2.role_defaults_json),
+    single_card: g2.single_card === 1,
+    created_at: g2.created_at,
+    updated_at: g2.updated_at,
+    ...g2.hold_suggested_at !== null ? { hold_suggested_at: g2.hold_suggested_at } : {},
+    ...g2.archive_note !== null ? { archive_note: g2.archive_note } : {}
+  }));
+}
+function orgConfirmsFromDb(port) {
+  const rows = port.query("SELECT id, kind, title, reason, payload_json, status, created_at, decided_at, decided_by FROM org_confirm ORDER BY created_at, id");
+  const toConfirm = (r) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    reason: r.reason,
+    payload: safeParseObject(r.payload_json),
+    status: r.status,
+    created_at: r.created_at,
+    ...r.decided_at !== null ? { decided_at: r.decided_at } : {},
+    ...r.decided_by !== null ? { decided_by: r.decided_by } : {}
+  });
+  return [
+    ...rows.filter((r) => r.status === "pending").map(toConfirm),
+    ...rows.filter((r) => r.status !== "pending").map(toConfirm)
+  ];
+}
+function lessonsFromDb(port, gid) {
+  return port.query(
+    "SELECT id, text, tags_json, created_at, source_dispatch_id FROM lesson WHERE group_id = ? ORDER BY created_at, id",
+    [gid]
+  ).map((l) => ({
+    id: l.id,
+    text: l.text,
+    tags: safeParseArray(l.tags_json).filter((t) => typeof t === "string"),
+    ts: l.created_at,
+    ...l.source_dispatch_id !== null ? { source_dispatch_id: l.source_dispatch_id } : {}
+  }));
+}
+function dispatchEntriesFromDb(port, max = 500) {
+  const rows = port.query("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority FROM dispatch ORDER BY created_at, updated_at, id");
+  const byId = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    byId.set(r.id.replace(/#r\d+$/, ""), {
+      ts: r.updated_at,
+      id: r.id.replace(/#r\d+$/, ""),
+      tier: r.tier,
+      target: r.target_member_id ?? "",
+      status: r.status,
+      ...r.receipt !== null ? { receipt: r.receipt } : {},
+      session_id: r.source_session_id ?? "",
+      ...r.actor ? { actor: r.actor } : {},
+      // W-SMIMPL ②：回执缺失标记（v4 列；0/null 不带键=旧行宽容，json 源行本就缺省）
+      ...r.receipt_missing === 1 ? { receipt_missing: true } : {},
+      // #G3/#G5：失败分类/重试标记/优先级（v5 列；null 不带键=旧行与 json 缺省对齐）
+      ...r.failure_reason ? { failure_reason: r.failure_reason } : {},
+      ...r.retry_of ? { retry_of: r.retry_of } : {},
+      ...r.priority ? { priority: r.priority } : {}
+    });
+  }
+  const all = [...byId.values()];
+  return all.slice(Math.max(0, all.length - max));
+}
+function safeParseArray(s) {
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+function safeParseObject(s) {
+  try {
+    const v = JSON.parse(s);
+    return v !== null && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+function writeShadowDiff(dataDir3, rows) {
+  mkdirSync5(dataDir3, { recursive: true });
+  const body = rows.map((r) => JSON.stringify(r)).join("\n");
+  writeFileSync4(join11(dataDir3, SHADOW_DIFF_FILE), body ? body + "\n" : "", "utf-8");
+}
+function readShadowDiff(dataDir3) {
+  const p = join11(dataDir3, SHADOW_DIFF_FILE);
+  if (!existsSync11(p)) return [];
+  return readFileSync9(p, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
+function keySetDiff(domain, jsonKeys, sqliteKeys, jsonSample, sqliteSample) {
+  const now = Date.now();
+  const rows = [];
+  const jsonSet = new Set(jsonKeys);
+  const sqliteSet = new Set(sqliteKeys);
+  for (const k3 of jsonKeys) if (!sqliteSet.has(k3)) rows.push({ ts: now, domain, key: k3, category: "missing-in-sqlite", json_value: jsonSample?.(k3) });
+  for (const k3 of sqliteKeys) if (!jsonSet.has(k3)) rows.push({ ts: now, domain, key: k3, category: "missing-in-json", sqlite_value: sqliteSample?.(k3) });
+  if (jsonKeys.length !== sqliteKeys.length) {
+    rows.push({ ts: now, domain, key: "*", category: "count-mismatch", json_value: jsonKeys.length, sqlite_value: sqliteKeys.length });
+  }
+  return rows;
+}
+function sampleFieldDiff(domain, jsonVals, sqliteVals) {
+  const now = Date.now();
+  const rows = [];
+  const sMap = new Map(sqliteVals.map((v) => [v.key, v.value]));
+  for (const { key, value } of jsonVals) {
+    const sv2 = sMap.get(key);
+    if (sv2 !== void 0 && JSON.stringify(value) !== JSON.stringify(sv2)) {
+      rows.push({ ts: now, domain, key, category: "value-mismatch", json_value: value, sqlite_value: sv2 });
+    }
+  }
+  return rows;
+}
+function compareDomain(domain, port, dirs) {
+  switch (domain) {
+    case "group": {
+      const j2 = readProjectsJson(dirs.orgDir);
+      const jKeys = j2.groups.map((g2) => g2.id);
+      const sRows = port.query(`SELECT id, tier, status FROM "group"`);
+      return [
+        ...keySetDiff(
+          domain,
+          jKeys,
+          sRows.map((r) => r.id),
+          (k3) => j2.groups.find((g2) => g2.id === k3)?.status,
+          (k3) => sRows.find((r) => r.id === k3)?.status
+        ),
+        ...sampleFieldDiff(
+          domain,
+          j2.groups.map((g2) => ({ key: g2.id, value: { tier: g2.tier, status: g2.status } })),
+          sRows.map((r) => ({ key: r.id, value: { tier: r.tier, status: r.status } }))
+        )
+      ];
+    }
+    case "task": {
+      const jKeys = listDirStems(dirs.tasksDir);
+      const sKeys = port.query("SELECT DISTINCT external_task_file_id AS k FROM task WHERE external_task_file_id IS NOT NULL").map((r) => r.k);
+      return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
+    }
+    case "dispatch": {
+      const jKeys = [...new Set(readNdjsonIds(join11(dirs.orgDir, "dispatch-log.ndjson")))];
+      const sKeys = port.query("SELECT id FROM dispatch").map((r) => r.id.replace(/#r\d+$/, ""));
+      return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
+    }
+    case "notification": {
+      const now = Date.now();
+      const keys = /* @__PURE__ */ new Set();
+      const addValidKeys = (arr) => {
+        for (const raw of arr) {
+          const x = raw;
+          if (typeof x.key === "string" && x.key && typeof x.kind === "string" && typeof x.created_at === "number") keys.add(x.key);
+        }
+      };
+      try {
+        const pf = JSON.parse(readFileSync9(join11(dirs.dataDir, "notifications.json"), "utf-8"));
+        if (Array.isArray(pf.notifications)) addValidKeys(pf.notifications);
+      } catch {
+      }
+      try {
+        const lf = JSON.parse(readFileSync9(join11(dirs.dataDir, "decision-notifications.json"), "utf-8"));
+        if (Array.isArray(lf)) addValidKeys(lf);
+      } catch {
+      }
+      const jCount = keys.size;
+      const sCount = port.query("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
+      return jCount !== sCount ? [{ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount }] : [];
+    }
+    case "acceptance": {
+      const jKeys = acceptanceKeys(join11(dirs.dataDir, "acceptances"));
+      const sKeys = port.query("SELECT id FROM acceptance_sheet").map((r) => r.id);
+      return keySetDiff(domain, jKeys, sKeys);
+    }
+    case "artifact": {
+      const now = Date.now();
+      const rows = [];
+      const jCount = countNdjsonLines(join11(dirs.dataDir, "deliverables.json"));
+      const sCount = port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? 0;
+      if (jCount !== sCount) rows.push({ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount });
+      return rows;
+    }
+    case "lesson": {
+      void dirs;
+      return [];
+    }
+    case "confirm": {
+      const jKeys = readConfirmsJson(dirs.orgDir).map((c) => c.id);
+      const sKeys = port.query("SELECT id FROM org_confirm").map((r) => r.id);
+      return keySetDiff(domain, jKeys, sKeys);
+    }
+  }
+}
+function runShadowCompare(port, dirs, domains) {
+  const all = domains ? [...domains] : ["group", "task", "dispatch", "notification", "acceptance", "artifact", "lesson", "confirm"];
+  const rows = [];
+  for (const d2 of all) {
+    try {
+      rows.push(...compareDomain(d2, port, dirs));
+    } catch (err) {
+      rows.push({ ts: Date.now(), domain: d2, key: "*", category: "shadow-error", sqlite_value: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  writeShadowDiff(dirs.dataDir, rows);
+  return rows;
+}
+function readProjectsJson(orgDirPath) {
+  const p = join11(orgDirPath, "projects.json");
+  try {
+    const v = JSON.parse(readFileSync9(p, "utf-8"));
+    return { groups: Array.isArray(v.groups) ? v.groups : [] };
+  } catch {
+    return { groups: [] };
+  }
+}
+function readConfirmsJson(orgDirPath) {
+  const p = join11(orgDirPath, "confirms.json");
+  try {
+    const v = JSON.parse(readFileSync9(p, "utf-8"));
+    return Array.isArray(v.confirms) ? v.confirms : [];
+  } catch {
+    return [];
+  }
+}
+function listDirStems(dir) {
+  if (!existsSync11(dir)) return [];
+  try {
+    return readdirSync4(dir, { withFileTypes: true }).flatMap((e) => {
+      if (!e.isFile() || !e.name.endsWith(".json")) return [];
+      const stem = basename2(e.name, ".json");
+      return [stem];
+    });
+  } catch {
+    return [];
+  }
+}
+function readNdjsonIds(file) {
+  if (!existsSync11(file)) return [];
+  const ids = [];
+  for (const line of readFileSync9(file, "utf-8").split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const v = JSON.parse(t);
+      if (typeof v.id === "string" && v.id) ids.push(v.id);
+    } catch {
+    }
+  }
+  return ids;
+}
+function countNdjsonLines(file) {
+  if (!existsSync11(file)) return 0;
+  return readFileSync9(file, "utf-8").split("\n").filter((l) => l.trim()).length;
+}
+function acceptanceKeys(dir) {
+  if (!existsSync11(dir)) return [];
+  const keys = [];
+  for (const f of readdirSync4(dir)) {
+    if (!f.endsWith(".json")) continue;
+    keys.push(basename2(f, ".json"));
+    try {
+      const v = JSON.parse(readFileSync9(join11(dir, f), "utf-8"));
+      if (typeof v.id === "string" && v.id && v.id !== basename2(f, ".json")) keys.push(v.id);
+    } catch {
+    }
+  }
+  return keys;
+}
+function viaReadMode(domain, io2) {
+  const mode = currentReadMode();
+  if (mode === "json") return io2.json();
+  const driver = loadSqliteDriver();
+  if (!driver.ok) {
+    warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain} \u89E6\u53D1`);
+    return io2.json();
+  }
+  const dirs = resolveDirs(io2.dirs);
+  let port;
+  try {
+    port = ensureStore(dirs);
+  } catch (err) {
+    warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain}\uFF0Csqlite \u5EFA\u5E93/\u8FC1\u79FB\u5931\u8D25`);
+    return io2.json();
+  }
+  if (mode === "sqlite") return io2.sqlite(port);
+  const jsonVal = io2.json();
+  const now = Date.now();
+  const last = shadowCooldown.get(domain) ?? 0;
+  if (now - last >= SHADOW_DIFF_COOLDOWN_MS) {
+    shadowCooldown.set(domain, now);
+    try {
+      const sqliteVal = io2.sqlite(port);
+      const rows = diffProjection(domain, jsonVal, sqliteVal);
+      try {
+        rows.push(...compareDomain(domain, port, dirs));
+      } catch {
+      }
+      writeShadowDiff(dirs.dataDir, rows);
+    } catch (err) {
+      try {
+        writeShadowDiff(dirs.dataDir, [{ ts: Date.now(), domain, key: "*", category: "shadow-error", sqlite_value: err instanceof Error ? err.message : String(err) }]);
+      } catch {
+      }
+    }
+  }
+  return jsonVal;
+}
+function diffProjection(domain, jsonVal, sqliteVal) {
+  const rows = [];
+  const collect = (path6, j2, s) => {
+    if (rows.length >= MAX_DIFF_ROWS_PER_DOMAIN) {
+      if (rows.length === MAX_DIFF_ROWS_PER_DOMAIN) {
+        rows.push({ ts: Date.now(), domain, key: "*", category: "count-mismatch", json_value: "truncated", sqlite_value: `\u5DEE\u5F02\u8D85 ${MAX_DIFF_ROWS_PER_DOMAIN} \u884C\u622A\u65AD` });
+      }
+      return;
+    }
+    if (JSON.stringify(j2) === JSON.stringify(s)) return;
+    if (Array.isArray(j2) && Array.isArray(s)) {
+      if (j2.length !== s.length) {
+        rows.push({ ts: Date.now(), domain, key: path6 || "*", category: "count-mismatch", json_value: j2.length, sqlite_value: s.length });
+      }
+      const len = Math.max(j2.length, s.length);
+      for (let i = 0; i < len; i++) collect(`${path6}[${i}]`, j2[i], s[i]);
+      return;
+    }
+    if (j2 !== null && s !== null && typeof j2 === "object" && typeof s === "object") {
+      const jo = j2;
+      const so2 = s;
+      for (const k3 of Object.keys(jo)) {
+        if (!(k3 in so2)) rows.push({ ts: Date.now(), domain, key: path6 ? `${path6}.${k3}` : k3, category: "missing-in-sqlite", json_value: jo[k3] });
+        else collect(path6 ? `${path6}.${k3}` : k3, jo[k3], so2[k3]);
+      }
+      for (const k3 of Object.keys(so2)) {
+        if (!(k3 in jo)) rows.push({ ts: Date.now(), domain, key: path6 ? `${path6}.${k3}` : k3, category: "missing-in-json", sqlite_value: so2[k3] });
+      }
+      return;
+    }
+    rows.push({ ts: Date.now(), domain, key: path6 || "*", category: "value-mismatch", json_value: j2, sqlite_value: s });
+  };
+  collect("", jsonVal, sqliteVal);
+  return rows;
+}
+function resetReadModeForTest() {
+  for (const port of portCache.values()) {
+    try {
+      if (port.isOpen) port.close();
+    } catch {
+    }
+  }
+  portCache.clear();
+  shadowCooldown.clear();
+  degradationNotified = false;
+  resetSqliteDriverForTest();
+}
+var READ_MODE_ENV, READ_MODES, SHADOW_DIFF_FILE, SHADOW_DIFF_COOLDOWN_MS, MAX_DIFF_ROWS_PER_DOMAIN, degradationNotified, portCache, DOWNSTREAM_TABLES, shadowCooldown;
+var init_read_mode = __esm({
+  "src/storage/read-mode.ts"() {
+    "use strict";
+    init_sqlite();
+    init_migrator();
+    init_checkpoint();
+    init_import_util();
+    init_import_org();
+    init_import_notification();
+    init_import_session_task();
+    init_import_acceptance();
+    init_import_artifact();
+    init_import_dispatch_lesson();
+    init_schema();
+    READ_MODE_ENV = "CCR_STORAGE_READ_MODE";
+    READ_MODES = ["json", "sqlite", "shadow"];
+    SHADOW_DIFF_FILE = "shadow-diff.ndjson";
+    SHADOW_DIFF_COOLDOWN_MS = 2e3;
+    MAX_DIFF_ROWS_PER_DOMAIN = 200;
+    degradationNotified = false;
+    portCache = /* @__PURE__ */ new Map();
+    DOWNSTREAM_TABLES = [
+      "notification_client_state",
+      "notification",
+      "acceptance_result",
+      "acceptance_item",
+      "acceptance_sheet",
+      "artifact",
+      "lesson",
+      "dispatch",
+      "task",
+      "session"
+    ];
+    shadowCooldown = /* @__PURE__ */ new Map();
+  }
+});
+
+// src/storage/session-write.ts
+var session_write_exports = {};
+__export(session_write_exports, {
+  bootFromMode: () => bootFromMode,
+  bootReconcile: () => bootReconcile,
+  dbRowsToReplayed: () => dbRowsToReplayed,
+  resetSessionWriteWarnForTest: () => resetSessionWriteWarnForTest,
+  sessionWriteMode: () => sessionWriteMode,
+  shadowSessionDiff: () => shadowSessionDiff,
+  shadowWriteSession: () => shadowWriteSession
+});
+function sessionWriteMode() {
+  const raw = process.env.CCR_SESSION_WRITE_MODE;
+  if (raw === "db") return "db";
+  if (raw === "off") return "off";
+  return "shadow";
+}
+function rowOf(s, gidSafe) {
+  return [
+    s.session_id,
+    s.relay_session_id ?? null,
+    gidSafe,
+    s.model ?? null,
+    s.cwd ?? "",
+    s.status,
+    JSON.stringify({
+      title: s.title ?? "",
+      action_summary: s.action_summary ?? "",
+      last_error: s.last_error ?? null,
+      done_reason: s.done_reason ?? null,
+      duration_ms: s.duration_ms ?? null,
+      historical: s.historical === true,
+      external: s.external === true,
+      cli_pid: s.cli_pid ?? null,
+      pinned: s.pinned === true,
+      saved: s.saved === true
+    }),
+    s.started_at ?? s.updated_at ?? Date.now(),
+    s.updated_at ?? Date.now(),
+    null
+  ];
+}
+function shadowWriteSession(state) {
+  const mode = sessionWriteMode();
+  if (mode === "off" || currentReadMode() === "json") return;
+  if (!state || typeof state.session_id !== "string" || !state.session_id) return;
+  let port;
+  try {
+    port = ensureStoreQuiet(resolveDirs());
+  } catch (err) {
+    if (!warned) {
+      warned = true;
+      console.warn("[session-write] \u26A0\uFE0F  SQLite \u4E0D\u53EF\u7528\uFF0Csession \u76F4\u5199\u65C1\u8DEF\uFF08#158 \u8BED\u4E49\uFF0C\u5E27\u94FE\u4E0D\u53D7\u5F71\u54CD\uFF09\uFF1A", err instanceof Error ? err.message : err);
+    }
+    return;
+  }
+  try {
+    const gid = state.project_gid ?? null;
+    const gidSafe = gid && port.query('SELECT COUNT(*) AS n FROM "group" WHERE id = ?', [gid])[0]?.n ? gid : null;
+    port.begin();
+    try {
+      port.exec(SESSION_UPSERT, rowOf(state, gidSafe));
+      port.commit();
+    } catch (err) {
+      try {
+        port.rollback();
+      } catch {
+      }
+      throw err;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isFk = /FOREIGN KEY/i.test(msg);
+    if (!warned || isFk) {
+      if (!isFk) warned = true;
+      console.warn(`[session-write] \u76F4\u5199\u964D\u7EA7${isFk ? "\uFF08FK \u5148\u5E8F\uFF0C\u7EC4\u884C\u843D\u5E93\u540E\u81EA\u6108\u4E0D\u9501\u6807\u5FD7\uFF09" : ""}\uFF08\u5E27\u94FE\u4E0D\u53D7\u5F71\u54CD\uFF0C\u6295\u5F71\u515C\u5E95\uFF09\uFF1A`, msg);
+    }
+  }
+}
+function shadowSessionDiff(port, state) {
+  const row = port.query(
+    "SELECT status, updated_at, cwd, relay_session_id FROM session WHERE id = ?",
+    [state.session_id]
+  )[0];
+  if (!row) return [`\u4F1A\u8BDD ${state.session_id} \u65E0\u884C\uFF08\u76F4\u5199\u672A\u843D\u6216\u88AB\u57DF\u6E05\uFF09`];
+  const out = [];
+  if (row.status !== state.status) out.push(`status: \u5E93=${row.status} \u5185\u5B58=${state.status}`);
+  if (row.updated_at !== state.updated_at) out.push(`updated_at: \u5E93=${row.updated_at} \u5185\u5B58=${state.updated_at}`);
+  if ((row.cwd ?? "") !== (state.cwd ?? "")) out.push(`cwd: \u5E93=${row.cwd} \u5185\u5B58=${state.cwd}`);
+  if ((row.relay_session_id ?? null) !== (state.relay_session_id ?? null)) out.push(`relay_session_id: \u5E93=${row.relay_session_id} \u5185\u5B58=${state.relay_session_id}`);
+  return out;
+}
+function resetSessionWriteWarnForTest() {
+  warned = false;
+}
+function bootFromMode() {
+  const raw = process.env.CCR_BOOT_FROM;
+  if (raw === "auto" || raw === "db") return raw;
+  return "events";
+}
+function bootReconcile(port, replayedIds) {
+  const rows = port.query("SELECT id, status FROM session");
+  const dbIds = new Set(rows.map((r2) => r2.id));
+  const dbOnly = [...dbIds].filter((id2) => !replayedIds.has(id2));
+  const replayOnly = [...replayedIds].filter((id2) => !dbIds.has(id2));
+  const statusMismatch = [];
+  const r = { dbOnly, replayOnly, statusMismatch };
+  if (dbOnly.length === 0 && replayOnly.length === 0) {
+    console.log(`[boot-reconcile] \u5E93\u2194\u56DE\u653E\u96F6\u5DEE\u5F02\uFF08${rows.length} \u4F1A\u8BDD\uFF09\u2014\u2014\u5207\u6E90\uFF08CCR_BOOT_FROM=db\uFF09\u98CE\u9669\u9762\u6E05\u96F6`);
+  } else {
+    console.warn(`[boot-reconcile] \u5E93\u591A ${dbOnly.length} \u884C\uFF08events \u5DF2\u538B\u7F29\u6216\u76F4\u5199\u5148\u884C\uFF09/\u56DE\u653E\u591A ${replayOnly.length} \u5361\uFF08\u5E93 lag\uFF1A\u5E27\u8282\u6D41/\u964D\u7EA7\u7A97\uFF09\u2014\u2014\u5207\u6E90\u524D\u9700\u6536\u655B\uFF1B\u6837\u672C\uFF1AdbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")}`);
+  }
+  return r;
+}
+function dbRowsToReplayed(port) {
+  const rows = port.query("SELECT id, relay_session_id, group_id, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at FROM session WHERE deleted_at IS NULL");
+  const out = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    let rs2 = {};
+    try {
+      rs2 = JSON.parse(r.runtime_state_json);
+    } catch {
+    }
+    out.set(r.id, {
+      state: {
+        session_id: r.id,
+        relay_session_id: r.relay_session_id ?? "",
+        project_gid: r.group_id ?? void 0,
+        cwd: r.cwd,
+        model: r.model ?? void 0,
+        status: r.status,
+        title: typeof rs2.title === "string" ? rs2.title : r.id.slice(0, 8),
+        action_summary: typeof rs2.action_summary === "string" ? rs2.action_summary : "\uFF08\u5E93\u6062\u590D\uFF09",
+        last_error: rs2.last_error ?? null,
+        done_reason: rs2.done_reason ?? null,
+        duration_ms: rs2.duration_ms ?? null,
+        historical: rs2.historical === true,
+        external: rs2.external === true,
+        cli_pid: rs2.cli_pid ?? null,
+        pinned: rs2.pinned === true,
+        saved: rs2.saved === true,
+        started_at: r.started_at,
+        updated_at: r.updated_at,
+        stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }
+      },
+      logs: []
+    });
+  }
+  return out;
+}
+var SESSION_UPSERT, warned;
+var init_session_write = __esm({
+  "src/storage/session-write.ts"() {
+    "use strict";
+    init_read_mode();
+    init_read_mode();
+    SESSION_UPSERT = `INSERT OR REPLACE INTO session
+  (id, relay_session_id, group_id, member_id, external_sid, engine, provider, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at)
+  VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`;
+    warned = false;
   }
 });
 
@@ -11264,2500 +14110,7 @@ import { appendFileSync as appendFileSync5, existsSync as existsSync28, mkdirSyn
 // src/storage/org-write-tx.ts
 import { homedir as homedir4 } from "node:os";
 import { join as join12 } from "node:path";
-
-// src/storage/read-mode.ts
-import { existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync9, readdirSync as readdirSync4, writeFileSync as writeFileSync4 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import { basename as basename2, join as join11 } from "node:path";
-
-// src/storage/sqlite.ts
-import { mkdirSync as mkdirSync4 } from "node:fs";
-import { join as join5 } from "node:path";
-import { createRequire } from "node:module";
-var DEFAULT_DB_FILENAME = "cc-deck.sqlite3";
-var requireCjs = createRequire(import.meta.url);
-var driverCache;
-var driverOverride;
-function loadSqliteDriver() {
-  if (driverOverride !== void 0) return driverOverride;
-  if (driverCache !== void 0) return driverCache;
-  try {
-    const mod = requireCjs("better-sqlite3");
-    const ctor = typeof mod === "function" ? mod : mod.default;
-    if (typeof ctor !== "function") {
-      driverCache = { ok: false, ctor: null, error: "better-sqlite3 \u5BFC\u51FA\u5F62\u6001\u5F02\u5E38\uFF08\u975E\u6784\u9020\u51FD\u6570\uFF09", code: null };
-    } else {
-      const throwaway = new ctor(":memory:");
-      throwaway.close();
-      driverCache = { ok: true, ctor, error: null, code: null };
-    }
-  } catch (err) {
-    const code = err.code ?? null;
-    driverCache = { ok: false, ctor: null, error: err instanceof Error ? err.message : String(err), code };
-  }
-  return driverCache;
-}
-var SqliteStorage = class {
-  constructor(dir, filename) {
-    this.dir = dir;
-    this._path = join5(dir, filename);
-  }
-  dir;
-  db = null;
-  _path = "";
-  _open = false;
-  get path() {
-    return this._path;
-  }
-  get isOpen() {
-    return this._open;
-  }
-  open() {
-    if (this._open) throw new Error(`StoragePort.open: \u5DF2\u6253\u5F00\uFF08${this._path}\uFF09\u2014\u2014\u91CD\u590D open \u5C5E\u7F16\u7A0B\u9519\u8BEF`);
-    const driver = loadSqliteDriver();
-    if (!driver.ok || driver.ctor === null) {
-      throw new Error(`StoragePort.open: better-sqlite3 \u4E0D\u53EF\u7528\uFF08${driver.code ?? "\u65E0\u9519\u8BEF\u7801"}\uFF1A${driver.error}\uFF09\u2014\u2014\u539F\u751F\u4E8C\u8FDB\u5236\u7F3A\u5931\u6216\u5E73\u53F0\u4E0D\u5339\u914D\uFF0C\u8BFB\u9762\u5E94\u964D\u7EA7 json \u6863`);
-    }
-    mkdirSync4(this.dir, { recursive: true });
-    this.db = new driver.ctor(this._path);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.db.pragma("synchronous = NORMAL");
-    this._open = true;
-  }
-  close() {
-    if (!this.db || !this._open) throw new Error("StoragePort.close: \u672A\u6253\u5F00\u2014\u2014close \u524D\u987B open");
-    this.db.close();
-    this.db = null;
-    this._open = false;
-  }
-  /** #292-B2：连接是否处于未结事务（better-sqlite3 inTransaction 直通）——写口事务
-   * 自愈清场用（导入器偶发遗留未结事务的防御，遗留疑点见 org-write-tx 头注）。 */
-  get inTransaction() {
-    return this.requireDb("inTransaction").inTransaction;
-  }
-  begin() {
-    this.requireDb("begin").exec("BEGIN IMMEDIATE");
-  }
-  commit() {
-    this.requireDb("commit").exec("COMMIT");
-  }
-  rollback() {
-    this.requireDb("rollback").exec("ROLLBACK");
-  }
-  exec(sql, params) {
-    const db2 = this.requireDb("exec");
-    if (params === void 0) {
-      db2.exec(sql);
-      return;
-    }
-    db2.prepare(sql).run(...params);
-  }
-  query(sql, params) {
-    const db2 = this.requireDb("query");
-    if (params === void 0) return db2.prepare(sql).all();
-    return db2.prepare(sql).all(...params);
-  }
-  /** 取已打开的连接句柄；未打开抛错（TS 收窄靠返回值而非断言）。 */
-  requireDb(op2) {
-    if (!this.db || !this._open) throw new Error(`StoragePort.${op2}: \u672A\u6253\u5F00\u2014\u2014open \u524D\u7F6E`);
-    return this.db;
-  }
-};
-function createSqlitePort(options) {
-  return new SqliteStorage(options.dataDir, options.filename ?? DEFAULT_DB_FILENAME);
-}
-
-// src/storage/migrator.ts
-function currentVersion(port) {
-  const row = port.query("PRAGMA user_version")[0];
-  const v = row?.user_version;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
-    throw new Error(`migrator: user_version \u4E0D\u53EF\u5224\u5B9A\uFF08${String(v)}\uFF09\u2014\u2014\u975E\u672C runner \u7BA1\u7406\u7684\u5E93\uFF1F`);
-  }
-  return v;
-}
-function setVersion(port, version) {
-  port.exec(`PRAGMA user_version = ${version}`);
-}
-function assertWellFormed(migrations2) {
-  migrations2.forEach((m, i) => {
-    if (m.version !== i + 1) {
-      throw new Error(`migrator: \u8FC1\u79FB\u5217\u8868\u987B\u4ECE 1 \u8FDE\u7EED\u5347\u5E8F\uFF08\u7B2C ${i} \u9879 version=${m.version}\uFF09`);
-    }
-  });
-}
-function runMigrations(port, migrations2) {
-  assertWellFormed(migrations2);
-  const from = currentVersion(port);
-  const applied = [];
-  for (const migration of migrations2) {
-    if (migration.version <= from) continue;
-    port.begin();
-    try {
-      migration.up(port);
-      setVersion(port, migration.version);
-      port.commit();
-    } catch (err) {
-      port.rollback();
-      const reason = err instanceof Error ? err.message : String(err);
-      throw new Error(`migrator: v${migration.version}(${migration.name}) \u8FC1\u79FB\u5931\u8D25\uFF0C\u5DF2\u56DE\u6EDA\u4FDD\u7559 v${from + applied.length} \u5B8C\u6574\u6001\u2014\u2014${reason}`);
-    }
-    applied.push(migration.version);
-  }
-  return { from, to: currentVersion(port), applied };
-}
-
-// src/storage/checkpoint.ts
-function writeCheckpoint(port, key) {
-  if (!Number.isInteger(key.offset) || key.offset < 0 || key.offset > key.lineCount) {
-    throw new Error(`checkpoint.writeCheckpoint: offset(${key.offset}) \u8D8A\u754C [0, lineCount(${key.lineCount})]\u2014\u2014\u7F16\u7A0B\u9519\u8BEF`);
-  }
-  const now = Date.now();
-  port.exec(
-    `INSERT INTO import_checkpoint (path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(path) DO UPDATE SET
-       mtime_ms = excluded.mtime_ms, mtime_ns = excluded.mtime_ns, line_count = excluded.line_count,
-       line_offset = excluded.line_offset, schema_version = excluded.schema_version,
-       updated_at = excluded.updated_at`,
-    [key.path, key.mtimeMs, key.mtimeNs ?? null, key.lineCount, key.offset, key.schemaVersion, now]
-  );
-}
-function readCheckpoint(port, path6, current) {
-  const row = port.query("SELECT path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at FROM import_checkpoint WHERE path = ?", [path6])[0];
-  if (!row) return null;
-  const checkpoint = {
-    path: row.path,
-    mtimeMs: row.mtime_ms,
-    ...row.mtime_ns != null ? { mtimeNs: row.mtime_ns } : {},
-    lineCount: row.line_count,
-    offset: row.line_offset,
-    schemaVersion: row.schema_version,
-    updatedAt: row.updated_at
-  };
-  if (checkpoint.mtimeMs !== current.mtimeMs || checkpoint.lineCount !== current.lineCount || checkpoint.schemaVersion !== current.schemaVersion) {
-    return null;
-  }
-  if (checkpoint.mtimeNs !== void 0 && current.mtimeNs !== void 0 && checkpoint.mtimeNs !== current.mtimeNs) {
-    return null;
-  }
-  return checkpoint;
-}
-
-// src/storage/import-util.ts
-import { createHash } from "node:crypto";
-import { readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
-function sha12(s) {
-  return createHash("sha1").update(s).digest("hex").slice(0, 12);
-}
-var OBS_MEMO = /* @__PURE__ */ new Map();
-var SIZE_MEMO_MAX_BYTES = 2 * 1024 * 1024;
-function statThenRead(file) {
-  const st2 = statSync2(file);
-  const mtimeMs = Math.round(st2.mtimeMs);
-  const mtimeNs = statSync2(file, { bigint: true }).mtimeNs.toString();
-  const hit = OBS_MEMO.get(file);
-  if (hit !== void 0 && hit.mtimeNs === mtimeNs && hit.size === st2.size) {
-    return { mtimeMs, mtimeNs, text: hit.text };
-  }
-  const text = readFileSync6(file, "utf8");
-  if (st2.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st2.size, text });
-  else OBS_MEMO.delete(file);
-  return { mtimeMs, mtimeNs, text };
-}
-
-// src/storage/import-org.ts
-import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync5 } from "node:fs";
-import { join as join6 } from "node:path";
-
-// src/storage/loss-report.ts
-var EXCERPT_MAX = 512;
-function appendLoss(port, record) {
-  const excerpt = record.excerpt.length > EXCERPT_MAX ? `${record.excerpt.slice(0, EXCERPT_MAX - 1)}\u2026` : record.excerpt;
-  port.exec(
-    "INSERT INTO import_loss (source_path, line_no, reason, excerpt, created_at) VALUES (?, ?, ?, ?, ?)",
-    [record.sourcePath, record.lineNo, record.reason, excerpt, Date.now()]
-  );
-}
-
-// src/storage/import-org.ts
-var ORG_IMPORT_SCHEMA_VERSION = 1;
-var GROUP_STATUS = /* @__PURE__ */ new Set(["pending", "active", "parked", "archived"]);
-var GROUP_TIER = /* @__PURE__ */ new Set(["\u8F7B\u7ACB\u9879", "\u6B63\u7ECF\u7ACB\u9879"]);
-var CONFIRM_KIND = /* @__PURE__ */ new Set(["project-create", "tier-change", "suggest-hold", "archive", "revive"]);
-var CONFIRM_STATUS = /* @__PURE__ */ new Set(["pending", "approved", "rejected"]);
-function observe(file, name) {
-  if (!existsSync5(file)) return { name, file, mtimeMs: 0, mtimeNs: void 0, lineCount: 0, text: null };
-  const obs = statThenRead(file);
-  const lines = obs.text.split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { name, file, mtimeMs: obs.mtimeMs, mtimeNs: obs.mtimeNs, lineCount: lines.length, text: obs.text };
-}
-function countAll(port) {
-  const n = (sql) => port.query(sql)[0]?.n ?? -1;
-  return {
-    project: n("SELECT COUNT(*) AS n FROM project"),
-    group: n(`SELECT COUNT(*) AS n FROM "group"`),
-    member: n("SELECT COUNT(*) AS n FROM member"),
-    groupMember: n("SELECT COUNT(*) AS n FROM group_member"),
-    orgConfirm: n("SELECT COUNT(*) AS n FROM org_confirm")
-  };
-}
-function importOrg(port, orgDir2, opts) {
-  const schemaVersion = opts?.schemaVersion ?? ORG_IMPORT_SCHEMA_VERSION;
-  const sources = [
-    observe(join6(orgDir2, "org.json"), "org.json"),
-    observe(join6(orgDir2, "projects.json"), "projects.json"),
-    observe(join6(orgDir2, "confirms.json"), "confirms.json")
-  ];
-  const current = (s) => ({ mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, schemaVersion });
-  const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
-  if (allValid) {
-    return { skipped: true, counts: countAll(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
-  }
-  const losses = [];
-  const groups = [];
-  const validGroupIds = /* @__PURE__ */ new Set();
-  const groupLineNo = /* @__PURE__ */ new Map();
-  const headcountRefs = [];
-  const confirms = [];
-  const orgSrc = sources[0];
-  let leader2 = null;
-  if (orgSrc.text !== null) {
-    try {
-      const a = JSON.parse(orgSrc.text);
-      if (a.version !== 1 || typeof a.leader_session_id !== "string" || !a.leader_session_id) {
-        losses.push({ source: orgSrc, lineNo: 1, reason: "bad-field", excerpt: orgSrc.text.slice(0, 200) });
-      } else {
-        const identity = `${orgDir2}@leader@`;
-        leader2 = {
-          id: `mem-${sha12(identity)}`,
-          stableIdentity: identity,
-          displayName: "Leader",
-          role: "leader",
-          engine: null,
-          provider: null,
-          model: null,
-          externalSid: a.leader_session_id,
-          joinedAt: typeof a.created_at === "number" ? a.created_at : 0,
-          ts: typeof a.created_at === "number" ? a.created_at : 0,
-          groupIds: []
-        };
-      }
-    } catch {
-      losses.push({ source: orgSrc, lineNo: 1, reason: "bad-json", excerpt: orgSrc.text.slice(0, 200) });
-    }
-  }
-  const projectsSrc = sources[1];
-  if (projectsSrc.text !== null) {
-    try {
-      const pf = JSON.parse(projectsSrc.text);
-      if (!Array.isArray(pf.groups)) throw new Error("groups \u975E\u6570\u7EC4");
-      pf.groups.forEach((raw, idx) => {
-        const lineNo = idx + 1;
-        const g2 = raw;
-        let groupValid = true;
-        if (typeof g2.id !== "string" || !g2.id || typeof g2.name !== "string" || typeof g2.anchor_dir !== "string" || !g2.anchor_dir) {
-          losses.push({ source: projectsSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify(g2).slice(0, 200) });
-          groupValid = false;
-        } else if (typeof g2.status !== "string" || !GROUP_STATUS.has(g2.status) || typeof g2.tier !== "string" || !GROUP_TIER.has(g2.tier)) {
-          losses.push({ source: projectsSrc, lineNo, reason: "bad-field", excerpt: JSON.stringify({ id: g2.id, status: g2.status, tier: g2.tier }) });
-          groupValid = false;
-        }
-        const createdAt = typeof g2.created_at === "number" ? g2.created_at : 0;
-        const updatedAt = typeof g2.updated_at === "number" ? g2.updated_at : createdAt;
-        if (groupValid && typeof g2.id === "string") {
-          groups.push({
-            id: g2.id,
-            projectRef: g2.anchor_dir,
-            name: g2.name,
-            anchorDir: g2.anchor_dir,
-            status: g2.status,
-            tier: g2.tier,
-            singleCard: g2.single_card === true ? 1 : 0,
-            headcountJson: JSON.stringify(Array.isArray(g2.headcount) ? g2.headcount : []),
-            roleDefaultsJson: JSON.stringify(g2.role_defaults ?? {}),
-            holdSuggestedAt: typeof g2.hold_suggested_at === "number" ? g2.hold_suggested_at : null,
-            archiveNote: typeof g2.archive_note === "string" ? g2.archive_note : null,
-            createdAt,
-            updatedAt
-          });
-          validGroupIds.add(g2.id);
-          groupLineNo.set(g2.id, lineNo);
-        }
-        if (Array.isArray(g2.headcount)) {
-          g2.headcount.forEach((h) => {
-            const e = h;
-            if (typeof e.role !== "string" || !e.role) {
-              losses.push({ source: projectsSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify({ gid: g2.id, entry: e }).slice(0, 200) });
-              return;
-            }
-            headcountRefs.push({
-              gid: typeof g2.id === "string" ? g2.id : "",
-              role: e.role,
-              engine: typeof e.engine === "string" ? e.engine : "",
-              sessionId: typeof e.session_id === "string" ? e.session_id : null,
-              provider: typeof e.provider === "string" ? e.provider : null,
-              model: typeof e.model === "string" ? e.model : null,
-              groupCreatedAt: createdAt,
-              groupUpdatedAt: updatedAt
-            });
-          });
-        }
-      });
-    } catch {
-      losses.push({ source: projectsSrc, lineNo: 1, reason: "bad-json", excerpt: projectsSrc.text.slice(0, 200) });
-    }
-  }
-  const projectByAnchor = /* @__PURE__ */ new Map();
-  for (const g2 of groups) {
-    const seen = projectByAnchor.get(g2.anchorDir);
-    if (seen) {
-      if (g2.createdAt < seen.ts) {
-        seen.ts = g2.createdAt;
-        seen.name = g2.name;
-      }
-      continue;
-    }
-    projectByAnchor.set(g2.anchorDir, { id: `proj-${sha12(g2.anchorDir)}`, name: g2.name, ts: g2.createdAt });
-  }
-  const memberByIdentity = /* @__PURE__ */ new Map();
-  for (const h of headcountRefs) {
-    const identity = `${orgDir2}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
-    const id2 = `mem-${sha12(identity)}`;
-    const seen = memberByIdentity.get(identity);
-    if (seen) {
-      seen.ts = Math.max(seen.ts, h.groupUpdatedAt);
-      if (!seen.groupIds.includes(h.gid)) seen.groupIds.push(h.gid);
-      continue;
-    }
-    memberByIdentity.set(identity, {
-      id: id2,
-      stableIdentity: identity,
-      displayName: h.role,
-      role: h.role,
-      engine: h.engine === "" ? null : h.engine,
-      provider: h.provider,
-      model: h.model,
-      externalSid: h.sessionId,
-      joinedAt: h.groupCreatedAt,
-      ts: h.groupUpdatedAt,
-      groupIds: [h.gid]
-    });
-  }
-  const confirmsSrc = sources[2];
-  if (confirmsSrc.text !== null) {
-    try {
-      const cf2 = JSON.parse(confirmsSrc.text);
-      const confirmList = Array.isArray(cf2) ? cf2 : cf2 !== null && typeof cf2 === "object" && Array.isArray(cf2.confirms) ? cf2.confirms : null;
-      if (confirmList === null) throw new Error("\u6839\u975E\u6570\u7EC4\u4E14\u975E {confirms:[\u2026]} \u5305\u88F9\u5F62");
-      confirmList.forEach((raw, idx) => {
-        const lineNo = idx + 1;
-        const c = raw;
-        const missing = typeof c.id !== "string" || !c.id || typeof c.kind !== "string" || typeof c.status !== "string" || typeof c.title !== "string" || typeof c.reason !== "string" || typeof c.created_at !== "number";
-        const kindBad = typeof c.kind === "string" && !CONFIRM_KIND.has(c.kind);
-        const statusBad = typeof c.status === "string" && !CONFIRM_STATUS.has(c.status);
-        if (missing || kindBad || statusBad) {
-          losses.push({ source: confirmsSrc, lineNo, reason: missing ? "missing-field" : "bad-field", excerpt: JSON.stringify(c).slice(0, 200) });
-          return;
-        }
-        const gid = typeof c.payload?.gid === "string" ? c.payload.gid : null;
-        let groupId = null;
-        if (gid !== null) {
-          if (validGroupIds.has(gid)) groupId = gid;
-          else losses.push({ source: confirmsSrc, lineNo, reason: "dangling-ref", excerpt: JSON.stringify({ id: c.id, gid }).slice(0, 200) });
-        } else {
-          losses.push({ source: confirmsSrc, lineNo, reason: "missing-attribution", excerpt: JSON.stringify({ id: c.id }).slice(0, 200) });
-        }
-        let decidedBy = typeof c.decided_by === "string" && c.decided_by ? c.decided_by : null;
-        if (decidedBy === "leader" && leader2 !== null) decidedBy = leader2.id;
-        const cid = c.id;
-        const kind = c.kind;
-        const status = c.status;
-        const title = c.title;
-        const reason = c.reason;
-        const createdAt = c.created_at;
-        confirms.push({
-          id: cid,
-          kind,
-          groupId,
-          title,
-          reason,
-          payloadJson: JSON.stringify(c.payload ?? {}),
-          status,
-          createdAt,
-          decidedAt: typeof c.decided_at === "number" ? c.decided_at : null,
-          decidedBy
-        });
-      });
-    } catch {
-      losses.push({ source: confirmsSrc, lineNo: 1, reason: "bad-json", excerpt: confirmsSrc.text.slice(0, 200) });
-    }
-  }
-  port.begin();
-  try {
-    port.exec("DELETE FROM group_member");
-    port.exec("DELETE FROM org_confirm");
-    port.exec("DELETE FROM member");
-    port.exec(`DELETE FROM "group"`);
-    port.exec("DELETE FROM project");
-    port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?, ?)", [orgSrc.file, projectsSrc.file, confirmsSrc.file]);
-    for (const [anchorDir, p] of projectByAnchor) {
-      port.exec(
-        "INSERT INTO project (id, name, dir_fingerprint, anchor_dir, is_default, is_hidden, deleted_at, ts) VALUES (?, ?, ?, ?, 0, 0, NULL, ?)",
-        [p.id, p.name, createHash2("sha1").update(anchorDir).digest("hex"), anchorDir, p.ts]
-      );
-    }
-    for (const g2 of groups) {
-      const p = projectByAnchor.get(g2.anchorDir);
-      port.exec(
-        `INSERT INTO "group" (id, project_id, name, anchor_dir, status, tier, single_card, headcount_json, role_defaults_json, hold_suggested_at, archive_note, workflow_profile, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'engineering', ?, ?)`,
-        [g2.id, p?.id ?? null, g2.name, g2.anchorDir, g2.status, g2.tier, g2.singleCard, g2.headcountJson, g2.roleDefaultsJson, g2.holdSuggestedAt, g2.archiveNote, g2.createdAt, g2.updatedAt]
-      );
-    }
-    const allMembers = leader2 !== null ? [leader2, ...memberByIdentity.values()] : [...memberByIdentity.values()];
-    for (const m of allMembers) {
-      const validGroups = m.groupIds.filter((gid) => validGroupIds.has(gid));
-      port.exec(
-        `INSERT INTO member (id, stable_identity, display_name, business_role, command_role, task_participation, engine, provider, model, external_sid, joined_at, retired_at, last_heartbeat_at, last_business_log_at, status, archive_json, ts)
-         VALUES (?, ?, ?, ?, ?, 'unknown', ?, ?, ?, ?, ?, NULL, NULL, NULL, 'active', ?, ?)`,
-        [
-          m.id,
-          m.stableIdentity,
-          m.displayName,
-          m.role,
-          m.role,
-          m.engine,
-          m.provider,
-          m.model,
-          m.externalSid,
-          m.joinedAt,
-          validGroups.length > 1 ? JSON.stringify({ groups: validGroups }) : "{}",
-          m.ts
-        ]
-      );
-    }
-    const seenRef = /* @__PURE__ */ new Set();
-    for (const h of headcountRefs) {
-      if (!validGroupIds.has(h.gid)) {
-        losses.push({ source: projectsSrc, lineNo: groupLineNo.get(h.gid) ?? 0, reason: "dangling-ref", excerpt: JSON.stringify({ gid: h.gid, role: h.role, engine: h.engine }).slice(0, 200) });
-        continue;
-      }
-      const identity = `${orgDir2}@${h.role}@${h.engine}@${h.sessionId ?? ""}`;
-      const memId = `mem-${sha12(identity)}`;
-      const gmKey = `${h.gid}@${memId}`;
-      if (seenRef.has(gmKey)) continue;
-      seenRef.add(gmKey);
-      port.exec(
-        "INSERT INTO group_member (group_id, member_id, command_role, task_participation, joined_at, retired_at, archive_json) VALUES (?, ?, ?, NULL, ?, NULL, '{}')",
-        [h.gid, memId, h.role, h.groupCreatedAt]
-      );
-    }
-    for (const c of confirms) {
-      port.exec(
-        "INSERT INTO org_confirm (id, kind, group_id, title, reason, payload_json, status, created_at, decided_at, decided_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [c.id, c.kind, c.groupId, c.title, c.reason, c.payloadJson, c.status, c.createdAt, c.decidedAt, c.decidedBy]
-      );
-    }
-    for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
-    for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
-    port.commit();
-  } catch (err) {
-    port.rollback();
-    throw new Error(`import-org: \u7EC4\u7EC7\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-  }
-  return { skipped: false, counts: countAll(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
-}
-
-// src/storage/import-notification.ts
-import { existsSync as existsSync6 } from "node:fs";
-import { join as join7 } from "node:path";
-var NOTIFICATION_IMPORT_SCHEMA_VERSION = 1;
-function observe2(file, name) {
-  if (!existsSync6(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
-  const obs = statThenRead(file);
-  const lines = obs.text.split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { name, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, text: obs.text };
-}
-function countAll2(port) {
-  return {
-    notification: port.query("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? -1,
-    clientState: port.query("SELECT COUNT(*) AS n FROM notification_client_state")[0]?.n ?? -1
-  };
-}
-function deriveLevel(actionable, kind, resolvedAt) {
-  if (!actionable || kind === "system") return "info";
-  return resolvedAt !== null ? "done" : "waiting";
-}
-function importNotifications(port, dataDir3, opts) {
-  const schemaVersion = opts?.schemaVersion ?? NOTIFICATION_IMPORT_SCHEMA_VERSION;
-  const sources = [
-    observe2(join7(dataDir3, "notifications.json"), "notifications.json"),
-    observe2(join7(dataDir3, "decision-notifications.json"), "decision-notifications.json")
-  ];
-  const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
-  const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
-  if (allValid) {
-    return { skipped: true, counts: countAll2(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
-  }
-  const losses = [];
-  const byKey = /* @__PURE__ */ new Map();
-  const projSrc = sources[0];
-  if (projSrc.text !== null) {
-    try {
-      const pf = JSON.parse(projSrc.text);
-      if (!Array.isArray(pf.notifications)) throw new Error("notifications \u975E\u6570\u7EC4");
-      pf.notifications.forEach((raw, idx) => {
-        const lineNo = idx + 1;
-        const x = raw;
-        if (typeof x.key !== "string" || !x.key || typeof x.kind !== "string" || typeof x.created_at !== "number") {
-          losses.push({ source: projSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify(x).slice(0, 200) });
-          return;
-        }
-        if (byKey.has(x.key)) {
-          losses.push({ source: projSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: x.key }).slice(0, 200) });
-          return;
-        }
-        const resolvedAt = typeof x.resolved_at === "number" ? x.resolved_at : null;
-        const handledAt = typeof x.handled_at === "number" ? x.handled_at : typeof x.dismissed_at === "number" ? x.dismissed_at : null;
-        const actionable = x.actionable === true;
-        const sc2 = x.sourceContext ?? {};
-        const clientStates = /* @__PURE__ */ new Map();
-        if (Array.isArray(x.client_states)) {
-          x.client_states.forEach((cs2) => {
-            const c = cs2;
-            if (typeof c.client_id !== "string" || !c.client_id) {
-              losses.push({ source: projSrc, lineNo, reason: "missing-attribution", excerpt: JSON.stringify({ key: x.key, client_state: c }).slice(0, 200) });
-              return;
-            }
-            if (clientStates.has(c.client_id)) {
-              losses.push({ source: projSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: x.key, client_id: c.client_id }).slice(0, 200) });
-            }
-            clientStates.set(c.client_id, {
-              clientId: c.client_id,
-              readAt: typeof c.read_at === "number" ? c.read_at : null,
-              dismissedAt: typeof c.dismissed_at === "number" ? c.dismissed_at : null
-            });
-          });
-        }
-        const returnPath = typeof sc2.returnPath === "string" ? sc2.returnPath : "";
-        if (returnPath) losses.push({ source: projSrc, lineNo, reason: "unmapped-field", excerpt: JSON.stringify({ key: x.key, return_path: returnPath }).slice(0, 300) });
-        byKey.set(x.key, {
-          id: `ntf-${sha12(x.key)}`,
-          key: x.key,
-          origin: "proj",
-          category: x.kind,
-          level: typeof x.severity === "string" ? x.severity : deriveLevel(actionable, x.kind, resolvedAt),
-          sessionId: typeof sc2.sessionId === "string" && sc2.sessionId ? sc2.sessionId : null,
-          payload: {
-            title: x.title ?? "",
-            body: x.body ?? "",
-            actionable,
-            group: x.group ?? null,
-            source_context: sc2
-          },
-          handledAt,
-          resolvedAt,
-          conditionKey: x.key,
-          createdAt: x.created_at,
-          clientStates: [...clientStates.values()]
-        });
-      });
-    } catch {
-      losses.push({ source: projSrc, lineNo: 1, reason: "bad-json", excerpt: projSrc.text.slice(0, 200) });
-    }
-  }
-  const ledgerSrc = sources[1];
-  if (ledgerSrc.text !== null) {
-    try {
-      const lf = JSON.parse(ledgerSrc.text);
-      if (!Array.isArray(lf)) throw new Error("\u6839\u975E\u6570\u7EC4");
-      lf.forEach((raw, idx) => {
-        const lineNo = idx + 1;
-        const d2 = raw;
-        if (typeof d2.key !== "string" || !d2.key || typeof d2.kind !== "string" || typeof d2.created_at !== "number") {
-          losses.push({ source: ledgerSrc, lineNo, reason: "missing-field", excerpt: JSON.stringify(d2).slice(0, 200) });
-          return;
-        }
-        const resolvedAt = typeof d2.resolved_at === "number" ? d2.resolved_at : null;
-        const handledAt = typeof d2.handled_at === "number" ? d2.handled_at : typeof d2.dismissed_at === "number" ? d2.dismissed_at : null;
-        const actionable = d2.actionable === true;
-        const sc2 = d2.source_context ?? null;
-        const sessionId = typeof sc2?.sessionId === "string" && sc2.sessionId ? sc2.sessionId : typeof d2.source_session_id === "string" && d2.source_session_id ? d2.source_session_id : null;
-        const returnPath = typeof sc2?.returnPath === "string" ? sc2.returnPath : "";
-        const ledgerExtra = {
-          ...typeof d2.first_sent_at === "number" ? { first_sent_at: d2.first_sent_at } : {},
-          ...typeof d2.reminded_at === "number" ? { reminded_at: d2.reminded_at } : {},
-          ...typeof d2.revision === "string" ? { revision: d2.revision } : {}
-        };
-        const existing = byKey.get(d2.key);
-        if (existing !== void 0) {
-          if (existing.origin !== "proj") {
-            losses.push({ source: ledgerSrc, lineNo, reason: "duplicate-key", excerpt: JSON.stringify({ key: d2.key }).slice(0, 200) });
-            return;
-          }
-          if (returnPath) losses.push({ source: ledgerSrc, lineNo, reason: "unmapped-field", excerpt: JSON.stringify({ key: d2.key, return_path: returnPath }).slice(0, 300) });
-          existing.sessionId = existing.sessionId ?? sessionId;
-          existing.createdAt = Math.min(existing.createdAt, d2.created_at);
-          existing.handledAt = existing.handledAt !== null && handledAt !== null ? Math.min(existing.handledAt, handledAt) : existing.handledAt ?? handledAt;
-          existing.resolvedAt = existing.resolvedAt !== null && resolvedAt !== null ? Math.min(existing.resolvedAt, resolvedAt) : existing.resolvedAt ?? resolvedAt;
-          if (Object.keys(ledgerExtra).length > 0) existing.payload.ledger = ledgerExtra;
-          existing.origin = "merged";
-          return;
-        }
-        if (returnPath) losses.push({ source: ledgerSrc, lineNo, reason: "unmapped-field", excerpt: JSON.stringify({ key: d2.key, return_path: returnPath }).slice(0, 300) });
-        byKey.set(d2.key, {
-          id: `ntf-${sha12(d2.key)}`,
-          key: d2.key,
-          origin: "ledger",
-          category: d2.kind,
-          level: deriveLevel(actionable, d2.kind, resolvedAt),
-          sessionId,
-          payload: {
-            title: "",
-            body: "",
-            actionable,
-            group: d2.group ?? null,
-            source_context: sc2 ?? { domain: d2.kind, entityId: d2.key, alertId: d2.key, returnPath: "" },
-            ...Object.keys(ledgerExtra).length > 0 ? { ledger: ledgerExtra } : {}
-          },
-          handledAt,
-          resolvedAt,
-          conditionKey: d2.key,
-          createdAt: d2.created_at,
-          clientStates: []
-        });
-      });
-    } catch {
-      losses.push({ source: ledgerSrc, lineNo: 1, reason: "bad-json", excerpt: ledgerSrc.text.slice(0, 200) });
-    }
-  }
-  port.begin();
-  try {
-    port.exec("DELETE FROM notification_client_state");
-    port.exec("DELETE FROM notification");
-    port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [projSrc.file, ledgerSrc.file]);
-    for (const n of byKey.values()) {
-      port.exec(
-        "INSERT INTO notification (id, project_id, group_id, session_id, level, category, payload_json, handled_at, resolved_at, condition_key, created_at) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [n.id, n.sessionId, n.level, n.category, JSON.stringify(n.payload), n.handledAt, n.resolvedAt, n.conditionKey, n.createdAt]
-      );
-      for (const cs2 of n.clientStates) {
-        port.exec(
-          "INSERT INTO notification_client_state (notification_id, client_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)",
-          [n.id, cs2.clientId, cs2.readAt, cs2.dismissedAt]
-        );
-      }
-    }
-    for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
-    for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
-    port.commit();
-  } catch (err) {
-    port.rollback();
-    throw new Error(`import-notification: \u901A\u77E5\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-  }
-  return { skipped: false, counts: countAll2(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
-}
-
-// src/storage/import-session-task.ts
-import { existsSync as existsSync7, readdirSync, readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
-import { join as join8 } from "node:path";
-var SESSION_TASK_IMPORT_SCHEMA_VERSION = 1;
-var DEFAULT_BATCH_SIZE = 500;
-var ACC_DIR_CP_SUFFIX = "#tasks-view";
-var TASK_STATUS = /* @__PURE__ */ new Set(["backlog", "claimed", "submitted", "ready_to_install", "done"]);
-var TASK_STATUS_MAP = {
-  todo: "backlog",
-  pending: "backlog",
-  doing: "claimed",
-  in_progress: "claimed",
-  done: "done",
-  completed: "done"
-};
-var SESSION_STATUS = /* @__PURE__ */ new Set(["WORKING", "WAITING", "ERROR", "DONE"]);
-function appendLossOnce(port, record) {
-  const dup = port.query(
-    "SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ? AND line_no = ? AND reason = ?",
-    [record.sourcePath, record.lineNo, record.reason]
-  )[0]?.n ?? 0;
-  if (dup === 0) appendLoss(port, record);
-}
-function observeNdjson(file) {
-  if (!existsSync7(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
-  const obs = statThenRead(file);
-  const lines = obs.text.split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
-}
-function observeTasksDir(dir) {
-  if (!existsSync7(dir)) return { mtimeMs: 0, count: 0, files: [] };
-  const files = [];
-  let maxMtime = 0;
-  for (const sid of readdirSync(dir).sort()) {
-    const sub = join8(dir, sid);
-    let tids;
-    try {
-      tids = readdirSync(sub).sort();
-    } catch {
-      continue;
-    }
-    for (const name of tids) {
-      if (!name.endsWith(".json")) continue;
-      const file = join8(sub, name);
-      let st2;
-      try {
-        st2 = statSync3(file);
-      } catch {
-        continue;
-      }
-      const m = Math.round(st2.mtimeMs);
-      if (m > maxMtime) maxMtime = m;
-      files.push({ sid, tid: name.slice(0, -5), file, mtimeMs: m });
-    }
-  }
-  return { mtimeMs: maxMtime, count: files.length, files };
-}
-function observeAcceptanceDir(dir) {
-  if (!existsSync7(dir)) return { mtimeMs: 0, count: 0, sheets: [] };
-  const sheets = [];
-  let maxMtime = 0;
-  for (const name of readdirSync(dir).sort()) {
-    if (!name.endsWith(".json") || name.endsWith(".results.json")) continue;
-    const file = join8(dir, name);
-    let st2;
-    try {
-      st2 = statSync3(file);
-    } catch {
-      continue;
-    }
-    const m = Math.round(st2.mtimeMs);
-    if (m > maxMtime) maxMtime = m;
-    let doc = null;
-    let raw = "";
-    try {
-      raw = readFileSync7(file, "utf8");
-      doc = JSON.parse(raw);
-    } catch {
-      doc = null;
-    }
-    sheets.push({ file, doc, raw });
-  }
-  return { mtimeMs: maxMtime, count: sheets.length, sheets };
-}
-var SESSION_INSERT = `INSERT OR REPLACE INTO session
-  (id, relay_session_id, group_id, member_id, external_sid, engine, provider, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at)
-  VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`;
-function applyEvent(port, ev2, lineNo, srcPath, groupByAnchor, losses) {
-  const src = srcPath;
-  const excerpt = JSON.stringify(ev2).slice(0, 200);
-  if (typeof ev2.session_id !== "string" || !ev2.session_id || typeof ev2.type !== "string") {
-    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-    return;
-  }
-  if (typeof ev2.ts !== "number" || !Number.isFinite(ev2.ts)) {
-    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-    return;
-  }
-  const sid = ev2.session_id;
-  const ts2 = ev2.ts;
-  const type = ev2.type;
-  const payload = typeof ev2.payload === "object" && ev2.payload !== null ? ev2.payload : {};
-  if (type === "SESSION_LOG" || type === "SESSION_ACTIVITY" || type === "SESSION_HEARTBEAT") {
-    return;
-  }
-  const existing = port.query(
-    "SELECT runtime_state_json, started_at, deleted_at FROM session WHERE id = ?",
-    [sid]
-  )[0];
-  if (type === "SESSION_DELETED") {
-    if (existing) {
-      port.exec("UPDATE session SET deleted_at = ?, updated_at = ? WHERE id = ?", [ts2, ts2, sid]);
-    }
-    return;
-  }
-  let nextStatus = null;
-  if (type === "SESSION_CREATED") nextStatus = "WORKING";
-  else if (type === "SESSION_WAITING") nextStatus = "WAITING";
-  else if (type === "SESSION_WAITING_RESOLVED") nextStatus = "WORKING";
-  else if (type === "SESSION_ERROR") nextStatus = "ERROR";
-  else if (type === "SESSION_DONE") nextStatus = "DONE";
-  else if (type === "SESSION_UPDATED") {
-    const p = payload.status;
-    if (typeof p === "string" && SESSION_STATUS.has(p)) nextStatus = p;
-  }
-  let runtimeJson = existing?.runtime_state_json ?? "{}";
-  if (type === "SESSION_ERROR" && typeof payload.last_error === "string") {
-    runtimeJson = JSON.stringify({ ...safeParse(runtimeJson), last_error: payload.last_error });
-  } else if (type === "SESSION_DONE") {
-    const patch = {};
-    if (typeof payload.done_reason === "string") patch.done_reason = payload.done_reason;
-    if (typeof payload.duration_ms === "number") patch.duration_ms = payload.duration_ms;
-    if (Object.keys(patch).length > 0) runtimeJson = JSON.stringify({ ...safeParse(runtimeJson), ...patch });
-  }
-  if (!existing) {
-    if (type !== "SESSION_CREATED") {
-      losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-      return;
-    }
-    const cwd = typeof payload.cwd === "string" && payload.cwd ? payload.cwd : "";
-    if (!cwd) {
-      losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-      return;
-    }
-    const status = nextStatus ?? "WORKING";
-    const row = {
-      id: sid,
-      relaySessionId: typeof payload.relay_session_id === "string" ? payload.relay_session_id : null,
-      groupId: groupByAnchor.get(cwd) ?? null,
-      engine: null,
-      provider: null,
-      model: typeof payload.model === "string" ? payload.model : null,
-      cwd,
-      status,
-      runtimeStateJson: runtimeJson,
-      startedAt: ts2,
-      updatedAt: ts2,
-      deletedAt: null
-    };
-    port.exec(SESSION_INSERT, [
-      row.id,
-      row.relaySessionId,
-      row.groupId,
-      row.model,
-      row.cwd,
-      row.status,
-      row.runtimeStateJson,
-      row.startedAt,
-      row.updatedAt,
-      row.deletedAt
-    ]);
-    return;
-  }
-  if (nextStatus !== null) {
-    port.exec("UPDATE session SET status = ?, updated_at = ?, runtime_state_json = ? WHERE id = ?", [
-      nextStatus,
-      ts2,
-      runtimeJson,
-      sid
-    ]);
-  } else {
-    port.exec("UPDATE session SET updated_at = ?, runtime_state_json = ? WHERE id = ?", [ts2, runtimeJson, sid]);
-  }
-}
-function safeParse(s) {
-  try {
-    const v = JSON.parse(s);
-    return typeof v === "object" && v !== null ? v : {};
-  } catch {
-    return {};
-  }
-}
-function parseTaskFile(ref, lossSource, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses) {
-  let doc;
-  try {
-    doc = JSON.parse(readFileSync7(ref.file, "utf8"));
-  } catch {
-    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "bad-json", excerpt: JSON.stringify({ file: ref.file }).slice(0, 200) });
-    return null;
-  }
-  const excerpt = JSON.stringify({ sid: ref.sid, tid: ref.tid, subject: doc.subject, status: doc.status }).slice(0, 200);
-  if (typeof doc.subject !== "string" || !doc.subject) {
-    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "missing-field", excerpt });
-    return null;
-  }
-  if (typeof doc.status !== "string" || !(doc.status in TASK_STATUS_MAP)) {
-    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "bad-field", excerpt });
-    return null;
-  }
-  const mapped = TASK_STATUS_MAP[doc.status];
-  const taskRef = `${ref.sid}/${ref.tid}`;
-  const cwd = sessionCwd.get(ref.sid);
-  const reviewRequired = cwd !== void 0 && reviewCwds.has(cwd) ? 1 : 0;
-  const groupId = cwd !== void 0 ? groupByAnchor.get(cwd) ?? null : null;
-  if (cwd === void 0) {
-    losses.push({ sourcePath: lossSource, lineNo: 1, reason: "dangling-ref", excerpt });
-  }
-  const projectId = groupId !== null ? groupProject.get(groupId) ?? null : null;
-  const dependsOn = Array.isArray(doc.blockedBy) ? doc.blockedBy.filter((x) => typeof x === "string").map((t) => `${ref.sid}/${t}`) : [];
-  return {
-    id: `task-${sha12(taskRef)}`,
-    projectId,
-    groupId,
-    sessionId: cwd !== void 0 ? ref.sid : null,
-    origin: "user",
-    externalTaskFileId: ref.tid,
-    taskRef,
-    title: doc.subject,
-    description: typeof doc.description === "string" ? doc.description : "",
-    dependsOnJson: JSON.stringify(dependsOn),
-    reviewRequired,
-    reviewStatus: reviewRequired === 1 ? "pending" : "not_required",
-    status: mapped === "done" && reviewRequired === 1 ? "submitted" : mapped,
-    ts: ref.mtimeMs
-  };
-}
-function importSessionTask(port, sources, opts) {
-  const schemaVersion = opts?.schemaVersion ?? SESSION_TASK_IMPORT_SCHEMA_VERSION;
-  const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE;
-  const obsEvents = observeNdjson(sources.eventsFile);
-  const obsTasks = observeTasksDir(sources.tasksDir);
-  const obsAccept = observeAcceptanceDir(sources.acceptanceDir);
-  const current = { schemaVersion };
-  const cpEvents = obsEvents.lines !== null ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount }) : null;
-  const cpTasks = readCheckpoint(port, sources.tasksDir, { ...current, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count });
-  const accCpKey = `${sources.acceptanceDir}${ACC_DIR_CP_SUFFIX}`;
-  const cpAccept = readCheckpoint(port, accCpKey, { ...current, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count });
-  if (cpEvents !== null && cpEvents.offset >= obsEvents.lineCount && cpTasks !== null && cpAccept !== null) {
-    const n2 = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
-    return {
-      skipped: true,
-      counts: { session: n2("SELECT COUNT(*) AS n FROM session"), task: n2("SELECT COUNT(*) AS n FROM task") },
-      loss: n2(
-        "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)",
-        sources.eventsFile,
-        sources.tasksDir,
-        sources.acceptanceDir
-      ),
-      rescanned: [],
-      eventsProcessed: 0
-    };
-  }
-  const groupByAnchor = /* @__PURE__ */ new Map();
-  for (const r of port.query(`SELECT id, anchor_dir FROM "group"`)) {
-    groupByAnchor.set(r.anchor_dir, r.id);
-  }
-  const losses = [];
-  let eventsProcessed = 0;
-  if (obsEvents.lines !== null) {
-    const fromLine = cpEvents !== null ? cpEvents.offset : 0;
-    if (fromLine === 0) {
-      port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.eventsFile]);
-    }
-    let batch = [];
-    const flushBatch = () => {
-      if (batch.length === 0) return;
-      port.begin();
-      try {
-        let lastLine = fromLine;
-        for (const b of batch) {
-          if (b.ev !== null) applyEvent(port, b.ev, b.lineNo, sources.eventsFile, groupByAnchor, losses);
-          lastLine = b.lineNo;
-        }
-        for (const l of losses.splice(0)) appendLossOnce(port, l);
-        writeCheckpoint(port, {
-          path: sources.eventsFile,
-          mtimeMs: obsEvents.mtimeMs,
-          lineCount: obsEvents.lineCount,
-          offset: lastLine,
-          schemaVersion
-        });
-        port.commit();
-      } catch (err) {
-        port.rollback();
-        throw new Error(`import-session-task: events \u6279\u5904\u7406\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08offset \u505C\u7559\u524D\u6279\u5C3E\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-      }
-      eventsProcessed += batch.length;
-      batch = [];
-    };
-    for (let i = fromLine; i < obsEvents.lines.length; i++) {
-      const line = obsEvents.lines[i];
-      const lineNo = i + 1;
-      let ev2 = null;
-      if (line.trim() !== "") {
-        try {
-          ev2 = JSON.parse(line);
-        } catch {
-          losses.push({ sourcePath: sources.eventsFile, lineNo, reason: "bad-json", excerpt: line.slice(0, 200) });
-        }
-      }
-      batch.push({ ev: ev2, lineNo });
-      if (batch.length >= batchSize) flushBatch();
-    }
-    flushBatch();
-    if (obsEvents.lineCount === 0 && fromLine === 0) {
-      port.begin();
-      try {
-        port.exec("DELETE FROM import_loss WHERE source_path = ?", ["events"]);
-        writeCheckpoint(port, { path: sources.eventsFile, mtimeMs: obsEvents.mtimeMs, lineCount: 0, offset: 0, schemaVersion });
-        port.commit();
-      } catch (err) {
-        port.rollback();
-        throw new Error(`import-session-task: \u7A7A events checkpoint \u5199\u5165\u5931\u8D25\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-  }
-  if (cpEvents === null || cpTasks === null || cpAccept === null) {
-    const reviewCwds = /* @__PURE__ */ new Set();
-    for (const s of obsAccept.sheets) {
-      if (s.doc === null) {
-        losses.push({ sourcePath: sources.acceptanceDir, lineNo: 1, reason: "bad-json", excerpt: s.raw.slice(0, 200) });
-        continue;
-      }
-      if (typeof s.doc.cwd === "string" && s.doc.cwd) reviewCwds.add(s.doc.cwd);
-    }
-    const sessionCwd = new Map(
-      port.query("SELECT id, cwd FROM session").map((r) => [r.id, r.cwd])
-    );
-    const groupProject = new Map(
-      port.query(`SELECT id, project_id FROM "group"`).map((r) => [r.id, r.project_id ?? ""])
-    );
-    port.begin();
-    try {
-      port.exec("DELETE FROM task");
-      port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [sources.tasksDir, sources.acceptanceDir]);
-      const rows = [];
-      for (const ref of obsTasks.files) {
-        const row = parseTaskFile(ref, sources.tasksDir, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses);
-        if (row !== null) {
-          if (!TASK_STATUS.has(row.status)) {
-            throw new Error(`\u6620\u5C04\u4EA7\u7269\u72B6\u6001\u8D8A\u8BCD\u8868\uFF08${row.taskRef} \u2192 ${row.status}\uFF09`);
-          }
-          rows.push(row);
-        }
-      }
-      for (const r of rows) {
-        port.exec(
-          `INSERT INTO task (id, project_id, group_id, session_id, parent_task_id, origin, external_sid, external_task_file_id,
-             task_ref, title, description, scope_json, handoff, assignee_id, branch, artifact_id, depends_on_json,
-             gate_reason, gate_opened_at, review_required, review_status, workflow_profile, status, deleted_at, ts)
-           VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, '{}', NULL, NULL, NULL, NULL, ?, NULL, NULL, ?, ?, NULL, ?, NULL, ?)`,
-          [
-            r.id,
-            r.projectId,
-            r.groupId,
-            r.sessionId,
-            r.origin,
-            r.externalTaskFileId,
-            r.taskRef,
-            r.title,
-            r.description,
-            r.dependsOnJson,
-            r.reviewRequired,
-            r.reviewStatus,
-            r.status,
-            r.ts
-          ]
-        );
-      }
-      for (const l of losses.splice(0)) appendLossOnce(port, l);
-      writeCheckpoint(port, { path: sources.tasksDir, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count, offset: obsTasks.count, schemaVersion });
-      writeCheckpoint(port, { path: accCpKey, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count, offset: obsAccept.count, schemaVersion });
-      port.commit();
-    } catch (err) {
-      port.rollback();
-      throw new Error(`import-session-task: task \u57DF\u91CD\u704C\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7 task \u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
-  return {
-    skipped: false,
-    counts: { session: n("SELECT COUNT(*) AS n FROM session"), task: n("SELECT COUNT(*) AS n FROM task") },
-    loss: n(
-      "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)",
-      sources.eventsFile,
-      sources.tasksDir,
-      sources.acceptanceDir
-    ),
-    rescanned: [sources.eventsFile, sources.tasksDir, sources.acceptanceDir],
-    eventsProcessed
-  };
-}
-
-// src/storage/import-acceptance.ts
-import { existsSync as existsSync8, readdirSync as readdirSync2 } from "node:fs";
-import { basename, join as join9 } from "node:path";
-var ACCEPTANCE_IMPORT_SCHEMA_VERSION = 1;
-var IMPORT_ACTOR = "import-migration";
-var SHEET_ID_RE = /^[0-9a-f]{32}$/;
-var VERDICTS = /* @__PURE__ */ new Set(["pass", "fail"]);
-function observeAcceptanceDir2(dir) {
-  const out = { mtimeMs: 0, fileCount: 0, sheets: [], results: [] };
-  if (!existsSync8(dir)) return out;
-  for (const name of readdirSync2(dir).sort()) {
-    if (!name.endsWith(".json")) continue;
-    const file = join9(dir, name);
-    let obs;
-    try {
-      obs = statThenRead(file);
-    } catch {
-      continue;
-    }
-    const raw = obs.text;
-    if (obs.mtimeMs > out.mtimeMs) out.mtimeMs = obs.mtimeMs;
-    out.fileCount++;
-    if (name.endsWith(".results.json")) {
-      const id2 = name.slice(0, -13);
-      let doc = null;
-      try {
-        const p = JSON.parse(raw);
-        const history = Array.isArray(p.history) ? p.history : null;
-        if (history !== null) {
-          doc = {
-            id: id2,
-            raw,
-            history: history.map((h) => ({
-              at: h.at,
-              ua: h.ua,
-              rows: Array.isArray(h.rows) ? h.rows : []
-            }))
-          };
-        }
-      } catch {
-        doc = null;
-      }
-      out.results.push({ file, doc });
-    } else {
-      const id2 = name.slice(0, -5);
-      let doc = null;
-      try {
-        const p = JSON.parse(raw);
-        doc = {
-          id: typeof p.id === "string" && p.id ? p.id : id2,
-          title: p.title,
-          created_at: p.created_at,
-          cwd: p.cwd,
-          sheet_key: p.sheet_key,
-          rows: Array.isArray(p.rows) ? p.rows : [],
-          raw
-        };
-      } catch {
-        doc = null;
-      }
-      out.sheets.push({ file, doc });
-    }
-  }
-  return out;
-}
-function importAcceptance(port, acceptanceDir2, opts) {
-  const schemaVersion = opts?.schemaVersion ?? ACCEPTANCE_IMPORT_SCHEMA_VERSION;
-  const obs = observeAcceptanceDir2(acceptanceDir2);
-  const cp2 = readCheckpoint(port, acceptanceDir2, { mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, schemaVersion });
-  if (cp2 !== null) {
-    const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
-    return {
-      skipped: true,
-      counts: {
-        sheet: n("SELECT COUNT(*) AS n FROM acceptance_sheet"),
-        item: n("SELECT COUNT(*) AS n FROM acceptance_item"),
-        result: n("SELECT COUNT(*) AS n FROM acceptance_result")
-      },
-      loss: n("SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ?", acceptanceDir2),
-      // COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）
-      rescanned: []
-    };
-  }
-  const losses = [];
-  const sheets = [];
-  const items = [];
-  const results = [];
-  const sheetById = /* @__PURE__ */ new Map();
-  const groupByAnchor = /* @__PURE__ */ new Map();
-  for (const r of port.query(`SELECT id, anchor_dir FROM "group"`)) {
-    groupByAnchor.set(r.anchor_dir, r.id);
-  }
-  const sheetIdSeen = /* @__PURE__ */ new Map();
-  for (const s of obs.sheets) {
-    if (s.doc === null) {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "bad-json", excerpt: `sheet \u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF1A${s.file}`.slice(0, 200) });
-      continue;
-    }
-    const d2 = s.doc;
-    const excerpt = JSON.stringify({ id: d2.id, title: d2.title }).slice(0, 200);
-    if (!SHEET_ID_RE.test(d2.id)) {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "bad-field", excerpt: JSON.stringify({ id: d2.id, why: "\u975E 32hex\uFF08\u7EBF\u4E0A ACCEPTANCE_ID_RE \u540C\u8BCD\u8868\u62D2\u5165\uFF09" }).slice(0, 200) });
-      continue;
-    }
-    if (typeof d2.title !== "string" || !d2.title || typeof d2.created_at !== "number") {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "missing-field", excerpt });
-      continue;
-    }
-    const firstSeen = sheetIdSeen.get(d2.id);
-    if (firstSeen !== void 0) {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "duplicate-id", excerpt: JSON.stringify({ id: d2.id, first: basename(firstSeen), dup: basename(s.file) }).slice(0, 200) });
-      continue;
-    }
-    sheetIdSeen.set(d2.id, s.file);
-    const cwd = typeof d2.cwd === "string" && d2.cwd ? d2.cwd : null;
-    const groupId = cwd !== null ? groupByAnchor.get(cwd) ?? null : null;
-    if (groupId === null) {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "missing-attribution", excerpt: JSON.stringify({ id: d2.id, cwd }).slice(0, 200) });
-    }
-    const row = {
-      id: d2.id,
-      groupId,
-      title: d2.title,
-      createdAt: d2.created_at,
-      sheetKey: typeof d2.sheet_key === "string" && d2.sheet_key ? d2.sheet_key : null
-    };
-    const sheetItems = [];
-    d2.rows.forEach((raw, idx) => {
-      const itemIndex = idx + 1;
-      const r = raw;
-      const iExcerpt = JSON.stringify({ id: d2.id, item_index: itemIndex, task: r.task }).slice(0, 200);
-      if (typeof r.task !== "string" || !r.task || typeof r.item !== "string" || typeof r.criteria !== "string") {
-        losses.push({ sourcePath: acceptanceDir2, lineNo: itemIndex, reason: "missing-field", excerpt: iExcerpt });
-        return;
-      }
-      const item = {
-        id: `itm-${sha12(`${d2.id}/${itemIndex}`)}`,
-        sheetId: d2.id,
-        itemIndex,
-        task: r.task,
-        item: r.item,
-        criteria: r.criteria
-      };
-      sheetItems.push(item);
-    });
-    sheets.push(row);
-    items.push(...sheetItems);
-    sheetById.set(d2.id, { items: sheetItems });
-  }
-  for (const r of obs.results) {
-    if (r.doc === null) {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "bad-json", excerpt: `results \u6587\u4EF6\u89E3\u6790\u5931\u8D25\uFF1A${r.file}`.slice(0, 200) });
-      continue;
-    }
-    const d2 = r.doc;
-    const sheetEntry = sheetById.get(d2.id);
-    if (sheetEntry === void 0) {
-      losses.push({ sourcePath: acceptanceDir2, lineNo: 1, reason: "dangling-ref", excerpt: JSON.stringify({ results_id: d2.id, why: "\u65E0\u5BF9\u5E94 sheet" }).slice(0, 200) });
-      continue;
-    }
-    const itemByIndex = new Map(sheetEntry.items.map((it2) => [it2.itemIndex, it2]));
-    const seenResults = /* @__PURE__ */ new Set();
-    d2.history.forEach((h, hIdx) => {
-      const hExcerpt = JSON.stringify({ results_id: d2.id, h: hIdx }).slice(0, 200);
-      if (typeof h.at !== "number") {
-        losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "missing-field", excerpt: hExcerpt });
-        return;
-      }
-      const actor = typeof h.ua === "string" && h.ua ? h.ua : IMPORT_ACTOR;
-      for (const row of h.rows) {
-        if (typeof row.i !== "number" || !Number.isInteger(row.i) || row.i < 0) {
-          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d2.id, row }).slice(0, 200) });
-          continue;
-        }
-        const itemIndex = row.i + 1;
-        const item = itemByIndex.get(itemIndex);
-        if (item === void 0) {
-          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "dangling-ref", excerpt: JSON.stringify({ results_id: d2.id, item_index: itemIndex }).slice(0, 200) });
-          continue;
-        }
-        let verdict = null;
-        if (typeof row.verdict === "string") {
-          if (!VERDICTS.has(row.verdict)) {
-            losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d2.id, verdict: row.verdict }).slice(0, 200) });
-            continue;
-          }
-          verdict = row.verdict;
-        } else if (row.verdict !== null && row.verdict !== void 0) {
-          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "bad-field", excerpt: JSON.stringify({ results_id: d2.id, verdict: row.verdict }).slice(0, 200) });
-          continue;
-        }
-        const resultKey = `${hIdx}/${itemIndex}`;
-        if (seenResults.has(resultKey)) {
-          losses.push({ sourcePath: acceptanceDir2, lineNo: hIdx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ results_id: d2.id, h: hIdx, item_index: itemIndex, why: "\u540C\u6279\u6B21\u91CD\u590D\u5224\u5B9A\u4FDD\u9996" }).slice(0, 200) });
-          continue;
-        }
-        seenResults.add(resultKey);
-        results.push({
-          id: `res-${sha12(`${d2.id}/h${hIdx}/i${itemIndex}`)}`,
-          itemId: item.id,
-          verdict,
-          note: typeof row.note === "string" ? row.note : "",
-          actor,
-          createdAt: h.at
-        });
-      }
-    });
-  }
-  port.begin();
-  try {
-    port.exec("DELETE FROM acceptance_result");
-    port.exec("DELETE FROM acceptance_item");
-    port.exec("DELETE FROM acceptance_sheet");
-    port.exec("DELETE FROM import_loss WHERE source_path = ?", [acceptanceDir2]);
-    for (const s of sheets) {
-      port.exec(
-        "INSERT INTO acceptance_sheet (id, task_id, group_id, title, created_at, sheet_key) VALUES (?, NULL, ?, ?, ?, ?)",
-        [s.id, s.groupId, s.title, s.createdAt, s.sheetKey]
-      );
-    }
-    for (const it2 of items) {
-      port.exec(
-        "INSERT INTO acceptance_item (id, sheet_id, item_index, task, item, criteria) VALUES (?, ?, ?, ?, ?, ?)",
-        [it2.id, it2.sheetId, it2.itemIndex, it2.task, it2.item, it2.criteria]
-      );
-    }
-    for (const r of results) {
-      port.exec(
-        "INSERT INTO acceptance_result (id, item_id, verdict, note, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        [r.id, r.itemId, r.verdict, r.note, r.actor, r.createdAt]
-      );
-    }
-    for (const l of losses) appendLoss(port, l);
-    writeCheckpoint(port, { path: acceptanceDir2, mtimeMs: obs.mtimeMs, lineCount: obs.fileCount, offset: obs.fileCount, schemaVersion });
-    port.commit();
-  } catch (err) {
-    port.rollback();
-    throw new Error(`import-acceptance: \u9A8C\u6536\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-  }
-  const n2 = (sql) => port.query(sql)[0]?.n ?? -1;
-  return {
-    skipped: false,
-    counts: {
-      sheet: n2("SELECT COUNT(*) AS n FROM acceptance_sheet"),
-      item: n2("SELECT COUNT(*) AS n FROM acceptance_item"),
-      result: n2("SELECT COUNT(*) AS n FROM acceptance_result")
-    },
-    loss: losses.length,
-    rescanned: obs.fileCount > 0 ? [acceptanceDir2] : []
-  };
-}
-
-// src/storage/import-artifact.ts
-import { createHash as createHash3 } from "node:crypto";
-import { existsSync as existsSync9 } from "node:fs";
-import { normalize } from "node:path";
-var ARTIFACT_IMPORT_SCHEMA_VERSION = 1;
-var ARTIFACT_DELETE_CHUNK = 500;
-function observeFile(file, key) {
-  if (!existsSync9(file)) return { key, file, mtimeMs: 0, lineCount: 0, records: null, badJson: null };
-  const obs = statThenRead(file);
-  const lines = obs.text.split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  let records = null;
-  let badJson = null;
-  try {
-    const parsed = JSON.parse(obs.text);
-    if (Array.isArray(parsed)) records = parsed;
-    else badJson = "\u6839\u975E\u6570\u7EC4";
-  } catch {
-    badJson = obs.text.slice(0, 200);
-  }
-  return { key, file, mtimeMs: obs.mtimeMs, lineCount: lines.length, records, badJson };
-}
-function observeInline(records, key) {
-  const fingerprint = parseInt(createHash3("sha1").update(JSON.stringify(records)).digest("hex").slice(0, 8), 16);
-  return { key, file: null, mtimeMs: fingerprint, lineCount: records.length, records, badJson: null };
-}
-function normalizedSourceId(...values) {
-  for (const v of values) {
-    if (v === void 0 || v === null) continue;
-    const s = String(v).trim();
-    if (s) return s;
-  }
-  return "local";
-}
-function normalizedArtifactPath(path6) {
-  const value = normalize(path6 || ".").replaceAll("\\", "/");
-  if (value.length > 1) return value.replace(/\/+$/, "");
-  return value;
-}
-function existenceStateOf(rec) {
-  if (rec.unverified === true) return "unknown";
-  if (typeof rec.exists === "boolean") return rec.exists ? "exists" : "missing";
-  return "unknown";
-}
-function firstString(...values) {
-  for (const v of values) {
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  return null;
-}
-function tableHas(port, table, id2) {
-  return (port.query(`SELECT COUNT(*) AS n FROM ${table} WHERE id = ?`, [id2])[0]?.n ?? 0) > 0;
-}
-function parseRecord(port, raw, sourceIdResolved, attribution, lineNo, sourceKey, losses) {
-  const bad = (reason, excerpt) => {
-    losses.push({ sourceKey, lineNo, reason, excerpt: excerpt.slice(0, 200) });
-    return null;
-  };
-  if (typeof raw !== "object" || raw === null) return bad("missing-field", JSON.stringify(raw));
-  const rec = raw;
-  const rawPath = typeof rec.path === "string" ? rec.path : typeof rec.normalized_path === "string" ? rec.normalized_path : null;
-  if (!rawPath) return bad("missing-field", JSON.stringify(rec));
-  const createdAt = typeof rec.first_at === "number" ? rec.first_at : typeof rec.ts === "number" ? rec.ts : null;
-  if (createdAt === null) return bad("missing-field", JSON.stringify(rec));
-  const sessionId = firstString(rec.session_id, rec.sid, attribution?.session_id);
-  if (sessionId === null && rec.sid !== void 0 && typeof rec.sid !== "string") {
-    return bad("missing-attribution", JSON.stringify(rec));
-  }
-  if (sessionId === null && typeof rec.ts === "number" && rec.session_id === void 0 && attribution?.session_id === void 0) {
-    return bad("missing-attribution", JSON.stringify(rec));
-  }
-  const attr = (id2, table) => {
-    if (typeof id2 !== "string" || !id2) return null;
-    if (!tableHas(port, table, id2)) {
-      losses.push({ sourceKey, lineNo, reason: "dangling-ref", excerpt: JSON.stringify({ path: rawPath, [table]: id2 }).slice(0, 200) });
-      return null;
-    }
-    return id2;
-  };
-  const projectId = attr(firstString(attribution?.project_id), "project");
-  const groupId = attr(firstString(attribution?.group_id), `"group"`);
-  const sessionIdOk = sessionId === null ? null : attr(sessionId, "session");
-  const taskId = attr(firstString(attribution?.task_id), "task");
-  const updatedAt = typeof rec.last_at === "number" ? rec.last_at : createdAt;
-  const sourceId = normalizedSourceId(rec.source_id, rec.sourceId, sourceIdResolved);
-  const kind = firstString(rec.kind, rec.op) ?? (rec.sid !== void 0 || rec.session_id !== void 0 ? "deliverable" : "artifact");
-  return {
-    sourceId,
-    normalizedPath: normalizedArtifactPath(rawPath),
-    projectId,
-    groupId,
-    sessionId: sessionIdOk,
-    taskId,
-    deliveryGroupKey: firstString(rec.delivery_group_key, rec.deliveryGroupKey),
-    size: typeof rec.size === "number" ? rec.size : null,
-    kind,
-    existenceState: existenceStateOf(rec),
-    createdAt,
-    updatedAt
-  };
-}
-function importArtifacts(port, sources, opts) {
-  const schemaVersion = opts?.schemaVersion ?? ARTIFACT_IMPORT_SCHEMA_VERSION;
-  const deleteChunk = Math.max(1, opts?.deleteChunkSize ?? ARTIFACT_DELETE_CHUNK);
-  const observed = sources.map((s, idx) => {
-    const resolvedId = normalizedSourceId(s.id, s.sourceId);
-    if (s.file !== void 0) return { src: s, obs: observeFile(s.file, s.file), resolvedId };
-    return { src: s, obs: observeInline(s.records ?? [], `inline:${idx}`), resolvedId };
-  });
-  const current = (o) => ({ mtimeMs: o.mtimeMs, lineCount: o.lineCount, schemaVersion });
-  const allValid = observed.length > 0 && observed.every(({ obs }) => readCheckpoint(port, obs.key, current(obs)) !== null);
-  const sourceKeys = observed.map(({ obs }) => obs.key);
-  if (allValid) {
-    return {
-      skipped: true,
-      counts: { artifact: port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: 0 },
-      // loss 计数走 COUNT 下推（STAT-SHORTCUT，缘由同 import-org.ts skipped 分支）；
-      // allValid 已保证 sourceKeys 非空（上方 observed.length > 0），IN 占位动态拼安全
-      loss: port.query(`SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(", ")})`, sourceKeys)[0]?.n ?? 0,
-      rescanned: []
-    };
-  }
-  const losses = [];
-  const rowsBySource = [];
-  for (const { obs, resolvedId, src } of observed) {
-    const rows = [];
-    const seen = /* @__PURE__ */ new Map();
-    if (obs.records !== null) {
-      obs.records.forEach((raw, idx) => {
-        const row = parseRecord(port, raw, resolvedId, src.attribution, idx + 1, obs.key, losses);
-        if (row === null) return;
-        const key = JSON.stringify([row.sourceId, row.normalizedPath]);
-        if (seen.has(key)) {
-          losses.push({ sourceKey: obs.key, lineNo: idx + 1, reason: "duplicate-key", excerpt: JSON.stringify({ source_id: row.sourceId, path: row.normalizedPath }).slice(0, 200) });
-          seen.delete(key);
-        }
-        seen.set(key, row);
-      });
-    }
-    rows.push(...seen.values());
-    if (obs.badJson !== null) losses.push({ sourceKey: obs.key, lineNo: 1, reason: "bad-json", excerpt: obs.badJson });
-    rowsBySource.push({ obs, resolvedId, rows });
-  }
-  const planMap = /* @__PURE__ */ new Map();
-  for (const { rows, resolvedId } of rowsBySource) {
-    if (!planMap.has(resolvedId)) planMap.set(resolvedId, /* @__PURE__ */ new Set());
-    for (const r of rows) {
-      let keep = planMap.get(r.sourceId);
-      if (keep === void 0) {
-        keep = /* @__PURE__ */ new Set();
-        planMap.set(r.sourceId, keep);
-      }
-      keep.add(r.normalizedPath);
-    }
-  }
-  port.begin();
-  try {
-    for (const [sourceId, keep] of planMap) {
-      if (keep.size === 0) {
-        port.exec("DELETE FROM artifact WHERE source_id = ?", [sourceId]);
-      } else {
-        const stale = port.query("SELECT normalized_path FROM artifact WHERE source_id = ?", [sourceId]).map((r) => r.normalized_path).filter((p) => !keep.has(p));
-        for (let i = 0; i < stale.length; i += deleteChunk) {
-          const chunk = stale.slice(i, i + deleteChunk);
-          port.exec(
-            `DELETE FROM artifact WHERE source_id = ? AND normalized_path IN (${chunk.map(() => "?").join(",")})`,
-            [sourceId, ...chunk]
-          );
-        }
-      }
-    }
-    for (const { rows } of rowsBySource) {
-      for (const r of rows) {
-        port.exec(
-          `INSERT INTO artifact (source_id, normalized_path, project_id, group_id, session_id, task_id, delivery_group_key, size, kind, existence_state, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(source_id, normalized_path) DO UPDATE SET
-             project_id=excluded.project_id, group_id=excluded.group_id, session_id=excluded.session_id,
-             task_id=excluded.task_id, delivery_group_key=excluded.delivery_group_key, size=excluded.size,
-             kind=excluded.kind, existence_state=excluded.existence_state, created_at=excluded.created_at,
-             updated_at=excluded.updated_at`,
-          [r.sourceId, r.normalizedPath, r.projectId, r.groupId, r.sessionId, r.taskId, r.deliveryGroupKey, r.size, r.kind, r.existenceState, r.createdAt, r.updatedAt]
-        );
-      }
-    }
-    if (sourceKeys.length > 0) {
-      port.exec(`DELETE FROM import_loss WHERE source_path IN (${sourceKeys.map(() => "?").join(",")})`, sourceKeys);
-    }
-    for (const l of losses) appendLoss(port, { sourcePath: l.sourceKey, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
-    for (const { obs } of rowsBySource) writeCheckpoint(port, { path: obs.key, mtimeMs: obs.mtimeMs, lineCount: obs.lineCount, offset: obs.lineCount, schemaVersion });
-    port.commit();
-  } catch (err) {
-    port.rollback();
-    throw new Error(`import-artifact: \u4EA7\u7269\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-  }
-  return {
-    skipped: false,
-    counts: { artifact: port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? -1, upserted: rowsBySource.reduce((n, x) => n + x.rows.length, 0) },
-    loss: losses.length,
-    rescanned: sourceKeys
-  };
-}
-
-// src/storage/import-dispatch-lesson.ts
-import { existsSync as existsSync10, readdirSync as readdirSync3, readFileSync as readFileSync8, statSync as statSync4 } from "node:fs";
-import { join as join10 } from "node:path";
-var DISPATCH_LESSON_IMPORT_SCHEMA_VERSION = 1;
-var DEFAULT_BATCH_SIZE2 = 500;
-var DISPATCH_STATUS = /* @__PURE__ */ new Set(["dispatched", "running", "done", "failed"]);
-var TERMINAL_STATUS = /* @__PURE__ */ new Set(["done", "failed"]);
-function observeNdjson2(file) {
-  if (!existsSync10(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
-  const obs = statThenRead(file);
-  const lines = obs.text.split("\n");
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
-}
-function observeBoardsDir(dir) {
-  if (!existsSync10(dir)) return { mtimeMs: 0, count: 0, files: [] };
-  const files = [];
-  let maxMtime = 0;
-  for (const name of readdirSync3(dir).sort()) {
-    if (!name.endsWith(".json")) continue;
-    const file = join10(dir, name);
-    let st2;
-    try {
-      st2 = statSync4(file);
-    } catch {
-      continue;
-    }
-    const m = Math.round(st2.mtimeMs);
-    if (m > maxMtime) maxMtime = m;
-    let doc = null;
-    try {
-      doc = JSON.parse(readFileSync8(file, "utf8"));
-    } catch {
-      doc = null;
-    }
-    files.push({ gid: name.slice(0, -5), file, mtimeMs: m, doc });
-  }
-  return { mtimeMs: maxMtime, count: files.length, files };
-}
-function appendLossOnce2(port, record) {
-  const dup = port.query(
-    "SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ? AND line_no = ? AND reason = ?",
-    [record.sourcePath, record.lineNo, record.reason]
-  )[0]?.n ?? 0;
-  if (dup === 0) appendLoss(port, record);
-}
-function restoreSegs(port) {
-  const rows = port.query(
-    "SELECT id, attempt_no, status, parent_dispatch_id FROM dispatch"
-  );
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const segs = /* @__PURE__ */ new Map();
-  for (const r of rows) {
-    let root = r.id;
-    let guard = 0;
-    while (guard++ < 1e3) {
-      const parent = byId.get(root)?.parent_dispatch_id ?? null;
-      if (parent === null) break;
-      root = parent;
-    }
-    const prev = segs.get(root);
-    if (!prev || r.attempt_no > prev.attemptNo) {
-      segs.set(root, { segId: r.id, attemptNo: r.attempt_no, terminal: TERMINAL_STATUS.has(r.status) });
-    }
-  }
-  return segs;
-}
-function applyDispatchLine(port, e, lineNo, srcPath, segs, groupByAnchor, sessionMember, dispatchIds, losses) {
-  const src = srcPath;
-  const excerpt = JSON.stringify(e).slice(0, 200);
-  if (typeof e.id !== "string" || !e.id) {
-    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-    return;
-  }
-  if (typeof e.status !== "string" || !DISPATCH_STATUS.has(e.status)) {
-    losses.push({ sourcePath: src, lineNo, reason: e.status === void 0 ? "missing-field" : "bad-field", excerpt });
-    return;
-  }
-  if (typeof e.ts !== "number" || !Number.isFinite(e.ts)) {
-    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-    return;
-  }
-  if (typeof e.tier !== "string" || e.tier === "") {
-    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-    return;
-  }
-  const anchor = typeof e.project_anchor === "string" ? e.project_anchor : "";
-  const groupId = anchor === "" ? null : groupByAnchor.get(anchor) ?? null;
-  if (anchor !== "" && groupId === null) {
-    losses.push({ sourcePath: src, lineNo, reason: "dangling-ref", excerpt });
-  }
-  const sid = typeof e.session_id === "string" ? e.session_id : "";
-  const sourceSessionId = sid === "" ? null : sessionMember.has(sid) ? sid : null;
-  if (sid !== "" && sourceSessionId === null) {
-    losses.push({ sourcePath: src, lineNo, reason: "dangling-ref", excerpt });
-  }
-  const target = typeof e.target === "string" ? e.target : "";
-  const targetMemberId = target !== "" && sessionMember.has(target) ? sessionMember.get(target) ?? null : null;
-  const actor = typeof e.actor === "string" ? e.actor : "";
-  if (e.actor !== void 0 && typeof e.actor !== "string") {
-    losses.push({ sourcePath: src, lineNo, reason: "missing-field", excerpt });
-  }
-  const receipt = typeof e.receipt === "string" ? e.receipt : "";
-  const seg = segs.get(e.id);
-  if (!seg) {
-    port.exec(
-      `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
-         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), 1, NULL, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
-      [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? ""]
-      /* W-SMIMPL ② v4 列 + #G3/#G5 三列透传（NULLIF 空串=不带键） */
-    );
-    segs.set(e.id, { segId: e.id, attemptNo: 1, terminal: TERMINAL_STATUS.has(e.status) });
-    dispatchIds.add(e.id);
-    return;
-  }
-  if (seg.terminal) {
-    const nextAttempt = seg.attemptNo + 1;
-    const segId = `${e.id}#r${nextAttempt}`;
-    if (dispatchIds.has(segId)) {
-      losses.push({ sourcePath: src, lineNo, reason: "duplicate-id", excerpt });
-      return;
-    }
-    port.exec(
-      `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
-         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
-      [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? ""]
-      /* W-SMIMPL ② v4 列 + #G3/#G5 三列（重投新段按本行重置） */
-    );
-    segs.set(e.id, { segId, attemptNo: nextAttempt, terminal: TERMINAL_STATUS.has(e.status) });
-    dispatchIds.add(segId);
-    return;
-  }
-  port.exec(
-    `UPDATE dispatch SET status = ?, tier = ?, group_id = ?, target_member_id = ?, source_session_id = ?,
-       actor = ?, receipt = COALESCE(NULLIF(?, ''), receipt), receipt_missing = ?, failure_reason = COALESCE(NULLIF(?, ''), failure_reason), retry_of = COALESCE(NULLIF(?, ''), retry_of), priority = COALESCE(NULLIF(?, ''), priority), updated_at = ? WHERE id = ?`,
-    [e.status, e.tier, groupId, targetMemberId, sourceSessionId, actor, receipt, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? "", e.ts, seg.segId]
-    /* W-SMIMPL ② v4 列 + #G3/#G5 三列（同段末行覆盖，非空才覆） */
-  );
-  segs.get(e.id).terminal = TERMINAL_STATUS.has(e.status);
-}
-function importBoardLessons(port, ref, srcDir, groupIds, dispatchIds, seenLessonIds, losses) {
-  void port;
-  void ref;
-  void srcDir;
-  void groupIds;
-  void dispatchIds;
-  void seenLessonIds;
-  void losses;
-}
-function importDispatchLesson(port, sources, opts) {
-  const schemaVersion = opts?.schemaVersion ?? DISPATCH_LESSON_IMPORT_SCHEMA_VERSION;
-  const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE2;
-  const obsLog = observeNdjson2(sources.dispatchLogFile);
-  const obsBoards = observeBoardsDir(sources.boardsDir);
-  const current = { schemaVersion };
-  const cpLog = obsLog.lines !== null ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }) : null;
-  const cpBoards = readCheckpoint(port, sources.boardsDir, { ...current, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count });
-  if (cpLog !== null && cpLog.offset >= obsLog.lineCount && cpBoards !== null) {
-    const n2 = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
-    return {
-      skipped: true,
-      counts: { dispatch: n2("SELECT COUNT(*) AS n FROM dispatch"), lesson: n2("SELECT COUNT(*) AS n FROM lesson") },
-      loss: n2(
-        "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)",
-        sources.dispatchLogFile,
-        sources.boardsDir
-      ),
-      rescanned: [],
-      dispatchProcessed: 0
-    };
-  }
-  const losses = [];
-  let dispatchProcessed = 0;
-  const rescanned = [];
-  if (obsLog.lines !== null) {
-    const replay = cpLog === null;
-    const fromLine = replay ? 0 : cpLog.offset;
-    const groupByAnchor = new Map(
-      port.query(`SELECT id, anchor_dir FROM "group"`).map((r) => [r.anchor_dir, r.id])
-    );
-    const sessionMember = new Map(
-      port.query("SELECT id, member_id FROM session").map((r) => [r.id, r.member_id])
-    );
-    const segs = replay ? /* @__PURE__ */ new Map() : restoreSegs(port);
-    const dispatchIds = replay ? /* @__PURE__ */ new Set() : new Set(port.query("SELECT id FROM dispatch").map((r) => r.id));
-    let batch = [];
-    let cleared = false;
-    const flushBatch = () => {
-      if (batch.length === 0) return;
-      port.begin();
-      try {
-        if (replay && !cleared) {
-          port.exec("DELETE FROM lesson");
-          port.exec("DELETE FROM dispatch");
-          port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.dispatchLogFile]);
-          cleared = true;
-        }
-        let lastLine = fromLine;
-        for (const b of batch) {
-          if (b.ev !== null) {
-            applyDispatchLine(port, b.ev, b.lineNo, sources.dispatchLogFile, segs, groupByAnchor, sessionMember, dispatchIds, losses);
-          }
-          lastLine = b.lineNo;
-        }
-        for (const l of losses.splice(0)) appendLossOnce2(port, l);
-        writeCheckpoint(port, {
-          path: sources.dispatchLogFile,
-          mtimeMs: obsLog.mtimeMs,
-          lineCount: obsLog.lineCount,
-          offset: lastLine,
-          schemaVersion
-        });
-        port.commit();
-      } catch (err) {
-        port.rollback();
-        throw new Error(`import-dispatch-lesson: dispatch \u6279\u5904\u7406\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08offset \u505C\u7559\u524D\u6279\u5C3E\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-      }
-      dispatchProcessed += batch.length;
-      batch = [];
-    };
-    for (let i = fromLine; i < obsLog.lines.length; i++) {
-      const line = obsLog.lines[i];
-      const lineNo = i + 1;
-      let ev2 = null;
-      if (line.trim() !== "") {
-        try {
-          ev2 = JSON.parse(line);
-        } catch {
-          losses.push({ sourcePath: sources.dispatchLogFile, lineNo, reason: "bad-json", excerpt: line.slice(0, 200) });
-        }
-      }
-      batch.push({ ev: ev2, lineNo });
-      if (batch.length >= batchSize) flushBatch();
-    }
-    flushBatch();
-    if (obsLog.lineCount === 0 && fromLine === 0) {
-      port.begin();
-      try {
-        port.exec("DELETE FROM lesson");
-        port.exec("DELETE FROM dispatch");
-        port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.dispatchLogFile]);
-        writeCheckpoint(port, { path: sources.dispatchLogFile, mtimeMs: obsLog.mtimeMs, lineCount: 0, offset: 0, schemaVersion });
-        port.commit();
-      } catch (err) {
-        port.rollback();
-        throw new Error(`import-dispatch-lesson: \u7A7A dispatch-log checkpoint \u5199\u5165\u5931\u8D25\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-    if (replay || dispatchProcessed > 0) rescanned.push(sources.dispatchLogFile);
-  }
-  if (cpBoards === null || cpLog === null) {
-    const groupIds = new Set(port.query(`SELECT id FROM "group"`).map((r) => r.id));
-    const dispatchIds = new Set(port.query("SELECT id FROM dispatch").map((r) => r.id));
-    port.begin();
-    try {
-      port.exec("DELETE FROM lesson");
-      port.exec("DELETE FROM import_loss WHERE source_path = ?", [sources.boardsDir]);
-      const seenLessonIds = /* @__PURE__ */ new Set();
-      for (const ref of obsBoards.files) {
-        importBoardLessons(port, ref, sources.boardsDir, groupIds, dispatchIds, seenLessonIds, losses);
-      }
-      for (const l of losses.splice(0)) appendLossOnce2(port, l);
-      writeCheckpoint(port, { path: sources.boardsDir, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count, offset: obsBoards.count, schemaVersion });
-      port.commit();
-    } catch (err) {
-      port.rollback();
-      throw new Error(`import-dispatch-lesson: lesson \u57DF\u91CD\u704C\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7 lesson \u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-    }
-    rescanned.push(sources.boardsDir);
-  }
-  const n = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
-  return {
-    skipped: false,
-    counts: { dispatch: n("SELECT COUNT(*) AS n FROM dispatch"), lesson: n("SELECT COUNT(*) AS n FROM lesson") },
-    loss: n(
-      "SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?)",
-      sources.dispatchLogFile,
-      sources.boardsDir
-    ),
-    rescanned,
-    dispatchProcessed
-  };
-}
-
-// src/storage/schema.ts
-var BASELINE_15_TABLES_DDL = `
-CREATE TABLE project (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, dir_fingerprint TEXT NOT NULL UNIQUE,
-  anchor_dir TEXT NOT NULL, is_default INTEGER NOT NULL DEFAULT 0,
-  is_hidden INTEGER NOT NULL DEFAULT 0, deleted_at INTEGER, ts INTEGER NOT NULL
-);
-CREATE TABLE member (
-  id TEXT PRIMARY KEY, stable_identity TEXT NOT NULL UNIQUE,
-  display_name TEXT NOT NULL, business_role TEXT NOT NULL,
-  command_role TEXT NOT NULL, task_participation TEXT NOT NULL,
-  engine TEXT, provider TEXT, model TEXT, external_sid TEXT,
-  joined_at INTEGER NOT NULL, retired_at INTEGER,
-  last_heartbeat_at INTEGER, last_business_log_at INTEGER,
-  status TEXT NOT NULL, archive_json TEXT NOT NULL DEFAULT '{}', ts INTEGER NOT NULL
-);
-CREATE TABLE "group" (
-  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES project(id),
-  name TEXT NOT NULL, anchor_dir TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('pending','active','parked','archived')),
-  tier TEXT NOT NULL CHECK(tier IN ('\u8F7B\u7ACB\u9879','\u6B63\u7ECF\u7ACB\u9879')), single_card INTEGER NOT NULL,
-  headcount_json TEXT NOT NULL DEFAULT '[]', role_defaults_json TEXT NOT NULL DEFAULT '{}',
-  hold_suggested_at INTEGER, archive_note TEXT,
-  workflow_profile TEXT NOT NULL DEFAULT 'engineering', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-);
-CREATE TABLE group_member (
-  group_id TEXT NOT NULL REFERENCES "group"(id), member_id TEXT NOT NULL REFERENCES member(id),
-  command_role TEXT, task_participation TEXT, joined_at INTEGER NOT NULL,
-  retired_at INTEGER, archive_json TEXT NOT NULL DEFAULT '{}',
-  PRIMARY KEY(group_id, member_id)
-);
-CREATE TABLE session (
-  id TEXT PRIMARY KEY, relay_session_id TEXT, group_id TEXT REFERENCES "group"(id),
-  member_id TEXT REFERENCES member(id), external_sid TEXT, engine TEXT, provider TEXT, model TEXT,
-  cwd TEXT NOT NULL, status TEXT NOT NULL, runtime_state_json TEXT NOT NULL DEFAULT '{}',
-  started_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER
-);
-CREATE TABLE task (
-  id TEXT PRIMARY KEY, project_id TEXT REFERENCES project(id), group_id TEXT REFERENCES "group"(id),
-  session_id TEXT REFERENCES session(id), parent_task_id TEXT REFERENCES task(id),
-  origin TEXT NOT NULL, external_sid TEXT, external_task_file_id TEXT,
-  task_ref TEXT NOT NULL UNIQUE, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-  scope_json TEXT NOT NULL DEFAULT '{}', handoff TEXT, assignee_id TEXT REFERENCES member(id),
-  branch TEXT, artifact_id TEXT, depends_on_json TEXT NOT NULL DEFAULT '[]',
-  gate_reason TEXT, gate_opened_at INTEGER, review_required INTEGER NOT NULL DEFAULT 0,
-  review_status TEXT CHECK(review_status IN ('pending','passed','not_required')),
-  workflow_profile TEXT, status TEXT NOT NULL CHECK(status IN ('backlog','claimed','submitted','ready_to_install','done')),
-  deleted_at INTEGER, ts INTEGER NOT NULL
-);
-CREATE TABLE dispatch (
-  id TEXT PRIMARY KEY, task_id TEXT REFERENCES task(id), group_id TEXT REFERENCES "group"(id),
-  tier TEXT NOT NULL, target_member_id TEXT REFERENCES member(id),
-  source_session_id TEXT REFERENCES session(id), actor TEXT NOT NULL, command_id TEXT,
-  status TEXT NOT NULL CHECK(status IN ('dispatched','running','done','failed')),
-  receipt TEXT, attempt_no INTEGER NOT NULL DEFAULT 1,
-  parent_dispatch_id TEXT REFERENCES dispatch(id), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-);
-CREATE TABLE lesson (
-  id TEXT PRIMARY KEY, group_id TEXT REFERENCES "group"(id), task_id TEXT REFERENCES task(id),
-  text TEXT NOT NULL, tags_json TEXT NOT NULL DEFAULT '[]',
-  source_dispatch_id TEXT REFERENCES dispatch(id), created_at INTEGER NOT NULL
-);
-CREATE TABLE org_confirm (
-  id TEXT PRIMARY KEY, kind TEXT NOT NULL, group_id TEXT REFERENCES "group"(id),
-  title TEXT NOT NULL, reason TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),
-  created_at INTEGER NOT NULL, decided_at INTEGER, decided_by TEXT
-);
-CREATE TABLE acceptance_sheet (
-  id TEXT PRIMARY KEY, task_id TEXT REFERENCES task(id), group_id TEXT REFERENCES "group"(id),
-  title TEXT NOT NULL, created_at INTEGER NOT NULL, sheet_key TEXT
-);
-CREATE TABLE acceptance_item (
-  id TEXT PRIMARY KEY, sheet_id TEXT NOT NULL REFERENCES acceptance_sheet(id),
-  item_index INTEGER NOT NULL, task TEXT NOT NULL, item TEXT NOT NULL, criteria TEXT NOT NULL,
-  UNIQUE(sheet_id,item_index)
-);
-CREATE TABLE acceptance_result (
-  id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES acceptance_item(id),
-  verdict TEXT CHECK(verdict IN ('pass','fail') OR verdict IS NULL), note TEXT NOT NULL DEFAULT '',
-  actor TEXT NOT NULL, created_at INTEGER NOT NULL
-);
-CREATE TABLE artifact (
-  source_id TEXT NOT NULL, normalized_path TEXT NOT NULL,
-  project_id TEXT REFERENCES project(id), group_id TEXT REFERENCES "group"(id),
-  session_id TEXT REFERENCES session(id), task_id TEXT REFERENCES task(id),
-  delivery_group_key TEXT, size INTEGER, kind TEXT NOT NULL,
-  existence_state TEXT NOT NULL CHECK(existence_state IN ('exists','missing','unknown')),
-  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-  PRIMARY KEY(source_id, normalized_path)
-);
-CREATE TABLE notification (
-  id TEXT PRIMARY KEY, project_id TEXT, group_id TEXT, session_id TEXT,
-  level TEXT NOT NULL, category TEXT NOT NULL, payload_json TEXT NOT NULL,
-  handled_at INTEGER, resolved_at INTEGER, condition_key TEXT, created_at INTEGER NOT NULL
-);
-CREATE TABLE notification_client_state (
-  notification_id TEXT NOT NULL REFERENCES notification(id), client_id TEXT NOT NULL,
-  read_at INTEGER, dismissed_at INTEGER, PRIMARY KEY(notification_id, client_id)
-);
-CREATE INDEX idx_task_ready ON task(group_id,status,gate_reason);
-CREATE INDEX idx_dispatch_open ON dispatch(group_id,status);
-CREATE INDEX idx_confirm_pending ON org_confirm(status) WHERE status='pending';
-CREATE INDEX idx_artifact_attr ON artifact(project_id,group_id,session_id,task_id);
-CREATE INDEX idx_notification_action ON notification(level,resolved_at,handled_at);
-CREATE INDEX idx_acceptance_task ON acceptance_sheet(task_id,group_id);
-`;
-var IMPORT_LEDGER_DDL = `
-CREATE TABLE import_checkpoint (
-  path TEXT PRIMARY KEY,
-  mtime_ms INTEGER NOT NULL,
-  line_count INTEGER NOT NULL,
-  line_offset INTEGER NOT NULL,
-  schema_version INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE import_loss (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  source_path TEXT NOT NULL,
-  line_no INTEGER NOT NULL,
-  reason TEXT NOT NULL,
-  excerpt TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL
-);
-`;
-var PERMISSION_AUDIT_DDL = `
-CREATE TABLE permission_audit (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  requested_mode TEXT, normalized_mode TEXT,
-  effective_mode TEXT NOT NULL, native_mode TEXT,
-  capability_state TEXT, engine TEXT,
-  reason TEXT NOT NULL, policy_source TEXT,
-  environment TEXT, dir_scope TEXT,
-  tier TEXT, actor TEXT, session_id TEXT, command_id TEXT,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX idx_permission_audit_created ON permission_audit(created_at);
-`;
-var migrations = [
-  {
-    version: 1,
-    name: "baseline-15-tables",
-    up: (p) => p.exec(BASELINE_15_TABLES_DDL)
-  },
-  {
-    version: 2,
-    name: "import-ledger",
-    up: (p) => p.exec(IMPORT_LEDGER_DDL)
-  },
-  {
-    version: 3,
-    name: "permission-audit",
-    up: (p) => p.exec(PERMISSION_AUDIT_DDL)
-  },
-  {
-    // W-SMIMPL ②：dispatch 表补回执缺失标记列（done 无「结果：」行=worker 静默收工的
-    // 观测标记）。v1 基线不动（迁移惯例），既有库/新库统一经 v4 增量；0/1 布尔，
-    // null/0 读侧不带键（宽容口径与 DispatchEntry.receipt_missing?: boolean 对齐）。
-    version: 4,
-    name: "dispatch-receipt-missing",
-    up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN receipt_missing INTEGER")
-  },
-  {
-    // #G3+#G5 板卡富模型+失败分类学：dispatch 表补三列（failure_reason 失败枚举/
-    // retry_of 自动重试标记/priority 优先级透传）。v4 同款增量惯例；三列全可空
-    //（旧行/未标注不带键，与 DispatchEntry 可选字段对齐——投影不再丢新字段）。
-    version: 5,
-    name: "dispatch-rich-model",
-    up: (p) => {
-      p.exec("ALTER TABLE dispatch ADD COLUMN failure_reason TEXT");
-      p.exec("ALTER TABLE dispatch ADD COLUMN retry_of TEXT");
-      p.exec("ALTER TABLE dispatch ADD COLUMN priority TEXT");
-    }
-  },
-  {
-    version: 6,
-    name: "#292-B2 import_checkpoint.mtime_ns\uFF08B \u8DEF\u5BA1\u67E5\u771F\u6839\u4FEE\uFF1Ams \u53D6\u6574\u5728\u7B49\u957F\u8986\u76D6\u5199\u5F62\u6001\u4E0B\u540C\u6BEB\u79D2\u78B0\u649E=checkpoint \u5047\u6709\u6548=\u6295\u5F71\u9648\u65E7=\u5199\u56DE\u62B9\u5199\uFF1Borg \u4E09\u6E90\u5148\u884C\u63A5\u5165\uFF0C\u5176\u4F59\u516D\u57DF\u9010\u6279\u8865\u4F20\u53C2\uFF09",
-    up: (p) => p.exec("ALTER TABLE import_checkpoint ADD COLUMN mtime_ns TEXT")
-  }
-];
-
-// src/storage/read-mode.ts
-var READ_MODE_ENV = "CCR_STORAGE_READ_MODE";
-var READ_MODES = ["json", "sqlite", "shadow"];
-var SHADOW_DIFF_FILE = "shadow-diff.ndjson";
-var SHADOW_DIFF_COOLDOWN_MS = 2e3;
-var MAX_DIFF_ROWS_PER_DOMAIN = 200;
-function resolveReadMode(raw) {
-  if (raw === void 0 || raw === null || raw.trim() === "") return "sqlite";
-  const v = raw.trim();
-  if (READ_MODES.includes(v)) return v;
-  throw new Error(`[read-mode] \u65E0\u6548 ${READ_MODE_ENV}="${raw}"\uFF08\u6709\u6548\u503C\uFF1A${READ_MODES.join("/")}\uFF09\u2014\u2014boot fail-fast\uFF0C\u4E0D\u9759\u9ED8\u56DE\u9000`);
-}
-function currentReadMode() {
-  return resolveReadMode(process.env[READ_MODE_ENV]);
-}
-function resolveDirs(override) {
-  const dataDir3 = override?.dataDir ?? process.env.CCR_DATA_DIR ?? join11(process.cwd(), "data");
-  return {
-    dataDir: dataDir3,
-    orgDir: override?.orgDir ?? process.env.CCR_ORG_DIR ?? join11(homedir3(), ".cc-deck", "org"),
-    tasksDir: override?.tasksDir ?? join11(dataDir3, "tasks")
-  };
-}
-var degradationNotified = false;
-function warnSqliteDegradedOnce(reason, code, context) {
-  if (degradationNotified) return;
-  degradationNotified = true;
-  console.error(`[read-mode] \u26A0\uFE0F  sqlite \u4E0D\u53EF\u7528\uFF0C\u5DF2\u964D\u7EA7 json \u6863\uFF08${context}\uFF1B\u9519\u8BEF\u7801 ${code ?? "\u65E0"}\uFF1B\u5E73\u53F0 ${process.platform}-${process.arch}\uFF09`);
-  console.error(`[read-mode] \u26A0\uFE0F  \u539F\u56E0: ${reason}`);
-  console.error(`[read-mode] \u8BFB\u9762\u884C\u4E3A\u540C CCR_STORAGE_READ_MODE=json\uFF0Crelay \u7EE7\u7EED\u542F\u52A8\uFF088787 \u7167\u5E38\u76D1\u542C\uFF09\u2014\u2014\u4FEE\u590D\u539F\u751F\u4E8C\u8FDB\u5236\u540E\u81EA\u52A8\u6062\u590D sqlite \u6863`);
-}
-function probeSqliteDriverAtBoot() {
-  const mode = currentReadMode();
-  if (mode === "json") return;
-  const driver = loadSqliteDriver();
-  if (driver.ok) return;
-  warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `boot \u63A2\u6D4B\uFF1A\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u9A71\u52A8\u52A0\u8F7D\u5931\u8D25`);
-}
-var portCache = /* @__PURE__ */ new Map();
-function ensureStore(dirs) {
-  const cached2 = portCache.get(dirs.dataDir);
-  if (cached2) {
-    importAllForShadow(cached2, dirs);
-    return cached2;
-  }
-  const port = createSqlitePort({ dataDir: dirs.dataDir });
-  port.open();
-  runMigrations(port, migrations);
-  importAllForShadow(port, dirs);
-  portCache.set(dirs.dataDir, port);
-  return port;
-}
-function ensureStoreQuiet(dirs) {
-  const cached2 = portCache.get(dirs.dataDir);
-  if (cached2) return cached2;
-  const port = createSqlitePort({ dataDir: dirs.dataDir });
-  port.open();
-  runMigrations(port, migrations);
-  portCache.set(dirs.dataDir, port);
-  return port;
-}
-var DOWNSTREAM_TABLES = [
-  "notification_client_state",
-  "notification",
-  "acceptance_result",
-  "acceptance_item",
-  "acceptance_sheet",
-  "artifact",
-  "lesson",
-  "dispatch",
-  "task",
-  "session"
-];
-function orgRescanPending(port, orgDirPath) {
-  const sources = ["org.json", "projects.json", "confirms.json"].map((f) => join11(orgDirPath, f));
-  for (const file of sources) {
-    let mtimeMs = 0;
-    let mtimeNs;
-    let lineCount = 0;
-    if (existsSync11(file)) {
-      const obs = statThenRead(file);
-      mtimeMs = obs.mtimeMs;
-      mtimeNs = obs.mtimeNs;
-      const lines = obs.text.split("\n");
-      if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-      lineCount = lines.length;
-    }
-    if (readCheckpoint(port, file, { mtimeMs, mtimeNs, lineCount, schemaVersion: ORG_IMPORT_SCHEMA_VERSION }) === null) return true;
-  }
-  return false;
-}
-function importAllForShadow(port, dirs) {
-  const failures = [];
-  const orgSources = ["org.json", "projects.json", "confirms.json"].map((f) => join11(dirs.orgDir, f));
-  if (orgRescanPending(port, dirs.orgDir)) {
-    port.begin();
-    try {
-      port.exec("PRAGMA defer_foreign_keys = ON");
-      for (const t of DOWNSTREAM_TABLES) port.exec(`DELETE FROM ${t}`);
-      port.exec(
-        `DELETE FROM import_checkpoint WHERE path NOT IN (?, ?, ?)`,
-        orgSources
-      );
-      port.commit();
-    } catch (err) {
-      port.rollback();
-      throw new Error(`[read-mode] org \u91CD\u626B\u8054\u52A8\u7684\u4E0B\u6E38\u4F5C\u5E9F\u5931\u8D25\u5DF2\u56DE\u6EDA\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  const steps = [
-    { domain: "org", run: () => importOrg(port, dirs.orgDir) },
-    {
-      domain: "session-task",
-      run: () => importSessionTask(port, {
-        eventsFile: join11(dirs.dataDir, "events.ndjson"),
-        tasksDir: dirs.tasksDir,
-        acceptanceDir: join11(dirs.dataDir, "acceptances")
-      })
-    },
-    {
-      domain: "dispatch-lesson",
-      run: () => importDispatchLesson(port, {
-        dispatchLogFile: join11(dirs.orgDir, "dispatch-log.ndjson"),
-        boardsDir: join11(dirs.orgDir, "boards")
-      })
-    },
-    { domain: "acceptance", run: () => importAcceptance(port, join11(dirs.dataDir, "acceptances")) },
-    { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
-    // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
-    // 扫描源路径 G2 再接——备案见头注降级条目）。
-    {
-      domain: "artifact",
-      run: () => {
-        const f = join11(dirs.dataDir, "deliverables.json");
-        return importArtifacts(port, existsSync11(f) ? [{ id: "deliverables", file: f }] : []);
-      }
-    }
-  ];
-  for (const { domain, run: run2 } of steps) {
-    try {
-      run2();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      failures.push({ domain, error: msg });
-      console.warn(`[read-mode] \u5BFC\u5165\u5668 ${domain} \u5931\u8D25\uFF08\u4E0D\u963B\u65AD\u4ED6\u57DF\uFF09: ${msg}`);
-    }
-  }
-  return failures;
-}
-function projectGroupsFromDb(port) {
-  return port.query(`SELECT id, name, anchor_dir, status, tier, single_card, headcount_json, role_defaults_json, hold_suggested_at, archive_note, created_at, updated_at FROM "group" ORDER BY created_at, id`).map((g2) => ({
-    id: g2.id,
-    name: g2.name,
-    anchor_dir: g2.anchor_dir,
-    status: g2.status,
-    tier: g2.tier,
-    headcount: safeParseArray(g2.headcount_json),
-    role_defaults: safeParseObject(g2.role_defaults_json),
-    single_card: g2.single_card === 1,
-    created_at: g2.created_at,
-    updated_at: g2.updated_at,
-    ...g2.hold_suggested_at !== null ? { hold_suggested_at: g2.hold_suggested_at } : {},
-    ...g2.archive_note !== null ? { archive_note: g2.archive_note } : {}
-  }));
-}
-function orgConfirmsFromDb(port) {
-  const rows = port.query("SELECT id, kind, title, reason, payload_json, status, created_at, decided_at, decided_by FROM org_confirm ORDER BY created_at, id");
-  const toConfirm = (r) => ({
-    id: r.id,
-    kind: r.kind,
-    title: r.title,
-    reason: r.reason,
-    payload: safeParseObject(r.payload_json),
-    status: r.status,
-    created_at: r.created_at,
-    ...r.decided_at !== null ? { decided_at: r.decided_at } : {},
-    ...r.decided_by !== null ? { decided_by: r.decided_by } : {}
-  });
-  return [
-    ...rows.filter((r) => r.status === "pending").map(toConfirm),
-    ...rows.filter((r) => r.status !== "pending").map(toConfirm)
-  ];
-}
-function dispatchEntriesFromDb(port, max = 500) {
-  const rows = port.query("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority FROM dispatch ORDER BY created_at, updated_at, id");
-  const byId = /* @__PURE__ */ new Map();
-  for (const r of rows) {
-    byId.set(r.id.replace(/#r\d+$/, ""), {
-      ts: r.updated_at,
-      id: r.id.replace(/#r\d+$/, ""),
-      tier: r.tier,
-      target: r.target_member_id ?? "",
-      status: r.status,
-      ...r.receipt !== null ? { receipt: r.receipt } : {},
-      session_id: r.source_session_id ?? "",
-      ...r.actor ? { actor: r.actor } : {},
-      // W-SMIMPL ②：回执缺失标记（v4 列；0/null 不带键=旧行宽容，json 源行本就缺省）
-      ...r.receipt_missing === 1 ? { receipt_missing: true } : {},
-      // #G3/#G5：失败分类/重试标记/优先级（v5 列；null 不带键=旧行与 json 缺省对齐）
-      ...r.failure_reason ? { failure_reason: r.failure_reason } : {},
-      ...r.retry_of ? { retry_of: r.retry_of } : {},
-      ...r.priority ? { priority: r.priority } : {}
-    });
-  }
-  const all = [...byId.values()];
-  return all.slice(Math.max(0, all.length - max));
-}
-function safeParseArray(s) {
-  try {
-    const v = JSON.parse(s);
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-function safeParseObject(s) {
-  try {
-    const v = JSON.parse(s);
-    return v !== null && typeof v === "object" && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-}
-function writeShadowDiff(dataDir3, rows) {
-  mkdirSync5(dataDir3, { recursive: true });
-  const body = rows.map((r) => JSON.stringify(r)).join("\n");
-  writeFileSync4(join11(dataDir3, SHADOW_DIFF_FILE), body ? body + "\n" : "", "utf-8");
-}
-function keySetDiff(domain, jsonKeys, sqliteKeys, jsonSample, sqliteSample) {
-  const now = Date.now();
-  const rows = [];
-  const jsonSet = new Set(jsonKeys);
-  const sqliteSet = new Set(sqliteKeys);
-  for (const k3 of jsonKeys) if (!sqliteSet.has(k3)) rows.push({ ts: now, domain, key: k3, category: "missing-in-sqlite", json_value: jsonSample?.(k3) });
-  for (const k3 of sqliteKeys) if (!jsonSet.has(k3)) rows.push({ ts: now, domain, key: k3, category: "missing-in-json", sqlite_value: sqliteSample?.(k3) });
-  if (jsonKeys.length !== sqliteKeys.length) {
-    rows.push({ ts: now, domain, key: "*", category: "count-mismatch", json_value: jsonKeys.length, sqlite_value: sqliteKeys.length });
-  }
-  return rows;
-}
-function sampleFieldDiff(domain, jsonVals, sqliteVals) {
-  const now = Date.now();
-  const rows = [];
-  const sMap = new Map(sqliteVals.map((v) => [v.key, v.value]));
-  for (const { key, value } of jsonVals) {
-    const sv2 = sMap.get(key);
-    if (sv2 !== void 0 && JSON.stringify(value) !== JSON.stringify(sv2)) {
-      rows.push({ ts: now, domain, key, category: "value-mismatch", json_value: value, sqlite_value: sv2 });
-    }
-  }
-  return rows;
-}
-function compareDomain(domain, port, dirs) {
-  switch (domain) {
-    case "group": {
-      const j2 = readProjectsJson(dirs.orgDir);
-      const jKeys = j2.groups.map((g2) => g2.id);
-      const sRows = port.query(`SELECT id, tier, status FROM "group"`);
-      return [
-        ...keySetDiff(
-          domain,
-          jKeys,
-          sRows.map((r) => r.id),
-          (k3) => j2.groups.find((g2) => g2.id === k3)?.status,
-          (k3) => sRows.find((r) => r.id === k3)?.status
-        ),
-        ...sampleFieldDiff(
-          domain,
-          j2.groups.map((g2) => ({ key: g2.id, value: { tier: g2.tier, status: g2.status } })),
-          sRows.map((r) => ({ key: r.id, value: { tier: r.tier, status: r.status } }))
-        )
-      ];
-    }
-    case "task": {
-      const jKeys = listDirStems(dirs.tasksDir);
-      const sKeys = port.query("SELECT DISTINCT external_task_file_id AS k FROM task WHERE external_task_file_id IS NOT NULL").map((r) => r.k);
-      return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
-    }
-    case "dispatch": {
-      const jKeys = [...new Set(readNdjsonIds(join11(dirs.orgDir, "dispatch-log.ndjson")))];
-      const sKeys = port.query("SELECT id FROM dispatch").map((r) => r.id.replace(/#r\d+$/, ""));
-      return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
-    }
-    case "notification": {
-      const now = Date.now();
-      const keys = /* @__PURE__ */ new Set();
-      const addValidKeys = (arr) => {
-        for (const raw of arr) {
-          const x = raw;
-          if (typeof x.key === "string" && x.key && typeof x.kind === "string" && typeof x.created_at === "number") keys.add(x.key);
-        }
-      };
-      try {
-        const pf = JSON.parse(readFileSync9(join11(dirs.dataDir, "notifications.json"), "utf-8"));
-        if (Array.isArray(pf.notifications)) addValidKeys(pf.notifications);
-      } catch {
-      }
-      try {
-        const lf = JSON.parse(readFileSync9(join11(dirs.dataDir, "decision-notifications.json"), "utf-8"));
-        if (Array.isArray(lf)) addValidKeys(lf);
-      } catch {
-      }
-      const jCount = keys.size;
-      const sCount = port.query("SELECT COUNT(*) AS n FROM notification")[0]?.n ?? 0;
-      return jCount !== sCount ? [{ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount }] : [];
-    }
-    case "acceptance": {
-      const jKeys = acceptanceKeys(join11(dirs.dataDir, "acceptances"));
-      const sKeys = port.query("SELECT id FROM acceptance_sheet").map((r) => r.id);
-      return keySetDiff(domain, jKeys, sKeys);
-    }
-    case "artifact": {
-      const now = Date.now();
-      const rows = [];
-      const jCount = countNdjsonLines(join11(dirs.dataDir, "deliverables.json"));
-      const sCount = port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? 0;
-      if (jCount !== sCount) rows.push({ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount });
-      return rows;
-    }
-    case "lesson": {
-      void dirs;
-      return [];
-    }
-    case "confirm": {
-      const jKeys = readConfirmsJson(dirs.orgDir).map((c) => c.id);
-      const sKeys = port.query("SELECT id FROM org_confirm").map((r) => r.id);
-      return keySetDiff(domain, jKeys, sKeys);
-    }
-  }
-}
-function readProjectsJson(orgDirPath) {
-  const p = join11(orgDirPath, "projects.json");
-  try {
-    const v = JSON.parse(readFileSync9(p, "utf-8"));
-    return { groups: Array.isArray(v.groups) ? v.groups : [] };
-  } catch {
-    return { groups: [] };
-  }
-}
-function readConfirmsJson(orgDirPath) {
-  const p = join11(orgDirPath, "confirms.json");
-  try {
-    const v = JSON.parse(readFileSync9(p, "utf-8"));
-    return Array.isArray(v.confirms) ? v.confirms : [];
-  } catch {
-    return [];
-  }
-}
-function listDirStems(dir) {
-  if (!existsSync11(dir)) return [];
-  try {
-    return readdirSync4(dir, { withFileTypes: true }).flatMap((e) => {
-      if (!e.isFile() || !e.name.endsWith(".json")) return [];
-      const stem = basename2(e.name, ".json");
-      return [stem];
-    });
-  } catch {
-    return [];
-  }
-}
-function readNdjsonIds(file) {
-  if (!existsSync11(file)) return [];
-  const ids = [];
-  for (const line of readFileSync9(file, "utf-8").split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      const v = JSON.parse(t);
-      if (typeof v.id === "string" && v.id) ids.push(v.id);
-    } catch {
-    }
-  }
-  return ids;
-}
-function countNdjsonLines(file) {
-  if (!existsSync11(file)) return 0;
-  return readFileSync9(file, "utf-8").split("\n").filter((l) => l.trim()).length;
-}
-function acceptanceKeys(dir) {
-  if (!existsSync11(dir)) return [];
-  const keys = [];
-  for (const f of readdirSync4(dir)) {
-    if (!f.endsWith(".json")) continue;
-    keys.push(basename2(f, ".json"));
-    try {
-      const v = JSON.parse(readFileSync9(join11(dir, f), "utf-8"));
-      if (typeof v.id === "string" && v.id && v.id !== basename2(f, ".json")) keys.push(v.id);
-    } catch {
-    }
-  }
-  return keys;
-}
-var shadowCooldown = /* @__PURE__ */ new Map();
-function viaReadMode(domain, io2) {
-  const mode = currentReadMode();
-  if (mode === "json") return io2.json();
-  const driver = loadSqliteDriver();
-  if (!driver.ok) {
-    warnSqliteDegradedOnce(driver.error ?? "unknown", driver.code, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain} \u89E6\u53D1`);
-    return io2.json();
-  }
-  const dirs = resolveDirs(io2.dirs);
-  let port;
-  try {
-    port = ensureStore(dirs);
-  } catch (err) {
-    warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain}\uFF0Csqlite \u5EFA\u5E93/\u8FC1\u79FB\u5931\u8D25`);
-    return io2.json();
-  }
-  if (mode === "sqlite") return io2.sqlite(port);
-  const jsonVal = io2.json();
-  const now = Date.now();
-  const last = shadowCooldown.get(domain) ?? 0;
-  if (now - last >= SHADOW_DIFF_COOLDOWN_MS) {
-    shadowCooldown.set(domain, now);
-    try {
-      const sqliteVal = io2.sqlite(port);
-      const rows = diffProjection(domain, jsonVal, sqliteVal);
-      try {
-        rows.push(...compareDomain(domain, port, dirs));
-      } catch {
-      }
-      writeShadowDiff(dirs.dataDir, rows);
-    } catch (err) {
-      try {
-        writeShadowDiff(dirs.dataDir, [{ ts: Date.now(), domain, key: "*", category: "shadow-error", sqlite_value: err instanceof Error ? err.message : String(err) }]);
-      } catch {
-      }
-    }
-  }
-  return jsonVal;
-}
-function diffProjection(domain, jsonVal, sqliteVal) {
-  const rows = [];
-  const collect = (path6, j2, s) => {
-    if (rows.length >= MAX_DIFF_ROWS_PER_DOMAIN) {
-      if (rows.length === MAX_DIFF_ROWS_PER_DOMAIN) {
-        rows.push({ ts: Date.now(), domain, key: "*", category: "count-mismatch", json_value: "truncated", sqlite_value: `\u5DEE\u5F02\u8D85 ${MAX_DIFF_ROWS_PER_DOMAIN} \u884C\u622A\u65AD` });
-      }
-      return;
-    }
-    if (JSON.stringify(j2) === JSON.stringify(s)) return;
-    if (Array.isArray(j2) && Array.isArray(s)) {
-      if (j2.length !== s.length) {
-        rows.push({ ts: Date.now(), domain, key: path6 || "*", category: "count-mismatch", json_value: j2.length, sqlite_value: s.length });
-      }
-      const len = Math.max(j2.length, s.length);
-      for (let i = 0; i < len; i++) collect(`${path6}[${i}]`, j2[i], s[i]);
-      return;
-    }
-    if (j2 !== null && s !== null && typeof j2 === "object" && typeof s === "object") {
-      const jo = j2;
-      const so2 = s;
-      for (const k3 of Object.keys(jo)) {
-        if (!(k3 in so2)) rows.push({ ts: Date.now(), domain, key: path6 ? `${path6}.${k3}` : k3, category: "missing-in-sqlite", json_value: jo[k3] });
-        else collect(path6 ? `${path6}.${k3}` : k3, jo[k3], so2[k3]);
-      }
-      for (const k3 of Object.keys(so2)) {
-        if (!(k3 in jo)) rows.push({ ts: Date.now(), domain, key: path6 ? `${path6}.${k3}` : k3, category: "missing-in-json", sqlite_value: so2[k3] });
-      }
-      return;
-    }
-    rows.push({ ts: Date.now(), domain, key: path6 || "*", category: "value-mismatch", json_value: j2, sqlite_value: s });
-  };
-  collect("", jsonVal, sqliteVal);
-  return rows;
-}
-
-// src/storage/org-write-tx.ts
+init_read_mode();
 function dirsForOrgDir(dir) {
   const base = resolveDirs();
   if (dir) return { ...base, orgDir: dir };
@@ -13833,6 +14186,7 @@ function withStorageTx(dirsOverride, fn, opts) {
 }
 
 // src/session-manager.ts
+init_session_write();
 import { homedir as homedir16 } from "node:os";
 import { isAbsolute as isAbsolute6, join as join42, resolve as resolve9, sep as sep6 } from "node:path";
 
@@ -13988,8 +14342,10 @@ function serveArtifact(name, res) {
 import { readFileSync as readFileSync11, writeFileSync as writeFileSync6, existsSync as existsSync13, mkdirSync as mkdirSync6, rmSync, chmodSync } from "node:fs";
 import { homedir as homedir6 } from "node:os";
 import { dirname as dirname4, join as join15 } from "node:path";
+init_read_mode();
 
 // src/storage/write-dispatch.ts
+init_read_mode();
 function writeDispatchToDb() {
   try {
     ensureStore(resolveDirs());
@@ -15246,6 +15602,7 @@ function tagRouting(gid, sessionId, tags, dir) {
 }
 
 // src/projects.ts
+init_read_mode();
 function projectsFilePath(dir) {
   return join19(dir ?? orgDir(), "projects.json");
 }
@@ -16535,6 +16892,8 @@ function takeBlockedDispatches(engine) {
 }
 
 // src/permission-audit.ts
+init_read_mode();
+init_sqlite();
 import { isAbsolute as isAbsolute2, join as join21, resolve as resolve3 } from "node:path";
 import { homedir as homedir9 } from "node:os";
 import { readFileSync as readFileSync17 } from "node:fs";
@@ -59452,6 +59811,10 @@ ${msg2}`);
       // 恒随增量帧显式携带（null=已清），防其他在线端挂着过期登录失效标记
       auth_hint: s.state.auth_hint ?? null
     });
+    try {
+      shadowWriteSession(s.state);
+    } catch {
+    }
   }
   heartbeat() {
     const now = Date.now();
@@ -67359,6 +67722,7 @@ function ensureTodoToolsEnv() {
 }
 
 // src/index.ts
+init_read_mode();
 if (process.env.CCR_PARENT_PID) {
   const ts2 = () => (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19) + " ";
   for (const m of ["log", "error", "warn"]) {
@@ -67572,6 +67936,27 @@ var compactEventsTick = () => {
 };
 setInterval(compactEventsTick, 6 * 36e5).unref?.();
 var replayed = boot.sessions;
+if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") {
+  try {
+    const { ensureStoreQuiet: ensureStoreQuiet2, resolveDirs: rd2 } = await Promise.resolve().then(() => (init_read_mode(), read_mode_exports));
+    const { bootReconcile: bootReconcile2, dbRowsToReplayed: dbRowsToReplayed2 } = await Promise.resolve().then(() => (init_session_write(), session_write_exports));
+    const dbPort = ensureStoreQuiet2(rd2());
+    bootReconcile2(dbPort, new Set(replayed.keys()));
+    if (process.env.CCR_BOOT_FROM === "db") {
+      const fromDb = dbRowsToReplayed2(dbPort);
+      let merged = 0;
+      for (const [id2, rs2] of fromDb) {
+        if (!replayed.has(id2)) {
+          replayed.set(id2, rs2);
+          merged++;
+        } else replayed.set(id2, rs2);
+      }
+      console.log(`[boot-from-db] \u5207\u6E90\uFF1A\u5E93 ${fromDb.size} \u884C\uFF08\u65B0\u6536\u517B ${merged}\uFF0C\u8986\u76D6 ${fromDb.size - merged}\uFF09+\u56DE\u653E\u515C\u5E95`);
+    }
+  } catch (err) {
+    console.warn("[boot-from-db] \u5207\u6E90\u964D\u7EA7\uFF08boot \u4E0D\u53D7\u5F71\u54CD\uFF0C\u56DE\u653E\u515C\u5E95\u5168\u7A0B\u63A5\u7BA1\uFF09\uFF1A", err instanceof Error ? err.message : err);
+  }
+}
 var bus = new EventBus({ preload: kept, persistPath });
 var mgr = new SessionManager(bus, cfg);
 attachAgentActivator(bus, mgr);

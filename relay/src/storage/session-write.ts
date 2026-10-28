@@ -27,7 +27,10 @@ export function sessionWriteMode(): SessionWriteMode {
   const raw = process.env.CCR_SESSION_WRITE_MODE;
   if (raw === "db") return "db";
   if (raw === "off") return "off";
-  return "shadow"; // B4a 缺省：影子（写库比对，不动读面）
+  // 缺省 shadow（B4a 影子态）。终态翻 db 的灰度序（四步 env 显式、验收后随发版
+  // 改缺省）：auto 对账零差异段 → CCR_SESSION_IMPORT=off（库行权威成立）→
+  // CCR_SESSION_WRITE_MODE=db → CCR_BOOT_FROM=db（最后翻）
+  return "shadow";
 }
 
 /** 与导入器 SESSION_INSERT 同构（import-session-task.ts:249 列序）——直写复用
@@ -169,4 +172,47 @@ export function bootReconcile(
     console.warn(`[boot-reconcile] 库多 ${dbOnly.length} 行（events 已压缩或直写先行）/回放多 ${replayOnly.length} 卡（库 lag：帧节流/降级窗）——切源前需收敛；样本：dbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")}`);
   }
   return r;
+}
+
+// ---------- #292-B4c：db 态切源（库行优先喂 adopt，回放兜底缺行） ----------
+/** 库行 → ReplayedSession 形状（history.ts reduceHistory 产物对齐）。external 卡
+ *  字段从 runtime_state_json 还原（直写侧 rowOf 的对称逆）；managed 卡 agent 侧
+ *  （转录路径/汇报链）不在库行——沿用既有 lazy 链，adopt 后由 ensureLeader/拉活
+ *  机制按需接管。logs 恒空：timeline 留 events.ndjson（R1 拍板），客户端重连走
+ *  内存 replay 补 timeline。 */
+export function dbRowsToReplayed(port: StoragePort): Map<string, { state: Record<string, unknown>; logs: unknown[] }> {
+  const rows = port.query<{
+    id: string; relay_session_id: string | null; group_id: string | null; model: string | null;
+    cwd: string; status: string; runtime_state_json: string; started_at: number; updated_at: number; deleted_at: number | null;
+  }>("SELECT id, relay_session_id, group_id, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at FROM session WHERE deleted_at IS NULL");
+  const out = new Map<string, { state: Record<string, unknown>; logs: unknown[] }>();
+  for (const r of rows) {
+    let rs: Record<string, unknown> = {};
+    try { rs = JSON.parse(r.runtime_state_json) as Record<string, unknown>; } catch { /* 空对象缺省 */ }
+    out.set(r.id, {
+      state: {
+        session_id: r.id,
+        relay_session_id: r.relay_session_id ?? "",
+        project_gid: r.group_id ?? undefined,
+        cwd: r.cwd,
+        model: r.model ?? undefined,
+        status: r.status,
+        title: typeof rs.title === "string" ? rs.title : r.id.slice(0, 8),
+        action_summary: typeof rs.action_summary === "string" ? rs.action_summary : "（库恢复）",
+        last_error: rs.last_error ?? null,
+        done_reason: rs.done_reason ?? null,
+        duration_ms: rs.duration_ms ?? null,
+        historical: rs.historical === true,
+        external: rs.external === true,
+        cli_pid: rs.cli_pid ?? null,
+        pinned: rs.pinned === true,
+        saved: rs.saved === true,
+        started_at: r.started_at,
+        updated_at: r.updated_at,
+        stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+      },
+      logs: [],
+    });
+  }
+  return out;
 }

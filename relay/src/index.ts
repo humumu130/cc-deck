@@ -303,15 +303,27 @@ const compactEventsTick = (): void => {
 setInterval(compactEventsTick, 6 * 3600_000).unref?.();
 const replayed = boot.sessions; // 单遍流式产物（= reduceHistory(kept) 等价）
 
-// #292-B4b boot 对账哨（CCR_BOOT_FROM=auto 时：库行 vs 回放卡差异日志，零行为切换
-// ——为切源 db 优先 adopt 提供生产对账数据；缺省 events 不跑）
+// #292-B4b/B4c boot 对账哨+db 切源（CCR_BOOT_FROM：缺省 events 现行为；auto=对账
+// 哨日志零行为切换；db=切源——库行转 ReplayedSession 形状优先喂 adopt，回放兜底
+// 库缺失/损坏行（R1：库 open 先行，回放兜底语义；B4c 前提=CCR_SESSION_IMPORT=off
+// 使库行为直写权威）
 if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") {
   try {
     const { ensureStoreQuiet, resolveDirs: rd } = await import("./storage/read-mode.js");
-    const { bootReconcile } = await import("./storage/session-write.js");
-    bootReconcile(ensureStoreQuiet(rd()), new Set(replayed.keys()));
+    const { bootReconcile, dbRowsToReplayed } = await import("./storage/session-write.js");
+    const dbPort = ensureStoreQuiet(rd());
+    bootReconcile(dbPort, new Set(replayed.keys()));
+    if (process.env.CCR_BOOT_FROM === "db") {
+      const fromDb = dbRowsToReplayed(dbPort);
+      let merged = 0;
+      for (const [id, rs] of fromDb) {
+        if (!replayed.has(id)) { replayed.set(id, rs as never); merged++; }
+        else replayed.set(id, rs as never); // 库行权威覆盖回放行（直写终态>压缩回放态）
+      }
+      console.log(`[boot-from-db] 切源：库 ${fromDb.size} 行（新收养 ${merged}，覆盖 ${fromDb.size - merged}）+回放兜底`);
+    }
   } catch (err) {
-    console.warn("[boot-reconcile] 对账哨降级（boot 不受影响，回放兜底）：", err instanceof Error ? err.message : err);
+    console.warn("[boot-from-db] 切源降级（boot 不受影响，回放兜底全程接管）：", err instanceof Error ? err.message : err);
   }
 }
 
