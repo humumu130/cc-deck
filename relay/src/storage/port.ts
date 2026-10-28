@@ -36,6 +36,8 @@ export interface StoragePort {
   readonly path: string;
   /** 是否处于打开状态。 */
   readonly isOpen: boolean;
+  /** #292-B2：连接是否处于未结事务——写口事务自愈清场（导入器偶发遗留防御）。 */
+  readonly inTransaction: boolean;
 
   /** 打开（或创建）库文件并落冻结 PRAGMA（WAL/外键）。目录不存在则创建。重复 open 已打开的端口视为编程错误。 */
   open(): void;

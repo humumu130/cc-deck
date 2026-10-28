@@ -235,4 +235,10 @@ export const migrations: readonly Migration[] = [
       p.exec("ALTER TABLE dispatch ADD COLUMN priority TEXT");
     },
   },
+
+  {
+    version: 6,
+    name: "#292-B2 import_checkpoint.mtime_ns（B 路审查真根修：ms 取整在等长覆盖写形态下同毫秒碰撞=checkpoint 假有效=投影陈旧=写回抹写；org 三源先行接入，其余六域逐批补传参）",
+    up: (p) => p.exec("ALTER TABLE import_checkpoint ADD COLUMN mtime_ns TEXT"),
+  },
 ];
