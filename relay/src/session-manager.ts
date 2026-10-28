@@ -4684,14 +4684,17 @@ export class SessionManager {
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
     let best: string | null = null;
     let bestAt = -1;
+    let bestIsExternal = false; // #294 PM 保活断点修复：managed PM（SDK 面板开会话）同样可为值守——external 优先、同类取最近
     for (const s of this.sessions.values()) {
-      if (!s.state.external || s.state.historical) continue;
-      if (this.leaderId && s.state.session_id === this.leaderId) continue; // 锚卡防御性排除（external 不该是锚，双保险）
+      if (s.state.historical) continue;
+      if (!s.state.external && !this.managedSessions.has(s.state.session_id)) continue; // external 或 managed（SDK spawn 的 PM 面板会话）
+      if (this.leaderId && s.state.session_id === this.leaderId) continue;
       const pid = s.state.cli_pid;
-      if (!pid) continue; // 无进程定位：extInput 大概率黑洞（等待 bridge 重定位/hook 上报）
-      try { process.kill(pid, 0); } catch { continue; } // 进程已死：哑值守等用户开新会话，不自动开新窗
+      if (!pid) continue;
+      try { process.kill(pid, 0); } catch { continue; }
       const at = s.state.updated_at || 0;
-      if (at > bestAt) { bestAt = at; best = s.state.session_id; }
+      const isExt = !!s.state.external;
+      if (at > bestAt || (isExt && !bestIsExternal)) { bestAt = at; best = s.state.session_id; bestIsExternal = isExt; }
     }
     return best;
   }
