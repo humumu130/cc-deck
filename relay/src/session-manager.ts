@@ -4,6 +4,7 @@ import { readTitleOverrides } from "./title-derive.js";
 import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { withStorageTx } from "./storage/org-write-tx.js";
+import { shadowWriteSession } from "./storage/session-write.js";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -7892,6 +7893,9 @@ export class SessionManager {
       // 恒随增量帧显式携带（null=已清），防其他在线端挂着过期登录失效标记
       auth_hint: s.state.auth_hint ?? null,
     });
+    // #292-B4：帧处理口 session 直写（影子模式起步——shadow 写库+比对，读面不动；
+    // R4 单帧一小事务；off/json/降级=旁路零影响；详见 storage/session-write.ts 头注）
+    try { shadowWriteSession(s.state); } catch { /* 直写自身已吞错降级，双保险 */ }
   }
 
   private heartbeat(): void {

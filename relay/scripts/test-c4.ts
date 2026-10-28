@@ -1,0 +1,151 @@
+// #292-B4 终批断言套件（B4a 影子面；B4b/c 随灰度步扩展）：
+//   §W 帧写透传：emitUpdated 触发 session 直写（shadow 模式），行落库+可比列与内存零差异
+//   §S 影子 20 轮：写→投影重灌→直写→再比对（投影覆盖直写→直写再覆盖，终态=内存态）循环零差异
+//   §P 性能预算（R4）：100 帧单帧事务计时 P95<5ms（沙盒口径）
+//   §O off 旁路：CCR_SESSION_WRITE_MODE=off 零写（行数不变）
+//   §D 降级：json 档=旁路；库不可用=warn 一次+帧链不炸
+// 直跑：cd relay && env -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT npx tsx scripts/test-c4.ts
+import { rmSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SB = (p: string) => fileURLToPath(new URL(p, import.meta.url));
+for (const d of ["../data/test-c4-org/", "../data/test-c4-data/"]) {
+  rmSync(SB(d), { recursive: true, force: true });
+  mkdirSync(SB(d), { recursive: true });
+}
+process.env.CCR_ORG_DIR = SB("../data/test-c4-org/");
+process.env.CCR_DATA_DIR = SB("../data/test-c4-data/");
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_PARENT_PID;
+delete process.env.CCR_RELAY_CHILD;
+delete process.env.CCR_STORAGE_READ_MODE;
+delete process.env.CCR_SESSION_WRITE_MODE;
+delete process.env.CCR_PORT;
+
+let pass = 0, fail = 0;
+function assert4(cond: boolean, name: string, extra = ""): void {
+  if (cond) { pass++; console.log(`  ✓ ${name}`); }
+  else { fail++; console.error(`  ✗ ${name}${extra ? "｜" + extra : ""}`); }
+}
+
+const { EventBus } = await import("../src/event-bus.js");
+const { SessionManager } = await import("../src/session-manager.js");
+const { loadConfig } = await import("../src/config.js");
+const cfg = loadConfig();
+cfg.token = "t";
+cfg.dataDir = process.env.CCR_DATA_DIR!;
+const bus = new EventBus({ persistPath: join(process.env.CCR_DATA_DIR!, "events.ndjson") });
+const sm = new SessionManager(bus, cfg);
+const { ensureStore, resolveDirs } = await import("../src/storage/read-mode.js");
+const port = ensureStore(resolveDirs());
+const sw = await import("../src/storage/session-write.js");
+
+console.log("§W 帧写透传（external 卡路径——零 agent 依赖，同 emitUpdated 帧链）：");
+let sid = "";
+{
+  const W_CWD = join(process.env.CCR_DATA_DIR!, "w");
+  mkdirSync(W_CWD, { recursive: true });
+  const est = sm.ensureExternal("ext-c4-e59a0001-0000-4000-8000-000000000001", W_CWD, "c4 批4会话", "c4-e59a0001", Date.now(), {});
+  sid = est.session_id;
+  sm.setExternalStatus(sid, "WORKING", "c4 批4首帧");
+  // 帧链直驱（force 帧——setExternalStatus 的非 force 帧受 UPDATE_THROTTLE_MS 节流
+  // 会跳过挂点：帧粒度=库粒度属设计内，最终由下一 force 帧收敛；测试直驱 force 验证透传）
+  const cardsW = (sm as unknown as { sessions: Map<string, { state: { session_id: string } & Record<string, unknown> }> }).sessions;
+  (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cardsW.get(sid) as never, true);
+  const row = port.query<{ id: string; status: string; cwd: string }>("SELECT id, status, cwd FROM session WHERE id = ?", [sid]);
+  assert4(row.length === 1, `W1 帧写透传：状态帧后 session 行落库（id=${sid.slice(0, 16)}…）`);
+  assert4(row[0]?.status === "WORKING", `W2 落库 status=WORKING（实 ${row[0]?.status}）`);
+  const cards = (sm as unknown as { sessions: Map<string, { state: { session_id: string } & Record<string, unknown> }> }).sessions;
+  const st = cards.get(sid)?.state;
+  assert4(!!st && sw.shadowSessionDiff(port, st as never).length === 0, "W3 影子比对：可比列零差异（status/updated_at/cwd/relay_session_id）");
+}
+
+console.log("§S 影子 20 轮（投影重灌↔直写互覆盖，终态=内存态）：");
+{
+  let diffN = 0;
+  for (let i = 0; i < 20; i++) {
+    // 状态推进（emitUpdated 帧）→直写
+    (sm as unknown as { emitUpdatedForTest?: (id: string) => void }).emitUpdatedForTest?.(sid);
+    // 直接驱动一次状态变更（setExternalStatus 同族——用内部 touch：改 summary 再 emit）
+    const cards = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+    const st = cards.get(sid)?.state;
+    if (st) { st.action_summary = `影子轮 ${i}`; st.updated_at = Date.now(); }
+    (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cards.get(sid) as never, true);
+    // 投影重灌（ensureStore 全量导入——session 域 checkpoint 失效时重灌覆盖直写行）
+    ensureStore(resolveDirs());
+    // 再帧写（直写覆盖回内存态）
+    (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cards.get(sid) as never, true);
+    const diffs = sw.shadowSessionDiff(port, st as never);
+    if (diffs.length) { diffN++; if (diffN <= 2) console.log(`    轮 ${i} 差异:`, diffs.join("; ").slice(0, 120)); }
+  }
+  assert4(diffN === 0, `S1 投影↔直写互覆盖 20 轮零差异（实 ${diffN} 轮有差）`);
+}
+
+console.log("§P 性能预算（R4：100 帧单帧事务 P95<5ms）：");
+{
+  const cards = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+  const s4 = cards.get(sid) as never;
+  const dts: number[] = [];
+  for (let i = 0; i < 100; i++) {
+    const st = cards.get(sid)?.state;
+    if (st) st.updated_at = Date.now();
+    const t = performance.now();
+    (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(s4, true);
+    dts.push(performance.now() - t);
+  }
+  dts.sort((a, b) => a - b);
+  const p95 = dts[Math.floor(dts.length * 0.95)];
+  console.log(`  [计时] 100 帧 P50=${dts[50].toFixed(2)}ms P95=${p95.toFixed(2)}ms max=${dts[99].toFixed(2)}ms`);
+  assert4(p95 < 5, `P1 单帧事务 P95<5ms（实 ${p95.toFixed(2)}ms，R4 预算）`);
+}
+
+console.log("§O off 旁路：");
+{
+  const before = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM session")[0]?.n ?? -1;
+  process.env.CCR_SESSION_WRITE_MODE = "off";
+  const cards = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+  const st = cards.get(sid)?.state;
+  if (st) st.updated_at = Date.now();
+  (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cards.get(sid) as never, true);
+  const after = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM session")[0]?.n ?? -2;
+  // 行数不变且 updated_at 未被本帧推（off 旁路——行可能是旧直写行但值不动）
+  const rowUa = port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at ?? 0;
+  const memUa = Number(cards.get(sid)?.state.updated_at ?? 0);
+  assert4(before === after && rowUa !== memUa, `O1 off=零写（行数 ${before}→${after} 不变，库时刻停在旁路前）`);
+  delete process.env.CCR_SESSION_WRITE_MODE;
+}
+
+console.log("§D 降级：");
+{
+  // json 档=旁路（帧链不炸）
+  process.env.CCR_STORAGE_READ_MODE = "json";
+  let threw = false;
+  try {
+    const cards = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+    const st = cards.get(sid)?.state;
+    if (st) st.updated_at = Date.now();
+    (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cards.get(sid) as never, true);
+  } catch { threw = true; }
+  assert4(!threw, "D1 json 档帧链不炸（直写旁路）");
+  delete process.env.CCR_STORAGE_READ_MODE;
+  // 库不可用（dataDir 指坏路径）：quiet 抛→warn 一次旁路，帧链不炸
+  const savedData = process.env.CCR_DATA_DIR;
+  process.env.CCR_DATA_DIR = "/dev/null/nope/c4";
+  sw.resetSessionWriteWarnForTest();
+  let threw2 = false;
+  try {
+    const cards = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+    const st = cards.get(sid)?.state;
+    if (st) st.updated_at = Date.now();
+    (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cards.get(sid) as never, true);
+  } catch { threw2 = true; }
+  assert4(!threw2, "D2 库不可用：直写旁路 warn 一次，帧链不炸（#158 语义）");
+  process.env.CCR_DATA_DIR = savedData;
+}
+
+console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
+for (const d of ["../data/test-c4-org/", "../data/test-c4-data/"]) {
+  try { rmSync(SB(d), { recursive: true, force: true }); } catch {}
+}
+process.exit(fail > 0 ? 1 : 0);
