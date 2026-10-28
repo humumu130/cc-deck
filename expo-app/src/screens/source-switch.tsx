@@ -108,7 +108,7 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
       {open ? <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} /> : null}
       {open ? (
         <View
-          style={[c.menu, anchor ? { right: "auto", left: clampMenuLeft(anchor.tx, anchor.tw, menuW, screenW, anchor.wx) } : null]}
+          style={[c.menu, { maxWidth: screenW - 16 }, anchor ? { right: "auto", left: clampMenuLeft(anchor.tx, anchor.tw, menuW, screenW, anchor.wx) } : null]}
           onLayout={(e) => setMenuW(Math.max(208, e.nativeEvent.layout.width))} /* #290：实宽回测（自适应内容后 clamp 重算） */
         >
           {[...sources].sort((a, b) => (b.id === snap.activeSourceId ? 1 : 0) - (a.id === snap.activeSourceId ? 1 : 0)).map((src) => {

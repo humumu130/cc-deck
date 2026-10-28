@@ -59,6 +59,7 @@ console.log("§A 静态锚：");
   ok(/anchor \? \{ right: "auto", left: clampMenuLeft\(/.test(src), "A3 测到锚后 clamp 接管 left（right:auto 退役右锚）");
   ok(src.includes("right: 0, minWidth: 208") && src.includes("首开未测到锚时的回落"), "A4 首开未测到回落 right:0（measure 异步窗）");
   ok(/useWindowDimensions/.test(src), "A5 屏宽活读（旋转/分屏不写死）");
+  ok(src.includes("{ maxWidth: screenW - 16 }"), "A6 菜单 maxWidth 夹屏宽（审查 P2-1：超宽内容不撑出屏）");
 }
 
 console.log(`\n§U-§A：${pass} ok / ${fail} FAIL`);
