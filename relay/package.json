@@ -119,7 +119,8 @@
     "test:wildonboard": "tsx scripts/test-wild-onboard.ts",
     "test:orgagg": "tsx scripts/test-org-agg.ts",
     "test:msp": "tsx scripts/test-msp.ts",
-    "test:cbs": "tsx scripts/test-cbs.ts"
+    "test:cbs": "tsx scripts/test-cbs.ts",
+    "test:spa": "tsx scripts/test-spa.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
