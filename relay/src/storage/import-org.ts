@@ -19,7 +19,7 @@ import { sha12, statThenRead } from "./import-util.js";
 import { join } from "node:path";
 import type { StoragePort } from "./port.js";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
-import { appendLoss } from "./loss-report.js";
+import { appendLoss, listLoss } from "./loss-report.js";
 
 /** 导入映射逻辑版本：映射代码升级时 bump→全部源失效强制重扫（与 DB user_version 正交）。 */
 export const ORG_IMPORT_SCHEMA_VERSION = 1;
@@ -113,6 +113,48 @@ export function importOrg(port: StoragePort, orgDir: string, opts?: { schemaVers
   }
 
   // ---------- 解析（纯函数段：源文本 → 中间行 + loss 待落账） ----------
+  // #292-cutover-P1（B-F3 坏账隔离）：源文件存在（text!==null）但整文件 bad-json
+  // = 崩溃半写残留的高危形态（原子写落地前的存量窗）。此前行为=「清域+插 0 行+
+  // 落 checkpoint」把坏态合法化为空表（确认单静默清空且不再重扫）。修复判据：
+  // 该源**上一轮 checkpoint 存在**（曾成功导入过=文件本该有内容）而本轮坏 JSON
+  // → 判源损坏：跳过本域导入（保留库内旧快照），落 loss 告警，不写 checkpoint
+  // （下轮重扫重试，文件修复即自愈）。首见坏文件（无 checkpoint）维持旧语义
+  // （可能真是空态初始化，清域导入空表无损失）。
+  const allValidBefore = allValid;
+  void allValidBefore; // 口径注记：进到这里 allValid 必为 false
+  const sourceCorrupted: ObservedSource[] = [];
+  for (const s of sources) {
+    if (s.text === null) continue; // 文件缺席=合法空态
+    let bad = false;
+    try {
+      JSON.parse(s.text);
+    } catch {
+      bad = true;
+    }
+    if (!bad) continue;
+    // 「曾成功导入过」判据=checkpoint 表有该源行（mtimeMs=0 探针必 mismatch，
+    // 但行存在即历史成功证据；直接查表更直白）
+    const hadCheckpoint = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM import_checkpoint WHERE path = ?", [s.file])[0]?.n !== 0;
+    if (hadCheckpoint) sourceCorrupted.push(s);
+  }
+  if (sourceCorrupted.length > 0) {
+    const beginOk = (() => { try { port.begin(); return true; } catch { return false; } })();
+    if (beginOk) {
+      try {
+        for (const s of sourceCorrupted) {
+          appendLoss(port, { sourcePath: s.file, lineNo: 0, reason: "source-corrupted", excerpt: `源曾成功导入过但本轮 bad-json（崩溃半写？）——跳过本域导入保留旧快照，不落 checkpoint（修复后自动重扫）: ${(s.text ?? "").slice(0, 120)}` });
+        }
+        port.commit();
+      } catch {
+        try { port.rollback(); } catch { /* 连接已死 */ }
+      }
+    }
+    console.warn(`[import-org] 源损坏隔离（${sourceCorrupted.map((s) => s.file.split("/").pop()).join(", ")}）：曾成功导入的源本轮 bad-json，跳过清域保留旧快照——检查磁盘/写入链`);
+    const lossCount = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0;
+    void listLoss;
+    return { skipped: false, counts: countAll(port), loss: lossCount, rescanned: [] };
+  }
+
   const losses: { source: ObservedSource; lineNo: number; reason: string; excerpt: string }[] = [];
   const groups: GroupRow[] = [];
   const validGroupIds = new Set<string>();

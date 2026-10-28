@@ -21,7 +21,10 @@ process.env.CCR_DATA_DIR = SB("../data/test-c2-data/");
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_PARENT_PID;
 delete process.env.CCR_RELAY_CHILD;
-delete process.env.CCR_STORAGE_READ_MODE; // 缺省 sqlite 档（生产同款）
+// #292-cutover-P1（C-C6）：可控注入——KEEP_READ_MODE=1 保留外部 env（真 json 档
+// 全套件覆盖），缺省钉 sqlite 档（生产同款）。此前无条件 delete 使「json 档跑
+// 全套件」的 env 通道失效（覆盖是假的）。
+if (process.env.KEEP_READ_MODE !== "1") delete process.env.CCR_STORAGE_READ_MODE; // 缺省 sqlite 档（生产同款）
 
 let pass = 0, fail = 0;
 function assert2(cond: boolean, name: string, extra = ""): void {
@@ -69,8 +72,20 @@ let gid = "";
   const { decideConfirm } = await import("../src/projects.js");
   const dec = decideConfirm(c0[0]?.id ?? "", true, "c2-test", DIR);
   assert2(dec.ok, "T3b decideConfirm 事务透传", dec.ok ? "" : dec.error);
-  const c1 = port.query<{ status: string }>("SELECT status FROM org_confirm WHERE id = ?", [c0[0]?.id ?? ""]);
-  assert2(c1[0]?.status === "approved", `T3c 决议后库立即可见 approved（实 ${c1[0]?.status}）`);
+  // #292-cutover-P1（C-C1）：org 写口追赶转 deferred——「库立即可见」改「tick 排空后
+  // 可见」（文件账先成=降级安全；同步冻结 98.8s 的代价换最终一致，读者走读前触发
+  // 自带追赶同款窗口）。json 档（KEEP_READ_MODE 专跑）=零 SQLite 参与铁律：决议真
+  // 相在文件面断言（confirms.json），库断言跳过（json 档库是旁路残留不承诺投影）。
+  await new Promise((r) => setImmediate(() => setImmediate(r)));
+  if (process.env.CCR_STORAGE_READ_MODE === "json") {
+    const { readFileSync: rfC2 } = await import("node:fs");
+    const cf = JSON.parse(rfC2(join(DIR, "confirms.json"), "utf-8")) as { confirms: { id: string; status: string }[] };
+    const inFile = cf.confirms.find((x) => x.id === (c0[0]?.id ?? ""))?.status;
+    assert2(inFile === "approved", `T3c-json 决议后文件面 approved（json 档零库参与，实 ${inFile}）`);
+  } else {
+    const c1 = port.query<{ status: string }>("SELECT status FROM org_confirm WHERE id = ?", [c0[0]?.id ?? ""]);
+    assert2(c1[0]?.status === "approved", `T3c 决议后库可见 approved（deferred 排空后，实 ${c1[0]?.status}）`);
+  }
 }
 
 console.log("§D 降级：");

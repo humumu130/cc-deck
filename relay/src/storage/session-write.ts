@@ -69,6 +69,36 @@ function rowOf(s: SessionState, gidSafe: string | null): unknown[] {
 }
 
 let warned = false;
+let tombstoneWarned = false;
+
+/** #292-cutover-P1（A-1/B-F1 双路互证）：deleteSession 的库侧墓碑——直写面此前
+ *  恒写 deleted_at=null（REPLACE 语义=复活），翻 CCR_BOOT_FROM=db 后已删会话被
+ *  dbRowsToReplayed 无条件收养=删卡复活。shadow 期即开始写：幂等（导入器同值
+ *  覆盖）、零风险，翻 db 前库内已积累正确墓碑。off/json 档=旁路（文件账已有
+ *  events.ndjson SESSION_DELETED 语义兜底）。失败只 warn 不炸删卡主链。
+ *  dataDir 显式传（与 shadowWriteSession 的 resolveDirs 口径并存：删卡点持有
+ *  cfg.dataDir，直接传避免 env 口径分叉——B 路 F5 同族面）。 */
+export function tombstoneSession(dataDir: string, sessionId: string): void {
+  if (sessionWriteMode() === "off" || currentReadMode() === "json") return;
+  let port: StoragePort;
+  try {
+    port = ensureStoreQuiet(resolveDirs({ dataDir }));
+  } catch (err) {
+    if (!tombstoneWarned) {
+      tombstoneWarned = true;
+      console.warn("[session-write] 墓碑降级（删卡主链不受影响，文件账 SESSION_DELETED 兜底）：", err instanceof Error ? err.message : err);
+    }
+    return;
+  }
+  try {
+    port.exec("UPDATE session SET deleted_at = ?, status = 'DONE' WHERE id = ? AND deleted_at IS NULL", [Date.now(), sessionId]);
+  } catch (err) {
+    if (!tombstoneWarned) {
+      tombstoneWarned = true;
+      console.warn("[session-write] 墓碑写入失败（不重试不炸删卡；翻 db 前需收敛）：", err instanceof Error ? err.message : err);
+    }
+  }
+}
 
 /** 帧处理口直写（emitUpdated 挂点调用）。同步小事务；off/json 档/库不可用=旁路。 */
 export function shadowWriteSession(state: SessionState): void {
@@ -158,20 +188,30 @@ export function bootFromMode(): BootFromMode {
  *  切源风险面清单）。auto 态只记日志不动作——生产跑一段零差异后再翻 db。 */
 export function bootReconcile(
   port: StoragePort,
-  replayedIds: Set<string>,
+  replayed: Map<string, { state: { status?: unknown } }>,
 ): { dbOnly: string[]; replayOnly: string[]; statusMismatch: string[] } {
-  const rows = port.query<{ id: string; status: string }>("SELECT id, status FROM session");
+  // #292-cutover-P1（A-2）：①查询滤 deleted_at（回放侧 .filter !deleted 同口径——
+  // 历史墓碑行此前永久计入 dbOnly，对账零差异门永不成立）；②statusMismatch 实装
+  // （行 status vs 回放卡 status 逐 id 比对——头注承诺的第三类差异此前从未计算）
+  const rows = port.query<{ id: string; status: string }>("SELECT id, status FROM session WHERE deleted_at IS NULL");
+  const replayedIds = new Set(replayed.keys());
   const dbIds = new Set(rows.map((r) => r.id));
   const dbOnly = [...dbIds].filter((id) => !replayedIds.has(id));
   const replayOnly = [...replayedIds].filter((id) => !dbIds.has(id));
   const statusMismatch: string[] = [];
-  const r = { dbOnly, replayOnly, statusMismatch };
-  if (dbOnly.length === 0 && replayOnly.length === 0) {
+  for (const r of rows) {
+    const card = replayed.get(r.id);
+    if (!card) continue;
+    const st = card.state?.status;
+    if (typeof st === "string" && st !== r.status) statusMismatch.push(`${r.id}(db=${r.status},events=${st})`);
+  }
+  const rec = { dbOnly, replayOnly, statusMismatch };
+  if (dbOnly.length === 0 && replayOnly.length === 0 && statusMismatch.length === 0) {
     console.log(`[boot-reconcile] 库↔回放零差异（${rows.length} 会话）——切源（CCR_BOOT_FROM=db）风险面清零`);
   } else {
-    console.warn(`[boot-reconcile] 库多 ${dbOnly.length} 行（events 已压缩或直写先行）/回放多 ${replayOnly.length} 卡（库 lag：帧节流/降级窗）——切源前需收敛；样本：dbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")}`);
+    console.warn(`[boot-reconcile] 库多 ${dbOnly.length} 行（events 已压缩或直写先行）/回放多 ${replayOnly.length} 卡（库 lag：帧节流/降级窗）/status 不一致 ${statusMismatch.length}（切源风险面）——切源前需收敛；样本：dbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")} mismatch=${statusMismatch.slice(0, 3).join(",")}`);
   }
-  return r;
+  return rec;
 }
 
 // ---------- #292-B4c：db 态切源（库行优先喂 adopt，回放兜底缺行） ----------

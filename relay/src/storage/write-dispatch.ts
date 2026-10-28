@@ -6,14 +6,33 @@
 // v1 教训：ensureStore() 需传 dirs（resolveDirs()），不存在 loadSqliteDriver 导出——
 // v1 对想象 API 编码，import 即 SyntaxError，test-brm→org.ts 链 8/8 崩（幸未构建上线）。
 
-import { ensureStore, resolveDirs } from "./read-mode.js";
+import { ensureStore, resolveDirs, currentReadMode } from "./read-mode.js";
 
-/** dispatch 台账 append 后调用：同步导入面把该行落库。失败不炸调用方（文件已写成功=降级安全）。 */
+/** dispatch 台账 append 后调用：导入面把该行落库。失败不炸调用方（文件已写成功=降级安全）。
+ * #292-cutover-P1（C-C1/P2-A5）：①json 读档短路（钉 json 回退档时不再建库+导入，
+ *   维持「json 档零 SQLite 参与」承诺——此前违反 read-mode 头注）；②追赶改
+ *   deferred 合并（C-C2 同 tick 去抖——派单热路径每 append 一次全量 observe 税
+ *   ~100ms，同 tick 批量派单合并一赶）；③降级 warn 加一次性闸（#158 坏二进制
+ *   机器上每次 appendDispatch 刷一条）。 */
+let dispatchSyncWarned = false;
 export function writeDispatchToDb(): void {
+  if (currentReadMode() === "json") return; // json 档零 SQLite 参与
   try {
-    ensureStore(resolveDirs());
+    const dirs = resolveDirs();
+    setImmediate(() => {
+      try {
+        ensureStore(dirs);
+      } catch (err) {
+        if (!dispatchSyncWarned) {
+          dispatchSyncWarned = true;
+          console.warn("[write-dispatch] 同步落库降级（一次性告警，文件账保留，读前触发兜底）：", err instanceof Error ? err.message : err);
+        }
+      }
+    });
   } catch (err) {
-    // SQLite 降级/原生模块缺失等：文件账仍在，导入器后续读前触发会再追赶
-    console.warn("[write-dispatch] 同步落库降级，文件账保留：", err instanceof Error ? err.message : err);
+    if (!dispatchSyncWarned) {
+      dispatchSyncWarned = true;
+      console.warn("[write-dispatch] 同步落库降级，文件账保留：", err instanceof Error ? err.message : err);
+    }
   }
 }

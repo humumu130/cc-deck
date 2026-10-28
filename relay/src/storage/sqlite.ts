@@ -102,6 +102,11 @@ class SqliteStorage implements StoragePort {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("synchronous = NORMAL");
+    // #292-cutover-P1（A-P4/B-F5 双提）：busy_timeout 5s——better-sqlite3 缺省 0，
+    // 跨进程争用（云桥导入追赶/org 重灌秒级事务）下 BEGIN IMMEDIATE 立即抛 BUSY
+    // →txDegraded 进程级弃守互斥（回退无锁纯文件=读改写竞态回归）。5s 等待把
+    // 「降级」变「等待」，互斥承诺跨进程成立（WAL 下写锁持有段毫秒级，5s 足够）。
+    this.db.pragma("busy_timeout = 5000");
     this._open = true;
   }
 

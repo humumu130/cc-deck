@@ -20,6 +20,9 @@ process.env.CCR_DATA_DIR = SB("../data/test-c3-data/");
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_PARENT_PID;
 delete process.env.CCR_RELAY_CHILD;
+// #292-cutover-P1（C-C6）：本套件主体断言 SQLite 行为（§W 帧写/§S 影子比对需库
+// 行），全套件 json 跑结构性不成立——env 钉 sqlite 档（json 子段 §D/§O 套件内
+// 自管）。json 档全套件覆盖面 = test-c2 + test-brm + test-c5（KEEP_READ_MODE 通道）。
 delete process.env.CCR_STORAGE_READ_MODE;
 delete process.env.CCR_PORT;
 

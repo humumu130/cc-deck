@@ -312,15 +312,37 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
     const { ensureStoreQuiet, resolveDirs: rd } = await import("./storage/read-mode.js");
     const { bootReconcile, dbRowsToReplayed } = await import("./storage/session-write.js");
     const dbPort = ensureStoreQuiet(rd());
-    bootReconcile(dbPort, new Set(replayed.keys()));
+    bootReconcile(dbPort, replayed as never);
     if (process.env.CCR_BOOT_FROM === "db") {
       const fromDb = dbRowsToReplayed(dbPort);
       let merged = 0;
+      let fieldFallback = 0;
       for (const [id, rs] of fromDb) {
         if (!replayed.has(id)) { replayed.set(id, rs as never); merged++; }
-        else replayed.set(id, rs as never); // 库行权威覆盖回放行（直写终态>压缩回放态）
+        else {
+          // #292-cutover-P1（B-F2）：字段级合并——pre-flip 库行 runtime_state_json 是
+          // importer 形状（无 title/action_summary），无条件覆盖=历史标题回退 UUID 前
+          // 缀/摘要变占位文案。规则：DB 行结构列（status/时间戳/gid）权威，runtime 域
+          // 字段 DB 缺失/占位时回落回放值（title 空/8 位前缀、summary=「（库恢复）」、
+          // stats 全零视为缺失信号）
+          const prev = replayed.get(id) as { state?: Record<string, unknown> } | undefined;
+          if (prev?.state) {
+            const ns = rs.state as Record<string, unknown>;
+            const dbTitle = typeof ns.title === "string" ? ns.title : "";
+            const dbSummary = typeof ns.action_summary === "string" ? ns.action_summary : "";
+            const dbTitleMissing = !dbTitle || dbTitle === id.slice(0, 8);
+            const dbSummaryMissing = !dbSummary || dbSummary === "（库恢复）";
+            const statsZero = (ns.stats as { files_changed?: number } | undefined)?.files_changed === 0
+              && (ns.stats as { lines_added?: number } | undefined)?.lines_added === 0;
+            if (dbTitleMissing && typeof prev.state.title === "string" && prev.state.title) { ns.title = prev.state.title; fieldFallback++; }
+            if (dbSummaryMissing && typeof prev.state.action_summary === "string" && prev.state.action_summary) ns.action_summary = prev.state.action_summary;
+            if (statsZero && prev.state.stats && typeof prev.state.stats === "object") ns.stats = prev.state.stats;
+            if (Array.isArray((prev.state as { logs?: unknown }).logs) && ((prev.state as { logs: unknown[] }).logs.length > 0)) rs.logs = (prev.state as { logs: unknown }).logs as never;
+          }
+          replayed.set(id, rs as never); // 结构列仍库行权威（直写终态>压缩回放态）
+        }
       }
-      console.log(`[boot-from-db] 切源：库 ${fromDb.size} 行（新收养 ${merged}，覆盖 ${fromDb.size - merged}）+回放兜底`);
+      console.log(`[boot-from-db] 切源：库 ${fromDb.size} 行（新收养 ${merged}，覆盖 ${fromDb.size - merged}，runtime 域回放兜底 ${fieldFallback}）`);
     }
   } catch (err) {
     console.warn("[boot-from-db] 切源降级（boot 不受影响，回放兜底全程接管）：", err instanceof Error ? err.message : err);

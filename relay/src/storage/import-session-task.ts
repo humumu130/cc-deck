@@ -119,7 +119,14 @@ interface ObservedNdjson {
 
 function observeNdjson(file: string): ObservedNdjson {
   if (!existsSync(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
-  const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）
+  const obs = statThenRead(file);
+  // #292-cutover-P1（C-C2 events observe 短路承接）：大源（>2MB）双未变时
+  // statThenRead 返回 unchanged+空 text+基线 lineCount——此处映射为 lines=[]（内容
+  // 未变，checkpoint 比较走 lineCount 不变=快进），不全文 split（35MB→0ms）。
+  // 真变更（append/压缩）不命中短路（mtimeNs 已变）→ 正常全文读。
+  if (obs.unchanged === true) {
+    return { mtimeMs: obs.mtimeMs, lineCount: obs.lineCount ?? 0, lines: [] };
+  }
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
