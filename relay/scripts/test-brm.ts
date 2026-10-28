@@ -61,16 +61,19 @@ console.log("§S 真对象行为（orgDir 沙盒）：");
   const gid = cg.ok ? cg.group.id : "";
   setGroupStatus(gid, "active"); // 新组默认 pending=板冻结，激活后可写（生产同链：PM 确认翻 active）
   const parent = upsertBoardEntry(gid, { text: "父任务", priority: "P0" });
-  ok(parent.ok && (parent as { entry: { priority?: string } }).entry.priority === "P0", "S1 upsert 建 priority=P0（透传+回读）");
-  const child = upsertBoardEntry(gid, { text: "子任务", parent_id: (parent as { entry: { id: string } }).entry.id, priority: "P1" });
-  ok(child.ok && (child as { entry: { parent_id?: string; priority?: string } }).entry.parent_id === (parent as { entry: { id: string } }).entry.id && (child as { entry: { priority?: string } }).entry.priority === "P1", "S2 upsert 建 parent_id+priority=P1（父子链透传）");
+  // 守卫式提取（护栏）：前置步骤失败时不再盲读 entry.id 崩掉整跑——断言记 FAIL 后续步骤自然短路
+  const parentId = parent.ok ? ((parent as { entry: { id: string } }).entry?.id ?? "") : "";
+  ok(parent.ok && (parent as { entry: { priority?: string } }).entry?.priority === "P0", "S1 upsert 建 priority=P0（透传+回读）");
+  const child = upsertBoardEntry(gid, { text: "子任务", parent_id: parentId, priority: "P1" });
+  const childId = child.ok ? ((child as { entry: { id: string } }).entry?.id ?? "") : "";
+  ok(child.ok && (child as { entry: { parent_id?: string; priority?: string } }).entry?.parent_id === parentId && (child as { entry: { priority?: string } }).entry?.priority === "P1", "S2 upsert 建 parent_id+priority=P1（父子链透传）");
   const board = loadBoardFile(gid);
-  ok(board?.entries.some((e) => e.priority === "P0" && !e.parent_id) && board?.entries.some((e) => e.parent_id === (parent as { entry: { id: string } }).entry.id), "S3 loadBoardFile 回读富字段（持久化往返）");
+  ok((board?.entries.some((e) => e.priority === "P0" && !e.parent_id) && board?.entries.some((e) => e.parent_id === parentId)) === true, "S3 loadBoardFile 回读富字段（持久化往返）");
   const badPrio = upsertBoardEntry(gid, { id: "bad-1", text: "坏优先级", priority: "P3" });
   ok(!badPrio.ok && /priority/.test(badPrio.error ?? "") && /不在词表/.test(badPrio.error ?? ""), "S4 priority 坏值拒写（P0/P1/P2 词表闸——checkFields enum 通用检查先命中，分支细查双闸兜底）");
   // 更新分支：null 清除
-  const upd = upsertBoardEntry(gid, { id: (child as { entry: { id: string } }).entry.id, text: "子任务", priority: null, parent_id: null });
-  ok(upd.ok && !(upd as { entry: { priority?: string } }).entry.priority && !(upd as { entry: { parent_id?: string } }).entry.parent_id, "S5 null 清除（回未标注/根卡）");
+  const upd = upsertBoardEntry(gid, { id: childId, text: "子任务", priority: null, parent_id: null });
+  ok(upd.ok && !(upd as { entry: { priority?: string } }).entry?.priority && !(upd as { entry: { parent_id?: string } }).entry?.parent_id, "S5 null 清除（回未标注/根卡）");
   // 坏 parent_id 容错（不炸——孤儿渲染层平铺）
   const orphan = upsertBoardEntry(gid, { text: "孤儿子卡", parent_id: "nonexistent-parent" });
   ok(orphan.ok, "S6 坏 parent_id 容错写入（孤儿渲染层平铺——与 depends_on 同口径不炸）");
