@@ -264,7 +264,13 @@ export function importAllForShadow(
     port.begin();
     try {
       port.exec("PRAGMA defer_foreign_keys = ON"); // 自引用表（task/dispatch 段链）全清的拓扑难题一次解除；commit 时全表已空=检查自然通过
-      for (const t of DOWNSTREAM_TABLES) port.exec(`DELETE FROM ${t}`);
+      // #292-B4c：CCR_SESSION_IMPORT=off（session 域停灌）时 session 表退出下游全清链
+      // ——直写为唯一写者，rescan 清了不重灌=丢行（C1 实锤）；org 归因重建靠直写
+      // gid 轻查 NULL 化自愈，无需重灌
+      const downstream = process.env.CCR_SESSION_IMPORT === "off"
+        ? DOWNSTREAM_TABLES.filter((t) => t !== "session")
+        : DOWNSTREAM_TABLES;
+      for (const t of downstream) port.exec(`DELETE FROM ${t}`);
       port.exec(
         `DELETE FROM import_checkpoint WHERE path NOT IN (?, ?, ?)`,
         orgSources,

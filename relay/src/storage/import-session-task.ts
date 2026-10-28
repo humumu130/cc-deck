@@ -294,7 +294,7 @@ function applyEvent(
 
   if (type === "SESSION_DELETED") {
     if (existing) {
-      port.exec("UPDATE session SET deleted_at = ?, updated_at = ? WHERE id = ?", [ts, ts, sid]);
+      if (process.env.CCR_SESSION_IMPORT !== "off") port.exec("UPDATE session SET deleted_at = ?, updated_at = ? WHERE id = ?", [ts, ts, sid]);
     }
     return; // 未见 sid 的 DELETED（重放序保证下不可达）静默忽略
   }
@@ -348,10 +348,12 @@ function applyEvent(
       updatedAt: ts,
       deletedAt: null,
     };
-    port.exec(SESSION_INSERT, [
-      row.id, row.relaySessionId, row.groupId, row.model, row.cwd, row.status,
-      row.runtimeStateJson, row.startedAt, row.updatedAt, row.deletedAt,
-    ]);
+    if (process.env.CCR_SESSION_IMPORT !== "off") {
+      port.exec(SESSION_INSERT, [
+        row.id, row.relaySessionId, row.groupId, row.model, row.cwd, row.status,
+        row.runtimeStateJson, row.startedAt, row.updatedAt, row.deletedAt,
+      ]);
+    }
     return;
   }
 
@@ -359,11 +361,11 @@ function applyEvent(
   // 均不回写——title 无 DDL 列可落、model 列存在但取首帧 CREATED 值不随 UPDATED 变；status
   // 仅词表内采信）。非「宽松合并」，列面就这三列。
   if (nextStatus !== null) {
-    port.exec("UPDATE session SET status = ?, updated_at = ?, runtime_state_json = ? WHERE id = ?", [
+    if (process.env.CCR_SESSION_IMPORT !== "off") port.exec("UPDATE session SET status = ?, updated_at = ?, runtime_state_json = ? WHERE id = ?", [
       nextStatus, ts, runtimeJson, sid,
     ]);
   } else {
-    port.exec("UPDATE session SET updated_at = ?, runtime_state_json = ? WHERE id = ?", [ts, runtimeJson, sid]);
+    if (process.env.CCR_SESSION_IMPORT !== "off") port.exec("UPDATE session SET updated_at = ?, runtime_state_json = ? WHERE id = ?", [ts, runtimeJson, sid]);
   }
 }
 
@@ -464,6 +466,10 @@ export function importSessionTask(
   sources: SessionTaskSources,
   opts?: { schemaVersion?: number; batchSize?: number },
 ): SessionTaskImportResult {
+  // #292-B4c session 域停灌闸：CCR_SESSION_IMPORT=off 时 session 表不写（直写为唯一
+  // 写者——翻转后库行权威性成立的前提）；task 域照灌（任务清单与 session 实体解耦）。
+  // 缺省 on（影子期投影照灌——直写与投影互覆盖 REPLACE 幂等）。
+
   const schemaVersion = opts?.schemaVersion ?? SESSION_TASK_IMPORT_SCHEMA_VERSION;
   const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE;
 

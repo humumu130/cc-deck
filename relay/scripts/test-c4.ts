@@ -106,13 +106,14 @@ console.log("§O off 旁路：");
   process.env.CCR_SESSION_WRITE_MODE = "off";
   const cards = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
   const st = cards.get(sid)?.state;
-  if (st) st.updated_at = Date.now();
+  // 显式异值（防同毫秒碰撞：快链下 Date.now() 可能与库行值同 ms——O1 曾 50% 闪失败的真根）
+  const ua0 = port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at ?? 0;
+  if (st) st.updated_at = ua0 - 999;
   (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cards.get(sid) as never, true);
   const after = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM session")[0]?.n ?? -2;
   // 行数不变且 updated_at 未被本帧推（off 旁路——行可能是旧直写行但值不动）
-  const rowUa = port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at ?? 0;
-  const memUa = Number(cards.get(sid)?.state.updated_at ?? 0);
-  assert4(before === after && rowUa !== memUa, `O1 off=零写（行数 ${before}→${after} 不变，库时刻停在旁路前）`);
+  const rowUa0 = port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at ?? 0;
+  assert4(before === after && (port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at ?? 0) === rowUa0, `O1 off=零写（行数 ${before}→${after} 不变，库时刻帧前后相等——emitUpdated 内部覆写 updated_at=now，断言不与内存值比防同毫秒碰撞）`);
   delete process.env.CCR_SESSION_WRITE_MODE;
 }
 
@@ -188,6 +189,31 @@ console.log("§D 降级：");
   process.env.CCR_BOOT_FROM = "auto";
   assert4(bootFromMode() === "auto", "B5 auto 态识别");
   delete process.env.CCR_BOOT_FROM;
+}
+
+// §C（B4c）：停灌闸+db 切源转换器
+{
+  // C1 停灌闸：CCR_SESSION_IMPORT=off 时投影不写 session（直写独占）——直写后行值
+  // 不被投影重灌覆盖（updated_at 停在直写值）
+  const cardsC = (sm as unknown as { sessions: Map<string, { state: Record<string, unknown> }> }).sessions;
+  const stC = cardsC.get(sid)?.state;
+  if (stC) { stC.updated_at = Date.now() - 1000; stC.action_summary = "C1 直写锚"; }
+  (sm as unknown as { emitUpdated: (s: unknown, force: boolean) => void }).emitUpdated(cardsC.get(sid) as never, true);
+  const directUa = port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at;
+  process.env.CCR_SESSION_IMPORT = "off";
+  ensureStore(resolveDirs()); // 全量导入面跑——session 域应被闸住不写
+  const afterOff = port.query<{ updated_at: number }>("SELECT updated_at FROM session WHERE id = ?", [sid])[0]?.updated_at;
+  delete process.env.CCR_SESSION_IMPORT;
+  assert4(afterOff === directUa, `C1 停灌闸：off 时投影不覆盖直写行（直写 ${directUa} → off 后 ${afterOff}）`);
+  // C2 db 切源转换器：dbRowsToReplayed 形状还原（库行→ReplayedSession）
+  const fromDb = sw.dbRowsToReplayed(port);
+  const rsC = fromDb.get(sid);
+  assert4(!!rsC && (rsC.state as { status?: string }).status === (cardsC.get(sid)?.state as { status?: string }).status
+    && Array.isArray(rsC.logs) && rsC.logs.length === 0, `C2 dbRowsToReplayed 形状还原（${fromDb.size} 行，state.status/logs 空数组对齐）`);
+  // C3 deleted_at 行不还原（#224 快照过滤语义不变）
+  port.exec("UPDATE session SET deleted_at = ? WHERE id = ?", [Date.now(), sid]);
+  assert4(!sw.dbRowsToReplayed(port).has(sid), "C3 deleted 行不还原（#224 语义）");
+  port.exec("UPDATE session SET deleted_at = NULL WHERE id = ?", [sid]);
 }
 
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
