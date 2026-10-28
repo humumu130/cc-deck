@@ -3,6 +3,7 @@ import { notificationsListOf } from "./decision-ledger-projection.js";
 import { readTitleOverrides } from "./title-derive.js";
 import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { withStorageTx } from "./storage/org-write-tx.js";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -376,11 +377,15 @@ function readDeliverables(dataDir: string): DeliverableEntry[] {
 }
 
 function appendDeliverable(dataDir: string, e: DeliverableEntry): void {
-  const list = readDeliverables(dataDir).filter((x) => !(x.sid === e.sid && x.path === e.path));
-  list.push(e);
-  try {
-    writeFileSync(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
-  } catch {}
+  // #292-B3 批2 范式（deliverables.json→artifact 表追赶；显式 dataDir——cfg.dataDir
+  // 可能≠env CCR_DATA_DIR，锁错库=互斥失效，见 withStorageTx 头注）
+  withStorageTx({ dataDir }, () => {
+    const list = readDeliverables(dataDir).filter((x) => !(x.sid === e.sid && x.path === e.path));
+    list.push(e);
+    try {
+      writeFileSync(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    } catch {}
+  });
 }
 
 // 手动命名的跨重启持久化（2026-09-16）：外部会话重启后经 ensureExternal 从 transcript
@@ -1036,13 +1041,27 @@ export class SessionManager {
   }
 
   private persistNotifications(): void {
+    // #292-B3 批2 范式：互斥+追赶（notifications.json→notification 表；显式
+    // cfg.dataDir 锁对库——env 覆盖态下 resolveDirs 落 cwd/data 会锁错库）。
+    // 高频域（每通知一写）：追赶成本见 test-c3 §P 计时断言（>50ms 阈值改异步）
     this.trimNotifications();
-    try {
-      mkdirSync(this.cfg.dataDir, { recursive: true });
-      writeFileSync(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
-    } catch (e) {
-      console.warn(`[notify] 通知账写入失败: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    withStorageTx({ dataDir: this.cfg.dataDir }, () => {
+      try {
+        mkdirSync(this.cfg.dataDir, { recursive: true });
+        writeFileSync(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
+      } catch (e) {
+        console.warn(`[notify] 通知账写入失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }, { deferredSync: true }); // #292-B3 B-P1-3：高频域追赶异步化（生产 141ms→tick 后，一致性窗口=读前触发自愈）
+  }
+
+  /** #292-B3 测试面薄壳：绕过 private 直接验 persistNotifications 事务链（test-c3） */
+  upsertNotificationForTest(kind: NotificationKind, entityId: string, revision: string | undefined, seed: Parameters<typeof this.upsertNotification>[3] extends never ? never : { title: string; body: string; severity: NotificationSeverity; group: NotificationGroup; actionable: boolean; sessionId?: string; domain: string; returnPath: string }): void {
+    this.upsertNotification(kind, entityId, revision, seed);
+  }
+  /** #292-B3 测试面薄壳：交付登记直驱 appendDeliverable 事务链（test-c3） */
+  registerDeliverableForTest(e: { sid: string; path: string }): void {
+    appendDeliverable(this.cfg.dataDir, { sid: e.sid, path: e.path, ts: Date.now() });
   }
 
   // 值变才发（R1a applyActivity 同款 dedup 纪律）：序列化比对，集合无变不发帧

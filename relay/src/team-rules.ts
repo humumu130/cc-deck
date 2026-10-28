@@ -33,6 +33,7 @@
 // 带 direct 标记（用户主权面）。本模块不含审批流——审批在 session-manager 漏斗 +
 // projects.ts OrgConfirm，store 层只认已批准的写入。
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { withOrgWriteTx } from "./storage/org-write-tx.js";
 import { randomUUID } from "node:crypto";
 import { join, dirname } from "node:path";
 import { orgDir } from "./org.js";
@@ -154,6 +155,10 @@ function corruptAndRefuse(p: string, dir: string | undefined, why: string): Load
 }
 
 function saveRules(s: RuleStore, dir?: string): boolean {
+  // #292-B3 批2 范式（单点包；rule 表=G2 归后续批，本批纯互斥+文件账保护）
+  return withOrgWriteTx(dir, () => saveRulesInner(s, dir));
+}
+function saveRulesInner(s: RuleStore, dir?: string): boolean {
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });

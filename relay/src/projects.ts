@@ -446,8 +446,12 @@ export function planHeadcountTrim(input: {
 
 /** 组编制整体写面（裁剪收口用——removeMember 循环 N 次写穿不如一次；成员级单退仍走
  * removeMember）。headcount 原样替换 + updated_at 推进；组不存在/写失败照常报。 */
-export function setGroupHeadcount(gid: string, headcount: ProjectHeadcountEntry[], dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
+export function setGroupHeadcount(gid: string, headcount: ProjectHeadcountEntry[], dir?: string): TransitionResult  {
+  return withOrgWriteTx(dir, () => setGroupHeadcountInner(gid, headcount, dir));
+}
+function setGroupHeadcountInner(gid: string, headcount: ProjectHeadcountEntry[], dir?: string): TransitionResult {
+  const f = readProjectsFileJson(dir);
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   g.headcount = headcount;
@@ -458,8 +462,12 @@ export function setGroupHeadcount(gid: string, headcount: ProjectHeadcountEntry[
 
 /** 组级编制上限写面（P0 2026-10-15）：cap=数字（>0 取整）设覆盖；undefined 清除回
  * 全局缺省（maxHeadcountWorkers）。设后生效面=派单闸/addMember 闸/裁剪保留判定。 */
-export function setGroupHeadcountCap(gid: string, cap: number | undefined, dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
+export function setGroupHeadcountCap(gid: string, cap: number | undefined, dir?: string): TransitionResult  {
+  return withOrgWriteTx(dir, () => setGroupHeadcountCapInner(gid, cap, dir));
+}
+function setGroupHeadcountCapInner(gid: string, cap: number | undefined, dir?: string): TransitionResult {
+  const f = readProjectsFileJson(dir);
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   if (cap === undefined) delete g.headcount_cap;
@@ -506,16 +514,36 @@ export type CreateGroupResult =
  * - 轻立项：同类免确认（首次确认一次，信任累积）——信任未建立同走 pending，之后直达 active。
  * 护栏：active 数量达上限拒绝（防止活跃台账失控）。锚点目录被在办/挂起组占用拒绝（一锚一组）。
  */
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
 export function createGroup(
   input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean },
   dir?: string,
+): CreateGroupResult  {
+  // #292-B3 A-P1-2/B-P1-1：确认单通知回调外层补发——Inner 直调 addConfirmInner 不发
+  // hook（防嵌套正确），但通知面依赖单咽喉回调（#018-R1FIX1 P1-1），外层 commit 后
+  // 补发（「先事实源后通知」保持，与 addConfirm 同款）
+  const r = withOrgWriteTx(dir, () => createGroupInner(input, dir));
+  if (r.ok && r.confirm) {
+    try { confirmCreatedHook?.(r.confirm); } catch (e) {
+      console.warn(`[projects] 确认单产生回调失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return r;
+}
+function createGroupInner(
+  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean },
+  dir?: string,
 ): CreateGroupResult {
-  const f = readProjectsFile(dir);
+  const f = readProjectsFileJson(dir);
   const activeCount = f.groups.filter((x) => x.status === "active").length;
   if (activeCount >= maxActiveGroups()) {
     return { ok: false, error: `并行项目组已达上限 ${maxActiveGroups()}（护栏），先结项或挂起再立项` };
   }
-  const clash = findGroupByAnchor(input.anchor_dir, dir);
+  // #292-B3 A-P1-1/B-P1-2：锁内禁投影读（findGroupByAnchor→listGroups→viaReadMode
+  // 嵌套导入事务+假降级横幅——批2 铁律在本口的复辟，双路审查实锤）——f 已在手边，
+  // 内联直读同口径（归一路径+排除 archived）
+  const normAnchor = (p: string) => p.replace(/[\\/]+$/, "").toLowerCase();
+  const clash = f.groups.find((x) => normAnchor(x.anchor_dir) === normAnchor(input.anchor_dir) && x.status !== "archived") ?? null;
   if (clash) {
     return { ok: false, error: `锚点目录已被项目组「${clash.name}」占用（${clash.status}），一锚一组` };
   }
@@ -537,7 +565,7 @@ export function createGroup(
   if (!saveGroup(group, dir)) return { ok: false, error: "索引写入失败" };
   let confirm: OrgConfirm | null = null;
   if (needsConfirm) {
-    confirm = addConfirm(
+    confirm = addConfirmInner(
       {
         kind: "project-create",
         title: `新建项目确认：${group.name}`, // W-WINPAIR-R9 文案件：「立项」口语词治理（显示层正式化）
@@ -703,8 +731,12 @@ function setGroupStatusInner(id: string, to: ProjectGroupStatus, note?: string, 
 }
 
 /** 升降级（§4）：档间可迁移，任务卡与 worktree 原地继承、只补不重建（M2 无 worktree 供给线，语义=只改档位标记） */
-export function setGroupTier(id: string, to: ProjectTier, dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
+export function setGroupTier(id: string, to: ProjectTier, dir?: string): TransitionResult  {
+  return withOrgWriteTx(dir, () => setGroupTierInner(id, to, dir));
+}
+function setGroupTierInner(id: string, to: ProjectTier, dir?: string): TransitionResult {
+  const f = readProjectsFileJson(dir);
   const g = f.groups.find((x) => x.id === id || x.name === id);
   if (!g) return { ok: false, error: `项目组不存在: ${id}` };
   if (g.tier === to) return { ok: true, group: g };
@@ -715,7 +747,23 @@ export function setGroupTier(id: string, to: ProjectTier, dir?: string): Transit
   return { ok: true, group: g };
 }
 
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
 export function addMember(
+  gid: string,
+  sessionId: string,
+  role: string,
+  selectionOrDir?: { engine?: SessionEngine; model?: string; provider?: string; nick?: string } | string,
+  dir?: string,
+  // P0 编制上限：缺省启闸（新席位受 headcountCapOf 管）；已在编席位走更新分支不触闸。
+  // 复用/改档路径（dispatchWorker 复用、member-add 复拉已在编熟手）天然不受影响
+  opts?: { enforceCap?: boolean },
+): TransitionResult  {
+  // #292-B3 B-P2：selectionOrDir 的 string 形态=Inner 实写目录（dataDir）——锁目录
+  // 与写目录对齐（否则锁错库=互斥失效）
+  const lockDir = typeof selectionOrDir === "string" ? selectionOrDir : dir;
+  return withOrgWriteTx(lockDir, () => addMemberInner(gid, sessionId, role, selectionOrDir, dir, opts));
+}
+function addMemberInner(
   gid: string,
   sessionId: string,
   role: string,
@@ -727,7 +775,7 @@ export function addMember(
 ): TransitionResult {
   const selection = typeof selectionOrDir === "string" ? undefined : selectionOrDir;
   const dataDir = typeof selectionOrDir === "string" ? selectionOrDir : dir;
-  const f = readProjectsFile(dataDir);
+  const f = readProjectsFileJson(dataDir);
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   const current = g.headcount.find((h) => h.session_id === sessionId);
@@ -753,8 +801,12 @@ export function addMember(
   return { ok: true, group: g };
 }
 
-export function removeMember(gid: string, sessionId: string, dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
+export function removeMember(gid: string, sessionId: string, dir?: string): TransitionResult  {
+  return withOrgWriteTx(dir, () => removeMemberInner(gid, sessionId, dir));
+}
+function removeMemberInner(gid: string, sessionId: string, dir?: string): TransitionResult {
+  const f = readProjectsFileJson(dir);
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   g.headcount = g.headcount.filter((h) => h.session_id !== sessionId);
@@ -766,8 +818,12 @@ export function removeMember(gid: string, sessionId: string, dir?: string): Tran
 /** P71 组级值守策略写面（019 §6.3 duty_policy）：policy=undefined 清除策略（回缺省开）。
  * 命令面/设置 UI 接线属后续批；本批消费面=dutySnapshot 组级过滤（session-manager）+
  * 存储字段落 groups.json（schema owner 串行扩展惯例，与 depends_on/member_archive 同源）。 */
-export function setGroupDutyPolicy(gid: string, policy: DutyPolicy | undefined, dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
+export function setGroupDutyPolicy(gid: string, policy: DutyPolicy | undefined, dir?: string): TransitionResult  {
+  return withOrgWriteTx(dir, () => setGroupDutyPolicyInner(gid, policy, dir));
+}
+function setGroupDutyPolicyInner(gid: string, policy: DutyPolicy | undefined, dir?: string): TransitionResult {
+  const f = readProjectsFileJson(dir);
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
   if (policy === undefined) delete g.duty_policy;
@@ -1260,7 +1316,21 @@ export function setConfirmCreatedHook(hook: ConfirmCreatedHook | null): void {
   confirmCreatedHook = hook;
 }
 
+/** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
 export function addConfirm(
+  input: { kind: ConfirmKind; title: string; reason: string; payload?: Record<string, unknown> },
+  dir?: string,
+): OrgConfirm  {
+  // #292-B3：确认单通知回调（confirmCreatedHook→upsertNotification→withStorageTx）
+  // 必须在事务外——commit 后发（「先事实源后通知」语义保留，且通知写口不嵌套本锁）
+  let created: OrgConfirm;
+  const r = withOrgWriteTx(dir, () => { created = addConfirmInner(input, dir); return created; });
+  try { confirmCreatedHook?.(r); } catch (e) {
+    console.warn(`[projects] 确认单产生回调失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return r;
+}
+function addConfirmInner(
   input: { kind: ConfirmKind; title: string; reason: string; payload?: Record<string, unknown> },
   dir?: string,
 ): OrgConfirm {
@@ -1273,16 +1343,10 @@ export function addConfirm(
     status: "pending",
     created_at: Date.now(),
   };
-  const list = readConfirms(dir);
+  const list = readConfirmsJson(dir);
   list.push(c);
   writeConfirms(list, dir);
-  // 先事实源后通知（P1-2 dispatch 终态同口径）；回调异常不阻断落单主路径
-  try {
-    confirmCreatedHook?.(c);
-  } catch (e) {
-    console.warn(`[projects] 确认单产生回调失败: ${e instanceof Error ? e.message : String(e)}`);
-  }
-  return c;
+  return c; // 通知回调已上移至外层（事务外，#292-B3 防嵌套）
 }
 
 export type DecideResult = { ok: true; confirm: OrgConfirm } | { ok: false; error: string };

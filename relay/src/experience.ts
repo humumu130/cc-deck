@@ -22,6 +22,8 @@
 // experience（默认 true），关 = 注入/GC/自动申报捕获全停零残留（用户 CLI 直写不拦——显式
 // 人为意图）。M12-4 收口自动账**不经本库**（D1-1：维持写 lessons/派单台账域现状）。
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync, appendFileSync, statSync } from "node:fs";
+import { withOrgWriteTx } from "./storage/org-write-tx.js";
+
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { orgDir } from "./org.js";
@@ -200,6 +202,11 @@ function corruptAndRefuse(p: string, dir: string | undefined, why: string): Load
 }
 
 function saveExperience(s: ExperienceStore, dir?: string): boolean {
+  // #292-B3 批2 范式（单点包）：互斥锁+降级链（库侧 experience 无表——G1 归
+  // cutover P0/P6 批，本批=纯互斥+文件账保护；追赶为全库通用面零害）
+  return withOrgWriteTx(dir, () => saveExperienceInner(s, dir));
+}
+function saveExperienceInner(s: ExperienceStore, dir?: string): boolean {
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
