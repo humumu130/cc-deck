@@ -1,6 +1,8 @@
 # 任务书：SQLite Cutover 批2——org 域写切 StoragePort 事务（#292-B2）
 
-基线：fix/engine-chip-slim@24ed9313（本 worktree 即此）。设计总图：`docs/specs/sqlite-cutover-plan.md`（先读）。
+基线：fix/engine-chip-slim@24ed9313（本 worktree 即此）。
+
+> **换人交接**：前席 18265972 压缩死循环零落地已停（恢复锚两版均在转录，无代码遗产）——你从零开始，worktree 除本任务书外干净。开工先一口气读完任务书+总图再动手，中途被压缩打断时优先恢复施工而不是重写状态摘要。设计总图：`docs/specs/sqlite-cutover-plan.md`（先读）。
 
 ## 目标（批2 范围，三域写口切事务）
 
