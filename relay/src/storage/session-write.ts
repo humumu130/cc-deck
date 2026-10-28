@@ -36,14 +36,14 @@ const SESSION_UPSERT = `INSERT OR REPLACE INTO session
   (id, relay_session_id, group_id, member_id, external_sid, engine, provider, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at)
   VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`;
 
-function rowOf(s: SessionState): unknown[] {
+function rowOf(s: SessionState, gidSafe: string | null): unknown[] {
   // 列序对齐 SESSION_UPSERT（=导入器 SESSION_INSERT）：id/relay_session_id/group_id
   // +[member_id/external_sid/engine/provider=SQL 字面 NULL]+model/cwd/status/
   // runtime_state_json/started_at/updated_at/deleted_at——10 个占位
   return [
     s.session_id,
     s.relay_session_id ?? null,
-    s.project_gid ?? null,
+    gidSafe,
     s.model ?? null,
     s.cwd ?? "",
     s.status,
@@ -83,18 +83,29 @@ export function shadowWriteSession(state: SessionState): void {
     return;
   }
   try {
+    // #292-B4 PM 审查 FK 陷阱处置：session.group_id REFERENCES "group"(id)——quiet
+    // 端口建库不导入（冷启新库无 group 行），直写带 project_gid 必撞 FK 且被 warned
+    // 一次性标志锁成全灭（B4c 翻转后 boot-from-db 必踩）。处置=写前 gid 轻查（indexed
+    // 主键查微秒级），组不在库=写 NULL（对齐导入器语义「会话不在组内是常态非数据
+    // 损失」，投影重灌/后续组在位后 REPLACE 自愈归因）
+    const gid = state.project_gid ?? null;
+    const gidSafe = gid && port.query<{ n: number }>('SELECT COUNT(*) AS n FROM "group" WHERE id = ?', [gid])[0]?.n ? gid : null;
     port.begin();
     try {
-      port.exec(SESSION_UPSERT, rowOf(state));
+      port.exec(SESSION_UPSERT, rowOf(state, gidSafe));
       port.commit();
     } catch (err) {
       try { port.rollback(); } catch { /* 连接死 */ }
       throw err;
     }
   } catch (err) {
-    if (!warned) {
-      warned = true;
-      console.warn("[session-write] 直写降级（帧链不受影响，投影兜底）：", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    // FK 先序类错误不锁 warned 标志（数据先序问题非库故障——组行落库后下一帧自愈；
+    // 锁死会把可自愈的瞬态放大成永久旁路，PM 审查指出的实雷）
+    const isFk = /FOREIGN KEY/i.test(msg);
+    if (!warned || isFk) {
+      if (!isFk) warned = true;
+      console.warn(`[session-write] 直写降级${isFk ? "（FK 先序，组行落库后自愈不锁标志）" : ""}（帧链不受影响，投影兜底）：`, msg);
     }
   }
 }
