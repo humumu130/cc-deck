@@ -315,6 +315,9 @@ export type DispatchTier = "咨询" | "随手办" | "轻立项" | "正经立项"
 // 兼容：closeHungDispatchRows/开放单过滤都白名单 running|dispatched，queued 不会被
 // 重启断档补记误收口；端上未知状态原样显示（宽容惯例）
 export type DispatchStatus = "dispatched" | "running" | "done" | "failed" | "queued";
+// #G5 失败分类学：分类器在 dispatch-retry.ts（org.ts 无环依赖该模块只做类型+咽喉调用）
+import { classifyDispatchFailure, DISPATCH_FAILURE_REASONS, type DispatchFailureReason } from "./dispatch-retry.js";
+export { DISPATCH_FAILURE_REASONS };
 
 export interface DispatchEntry {
   ts: number;
@@ -353,6 +356,17 @@ export interface DispatchEntry {
    *  （web 看板卡「无回执」角标/通知账）消费，不改任何状态语义。仅 done 单标（failed
    *  本身即异常信号不双计）。旧行缺省 undefined=有回执口径（宽容惯例）。 */
   receipt_missing?: boolean;
+  /** #G5 失败分类学：failed 行的失败枚举（network_error/timeout/tool_crash/
+   *  model_overload/logic_error/cancelled）——appendDispatch 咽喉自动分类（receipt
+   *  错误串→classifyDispatchFailure），调用方零改动单点收口。瞬态三类（network/
+   *  timeout/model_overload）由 dispatchWorker spawn 失败出口自动重试一次。 */
+  failure_reason?: DispatchFailureReason;
+  /** #G5 瞬态自动重试标记：本行由自动重试产生（值=原单 id；重试走 queue_replay
+   *  同 id 段链，此字段标记「该状态段由重试产生」+防循环证据）。链深恒 1。 */
+  retry_of?: string;
+  /** #G3 板卡富模型透传：派单 priority（P0/P1/P2）随全部台账行（与 engine 字段
+   *  同层透传口径，审计面可对账）。缺省=未标注。 */
+  priority?: string;
 }
 
 export function dispatchLogPath(dir?: string): string {
@@ -363,6 +377,9 @@ export function dispatchLogPath(dir?: string): string {
 // 无容量上限（append-only 审计语义，设计稿 §6.1 org_memory/dispatch_log 同口径）；
 // M1 量级 = 每次咨询 2 行，无需轮转。
 export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
+  // #G5 失败分类学写侧单点：failed 行自动 failure_reason（receipt 错误串→分类器），
+  // 调用方（spawn 失败/回合收口/看门狗等全部出口）零改动——全台账 failed 行带枚举
+  if (e.status === "failed" && !e.failure_reason) e.failure_reason = classifyDispatchFailure(e.receipt ?? "");
   // W-CMDIMPL T0b：reducer 写严格（§5.6/拍板 #10）——派单台账 schema 校验拒写
   //（含 STAGE 词表：stage 基表+custom. 前缀，拍板 #9；drill 标记在 schema 内放行）
   const chk = applyOrgChange("dispatch-entry", e);

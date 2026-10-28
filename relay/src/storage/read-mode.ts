@@ -365,8 +365,8 @@ export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEnt
   const rows = port.query<{
     id: string; tier: string; target_member_id: string | null; source_session_id: string | null;
     actor: string; status: string; receipt: string | null; created_at: number; updated_at: number;
-    receipt_missing: number | null;
-  }>("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing FROM dispatch ORDER BY created_at, updated_at, id");
+    receipt_missing: number | null; failure_reason: string | null; retry_of: string | null; priority: string | null;
+  }>("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority FROM dispatch ORDER BY created_at, updated_at, id");
   const byId = new Map<string, DispatchEntry>();
   for (const r of rows) {
     byId.set(r.id.replace(/#r\d+$/, ""), {
@@ -380,6 +380,10 @@ export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEnt
       ...(r.actor ? { actor: r.actor } : {}),
       // W-SMIMPL ②：回执缺失标记（v4 列；0/null 不带键=旧行宽容，json 源行本就缺省）
       ...(r.receipt_missing === 1 ? { receipt_missing: true } : {}),
+      // #G3/#G5：失败分类/重试标记/优先级（v5 列；null 不带键=旧行与 json 缺省对齐）
+      ...(r.failure_reason ? { failure_reason: r.failure_reason as DispatchEntry["failure_reason"] } : {}),
+      ...(r.retry_of ? { retry_of: r.retry_of } : {}),
+      ...(r.priority ? { priority: r.priority } : {}),
     });
   }
   const all = [...byId.values()];

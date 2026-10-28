@@ -97,6 +97,7 @@ export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_i
  *  W-CMDIMPL T0b：权威定义上移 org-schema.ts（reducer 校验层，依赖单向），此处
  *  re-export 兼容既有消费面——语义不变。 */
 export { BOARD_ENTRY_STATUSES } from "./org-schema.js";
+export { BOARD_PRIORITIES } from "./org-schema.js"; // #G3 优先级词表（权威 org-schema，re-export 兼容消费面）
 import { BOARD_ENTRY_STATUSES } from "./org-schema.js";
 
 export interface BoardEntry {
@@ -122,6 +123,12 @@ export interface BoardEntry {
   /** beads gate 思想（009 §2/§5：CI/定时/外部等待映射 blocked）：字段在场=blocked 可判定。
    * 红线：无自动放行/关闭路径——清除只能由人显式 upsert（gate:null），确认卡仍是用户决策唯一写面 */
   gate?: { reason: string; opened_at: number };
+  /** #G3 板卡富模型：优先级三档（P0/P1/P2，对标 multica）——缺省=未标注；词表权威
+   *  org-schema BOARD_PRIORITIES（本文件 re-export），派单透传同源 */
+  priority?: string;
+  /** #G3 父子链：父卡 id 引用——子任务在 web 板面同泳道折叠挂靠（跨泳道/坏引用=
+   *  孤儿容错平铺，depends_on 同口径不炸）。单父无环由调用侧保证（upsert 不查环） */
+  parent_id?: string;
 }
 
 /** #087 经验回流（009 §4 M2）：board lessons 分区——收口回执写入，任务书按 tag 筛选
@@ -886,6 +893,10 @@ export function upsertBoardEntry(
     depends_on?: string[];
     /** #087 beads gate：对象=设闸（opened_at 自动补）；null=显式清除（唯一清除口，人决策）；缺省=不动 */
     gate?: { reason: string } | null;
+    /** #G3 板卡富模型：优先级（P0/P1/P2；缺省=不动，词表校验在 schema）；null=清除 */
+    priority?: string | null;
+    /** #G3 父子链：父卡 id（缺省=不动；null=解除挂靠置根卡；空串洗掉=根卡） */
+    parent_id?: string | null;
   },
   dir?: string,
 ): { ok: true; entry: BoardEntry } | { ok: false; error: string } {
@@ -924,6 +935,14 @@ export function upsertBoardEntry(
       if (entry.gate === null) delete e.gate;
       else e.gate = { reason: entry.gate.reason, opened_at: now };
     }
+    if (entry.priority !== undefined) { // #G3：null=清除回未标注
+      if (entry.priority === null) delete e.priority;
+      else e.priority = entry.priority;
+    }
+    if (entry.parent_id !== undefined) { // #G3：null/空串=解除挂靠置根卡
+      if (entry.parent_id === null || entry.parent_id === "") delete e.parent_id;
+      else e.parent_id = entry.parent_id;
+    }
     e.updated_at = now;
   } else {
     // D18：新卡也过规则内核（建卡即完成候选=done+review_required → R2 落 submitted）
@@ -942,6 +961,8 @@ export function upsertBoardEntry(
       ...(t.review_required === true ? { review_required: true } : {}),
       ...(deps && deps.length > 0 ? { depends_on: deps } : {}),
       ...(entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}),
+      ...(entry.priority ? { priority: entry.priority } : {}), // #G3：缺省不落键（旧行兼容）
+      ...(entry.parent_id ? { parent_id: entry.parent_id } : {}),
     };
     w.board.entries.push(e);
   }

@@ -223,4 +223,16 @@ export const migrations: readonly Migration[] = [
     name: "dispatch-receipt-missing",
     up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN receipt_missing INTEGER"),
   },
+  {
+    // #G3+#G5 板卡富模型+失败分类学：dispatch 表补三列（failure_reason 失败枚举/
+    // retry_of 自动重试标记/priority 优先级透传）。v4 同款增量惯例；三列全可空
+    //（旧行/未标注不带键，与 DispatchEntry 可选字段对齐——投影不再丢新字段）。
+    version: 5,
+    name: "dispatch-rich-model",
+    up: (p) => {
+      p.exec("ALTER TABLE dispatch ADD COLUMN failure_reason TEXT");
+      p.exec("ALTER TABLE dispatch ADD COLUMN retry_of TEXT");
+      p.exec("ALTER TABLE dispatch ADD COLUMN priority TEXT");
+    },
+  },
 ];

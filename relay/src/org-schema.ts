@@ -22,6 +22,12 @@ export const DISPATCH_STATUSES = ["dispatched", "running", "done", "failed", "qu
 // projects.ts 保留 re-export 兼容既有消费面（D18 freeze 词表语义不变，权威注释见彼处）
 export const BOARD_ENTRY_STATUSES = ["backlog", "claimed", "submitted", "ready_to_install", "done"] as const;
 export const DISPATCH_TIERS = ["咨询", "随手办", "轻立项", "正经立项", "暂缓", "看门狗"] as const;
+// #G3 板卡富模型：优先级三档（对标 multica）——权威=本文件（BOARD_ENTRY_STATUSES 同款），
+// projects.ts re-export。缺省=未标注（不落键，旧行兼容）
+export const BOARD_PRIORITIES = ["P0", "P1", "P2"] as const;
+// #G5 失败分类学：六枚举镜像（权威=dispatch-retry.ts 分类器伴生 DISPATCH_FAILURE_REASONS，
+// 本文件不 import 防依赖面扩散——两处改动需同步，同步责任在本注释）
+export const FAILURE_REASONS = ["network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled"] as const;
 
 // ---------- 基础校验原语 ----------
 
@@ -118,6 +124,8 @@ export const BOARD_ENTRY_SCHEMA: Record<string, { type: "string" | "number" | "b
   depends_on: { type: "string-array" },
   transitions: { type: "object-array" },
   gate: { type: "object" },
+  priority: { type: "enum", enumTable: BOARD_PRIORITIES }, // #G3：词表分支细查
+  parent_id: { type: "string" }, // #G3：父子链（坏引用渲染层孤儿容错，depends_on 同口径不炸）
 };
 
 /** DispatchEntry（org.ts:316；stage/stage_detail 为 T1-STAGE 增量字段——先行入 schema） */
@@ -140,6 +148,12 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   stage_detail: { type: "string" },
   /** §2.4 链路演练：drill 标记行（读侧宽容忽略） */
   drill: { type: "boolean" },
+  /** #G5 失败分类学：failed 行枚举（appendDispatch 咽喉自动落；词表=FAILURE_REASONS 镜像） */
+  failure_reason: { type: "enum", enumTable: FAILURE_REASONS },
+  /** #G5 瞬态自动重试标记：值=原单 id（链深恒 1） */
+  retry_of: { type: "string" },
+  /** #G3 板卡富模型透传：派单优先级（P0/P1/P2，板卡词表同源） */
+  priority: { type: "enum", enumTable: BOARD_PRIORITIES },
   /** W-SMIMPL ②：回执契约可见化——done 无结果行标记（读侧宽容忽略，旧行缺省=有回执） */
   receipt_missing: { type: "boolean" },
 };
@@ -183,6 +197,8 @@ export function applyOrgChange(kind: OrgChangeKind, payload: unknown): OrgChange
       }
       const gate = payload.gate;
       if (gate !== undefined && gate !== null && (!isObj(gate) || !isStr(gate.reason) || !isNum(gate.opened_at))) return { ok: false, error: "gate 应为 {reason, opened_at}" };
+      const pr = payload.priority; // #G3：优先级词表（缺省=未标注合法）
+      if (pr !== undefined && (!isStr(pr) || !(BOARD_PRIORITIES as readonly string[]).includes(pr))) return { ok: false, error: `板卡 priority 不在词表（P0/P1/P2）：${pr}` };
       return { ok: true };
     }
     case "dispatch-entry": {
@@ -190,6 +206,10 @@ export function applyOrgChange(kind: OrgChangeKind, payload: unknown): OrgChange
       if (err) return { ok: false, error: `派单台账校验拒写：${err}` };
       const stage = payload.stage;
       if (stage !== undefined && !stageStageOk(stage as string)) return { ok: false, error: `stage 不在词表（基表或 custom. 前缀）：${stage}` };
+      const fr = payload.failure_reason; // #G5：失败分类词表
+      if (fr !== undefined && (!isStr(fr) || !(FAILURE_REASONS as readonly string[]).includes(fr))) return { ok: false, error: `failure_reason 不在词表：${fr}` };
+      const dpr = payload.priority; // #G3：派单优先级词表（板卡同源）
+      if (dpr !== undefined && (!isStr(dpr) || !(BOARD_PRIORITIES as readonly string[]).includes(dpr))) return { ok: false, error: `派单 priority 不在词表（P0/P1/P2）：${dpr}` };
       return { ok: true };
     }
   }

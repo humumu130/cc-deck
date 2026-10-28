@@ -121,7 +121,8 @@
     "test:msp": "tsx scripts/test-msp.ts",
     "test:cbs": "tsx scripts/test-cbs.ts",
     "test:spa": "tsx scripts/test-spa.ts",
-    "test:fc": "tsx scripts/test-fc.ts"
+    "test:fc": "tsx scripts/test-fc.ts",
+    "test:brm": "tsx scripts/test-brm.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
