@@ -10407,6 +10407,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { hostname } from "node:os";
 import { join } from "node:path";
 var SETTINGS_FILE = "settings.json";
+var ENGINE_PROFILES_FILE = "engine-profiles.json";
+var ENGINE_PROFILE_ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
+var SECRET_FIELD = /(token|secret|password|api[_-]?key|private[_-]?key)/i;
+var REFERENCE_FIELD = /(?:_env|_ref)$/i;
 var RELAY_NAME_MAX = 12;
 var RELAY_NAME_FILE = "relay-name";
 function effectiveRelayName(dataDir3) {
@@ -10440,6 +10444,75 @@ function writeRelayName(dataDir3, name) {
     return false;
   }
 }
+function engineProfilesPath(dataDir3) {
+  return join(dataDir3, ENGINE_PROFILES_FILE);
+}
+function secretFieldPaths(value, prefix = "") {
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) return value.flatMap((item, index) => secretFieldPaths(item, `${prefix}[${index}]`));
+  const out = [];
+  for (const [key, child] of Object.entries(value)) {
+    const path6 = prefix ? `${prefix}.${key}` : key;
+    if (SECRET_FIELD.test(key) && !REFERENCE_FIELD.test(key)) out.push(path6);
+    if (REFERENCE_FIELD.test(key) && typeof child !== "string") out.push(path6);
+    out.push(...secretFieldPaths(child, path6));
+  }
+  return out;
+}
+function validateEngineProfile(profile) {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return { ok: false, error: "profile \u5FC5\u987B\u662F\u5BF9\u8C61" };
+  const raw = profile;
+  const secretPaths = secretFieldPaths(raw);
+  if (secretPaths.length > 0) return { ok: false, error: `profile \u542B\u79D8\u5BC6\u5B57\u6BB5: ${secretPaths.join(",")}` };
+  if (!ENGINE_PROFILE_ENGINES.includes(raw.engine)) return { ok: false, error: "engine \u65E0\u6548" };
+  if (typeof raw.provider !== "string" || !raw.provider.trim()) return { ok: false, error: "provider \u5FC5\u586B" };
+  if (typeof raw.profile_ref !== "string" || !raw.profile_ref.trim()) return { ok: false, error: "profile_ref \u5FC5\u586B" };
+  if (raw.model !== void 0 && typeof raw.model !== "string") return { ok: false, error: "model \u5FC5\u987B\u662F\u5B57\u7B26\u4E32" };
+  if (raw.capabilities !== void 0 && (!Array.isArray(raw.capabilities) || raw.capabilities.some((item) => typeof item !== "string"))) return { ok: false, error: "capabilities \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u6570\u7EC4" };
+  if (raw.enabled !== void 0 && typeof raw.enabled !== "boolean") return { ok: false, error: "enabled \u5FC5\u987B\u662F\u5E03\u5C14\u503C" };
+  if (raw.base_url !== void 0) {
+    if (typeof raw.base_url !== "string") return { ok: false, error: "base_url \u5FC5\u987B\u662F\u5B57\u7B26\u4E32" };
+    try {
+      new URL(raw.base_url);
+    } catch {
+      return { ok: false, error: "base_url \u65E0\u6CD5\u89E3\u6790" };
+    }
+  }
+  return {
+    ok: true,
+    profile: {
+      engine: raw.engine,
+      provider: raw.provider.trim(),
+      profile_ref: raw.profile_ref.trim(),
+      ...typeof raw.model === "string" && raw.model.trim() ? { model: raw.model.trim() } : {},
+      ...Array.isArray(raw.capabilities) ? { capabilities: raw.capabilities } : {},
+      ...typeof raw.enabled === "boolean" ? { enabled: raw.enabled } : {},
+      ...typeof raw.base_url === "string" ? { base_url: raw.base_url.trim() } : {},
+      ...typeof raw.api_key_env === "string" ? { api_key_env: raw.api_key_env.trim() } : {},
+      ...typeof raw.base_url_env === "string" ? { base_url_env: raw.base_url_env.trim() } : {},
+      ...typeof raw.keychain_ref === "string" ? { keychain_ref: raw.keychain_ref.trim() } : {},
+      ...typeof raw.effort === "string" && raw.effort.trim() ? { effort: raw.effort.trim() } : {},
+      ...typeof raw.permission_mode === "string" && raw.permission_mode.trim() ? { permission_mode: raw.permission_mode.trim() } : {}
+    }
+  };
+}
+function readEngineProfilesFile(dataDir3) {
+  try {
+    const raw = JSON.parse(readFileSync(engineProfilesPath(dataDir3), "utf-8"));
+    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray(raw.profiles) ? raw.profiles : null;
+    if (!list) return null;
+    const profiles = [];
+    for (const item of list) {
+      const checked = validateEngineProfile(item);
+      if (!checked.ok) return null;
+      profiles.push(checked.profile);
+    }
+    return profiles;
+  } catch {
+    return null;
+  }
+}
+var readEngineProfiles = readEngineProfilesFile;
 function settingsPath(dataDir3) {
   return join(dataDir3, SETTINGS_FILE);
 }
@@ -10810,7 +10883,10 @@ function reduceHistory(events) {
           // 孤儿收养等场景的 started_at 与事件落盘时刻不同步：载荷显式带了就优先（#321）
           started_at: p.started_at && p.started_at > 0 ? p.started_at : e.ts,
           updated_at: e.ts,
-          stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }
+          stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+          // #291 审查 A-P2-2：CREATED 帧带键则回放归一落 0（新 relay 帧）；老帧缺省
+          // undefined=降级档（过渡期可接受，首个工具帧即起算）
+          ...p.last_tool_use_at !== void 0 ? { last_tool_use_at: p.last_tool_use_at } : {}
         },
         logs: []
       };
@@ -10881,12 +10957,14 @@ function reduceHistory(events) {
       }
       case "SESSION_ERROR": {
         s.status = "ERROR";
+        s.turn_started_at = void 0;
         s.last_error = e.payload.message;
         rs2.logs.push({ ts: e.ts, kind: "system", text: `\u9519\u8BEF: ${s.last_error}` });
         break;
       }
       case "SESSION_DONE": {
         s.status = "DONE";
+        s.turn_started_at = void 0;
         const p = e.payload;
         s.done_reason = p.terminal_reason;
         s.duration_ms = p.duration_ms;
@@ -10910,6 +10988,7 @@ function reduceHistory(events) {
         const li = p.id ? rs2.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs2.logs[li] = entry;
         else rs2.logs.push(entry);
+        if (p.kind === "tool_use" || p.kind === "tool_result") s.last_tool_use_at = e.ts;
         if (rs2.logs.length > 1500) rs2.logs.splice(0, rs2.logs.length - 1500);
         break;
       }
@@ -48369,12 +48448,66 @@ var CODEBUDDY_ACTIVITY_CAPABILITIES = {
   native_elapsed: false,
   approval: false
 };
+var CODEBUDDY_MODELS = [
+  "hy4-preview",
+  "hy3",
+  "hy3-x",
+  "deepseek-v4.1-flash",
+  "step-5-preview",
+  "glm-5.3",
+  "glm-5.3-flash",
+  "glm-5.2",
+  "glm-5.1",
+  "glm-5v-turbo",
+  "space-bunny",
+  "minimax-m3.1-flash",
+  "minimax-m3",
+  "minimax-m2.7",
+  "kimi-k3.1-pro",
+  "kimi-k3-1",
+  "kimi-k2.8-preview",
+  "deepseek-v4-pro",
+  "mimo-v2.6-pro"
+];
+var CODEBUDDY_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"];
+var CODEBUDDY_EFFORT_ALIASES = { \u5FEB\u901F: "low", \u5747\u8861: "high", \u6781\u81F4: "xhigh" };
+var CODEBUDDY_PERMISSION_MODES = ["default", "plan", "acceptEdits", "dontAsk", "auto", "bypassPermissions"];
 var CodeBuddyAgentSession = class extends JsonProcessAgentSession {
+  cbConfig;
   constructor(opts) {
     super({ ...opts, label: "codebuddy", command: opts.command ?? process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code", profileId: "codebuddy" });
+    this.cbConfig = opts.codebuddy ?? {};
   }
   buildArgs(prompt) {
-    return ["--print", prompt, "--output-format", "stream-json"];
+    const args = ["--print", prompt, "--output-format", "stream-json"];
+    const model = (this.opts.model || "").trim();
+    if (model && model !== "default" && model !== "codebuddy") {
+      if (!CODEBUDDY_MODELS.includes(model) && !model.startsWith("custom:")) {
+        throw new Error(`codebuddy \u672A\u77E5\u6A21\u578B: ${model}\uFF08\u5185\u7F6E 20 \u4E2A\u6216 custom: \u524D\u7F00\u81EA\u5B9A\u4E49\uFF0C\u89C1 CODEBUDDY_MODELS\uFF09`);
+      }
+      args.push("--model", model.startsWith("custom:") ? model.slice(7) : model);
+    }
+    const cb2 = this.cbConfig;
+    if (cb2?.effort) {
+      const eff = CODEBUDDY_EFFORT_ALIASES[cb2.effort] ?? cb2.effort;
+      if (!CODEBUDDY_EFFORTS.includes(eff)) throw new Error(`codebuddy \u672A\u77E5\u6863\u4F4D: ${cb2.effort}\uFF08\u516D\u6863\u6216 \u5FEB\u901F/\u5747\u8861/\u6781\u81F4 \u522B\u540D\uFF09`);
+      args.push("--effort", eff);
+    }
+    if (cb2?.permissionMode) {
+      if (!CODEBUDDY_PERMISSION_MODES.includes(cb2.permissionMode)) {
+        throw new Error(`codebuddy \u672A\u77E5\u6743\u9650\u6A21\u5F0F: ${cb2.permissionMode}\uFF08\u516D\u6863\u89C1 CODEBUDDY_PERMISSION_MODES\uFF09`);
+      }
+      args.push("--permission-mode", cb2.permissionMode);
+    }
+    if (cb2?.fallbackModel) {
+      if (!CODEBUDDY_MODELS.includes(cb2.fallbackModel) && !cb2.fallbackModel.startsWith("custom:")) {
+        throw new Error(`codebuddy \u672A\u77E5\u56DE\u9000\u6A21\u578B: ${cb2.fallbackModel}`);
+      }
+      args.push("--fallback-model", cb2.fallbackModel.startsWith("custom:") ? cb2.fallbackModel.slice(7) : cb2.fallbackModel);
+    }
+    if (cb2?.allowedTools?.length) args.push("--allowedTools", cb2.allowedTools.join(","));
+    if (cb2?.disallowedTools?.length) args.push("--disallowedTools", cb2.disallowedTools.join(","));
+    return args;
   }
 };
 function preflightCodeBuddy(config) {
@@ -48478,7 +48611,8 @@ var definitions = {
     label: "CodeBuddy Code",
     capabilities: CODEBUDDY_CAPABILITIES,
     reinjection: true,
-    create: (opts) => createCodeBuddyAgent(opts),
+    create: (opts) => createCodeBuddyAgent({ ...opts, codebuddy: opts.codebuddy }),
+    // #285 能力面透传
     preflight: (provider) => preflightCodeBuddy({ provider })
   }
 };
@@ -48574,7 +48708,10 @@ function engineCatalogSummary(claudeModelFallback = "") {
         artifacts: def.capabilities?.artifacts ?? false
       },
       preflight: pf.ok ? { state: "pass", reason: "" } : { state: "fail", reason: pf.errors.join("\uFF1B") },
-      models: [],
+      // #285：codebuddy 模型清单进 catalog（adapter CODEBUDDY_MODELS 同源单一事实源
+      //——2026-10-27 一手 help 核实 20 个，端上设置页可选可存 engine profile）；其余
+      // registry 引擎（trae/qwen-code）维持 []（无源级清单不冒充）
+      models: id2 === "codebuddy" ? [...CODEBUDDY_MODELS] : [],
       default_for_roles: roles,
       ...auth.state === "needs_auth" ? { auth_hint: auth.auth_hint } : {}
     };
@@ -49734,8 +49871,14 @@ function readTaskStoreTodos(cliSessionId, base) {
 function autoReviveManaged(mgr2, limit = 3) {
   if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
   const candidates = [];
+  const staleTodoSkipped = [];
   for (const s of mgr2.sessions.values()) {
-    if (reviveEligible(mgr2, s)) continue;
+    const why = reviveEligible(mgr2, s);
+    if (why === "stale-todos") {
+      staleTodoSkipped.push(s.state.title || s.state.session_id.slice(0, 8));
+      continue;
+    }
+    if (why) continue;
     candidates.push({ s, updated: s.state.updated_at });
   }
   candidates.sort((a, b) => b.updated - a.updated);
@@ -49750,6 +49893,20 @@ function autoReviveManaged(mgr2, limit = 3) {
     }
   }
   if (revived > 0) console.log(`[auto-revive] \u5DF2\u81EA\u52A8\u62C9\u8D77 ${revived} \u4E2A\u6709\u672A\u5B8C\u6210\u5F85\u529E\u7684\u6258\u7BA1\u4F1A\u8BDD`);
+  if (staleTodoSkipped.length > 0) {
+    try {
+      mgr2.upsertNotification("system", "revive-stale-todos", String(Math.floor(Date.now() / 864e5)), {
+        title: "\u9648\u5E74\u5F85\u529E\u672A\u81EA\u52A8\u6062\u590D\uFF08\u9700\u786E\u8BA4\uFF09",
+        body: truncate(`\u70B9\u672C\u884C\u8DF3\u4F1A\u8BDD\u5217\u8868\u627E\u4F1A\u8BDD\u5361\u624B\u52A8\u6062\u590D\u3002${staleTodoSkipped.slice(0, 3).join("\u3001")}${staleTodoSkipped.length > 3 ? ` \u7B49 ${staleTodoSkipped.length} \u4E2A` : ""}\u2014\u2014\u5F85\u529E\u8D85\u8FC7 ${todoStaleDays()} \u5929\u672A\u52A8\uFF0C\u5DF2\u8DF3\u8FC7\u81EA\u52A8\u62C9\u8D77`, 160),
+        severity: "waiting",
+        group: "attention",
+        actionable: true,
+        domain: "session",
+        returnPath: "sessions"
+      });
+    } catch {
+    }
+  }
   return revived;
 }
 function recoverEngineAfterAuth(mgr2, engine) {
@@ -49831,6 +49988,11 @@ function scanNeedsAuthSessions(mgr2) {
 function reviveInstruction(s) {
   return s.state.engine === "codex" ? "\u8BF7\u4ECE\u4E2D\u65AD\u5904\u63A5\u7EED\u63A8\u8FDB\u5F53\u524D\u4EFB\u52A1\uFF1A\u5148\u7B80\u8FF0\u5DF2\u5B8C\u6210\u90E8\u5206\u4E0E\u4E0B\u4E00\u6B65\uFF0C\u518D\u7EE7\u7EED\u6267\u884C\u3002" : "\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002";
 }
+function todoStaleDays() {
+  const raw = process.env.CCR_REVIVE_TODO_STALE_DAYS;
+  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 3;
+}
 function reviveEligible(mgr2, s) {
   if (s.state.external) return "external";
   if (s.agent) return "agent-alive";
@@ -49846,9 +50008,20 @@ function reviveEligible(mgr2, s) {
   if (!s.state.relay_session_id) return "no-resume-anchor";
   if (s.state.engine === "codex") {
     if (s.state.status !== "ERROR" && s.state.status !== "WORKING") return "codex-idle";
+    if (s.state.status === "ERROR") {
+      const produced = (s.state.usage?.output_tokens ?? 0) > 0 || (s.state.stats?.files_changed ?? 0) > 0;
+      if (!produced) return "codex-empty";
+    }
   } else {
+    if (Date.now() - s.state.updated_at > 48 * 36e5) return "stale-48h";
     const todos = readTaskStoreTodos(s.state.relay_session_id, mgr2.employeeHome(s.state));
     if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) return "no-open-todos";
+    const days = todoStaleDays();
+    if (days > 0) {
+      const openTodos = todos.filter((t) => t.status === "pending" || t.status === "in_progress");
+      const newestOpenAt = Math.max(0, ...openTodos.map((t) => t.updated_at ?? 0));
+      if (newestOpenAt > 0 && Date.now() - newestOpenAt > days * 864e5) return "stale-todos";
+    }
   }
   if (Date.now() - s.state.updated_at > 48 * 36e5) return "stale-48h";
   return null;
@@ -49886,6 +50059,18 @@ function reviveManagedSession(mgr2, id2, source, reason) {
     });
     return { ok: false, error: msg };
   }
+}
+var PM_KEEPALIVE_DELAY_MS = 3e3;
+var PM_KEEPALIVE_MAX_IDLE_STREAK = 2;
+function pmKeepaliveEligible(p) {
+  if (p.envOff === "0") return false;
+  if (p.reason !== "stream closed") return false;
+  if (p.external || p.historical) return false;
+  if (!p.isDutyTarget) return false;
+  if (p.resumePending) return false;
+  if (p.resumeCooldownUntil && p.resumeCooldownUntil > p.now) return false;
+  if (p.idleStreak >= PM_KEEPALIVE_MAX_IDLE_STREAK) return false;
+  return true;
 }
 
 // src/lifecycle/context-link.ts
@@ -52891,6 +53076,17 @@ var SessionManager = class {
   }
   newAgent(cwd, model, cb2, initialPrompt, opts) {
     if (opts?.engine && opts.engine !== "claude" && opts.engine !== "codex") {
+      let cbConfig;
+      if (opts.engine === "codebuddy") {
+        try {
+          const profiles = readEngineProfiles(this.cfg.dataDir) || [];
+          const prof = profiles.find((e) => e.engine === "codebuddy");
+          if (prof && (prof.effort || prof.permission_mode)) {
+            cbConfig = { ...prof.effort ? { effort: prof.effort } : {}, ...prof.permission_mode ? { permissionMode: prof.permission_mode } : {} };
+          }
+        } catch {
+        }
+      }
       const registered = createRegisteredEngine(opts.engine, {
         cwd,
         model,
@@ -52899,7 +53095,8 @@ var SessionManager = class {
         initialPrompt,
         contextPacket: opts.role ? `role=${opts.role}
 provider=${opts.provider ?? "default"}` : void 0,
-        providerProfile: providerProfileFor(opts.engine, opts.provider)
+        providerProfile: providerProfileFor(opts.engine, opts.provider),
+        ...cbConfig ? { codebuddy: cbConfig } : {}
       });
       if (registered) return registered;
       throw new Error(`\u672A\u6CE8\u518C\u5F15\u64CE: ${opts.engine}`);
@@ -52926,9 +53123,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   snapshot() {
     const hideLeader = this.leaderId && readCollabMode(this.cfg.dataDir) === "no-leader";
+    const dutyId = this.dutyTargetId();
     return [...this.sessions.values()].filter((s) => !(hideLeader && s.state.session_id === this.leaderId)).map((s) => {
       const c = this.cloneState(s);
+      c.pm_standby = !!(dutyId && c.session_id === dutyId && c.status === "DONE");
       if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+      if (!c.engine) c.engine = "claude";
       return c;
     });
   }
@@ -53087,6 +53287,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       this.emitChainAudit("transition-illegal", detail, sid);
     }
     s.state.status = next;
+    if (next === "DONE" || next === "ERROR") s.state.turn_started_at = void 0;
   }
   /** [W-SMIMPL ①] seatGate 事实注入（W-SMDESIGN 候选 1）：在册性/外部性/Leader 三轴
    *  由持有 this.sessions 视野的本类提供——create 前置门 / HeadcountGate / member-add /
@@ -53685,6 +53886,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
+      last_tool_use_at: 0,
+      // #291：0=从未有工具活动——hook 心跳/唤醒消息不刷此键，「接单未开工」可判（undefined 才是老 relay 降级档）
       ...opts?.engine ? { engine: opts.engine } : {},
       ...opts?.provider ? { engine_provider: opts.provider } : {}
     };
@@ -53694,7 +53897,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       state.title_locked = true;
     }
     if (readPinnedSessions(this.cfg.dataDir).includes(id2)) state.pinned = true;
-    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
+    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0, pmKeepaliveStreak: 0, pmKeepaliveTimer: null });
     this.applyDeclaredDeliverables(id2);
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -53703,6 +53906,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       model: state.model,
       external: true,
       started_at: state.started_at,
+      last_tool_use_at: 0,
+      // #291 审查 B-P1-1：增量建卡即带键——否则端上 undefined 走老 relay 降级档，长连接面板看新 spawn worker 判活失守（SNAPSHOT 面正确增量面失守）
       ...state.engine ? { engine: state.engine } : {},
       ...state.engine_provider ? { provider: state.engine_provider } : {}
     });
@@ -54271,8 +54476,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       normalized_mode: mode === "acceptEdits" ? "edit-auto" : mode === "plan" ? "plan" : "ask",
       effective_mode: mode,
       native_mode: null,
-      capability_state: engineCapabilityState(s.state.engine ?? "claude"),
-      engine: s.state.engine ?? "claude",
+      // #286①：?? 不兜空串（"" ?? x === ""）——历史帧可能带空串 engine，权限面
+      // 与审计面统一 || 兜底（权限判定按 claude 档走，不因空串掉进未知档）
+      capability_state: engineCapabilityState(s.state.engine || "claude"),
+      engine: s.state.engine || "claude",
       reason: "legacy_state_normalized",
       policy_source: null,
       environment: resolveEnvScope(this.cfg.port),
@@ -54300,7 +54507,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!permissionPolicyEnabled()) return raw;
     const n = normalizeLegacyPermissionMode(raw);
     if (n.kind === "bypass_demoted") {
-      if (engineCapabilityState(s.state.engine ?? "claude") === "confirmed") return "bypassPermissions";
+      if (engineCapabilityState(s.state.engine || "claude") === "confirmed") return "bypassPermissions";
       s.state.permission_mode = n.mode;
       this.auditLegacyPermMode(s, raw, n.mode);
       return n.mode;
@@ -54324,6 +54531,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       return true;
     }
     if (this.isLeaderSession(id2)) return false;
+    if (s.pmKeepaliveTimer) {
+      clearTimeout(s.pmKeepaliveTimer);
+      s.pmKeepaliveTimer = null;
+    }
     this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
     this.sessions.delete(id2);
     this.lastStoreTodos.delete(id2);
@@ -54387,6 +54598,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s) return;
     const entry = { ts: Date.now(), kind, text, tool, ...meta };
+    if (kind === "tool_use" || kind === "tool_result") s.state.last_tool_use_at = meta?.occurred_at ?? entry.ts;
     const i = meta?.id ? s.logs.findIndex((e) => e.id === meta.id) : -1;
     if (i >= 0) {
       s.logs[i] = entry;
@@ -54607,6 +54819,8 @@ provider=${opts.provider ?? "default"}` : void 0,
         action_summary: "\u542F\u52A8\u4E2D",
         started_at: Date.now(),
         turn_started_at: Date.now(),
+        last_tool_use_at: 0,
+        // #291：0=从未有工具活动（spawn 起手窗未吐工具帧时端上显示待命——分钟级自纠；不加 turn 分支兜住：turn 窗会复活挂起卡误判，审查 291-A 终版裁决）
         updated_at: Date.now(),
         stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
         // #17 雇员身份随卡落位：Leader/派单 worker/随手办置 true（spawn 传
@@ -54629,7 +54843,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       unacked: [],
       wd: { phase: "idle", recoveries: [], gaveUp: false },
       streamGen: 0,
-      activitySeq: 0
+      activitySeq: 0,
+      pmKeepaliveStreak: 0,
+      pmKeepaliveTimer: null
     };
     const agent = this.newAgent(
       cwd,
@@ -54658,6 +54874,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       initial_prompt: prompt,
       title: managed.state.title,
       model: selectedModel,
+      last_tool_use_at: 0,
+      // #291 审查 B-P1-1：同 external——增量面建卡即带键
       ...managed.state.engine_provider ? { provider: managed.state.engine_provider } : {},
       // #17 雇员标记随首帧进事件流：重启回放重建卡片后 resume/读取路径照常选家
       ...managed.state.employee ? { employee: true } : {},
@@ -54930,6 +55148,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       onLog: (kind, text, meta) => {
         if (!mine()) return;
         touch(kind);
+        const metaOccurredAt = meta?.occurred_at;
         const { ackId, ...logMeta } = meta ?? {};
         if (kind === "user_message") {
           if (managed.pendingImgRefs?.length) {
@@ -54945,6 +55164,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
         }
         const entry = { ts: Date.now(), kind, text, ...logMeta };
+        if (kind === "tool_use" || kind === "tool_result") managed.state.last_tool_use_at = metaOccurredAt ?? entry.ts;
         const i = logMeta.id ? managed.logs.findIndex((e) => e.id === logMeta.id) : -1;
         if (i >= 0) managed.logs[i] = entry;
         else {
@@ -54969,6 +55189,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       onTurnEnd: (ok2, reason, durationMs) => {
         if (!mine()) return;
         managed.pendingInitial = void 0;
+        managed.pmKeepaliveStreak = 0;
         if (managed.wd.phase === "recovering") return;
         if (ok2) {
           managed.unacked = managed.unacked.filter((m) => m.hold !== "turn");
@@ -55051,8 +55272,40 @@ provider=${opts.provider ?? "default"}` : void 0,
           });
         }
         this.syncWaitingNotification(managed);
+        this.schedulePmKeepalive(managed, reason);
       }
     };
+  }
+  // #287 PM 常驻化：保活调度（判定纯函数 pmKeepaliveEligible 单源，schedule 与 fire
+  // 双查同参——fire 时现算 dutyTarget/互斥/熔断/删除，防 3s 调度窗内的换届与竞态；
+  // streak 闸防「拉起即退」死循环：连续无活动退出≥2 停拉，等真实消息/回合复位）
+  schedulePmKeepalive(s, reason) {
+    if (s.pmKeepaliveTimer) clearTimeout(s.pmKeepaliveTimer);
+    const check = () => pmKeepaliveEligible({
+      envOff: process.env.CCR_PM_KEEPALIVE,
+      reason,
+      external: !!s.state.external,
+      historical: !!s.state.historical,
+      isDutyTarget: this.dutyTargetId() === s.state.session_id,
+      resumePending: s.resumePending,
+      resumeCooldownUntil: s.resumeCooldownUntil,
+      now: Date.now(),
+      idleStreak: s.pmKeepaliveStreak
+    });
+    if (!check()) return;
+    s.pmKeepaliveTimer = setTimeout(() => {
+      s.pmKeepaliveTimer = null;
+      try {
+        if (!this.sessions.has(s.state.session_id)) return;
+        if (s.agent && !s.agent.ended) return;
+        if (!check()) return;
+        s.pmKeepaliveStreak += 1;
+        this.pushExternalLog(s.state.session_id, "system", "PM \u5E38\u9A7B\u4FDD\u6D3B\uFF1A\u7A7A\u95F2\u81EA\u52A8\u62C9\u8D77\u5F85\u547D\uFF08#287\uFF09");
+        this.reviveSaved(s);
+      } catch {
+      }
+    }, PM_KEEPALIVE_DELAY_MS);
+    s.pmKeepaliveTimer.unref?.();
   }
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
   // echo（#62 文件消息）：客户端可见回显文本——正文已合成路径指令时传原文本短回显，
@@ -55220,6 +55473,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         s.lastProgressAt = Date.now();
         s.lastProgressKind = "";
         this.transition(s.state.session_id, "WORKING", "resume");
+        s.state.turn_started_at = Date.now();
         s.agent = this.newAgent(
           s.state.cwd,
           s.state.model,
@@ -55334,6 +55588,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (backlog.length > 0 && s.agent && !s.agent.ended) {
           this.flushResumeBacklog(s, reviveStart);
           this.transition(s.state.session_id, "WORKING", "revive");
+          s.state.turn_started_at = Date.now();
           s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u5904\u7406\u6392\u961F\u6D88\u606F";
           this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
           this.emitUpdated(s, true);
@@ -55379,6 +55634,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     s.agent = agent;
     this.transition(s.state.session_id, "WORKING", "revive");
+    s.state.turn_started_at = Date.now();
     s.state.action_summary = "\u6062\u590D\u4E2D";
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
@@ -55392,6 +55648,11 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 权威清单（历史事件里的 pinned 可能过时——unpin 落盘后重启的兜底，一律按文件
   // 归一）。清单内托管会话标 pinned+saved 休眠（可见、状态 DONE「已保存」、不可
   // 操作，点卡走 COMMAND_RESUME_SESSION）；查无会话的条目（压缩丢失/已删）静默清理
+  // #275R：置顶清单只读出口（bridge 收编闸的置顶豁免用——置顶=最强持久意图信号，
+  // events 压缩丢卡后不得因转录陈年被收编闸拒之门外，否则置顶卡随压缩永久消失）
+  pinnedSessionIds() {
+    return readPinnedSessions(this.cfg.dataDir);
+  }
   applyPinned() {
     const file = readPinnedSessions(this.cfg.dataDir);
     const keep = [];
@@ -55610,7 +55871,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       unacked: [],
       wd: { phase: "idle", recoveries: [], gaveUp: false },
       streamGen: 0,
-      activitySeq: 0
+      activitySeq: 0,
+      pmKeepaliveStreak: 0,
+      pmKeepaliveTimer: null
     };
     this.sessions.set(id2, managed);
     this.pinLeaderFile(id2);
@@ -56119,8 +56382,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
     let best = null;
     let bestAt = -1;
+    let bestIsExternal = false;
     for (const s of this.sessions.values()) {
-      if (!s.state.external || s.state.historical) continue;
+      if (s.state.historical) continue;
       if (this.leaderId && s.state.session_id === this.leaderId) continue;
       const pid = s.state.cli_pid;
       if (!pid) continue;
@@ -56130,9 +56394,11 @@ provider=${opts.provider ?? "default"}` : void 0,
         continue;
       }
       const at = s.state.updated_at || 0;
-      if (at > bestAt) {
+      const isExt = !!s.state.external;
+      if (at > bestAt || isExt && !bestIsExternal) {
         bestAt = at;
         best = s.state.session_id;
+        bestIsExternal = isExt;
       }
     }
     return best;
@@ -60729,6 +60995,35 @@ function deriveStreamFrame(prev, next) {
   return { lines: next.slice(), stable: true };
 }
 var STREAM_DELTA_ENV = () => process.env.CCR_STREAM_DELTA !== "0";
+function adoptMaxAgeMs() {
+  const raw = process.env.CCR_ADOPT_MAX_AGE_DAYS;
+  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
+  const days = Number.isFinite(n) && n >= 0 ? n : 3;
+  return days * 864e5;
+}
+function isSandboxCwd(cwd) {
+  if (!cwd) return false;
+  if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return true;
+  const norm = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (/^\/(private\/)?tmp\//.test(norm) || /^\/var\/tmp\//.test(norm)) return true;
+  const tmpdir5 = process.env.TMPDIR;
+  if (tmpdir5) {
+    const t = tmpdir5.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+    if (norm.startsWith(t)) return true;
+  }
+  return false;
+}
+function shouldAdoptEngineProfile(profile, input) {
+  const cwd = profile.cwd ?? "";
+  if (isSandboxCwd(cwd)) {
+    return { adopt: false, reason: "sandbox-cwd" };
+  }
+  const maxAge = input.maxAgeMs !== void 0 ? input.maxAgeMs : adoptMaxAgeMs();
+  if (maxAge > 0 && !input.hasLiveProcess && input.now - profile.updatedAt > maxAge) {
+    return { adopt: false, reason: `stale-${Math.max(1, Math.round((input.now - profile.updatedAt) / 864e5))}d` };
+  }
+  return { adopt: true };
+}
 var Bridge = class _Bridge {
   constructor(bus2, mgr2, opts) {
     this.bus = bus2;
@@ -61016,6 +61311,20 @@ var Bridge = class _Bridge {
       const existing = this.mgr.getExternal(id2);
       if (!existing && this.mgr.ownsCliSession(profile.sessionId)) continue;
       if (this.mgr.isDeletedExt(id2)) continue;
+      if (!existing) {
+        const preMatch = processes ? matchEngineProcess(profile, processes) : void 0;
+        const verdict = shouldAdoptEngineProfile(profile, { hasLiveProcess: !!preMatch, now });
+        if (!verdict.adopt) {
+          if (verdict.reason !== "sandbox-cwd" && this.adoptPinnedSet().has(id2)) {
+          } else {
+            if (!this.adoptRejectLogged.has(id2)) {
+              this.adoptRejectLogged.add(id2);
+              console.log(`[adopt-gate] \u62D2\u6536 ${id2}\uFF08${verdict.reason}\uFF09\u2014\u2014\u9996\u6B21\u53D1\u73B0\u4E14\u8D85\u9F84/\u6C99\u76D2\uFF1B\u6253\u5F00\u8BE5\u8F6C\u5F55\u6216\u7F6E\u9876\u53EF\u6062\u590D\u6536\u7F16`);
+            }
+            continue;
+          }
+        }
+      }
       const title = profile.prompt ? profile.title : void 0;
       const state = existing ?? this.mgr.ensureExternal(
         id2,
@@ -61223,7 +61532,7 @@ var Bridge = class _Bridge {
           if (!cwd) continue;
           if (this.isTitleGenTranscript(p)) continue;
           if (this.isTestProbeTranscript(p)) continue;
-          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
+          if (isSandboxCwd(cwd)) continue;
           const probePrev = this.orphanProbe.get(p);
           if (probePrev && !probePrev.adopt && probePrev.size === fileSize) continue;
           const act = this.scanOrphanActivity(p);
@@ -61331,6 +61640,20 @@ var Bridge = class _Bridge {
   orphanProbe = /* @__PURE__ */ new Map();
   orphanSkipBannerShown = false;
   // W-SANDBOXFIX：隔离态跳过横幅 once（60s 轮询防刷屏）
+  // #275R 收编闸配套：置顶豁免集（60s 缓存的 pinned 清单读——拒收是稀疏事件，
+  // 不值得每拍读盘）+ 拒收日志去重（每 id 每进程一次，防 5s 扫描刷屏）
+  pinnedExtCache = null;
+  adoptRejectLogged = /* @__PURE__ */ new Set();
+  adoptPinnedSet() {
+    if (!this.pinnedExtCache || Date.now() - this.pinnedExtCache.at > 6e4) {
+      try {
+        this.pinnedExtCache = { at: Date.now(), ids: new Set(this.mgr.pinnedSessionIds()) };
+      } catch {
+        this.pinnedExtCache = { at: Date.now(), ids: /* @__PURE__ */ new Set() };
+      }
+    }
+    return this.pinnedExtCache.ids;
+  }
   scanOrphanActivity(p) {
     let fd2;
     try {
@@ -61575,7 +61898,7 @@ var Bridge = class _Bridge {
     }
   }
   async handleEvent(ev2) {
-    if ((ev2.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return { decision: "pass" };
+    if (isSandboxCwd(ev2.cwd)) return { decision: "pass" };
     this.noHookIds.delete(this.extId(ev2));
     this.lastHookAt.set(this.extId(ev2), Date.now());
     const decision = await this.dispatch(ev2);
@@ -61787,7 +62110,7 @@ var Bridge = class _Bridge {
   // 文件名 = CLI 会话 uuid（relay_session_id；ext id 是 "ext-" 前缀包装，须剥壳）
   locateTranscriptByCwd(st2) {
     if (!st2.cwd) return null;
-    if (st2.cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return null;
+    if (isSandboxCwd(st2.cwd)) return null;
     const sid = st2.relay_session_id || st2.session_id.replace(/^ext-/, "");
     return resolveSessionTitleFile({ cwd: st2.cwd, sessionId: sid });
   }

@@ -66,7 +66,7 @@
                   // 件十一：成员灯数据源=成员会话 run status（与会话卡 status-dot 唯一事实源同
                   // 语义）；查无会话数据=缺省灰（offline）。
                   // 件十⑤：别名解耦——显示名优先 nick（role 在 p 行小字自然弱化），无别名=现状
-                  const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
+                  const status = session.status === "WORKING" && window.__ccDeck005IsRealWorking && !window.__ccDeck005IsRealWorking(session) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || ""; /* #291 审查 B-P2-4：成员灯过真判定（待命灰呼吸与列表卡同源；缺全局=老壳降级原样） */
                   const heartbeatAt = Number(member.last_heartbeat_at || session.activity?.updated_at || session.updated_at || 0);
                   const logAt = Number(member.last_business_log_at || session.activity?.activity?.observed_at || session.activity?.updated_at || session.updated_at || 0);
                   const signalTone = (at) => {
@@ -96,7 +96,7 @@
                   const queued = project ? pendingDispatchSids(project.id) : new Set();
                   const rank = (m) => {
                     const session = state.sessions.get(m.session_id) || {};
-                    const status = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || "";
+                    const status = session.status === "WORKING" && window.__ccDeck005IsRealWorking && !window.__ccDeck005IsRealWorking(session) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || ""; /* #291 待命 */
                     const lastAt = Number(session.activity?.updated_at || session.updated_at || session.started_at || 0);
                     const isPm = /^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")); // PM 补充指令：词表对齐 SLIM_KEEP_ROLE 五词（中文 PM 实况同收）
                     const active = status === "working" ? 0 : status === "waiting" ? 1 : queued.has(m.session_id) ? 2 : 3;
@@ -346,6 +346,17 @@
                   const head = '<div class="pane-summary">团队输出物 <span class="faint">共 ' + rows.length + " 件 · 按登记时间倒序</span></div>";
                   if (!rows.length) return head + banner("当前编制尚无输出物 · 会话产出实时登记。");
                   return head + rows.map((r) => '<div class="task-card compact" data-team-artifact="' + escape(r.sid) + '" title="在会话域查看输出物"><strong>' + escape((r.a.path || "").split(/[\\/]/).pop() || r.a.path) + '</strong><p>' + escape(r.s?.title || r.sid) + (r.a.last_at ? " · " + expFmtTime(r.a.last_at) : "") + "</p></div>").join("");
+                }
+                // #282 三批 M2（清单 §2.3）：团队详情六 pane+成员/活动/确认区签名跳帧——
+                // 筛选切换+帧的整串 innerHTML 收口（活动/看板滚动位、筛选 chips 悬停逐帧存活）。
+                // 行文时间为绝对 HH:MM / 分钟粒度相对文本——分钟翻转才触发重建（无秒级签名失效面）。
+                const tSigOf = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "t" + (h >>> 0).toString(36); };
+                function tSigWrite(el, sig, html) {
+                  if (!el) return false;
+                  if (el.dataset.tSig === sig && el.childElementCount) return false;
+                  el.dataset.tSig = sig;
+                  el.innerHTML = html;
+                  return true;
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
@@ -854,6 +865,13 @@
                 }
                 function render() {
                   if (!state.mounted) return;
+                  // #282 M1 行内表单草稿守卫：经验/规则表单（expForm/rulesForm 只记目标 id 不记
+                  // 草稿文本）输入中任何帧到达→整 pane 重建→草稿丢。焦点在本域可编辑元素上时
+                  // 跳过本轮（下一帧重试——心跳/事件恒持续，选区/草稿存活窗口即用户输入窗口）。
+                  try {
+                    const ae = document.activeElement;
+                    if (ae && root.contains(ae) && ae.matches && ae.matches("input, select, textarea, [contenteditable='true']")) return;
+                  } catch (_) {}
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
                   const project = group();
                   const count = state.confirms.length;
@@ -863,7 +881,10 @@
                   badge.setAttribute("aria-label", "团队有 " + count + " 项需处理");
                   badge.setAttribute("title", "团队 · " + count + " 项需处理");
                   query("[data-team-count]").textContent = String(count);
-                  query("[data-team-projects]").innerHTML = state.projects?.length ? (() => {
+                  // #282 M1b 团队列表 keyed：html 照旧拼装，解析成键序（组头 grp:N/团队卡 t:<id>）
+                  // reconcile——未变卡零触碰（滚动/选中/hover/动画全保），变化单卡替换，容器不重建。
+                  const projectsEl = query("[data-team-projects]");
+                  const projectsHtml = state.projects?.length ? (() => {
                     // W-V8 批2 团队列表 v8 化（A 轨对照图①④）：进行中/已收团分组头 + 卡片
                     // 头像 tile + 点分多指标 meta（v8 scard 三行密度，含活跃时间）。
                     // 状态胶囊保留（UIPOLISH3 件九⑩ 用户拍板件不动）；分组只二分不改数据语义
@@ -885,6 +906,18 @@
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
                     return html;
                   })() : banner(projectsEmpty());
+                  const rkTeam = window.__ccDeck005Reconcile;
+                  if (rkTeam && state.projects?.length) {
+                    const t = document.createElement("template");
+                    t.innerHTML = projectsHtml;
+                    const desired = [];
+                    let gN = 0;
+                    for (const n of t.content.children) {
+                      const tid = n.getAttribute("data-team-project");
+                      desired.push([tid ? "t:" + tid : "grp:" + gN++, n.outerHTML]);
+                    }
+                    rkTeam(projectsEl, desired);
+                  } else projectsEl.innerHTML = projectsHtml;
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // V8R head 第二行 meta（原型 dhead.row2 语言）：编制/任务卡/待确认/开团时间——
                   // 无团队选中（空态）整行隐藏；数据缺项跳过不占位
@@ -916,20 +949,25 @@
                   window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
                   const memberHtml = sortRoster(members(project), project).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
+                  const activityCompactHtml = activityMarkup(project, { compact: true });
                   query("[data-team-member-count]").textContent = String(members(project).length);
-                  query("[data-team-members]").innerHTML = memberHtml;
-                  query("[data-team-activity]").innerHTML = activityMarkup(project, { compact: true }); // W-ACTIVITY3：右栏回执流=compact 态（v3 dispfeed 纯行形态，无头无 chips）
+                  tSigWrite(query("[data-team-members]"), "mem:" + tSigOf(memberHtml), memberHtml); // #282 三批 M2 签名跳帧
+                  tSigWrite(query("[data-team-activity]"), "act:" + tSigOf(activityCompactHtml), activityCompactHtml); // W-ACTIVITY3：右栏回执流=compact 态（v3 dispfeed 纯行形态，无头无 chips）
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
-                  panes[0].innerHTML = banner("团队对话请回到来源会话；此处不生成演示消息。");
+                  tSigWrite(panes[0], "p0", banner("团队对话请回到来源会话；此处不生成演示消息。")); // 常驻文案：签名恒定=首帧后零写
                   if (panes[1]) panes[1].classList.add("board-pane"); // 追加⑨：看板 pane flex 列布局（board flex:1 拉高的参照链）
-                  panes[1].innerHTML = boardMarkup(project);
+                  // #282 三批 M2：panes[1] 原三步写（=board、+=确认卡、+=图纸区）收口为单笔终态写
+                  //（终态在确认卡构建后落笔，见下方 boardFinal）；成员/经验/铁律/输出物 var 先算后签
+                  const teamOutputsHtml = teamOutputsMarkup(project);
+                  const expHtml = experienceMarkup();
+                  const rulesHtml = rulesMarkup();
                   // V8R：成员页尾 crewfoot（原型 .crewfoot）——顺带承载五色灯词表图例（用户定版）
                   const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · watchdog 双信号（心跳+日志） · 点卡片直开成员会话</div>';
-                  panes[2].innerHTML = '<div class="member-list">' + memberHtml + "</div>" + crewFoot;
-                  panes[3].innerHTML = activityHtml;
-                  panes[4].innerHTML = teamOutputsMarkup(project); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）
-                  panes[5].innerHTML = experienceMarkup(); // W-EXPP2 经验库第六 tab
-                  panes[6].innerHTML = rulesMarkup(); // W-RULES2 团队铁律第七 tab
+                  tSigWrite(panes[2], "p2:" + tSigOf(memberHtml), '<div class="member-list">' + memberHtml + "</div>" + crewFoot); // #282 三批 M2
+                  tSigWrite(panes[3], "p3:" + tSigOf(activityHtml), activityHtml);
+                  tSigWrite(panes[4], "p4:" + tSigOf(teamOutputsHtml), teamOutputsHtml); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）
+                  tSigWrite(panes[5], "p5:" + tSigOf(expHtml), expHtml); // W-EXPP2 经验库第六 tab
+                  tSigWrite(panes[6], "p6:" + tSigOf(rulesHtml), rulesHtml); // W-RULES2 团队铁律第七 tab
                   const canDetail = Boolean(project && state.command && state.online && !state.unsupported.has("COMMAND_PROJECT_DETAIL"));
                   if (!state.confirms.some((confirm) => confirm.id === state.confirmSelected)) state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === project?.id)?.id || state.confirms[0]?.id || null;
                   // UIPOLISH3 件四②（2026-10-11 用户拍板）：底部常驻栏废除——决议钮下沉到每张
@@ -947,12 +985,14 @@
                     const owner = state.projects?.find((item) => item.id === confirm.payload?.gid);
                     return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + escape(confirmKinds.get(confirm.kind) || confirm.kind) + " · " + escape(confirm.title) + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div><p>" + escape(confirm.reason) + (owner ? " · " + escape(owner.name || owner.id) : "") + '</p><div class="inspector-copy">' + escape(JSON.stringify(confirm.payload || {})) + "</div>" + decisionButtons(confirm) + "</div>";
                   }).join("") : "";
-                  query("[data-team-confirms]").innerHTML = count ? confirmCards : banner("暂无待确认事项");
-                  panes[1].innerHTML += count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "";
+                  tSigWrite(query("[data-team-confirms]"), "cf:" + tSigOf(confirmCards), count ? confirmCards : banner("暂无待确认事项")); // #282 三批 M2
                   // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
                   // 口径（name/锚点分词 ∩ tags 子串双向）。输出物原第二区已迁独立「输出」tab
                   // （W-OUTTAB，用户 1015 拍板：输出物不放看板里）
-                  panes[1].innerHTML += teamDesignSection(project);
+                  const boardFinal = boardMarkup(project)
+                    + (count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "")
+                    + teamDesignSection(project);
+                  tSigWrite(panes[1], "p1:" + tSigOf(boardFinal), boardFinal);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
                   if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
@@ -961,6 +1001,36 @@
                   state.confirms = entities(items).filter((confirm) => confirm.status === "pending");
                   for (const id of state.accepted) if (!state.confirms.some((confirm) => confirm.id === id)) state.accepted.delete(id);
                 }
+                // ---------- #283 org 域跨源聚合：分区合并 ----------
+                // 病灶：聚合视角下 per-source 全量帧经 Team 中间层（settings-domain）到达本域，
+                // 旧 case 整替换 state.projects/confirms → 并集被单源帧清掉（家 relay 重启
+                // 首播 groups 无 delta 直达裸透传=「公司源团队卡聚合视图不可见」活跃形态）。
+                // 修法：聚合视角=分区替换，他源分区原样保留；同 id 异源碰撞按帧源权威。
+                // 输入两形态（审查 B-P1-1 回修）：
+                //   · 裸透传（no-delta 帧）＝帧源自己的全量清单，条目无源标 → 盖帧源标；
+                //   · 中间层投影（delta 帧经 wrapper 并集重合成）＝全并集，条目已带真源标
+                //     （合成快照/槽缓存所盖）→ **保真不覆盖**，仅本帧新增条目（delta upsert
+                //     的裸对象）落帧源标。无条件盖章会污染全并集源标+跨源删除留僵尸卡
+                //     （污染后条目两过滤条件皆不命中，已删组滞留到下次快照）。
+                // 单源视角=整替换不盖章，既有行为逐字不变（「单源视图不变」断言面）。
+                const aggViewOn = () => !!(window.__ccDeck005SourceView && window.__ccDeck005SourceView() === "aggregate");
+                function mergePartition(current, incoming, frameSrc, keyOf) {
+                  if (!aggViewOn() || !frameSrc) return incoming.slice();
+                  const src = String(frameSrc);
+                  const stamped = incoming.map((x) => {
+                    if (!(x && typeof x === "object")) return x;
+                    return x.__relay_source === undefined ? Object.assign({}, x, { __relay_source: src }) : x; // 保真源标（投影路）；裸路条目无标→盖帧源
+                  });
+                  const stampIds = new Set(stamped.map(keyOf).filter((k) => k !== undefined));
+                  const kept = (Array.isArray(current) ? current : []).filter((x) => {
+                    if (!(x && typeof x === "object")) return false;
+                    if (String(x.__relay_source || "") === src) return false; // 帧源分区：整替换（真源标=帧源的条目含已删组一并退场）
+                    return !stampIds.has(keyOf(x)); // 同 id 碰撞：帧源/投影内版本权威，他源旧拷贝剔除
+                  });
+                  return kept.concat(stamped);
+                }
+                const groupKeyOf = (g) => (g && typeof g.id === "string" ? g.id : undefined);
+                const confirmKeyOf = (c) => (c && typeof c.id === "string" ? c.id : undefined);
                 function updateProjects(items) {
                   state.projects = Array.isArray(items) ? entities(items) : null;
                   if (!group()) state.selected = state.projects?.[0]?.id || null;
@@ -969,7 +1039,12 @@
                 }
                 function detail(gid, data) {
                   if (!state.projects?.some((item) => item.id === gid) || !data || data.group?.id !== gid || data.board?.gid !== gid || !Array.isArray(data.board.entries) || !Array.isArray(data.receipts)) return false;
-                  state.projects = state.projects.map((item) => item.id === gid ? data.group : item);
+                  // #283（审查 A-P2-1）：detail 回执整条替换时保真源标——data.group 来自
+                  // relay 无 __relay_source，裸替换会让该组脱离分区身份（源标兜底链失效+
+                  // 删除时走 kept 分支滞留成幽灵）
+                  state.projects = state.projects.map((item) => item.id === gid
+                    ? Object.assign({}, data.group, item.__relay_source !== undefined ? { __relay_source: item.__relay_source } : null)
+                    : item);
                   state.boards.set(gid, data.board);
                   state.receipts.set(gid, entities(data.receipts).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   // W-DISPVIS C2：组内排队单存本（dispatch_queue 能力位——旧 relay 缺省不
@@ -1015,7 +1090,20 @@
                   state.flights.add(id);
                   render();
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_CONFIRM", { confirm_id: id, approve }));
+                    // #288 审查 B-P1-2：远程确认卡「可见可决」——确认卡带 __relay_source 源标
+                    //（mergePartition 保真），决议命令按源路由（原视角通道=local 时对远程卡
+                    // 恒「确认单不存在」，远程正经立项/新 relay 首个轻立项永久 pending）。
+                    // 源名→通道位（cloudRelayName=cloud / lanRelayName=local）→ WsFor 通道
+                    const card = state.confirms.find((confirm) => confirm.id === id);
+                    const cardSrc = String(card?.__relay_source || "");
+                    let confirmWs = null;
+                    if (cardSrc) {
+                      const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                      const lane = cardSrc && st && String(st.cloudRelayName || "") === cardSrc ? "cloud"
+                        : cardSrc && st && String(st.lanRelayName || "") === cardSrc ? "local" : "";
+                      confirmWs = lane && window.__ccDeck005WsFor ? window.__ccDeck005WsFor(lane) : null;
+                    }
+                    const result = verdict(await state.command("COMMAND_ORG_CONFIRM", { confirm_id: id, approve }, undefined, confirmWs || undefined));
                     if (epoch !== state.epoch) return false;
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_CONFIRM", result.error); throw new Error(result.error); }
                     if (state.confirms.some((confirm) => confirm.id === id)) state.accepted.add(id);
@@ -1062,9 +1150,17 @@
                 function onEvent(context, message) {
                   const payload = message?.payload;
                   if (message?.type === "SNAPSHOT") return snapshot(payload, context);
-                  if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups) && payload.delta === undefined) { updateProjects(payload.groups); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
-                  if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(payload.pending); render(); return true; }
-                  if (message?.type === "BOARD_UPDATED" && payload?.delta === undefined && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  // #283：groups 全量帧恒消费（delta 在场与否）。注：本域唯一喂入方是
+                  // settings 层 wrapper（feed）——稳态 delta 帧在那侧已被剥 delta 重喂
+                  // {groups}，旧 `delta === undefined` 守卫在该接线下恒通过（死条件，
+                  // 行为中性），删除属防误接线的收紧而非修陈旧；聚合视角经 mergePartition
+                  // 分区替换保并集（no-delta 裸透传=重启首播清并集的原始病灶路径），
+                  // 单源视角整替换行为逐字不变
+                  if (message?.type === "PROJECTS_UPDATED" && Array.isArray(payload?.groups)) { updateProjects(mergePartition(state.projects, payload.groups, context && context.relayName, groupKeyOf)); render(); if (state.selected) void requestDetail(state.selected, true); return true; }
+                  if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(mergePartition(state.confirms, payload.pending, context && context.relayName, confirmKeyOf)); render(); return true; }
+                  // #283 同理：board 全量形态（board.gid+entries 在场）即权威覆盖，delta
+                  // 并载不影响（本 case 只取 board.entries 全量）；gid 门控=并集含该组
+                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
                   // W-EXPP2 经验域帧：帧双载恒带 entries 全量 → 覆盖式消费（未锚定=experiences
                   // null 时同帧即锚定——SNAPSHOT 先行兜底过，此处权威刷新）；expArm/expForm 保持
                   if (message?.type === "EXPERIENCE_UPDATED" && Array.isArray(payload?.entries)) { updateExperiences(payload.entries); render(); return true; }
@@ -1151,15 +1247,29 @@
                   } catch (e) { toast("打开目录选择器失败: " + ((e && e.message) || e)); }
                 }
                 // 源联动态：浏览钮显隐 + 锚点提示文案（远程源=那台电脑的路径）
+                // #288③ 锚点提示按目标源宿主系统（用户 1028 拍板「选源=数据落点」的配套）：
+                // 从所选源 SNAPSHOT.platform 读真实系统——darwin/linux→POSIX 路径示例、
+                // win32→盘符示例；快照未达/旧 relay 无字段=未知回落通用文案（不猜）
+                function teamAnchorHint(which) {
+                  const plat = window.__ccDeck005PlatformFor ? window.__ccDeck005PlatformFor(which) : null;
+                  const posix = "形如 /Users/名字/项目 或 /home/名字/项目";
+                  const win = "形如 C:\\Users\\名字\\项目";
+                  if (which === "cloud") {
+                    if (plat === "win32") return "路径在那台电脑（远程 Windows 宿主机）上——" + win;
+                    if (plat) return "路径在那台电脑（远程源宿主机）上——" + posix;
+                    return "路径在那台电脑（远程源宿主机）上——请按它的文件系统填项目绝对路径";
+                  }
+                  if (plat === "win32") return "路径在 relay 宿主机（Windows）上——" + win;
+                  if (plat) return "路径在 relay 宿主机上（非当前浏览器电脑）——" + posix;
+                  return "路径在 relay 宿主机上（非当前浏览器电脑）——Mac/Linux " + posix + "，Windows " + win;
+                }
                 function syncTeamCreateSource(pop) {
                   const sel = pop.querySelector("[data-team-field='source']");
                   const which = sel ? sel.value : "local";
                   const browse = pop.querySelector("[data-team-anchor-browse]");
                   if (browse) browse.hidden = !teamAnchorBrowseable(which);
                   const hint = pop.querySelector("[data-team-anchor-hint]");
-                  if (hint) hint.textContent = which === "cloud"
-                    ? "路径在那台电脑（远程源宿主机）上——请按它的文件系统填项目绝对路径"
-                    : "路径在 relay 宿主机上（非当前浏览器电脑）——Mac/Linux 形如 /Users/…，Windows 形如 C:\\…";
+                  if (hint) hint.textContent = teamAnchorHint(which);
                 }
                 // W-UIFB 追加⑮：手动成员行——agent 类型 + 角色名，候选勾选与手动行合计 ≤8 席。
                 // 接通现状（回执「追加批」详述）：relay sanitizeHeadcount 硬性要求 session_id 且
@@ -1266,9 +1376,41 @@
                   });
                   // W-TEAMSNC ①：PM 带队默认档——pm_session_id=会话域当前选中会话（跨域取
                   // __ccDeck005SlimUi.selectedSid；relay orgCommand create 单点插 role="pm" 身份行）。
-                  // 无选中/选中会话不在册：降级不带 PM 行继续建团（feedback 提示，不拦单）
-                  const pmSid = template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "";
-                  if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                  // #288② 按源在册闸（用户 1028 拍板「选源=数据落点」）——审查 A-P1 修正版：
+                  // 专用谓词 pmInSource（不 slice 截断/不排 external——relay 侧 pm_session_id
+                  // 校验口径「在册即可、外部允许」，生产 PM 主会话常为 ext- 外部会话，用展示用
+                  // 候选列表当判据会把双源×PM 带队头条场景恒拦死且归因错误）；源离线先探
+                  // WsFor 短路（离线时归因应为「源不在线」而非「PM 不在册」）；名册对不上
+                  // 源名（未知态）降级放行+warning（与 relay 权威校验兜底分层）。
+                  // 未选源（单源形态）行为不变：降级原口径（feedback 不拦）
+                  const pmSidOut = { v: template === "pm-led" ? String(window.__ccDeck005SlimUi?.selectedSid?.() || "") : "" };
+                  const pmSid = pmSidOut.v; // 读侧兼容（下方去重/splice 用）
+                  const srcSelEarly = pop.querySelector("[data-team-field='source']"); // #288②：闸块先于下方 srcSel 声明，早取同节点
+                  const pmInSource = (which, sid) => {
+                    const st = teamSourceInfo();
+                    const s = sid && state.sessions.get(sid);
+                    if (!s) return { verdict: "absent" };
+                    const src = String(s.relay_source || s.source || "");
+                    if (which === "cloud") {
+                      const cn = String((st && st.cloudRelayName) || "");
+                      return cn && src ? (src === cn ? { verdict: "in" } : { verdict: "out" }) : { verdict: "unknown" };
+                    }
+                    const ln = String((st && st.lanRelayName) || "");
+                    return (!src || (ln && src === ln)) ? { verdict: "in" } : (ln && src !== ln) ? { verdict: "out" } : { verdict: "unknown" };
+                  };
+                  if (template === "pm-led" && srcSelEarly) {
+                    const srcLabel = srcSelEarly.value === "cloud" ? "远程源" : "本机源";
+                    const online = window.__ccDeck005WsFor ? window.__ccDeck005WsFor(srcSelEarly.value) : null;
+                    if (online && pmSid) {
+                      const v = pmInSource(srcSelEarly.value, pmSid);
+                      if (v.verdict === "out") {
+                        feedback("PM 会话需属于所选源：当前选中会话不在" + srcLabel + "——请切换目标源或先在会话列表选中该源的 PM 会话");
+                        return; // 审查 P2②：feedback 即 toast 别名，双响退役
+                      }
+                      if (v.verdict === "unknown") feedback("暂无法核对选中会话是否属于" + srcLabel + "（源名册未同步）——将以该源 relay 校验为准");
+                      if (v.verdict === "absent") { feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）"); pmSidOut.v = ""; } // 审查 B：让提示为真（payload 不带该行）
+                    } else if (online && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
+                  } else if (template === "pm-led" && !pmSid) feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）");
                   if (pmSid) { const i = headcount.findIndex((h) => h.session_id === pmSid); if (i >= 0) headcount.splice(i, 1); } // PM 会话被同时勾选：让位 pm_session_id 身份行（同 sid 双行会被 relay 去重，先去保角色正确）
                   // W-UIFB 追加⑮：手动席（agent 类型+角色名）——relay sanitizeHeadcount 现版
                   // 硬性要求 session_id 且 adapter 不透传 role_defaults，入载会整单被拒；
@@ -1289,7 +1431,7 @@
                   if (state.flights.has(flight)) return;
                   state.flights.add(flight);
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSid ? { pm_session_id: pmSid } : {}) }, undefined, wsOverride));
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {}) }, undefined, wsOverride));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";

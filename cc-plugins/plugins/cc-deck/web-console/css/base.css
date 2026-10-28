@@ -486,6 +486,11 @@
     .status-dot.waiting { background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-blocked); }
     .status-dot.error { background: var(--st-error); animation: st-shake-once .32s ease-in-out 1; }
     .status-dot.working { background: var(--st-working); animation: st-glow-pulse 1.5s ease-in-out infinite; } /* #226 追加：glow 提强提快（用户 1023 灯显眼度），与 #211 裸点发光语言统一 */
+    /* #291 帧分类判活：待命态（已接单·待开工/挂起）——WORKING 帧在但无工作证据
+      （无活跃 turn 或无近期工具帧）。灰呼吸（缓频 2.4s）与工作中黄闪（1.5s glow）
+       双编码区分；灰实心会与关闭态混淆，呼吸节律保留「进程活着」语义 */
+    .status-dot.working-standby { background: var(--st-closed); animation: st-standby-breathe 2.4s ease-in-out infinite; }
+    @keyframes st-standby-breathe { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 4px 2px color-mix(in srgb, var(--st-closed) 55%, transparent); } }
     @keyframes st-glow-pulse { 0%, 100% { box-shadow: 0 0 3px 1px color-mix(in srgb, var(--st-working) 45%, transparent); } 50% { box-shadow: 0 0 8px 3px color-mix(in srgb, var(--st-working) 85%, transparent); } }
     @keyframes st-shake-once { 20% { transform: translateX(1px); } 45% { transform: translateX(-1px); } 70% { transform: translateX(.5px); } }
     @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
@@ -2487,6 +2492,14 @@
     .team-drawer .roster-row { display: flex; align-items: center; gap: 6px; margin: 1px 0; padding: 4px 7px; border-radius: 6px; cursor: pointer; }
     .team-drawer .roster-row:hover { background: var(--hover); }
     .team-drawer .roster-row .lamp-dot { flex: none; }
+    /* #291 补全套状态色（审查发现：lamp-dot 原仅 flex 布局、working/blocked 等类
+       从未有宽高背景=灯不可见；随待命分层一并补齐，色语言与 .status-dot 完全同源） */
+    .team-drawer .roster-row .lamp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-closed); }
+    .team-drawer .roster-row .lamp-dot.working { background: var(--st-working); animation: st-glow-pulse 1.5s ease-in-out infinite; }
+    .team-drawer .roster-row .lamp-dot.standby { background: var(--st-closed); animation: st-standby-breathe 2.4s ease-in-out infinite; } /* #291 待命：灰呼吸（接单未开工/挂起） */
+    .team-drawer .roster-row .lamp-dot.blocked { background: transparent; box-shadow: inset 0 0 0 1.5px var(--st-blocked); }
+    .team-drawer .roster-row .lamp-dot.error { background: var(--st-error); }
+    .team-drawer .roster-row .lamp-dot.idle { background: var(--st-idle); }
     .team-drawer .roster-row .rr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--fs-C); }
     .team-drawer .roster-row .rr-role { flex: none; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: var(--fs-micro); }
     .team-drawer .roster-row .rr-ctx { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }

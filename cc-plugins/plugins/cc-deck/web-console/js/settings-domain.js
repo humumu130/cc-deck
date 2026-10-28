@@ -31,7 +31,7 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.71";
+      const CONSOLE_VERSION = "0.7.0-test.73";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -3006,7 +3006,18 @@ function connectLan(ctx) {
         // 团队域不订阅总线，onEvent 门控跳过的帧在此按缓存 payload 重建）
         const teamSrc = v === "cloud" ? cloudCtx : ctx;
         if (teamSrc.hasSnapshot && teamSrc.lastSnapshotPayload) {
-          try { Team.onFrame(teamSrc, { type: "SNAPSHOT", payload: teamSrc.lastSnapshotPayload }); } catch {}
+          // #283（审查 A-P2-1）：切聚合视角的补喂改走合成快照（mergedTeamPayload 逐条带
+          // 真源标=分区合并的分区键基线）。原样补喂单源裸 payload=无戳基线：他源条目不属
+          // 任何分区，跨源删除走 kept 分支滞留幽灵到下次快照；且首帧 delta 盖标失真。
+          // 单源视角（local/cloud）补喂维持原行为不变
+          try {
+            if (v === "aggregate") {
+              const merged = mergedTeamPayload();
+              if (merged) Team.onFrame({ relayName: "聚合 · 全部源" }, { type: "SNAPSHOT", payload: merged });
+            } else {
+              Team.onFrame(teamSrc, { type: "SNAPSHOT", payload: teamSrc.lastSnapshotPayload });
+            }
+          } catch {}
         }
         replaySnapshots();
         renderSessionList();
@@ -3160,6 +3171,14 @@ function connectLan(ctx) {
       window.__ccDeck005WsFor = (source) => {
         if (source === "cloud") return cloudCtx.status === "online" ? cloudCmdShim : null;
         return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+      };
+      // #288③ 目标源宿主系统（SNAPSHOT.platform 全字段缓存读）：darwin→"darwin" 类 unix 提示、
+      // win32→Windows 盘符提示；无快照/无字段=未知（提示回落通用文案，不猜）。建团锚点 hint 按
+      // 所选源切换消费（team-domain syncTeamCreateSource）
+      window.__ccDeck005PlatformFor = (source) => {
+        const c = source === "cloud" ? cloudCtx : ctx;
+        const plat = c && c.lastSnapshotPayload && c.lastSnapshotPayload.platform;
+        return typeof plat === "string" && plat ? plat : null;
       };
       // ---------- W-WINPAIR：「＋ 添加服务器」弹窗（client 侧连远程源，对齐手机 SetupScreen 语义） ----------
       // 8 位配对码为主路径（云桥默认地址），高级折叠可改地址/桥令牌。提交=激活云链（壳/LAN 形态
@@ -3647,7 +3666,12 @@ function connectLan(ctx) {
             for (const group of (Array.isArray(p.delta.upserts) ? p.delta.upserts : [])) if (group && typeof group.id === "string") byId.set(group.id, group);
             for (const id of (Array.isArray(p.delta.removes) ? p.delta.removes : [])) byId.delete(String(id));
             this.projects = [...byId.values()];
-            this.feed(api, teamContext, "PROJECTS_UPDATED", { groups: this.projects });
+            // #283（审查 A/B-P1 同报回修）：喂帧源自己的全量清单（relay emitOrgState 稳态帧
+            // 恒带 groups 全量+delta 并载），不喂本层并集投影——下游 mergePartition 的分区
+            // 契约=「incoming=帧源分区」，并集投影会把全并集盖成单源分区（源标污染+跨源
+            // 删除留幽灵）。本层 this.projects 并集照旧维护（其余消费面不变）。旧 relay 稳态
+            // 帧缺 groups 的假想形态回落并集投影（下游保真源标语义可承接）
+            this.feed(api, teamContext, "PROJECTS_UPDATED", { groups: Array.isArray(p.groups) ? p.groups : this.projects });
             return;
           }
           if (message.type === "BOARD_UPDATED" && p.delta !== undefined) {
@@ -3736,10 +3760,11 @@ function connectLan(ctx) {
         renderSessionList();
         // #236 B：聚合=两源团队数据合成一张 SNAPSHOT 喂 Team（此时本源 lastSnapshotPayload
         // 已更新，并集恒最新）。快照级字段覆盖团队域全部渲染面（组列表/成员卡/板/回执流/
-        // 经验铁律）；增量帧（ORG_CONFIRM/BOARD_UPDATED 等）聚合下不重喂——下次任一源
-        // SNAPSHOT 到达自动重合成（增量实时性换合并确定性，最小面取舍入回执）。
-        // requestDetail 命令通道仍走视角源（__ccDeck005MainWs=ctx）：远端组详情刷新会
-        // 失败降级 toast，快照级数据可渲染不受阻——跨源命令路由属增强面留拍板。
+        // 经验铁律）。增量帧（PROJECTS/ORG_CONFIRM/BOARD）聚合下**也直喂团队域**（下方
+        // wrapper onFrame 各分支重合成/投影后 feed；#283 起 team-domain 分区合并保并集、
+        // wrapper delta 分支喂帧源裸全量——「聚合下不重喂」的旧取舍已被 #283 收窄为
+        // 「不重复合成快照」）。requestDetail 命令通道仍走视角源（__ccDeck005MainWs=ctx）：
+        // 远端组详情刷新会失败降级 toast，快照级数据可渲染不受阻——跨源命令路由属增强面留拍板。
         if (message.type === "SNAPSHOT") {
           const merged = mergedTeamPayload();
           if (merged) Team.onFrame({ relayName: "聚合 · 全部源" }, { type: "SNAPSHOT", payload: merged });
@@ -3763,9 +3788,12 @@ function connectLan(ctx) {
           // src-cap 在成员会话已收摊/不在册时的确定性兜底（浅拷贝不改单源快照原对象）
           for (const g of (Array.isArray(p.projects) ? p.projects : [])) if (g && g.id !== undefined && !projectsById.has(g.id)) { projectsById.set(g.id, g); out.projects.push(Object.assign({}, g, { __relay_source: String(c.relayName || "") })); }
           for (const s of (Array.isArray(p.sessions) ? p.sessions : [])) if (s && typeof s.session_id === "string" && !sessionsById.has(s.session_id)) { sessionsById.set(s.session_id, s); out.sessions.push(s); }
-          for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(b); }
+          // #283：boards/org_confirms 同打 __relay_source 源标（org_confirms 是 team-domain
+          // 分区合并的分区键——确认卡并集在 per-source 增量帧到达时不再被整替清掉；boards
+          // 本身走 gid 直写不进分区合并，源标为真值元数据供 src-cap 兜底/后续消费）
+          for (const b of (Array.isArray(p.boards) ? p.boards : [])) if (b && b.gid !== undefined && !boardsByGid.has(b.gid)) { boardsByGid.set(b.gid, b); out.boards.push(Object.assign({}, b, { __relay_source: String(c.relayName || "") })); }
           for (const r of (Array.isArray(p.receipts) ? p.receipts : [])) out.receipts.push(r);
-          for (const cf of (Array.isArray(p.org_confirms) ? p.org_confirms : [])) out.org_confirms.push(cf);
+          for (const cf of (Array.isArray(p.org_confirms) ? p.org_confirms : [])) out.org_confirms.push(Object.assign({}, cf, { __relay_source: String(c.relayName || "") }));
           if (out.experience === undefined && p.experience !== undefined) out.experience = p.experience;
           if (out.experience_enabled === undefined && p.experience_enabled !== undefined) out.experience_enabled = p.experience_enabled;
           if (out.rules === undefined && p.rules !== undefined) out.rules = p.rules;

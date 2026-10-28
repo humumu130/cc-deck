@@ -700,7 +700,30 @@
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
                 }
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
+                // #291 帧分类判活（心跳≠工作，用户 1028 定立）。判定=帧分类单判据：
+                //   干活中 = 近 15min 有工具帧（tool_use/tool_result——真工作证据）
+                //          | last_tool_use_at 缺（老 relay 未下发——降级干活，不误伤）
+                //   待命（已接单·待开工/挂起）= 有字段但 0（从未有工具活动）或超窗
+                // 「turn 生命周期」不在端上判定层（审查 291-A 终版裁决）：turn_started_at
+                // 由 relay 状态机承担（WORKING⟔活跃 turn：onPrompt/spawn 翻活、Stop/
+                // 静默 15min 收殓、本批补终态清算）——若端上再加 turn 新鲜窗分支，spawn
+                // 建卡即写 turn_started_at=now，挂起卡前 15min 会复活「判干活」误判
+                //（本批要杀的形态）；起手窗（读任务未吐工具帧）误显待命是分钟级且首个
+                // 工具帧即自纠，代价可接受。turn_started_at 面上仅作计时显示。
+                // 窗口 15min 对齐 relay sweepWorkingIdle hooked 静默窗（900s——审查
+                // 291-A P2-1：本仓 worker 自测链 10min+ 单工具是常态，10min 窗在
+                // [10,15)min 段把长工具误判待命，与 relay 防误判设计正面冲突）
+                function isRealWorking(s, now) {
+                  if (!s || s.status !== "WORKING") return false;
+                  const FRESH_MS = 15 * 60 * 1000;
+                  const t = s.last_tool_use_at;
+                  const at = typeof now === "number" ? now : Date.now();
+                  if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
+                  if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
+                  return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
+                }
+                window.__ccDeck005IsRealWorking = isRealWorking; // team-domain 计数同源（跨文件共享）
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -822,6 +845,10 @@
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
                   if (s) s.updated_at = entry.ts || Date.now();
+                  // #291 帧分类判活（增量面）：工具帧本地刷新 last_tool_use_at——relay 增量
+                  // 帧不带此键（SNAPSHOT 全量权威），实时性由本行补（与 relay pushExternalLog/
+                  // onLog 两咽喉同口径：tool_use/tool_result 刷，心跳类不刷）
+                  if (s && (entry.kind === "tool_use" || entry.kind === "tool_result")) s.last_tool_use_at = entry.occurred_at || entry.ts || Date.now(); /* #291 审查 A-P2①：occurred_at（活动真实时刻）优先，与 relay 两咽喉同口径——scan 回灌旧工具活动时不虚胖窗口 */
                   // #221 同族①（W-INJECT3 扩展）：回显对账双兜底——原唯一路径「精确文本匹配」
                   // 对回显形态差异（空白规整/短回显变体）失配=「发送中…」气泡永挂（用户实锤：
                   // CLI 已回复后续内容气泡仍滞留）。a) 匹配放宽（trim+多空白折叠）b) 回合推进
@@ -989,7 +1016,7 @@
                     }
                     if (!hitRole) continue;
                     // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
-                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" && !/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")) ? 1 : 0); }, 0); /* 1027 用户裁定：WORKING⟺有活应闭环——在跑计数=干活成员（worker/QA），PM/Leader 是管理岗不计入（他们恒有活但不是「在跑工人」） */
+                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" && isRealWorking(x) && !/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")) ? 1 : 0); }, 0); /* 1027 用户裁定：在跑计数=干活成员（worker/QA，管理岗不计入）；#291 精化：WORKING 再过 isRealWorking——待命（接单未开工/挂起）不占在跑计数（用户 1028：面板数字从此可直接信） */
                     out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, running, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）；W-ENGLM2 F：running 随行下发（chip 数字位=活跃数）
                   }
                   return out;
@@ -1028,6 +1055,8 @@
                     time: activityTime ? fmtListTime(activityTime) : "",
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
+                    pmStandby: session.pm_standby === true, // #287 值守 PM 待命态（快照派生）：替代 DONE 假死
+                    standby: status === "working" && !isRealWorking(session), // #291 帧分类判活：接单未开工/挂起（灰呼吸点+待开工标，不占在跑计数）
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
                     idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
                   };
@@ -1051,6 +1080,10 @@
                 // #227 件四：占位 getter——无品牌 SVG 引擎（zcode/glm/未知）=品牌色圆角字母
                 // （与像素螃蟹同族谱；expo EngineIcon PLACEHOLDER 同源色）
                 const engineBrandSvgOf = (item) => ENGINE_BRAND_SVG[item.engineClass] ?? (() => {
+                  // #286① 审查 B-P2① 修正：PH 只对真未知引擎（engine 非空但未收录）——
+                  // 空 class 的 claude 兜底已上移 myCardItem 归一层（engineKey || "claude"），
+                  // 此处不再拦空 class（原实现把未知引擎折叠空 class 后又落 claude 蟹，
+                  // 图文错配回归）
                   const PH = { zcode: ["#546784", "Z"], glm: ["#3E8EF7", "G"] }[item.engineClass] ?? ["#546784", (item.engine || "?").charAt(0).toUpperCase()];
                   return '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="' + PH[0] + '"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">' + PH[1] + '</text></svg>';
                 })();
@@ -1074,9 +1107,15 @@
                 };
                 // FB19 源色块：源色不再「家里 iMac 二值」——按源名哈希取八色环，同名恒色异名易分
                 const b2SourcePalette = ["#3E8E7E", "#5B8FA8", "#8A7AB5", "#A8763E", "#7D9A3C", "#B55F7A", "#4E85C0", "#9A8A4E"];
+                const b2SourceColorSeq = []; // 1028 用户实锤：哈希撞色无区分度——改「首次出现顺序分配」，同屏源颜色保证互异（>8 源回落哈希）
                 const b2SourceColor = (source) => {
                   const s = String(source || "");
                   if (!s) return "var(--source)";
+                  if (!b2SourceColorSeq.includes(s)) {
+                    if (b2SourceColorSeq.length < b2SourcePalette.length) b2SourceColorSeq.push(s);
+                  }
+                  const idx = b2SourceColorSeq.indexOf(s);
+                  if (idx >= 0) return b2SourcePalette[idx];
                   let h = 0;
                   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
                   return b2SourcePalette[h % b2SourcePalette.length];
@@ -1126,7 +1165,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -1202,7 +1241,7 @@
                       arts: s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [],
                     };
                   });
-                  const running = roster.filter((r) => r.status === "WORKING").length;
+                  const running = roster.filter((r) => r.status === "WORKING" && (() => { const rs = S.sessions.get(r.sid); return rs ? isRealWorking(rs) : true; })()).length; /* #291 审查 B-P1-2：同屏口径一致（行灯已真判定，计数跟上；rs 未同步保守按干活，与行灯降级一致） */
                   const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
                   const entries = Array.isArray(boardEntries) ? boardEntries : null;
                   const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
@@ -1231,8 +1270,10 @@
                   }
                   // 区二：成员 roster（行点击=直开成员会话，data-slim-open 既有链；异源未同步=灰行不隐行 #99件5 口径）
                   const rosterRows = model.roster.slice().sort(teamDrawerRosterSort).map((r) => {
-                    const st = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[r.status] || "closed";
-                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[r.status] || "离线";
+                    // #291 帧分类判活：WORKING 行过真判定——待命（接单未开工/挂起）灰点+「待开工」
+                    const rStandby = r.status === "WORKING" && (() => { const rs = S.sessions.get(r.sid); return rs ? !isRealWorking(rs) : false; })();
+                    const st = rStandby ? "standby" : ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[r.status] || "closed";
+                    const stWord = rStandby ? "待开工" : ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[r.status] || "离线";
                     return '<div class="roster-row' + (r.online ? "" : " offline") + '" data-slim-open="' + esc(r.sid) + '" role="button" tabindex="0" title="' + esc((r.pm ? "✦ " : "") + r.title + " · " + (r.nick || r.role || "成员") + " · " + stWord + (r.online ? " · 点击直开" : " · 会话未同步")) + '"><i class="lamp-dot ' + st + '"></i><span class="rr-name">' + (r.pm ? "✦ " : "") + esc(r.nick || r.title.slice(0, 14)) + '</span><span class="rr-role">' + esc(r.role || "worker") + '</span><span class="rr-ctx">' + (r.pct !== null ? r.pct + "%" : "") + "</span></div>";
                   }).join("");
                   const rosterSec = '<div class="dr-sec"><span>成员 ' + model.rosterN + '</span><span class="dr-sub">在跑 ' + model.running + " · 点击行直开</span></div>"
@@ -1470,16 +1511,26 @@
                   // chip（列表 r3+详情 head，未读角标 tc-unread 唯一列表未读面）；收纳逻辑保留，
                   // 收起会话入口=抽屉 roster 行直开；队级聚合健康/队数一览走 chip idle 态+团队域。
                   const mountUpper = (upperContent) => { // 单段挂载单口（上段节点=会话卡/空态占位）
-                    // #281 滚动保持：替换前记录旧滚动位（手势活跃窗内 -1=跳过哨兵；0=顶部本就无需写回），
-                    // 替换后写回新节点。内容变短时浏览器自动钳到 scrollHeight 上限，符合直觉。
+                    // #282 S1 定向化根治：容器 .list-upper 节点复用（不重建 ⇒ scrollTop 天然
+                    // 保持），会话卡按 data-session-card 键 reconcile——html 未变的卡零触碰
+                    //（焦点/重命名输入草稿/入场动画/hover 全保），变化的单卡替换，增删定点。
+                    // #281 scrollTop 记录/恢复保留为兜底（容器首建/键位全换的极端窗仍生效）。
                     const prevUpper = list.querySelector(".list-upper");
                     const keepScroll = prevUpper && Date.now() - listGestureAt >= LIST_GESTURE_WINDOW_MS ? prevUpper.scrollTop : -1;
-                    const upper = document.createElement("div");
-                    upper.className = "list-upper";
-                    upper.append(upperContent);
-                    if (upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true") upper.classList.add("is-empty"); // #103-B3 空态：上段不撑满随内容收缩
-                    list.replaceChildren(upper);
-                    if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 写回（is-empty 态 overflow:visible 写入无效，天然跳过）
+                    const upper = prevUpper || document.createElement("div");
+                    if (!prevUpper) { upper.className = "list-upper"; list.replaceChildren(upper); }
+                    const isEmpty = upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true";
+                    upper.classList.toggle("is-empty", !!isEmpty); // #103-B3 空态：上段不撑满随内容收缩
+                    const rk = window.__ccDeck005Reconcile;
+                    if (!rk) { upper.replaceChildren(upperContent); if (keepScroll > 0) upper.scrollTop = keepScroll; return; } // 工具未载兜底
+                    if (isEmpty) { rk(upper, [["empty", upperContent.outerHTML ? upperContent.outerHTML : ""]]); return; }
+                    const desired = [];
+                    upperContent.childNodes && upperContent.childNodes.forEach && upperContent.childNodes.forEach((n) => {
+                      if (n.nodeType === 1) desired.push([n.getAttribute("data-session-card") || "n:" + desired.length, n.outerHTML]);
+                    });
+                    if (!desired.length) desired.push(["empty", '<div class="readonly-banner"></div>']);
+                    rk(upper, desired);
+                    if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 兜底写回（节点复用时通常 no-op）
                   };
                   if (!S.sessions.size) {
                     const ph = document.createElement("div");
@@ -2052,7 +2103,7 @@
                     }
                     subEl.dataset.act = act;
                     subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
-                    subEl.textContent = act ? "⚙ Running " + act.slice(0, 110) : "";
+                    subEl.textContent = act ? (isRealWorking(s) ? "⚙ Running " : "⏸ 待开工 ") + act.slice(0, 110) : ""; /* #291 审查 B-P2-2：dock 与卡同屏一致（待命不走秒语义） */
                     subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
                   } else {
                     if (subEl) subEl.remove();
@@ -2148,9 +2199,14 @@
                 }
                 function renderInspector() {
                   const s = curSession();
-                  let html = "<h3>证据检查器</h3>";
+                  // #282 S3 块级拆分：块集合（不再拼单串整写）——写点在函数尾部稳定内层容器
+                  // [data-insp-body] 上 keyed reconcile：未变块零触碰（成员胶囊展开/详情块
+                  // 折叠/滚动位逐帧存活），变化块单点替换；FB6 摘下回填保留为 rk 缺席兜底
+                  const blocks = [];
+                  const blk = (key, h) => { if (h) blocks.push([key, h]); };
+                  blk("h", "<h3>证据检查器</h3>");
                   if (!s) {
-                    html += '<div class="readonly-banner">从左侧选择会话查看证据</div>';
+                    blk("empty", '<div class="readonly-banner">从左侧选择会话查看证据</div>');
                   } else {
                     const todos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
                     const done = todos.filter((t) => t.status === "completed").length;
@@ -2163,7 +2219,7 @@
                     // 任务清单保留；审批/确认区本就在对话流 wait-banner 非本面板）。分支判据=
                     // pmTeamChipOf 词表单口命中（与 chip/头像角色蟹同源）；非 PM 检查器零变化
                     const pmInspectorFocus = pmTeamChipOf(s.session_id).length > 0;
-                    html += '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + (inspSrc ? '<br><span class="source-badge insp-src">' + esc(inspSrc) + "</span>" : "") + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>';
+                    blk("sess", '<div class="inspector-block"><div class="inspector-title"><span>会话</span><span class="tag ' + st[1] + '">' + st[0] + '</span></div><div class="inspector-copy">' + esc(shortTitle(s)) + "<br>" + esc(eng[0] + (s.model ? " · " + s.model : "")) + (inspSrc ? '<br><span class="source-badge insp-src">' + esc(inspSrc) + "</span>" : "") + "<br>" + esc(shortPath(s.cwd || "")) + '</div></div>');
                     // [t-7e0c6189] 团队成员块：选中会话属于某编制时，成员胶囊行（点头像=直开）+ 展开第四列
                     const slimMem = slimRosterOf(S.projects).bySid.get(s.session_id);
                     if (slimMem) {
@@ -2173,29 +2229,47 @@
                         const chips = slimTeamObj.members.map((m) => {
                           const ms = S.sessions.get(m.session_id);
                           if (!ms) return ""; // 编制在、会话未同步：不出胶囊
-                          const mst = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[ms.status] || "done";
+                          const mst = ms.status === "WORKING" && !isRealWorking(ms) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[ms.status] || "done"; /* #291 待命灰呼吸 */
                           const badge = SLIM_KEEP_ROLE.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
                           const unread = unreadSet && unreadSet.has(m.session_id);
                           return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
                         }).join("");
-                        html += '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">团队信息 ⤢</button></div>'; // W-TEAMSNC ④：链接文案随厚抽屉升级（属性/路由零改动）
+                        blk("team", '<div class="inspector-block slim-team-block"><div class="inspector-title"><span>团队成员 · ' + esc(slimTeamObj.name) + "</span><span>" + slimTeamObj.members.length + ' 席</span></div><div class="member-chips">' + chips + '</div><button type="button" class="slim-drawer-link" data-slim-drawer-toggle="' + esc(slimMem.gid) + '">团队信息 ⤢</button></div>'); // W-TEAMSNC ④：链接文案随厚抽屉升级（属性/路由零改动）
                       }
                     }
-                    if (todos.length) html += '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>";
-                    if (s.context_usage && !pmInspectorFocus) html += '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>"; // W-DRAWMERGE：PM 瘦身去水位（他 tab 已有）
+                    if (todos.length) blk("todos", '<div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>' + done + "/" + todos.length + '</span></div>' + open.map((t) => '<div class="check-row">' + (t.status === "in_progress" ? '<b class="run">◐</b>' : '<span>○</span>') + "<span>" + esc(t.status === "in_progress" && t.active_form ? t.active_form : t.content || "") + "</span></div>").join("") + "</div>");
+                    if (s.context_usage && !pmInspectorFocus) blk("usage", '<div class="inspector-block"><div class="inspector-title"><span>用量</span><span>' + ctxPct(s) + '%</span></div>' + ctxMeterHtml(s) + "</div>"); // W-DRAWMERGE：PM 瘦身去水位（他 tab 已有）
                     // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
-                    if (s.pre_compact_summary) html += '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>";
+                    if (s.pre_compact_summary) blk("pcsum", '<div class="inspector-block"><details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details></div>");
                     const arts = Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [];
                     if (arts.length && !pmInspectorFocus) {
                       const top = arts.slice().sort((a, b) => (b.last_at || 0) - (a.last_at || 0)).slice(0, 4);
-                      html += '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>";
+                      blk("arts", '<div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>' + arts.length + "</span></div>" + top.map((a) => { const name = baseName(a.path); return '<div class="artifact-row">' + artIconHtml(name) + " " + esc(name) + " <span>" + relTime(a.last_at || a.first_at) + "</span></div>"; }).join("") + "</div>");
                     }
+                  }
+                  // #282 S3 写点：稳定内层容器 [data-insp-body]（一次创建永复用），块 keyed
+                  // reconcile——resizer 等 inspector 直接子节点永在体系外零触碰（单口的
+                  // 非 keyed 清场扫不到它们）。rk 缺席兜底=旧整写行为逐字节保留（FB6 摘回）。
+                  const rk = window.__ccDeck005Reconcile;
+                  if (rk) {
+                    let host = UI.inspector.querySelector("[data-insp-body]");
+                    if (!host) {
+                      // 审查 P1-1（review-282b-a）：旧 innerHTML 整写隐式清场了模板静态占位
+                      // 子节点（index-005 检查器假验收数据）——keyed 体系外显式清一次（resizer
+                      // 除外，FB6 拖宽条跨路径存活），否则每次加载假数据与真块永久同屏。
+                      host = document.createElement("div");
+                      host.setAttribute("data-insp-body", "");
+                      [...UI.inspector.children].forEach((c) => { if (!(c.classList && c.classList.contains("inspector-resizer"))) c.remove(); });
+                      UI.inspector.appendChild(host);
+                    }
+                    rk(host, blocks);
+                    return;
                   }
                   // FB6：innerHTML 会吞掉检查器拖宽条（地基 initInspectors 挂的）——摘下回填。
                   // 件六：收起钮已挂 screen（骑缝会被 overflow 裁 + 拖宽跟随），不在本面板内，
                   // 不再需要摘回
                   const inspectorCtrls = [...UI.inspector.querySelectorAll(".inspector-resizer")];
-                  UI.inspector.innerHTML = html;
+                  UI.inspector.innerHTML = blocks.map((b) => b[1]).join("");
                   inspectorCtrls.forEach((ctrl) => UI.inspector.prepend(ctrl));
                 }
 
@@ -2401,13 +2475,94 @@
                                 function renderConversation() {
                   const pane = UI.convPane;
                   if (!pane) return;
+                  // #282 S4 选区守卫：全量重灌（textContent=""）会清掉用户正选中的文本（复制
+                  // 中帧到→选区丢）。非折叠选区锚在对话面板内时跳过本轮重建——timeline 只尾增，
+                  // 下一帧事件到达自然补渲；选区折叠/移走后恢复常态。零成本防复制打断。
+                  try {
+                    const sel = document.getSelection();
+                    if (sel && !sel.isCollapsed && sel.rangeCount && pane.contains(sel.anchorNode)) return;
+                  } catch (_) {}
                   // 件十九（2026-10-12 用户实测「发完消息墙跳到顶」根修）：全量重建（textContent=""）
                   // 会让滚动容器塌缩→scrollTop 归零。v3 用 top-anchor（距顶）：对话前缀稳定（历史只尾增），
                   // 距顶恢复天然免疫 bottom-anchor 的 clamp 折损（回涨高度把位置拖进贴底窗的链式失效）。
                   const scrollAnchor = UI.body ? { top: UI.body.scrollTop } : null;
                   openProcGrp = null;
-                  pane.textContent = "";
                   const s = curSession();
+                  // #282 四批 S4 深度 keyed：timeline 条目进稳定内层宿主 [data-conv-body]，单口按
+                  // eKey 对齐——未变条目零解析零触碰（心跳/空闲帧全链路零成本；流式帧只替换尾条；
+                  // 长对话滚动/选区/入场动画天然存活——选区守卫保留前排双保险）。wait-card 是体系外
+                  // 受管子节点（timer 挂内部 + appendChild 移位），永在宿主外作兄弟，单口非键清场
+                  // 扫不到（S3 resizer 同型防线）。rk 缺席回落旧全量重灌（零删）。
+                  const rk4 = window.__ccDeck005Reconcile;
+                  if (rk4) {
+                    let host = pane.querySelector("[data-conv-body]");
+                    if (!host) {
+                      host = document.createElement("div");
+                      host.setAttribute("data-conv-body", "");
+                      [...pane.children].forEach((c) => { if (!c.classList.contains("wait-card")) c.remove(); }); // 旧全量重灌残留清场（wait-card 保留，syncWaitCard 收口）
+                      pane.appendChild(host);
+                    }
+                    const noteHtml = (t) => { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(t ?? "")) ? " warn" : ""); d.textContent = t; return d.outerHTML; };
+                    if (!s) {
+                      rk4(host, [["empty", noteHtml(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")]]);
+                      syncWaitCard(false); // 审查 P2-2（review-282d-a）：取消选中窗口清残留卡+waitElapsedTimer（旧路径靠 textContent="" 清节点但漏计时器——本路径双清）
+                      return;
+                    }
+                    const trunc = S.logsTruncated.get(s.session_id) || 0;
+                    const list = S.timelines.get(s.session_id) || [];
+                    const desired = [];
+                    if (trunc > 0) desired.push(["trunc", noteHtml("更早的 " + trunc + " 条已截断 · 仅显示最近记录")]);
+                    let prevDay = "";
+                    let procBuf = null, procKey = "";
+                    let lastAiChain = false, lastAiTs = 0; // 件九 string 版：连续 AI 正文去重署名链（间隔 >5min/过程组/气泡断）
+                    const flushProc = () => {
+                      if (procBuf && procBuf.length) {
+                        const open = expanded.has("proc:" + procKey);
+                        desired.push(["pg:" + procKey, '<div class="procgrp' + (open ? " open" : "") + '" data-proc="' + esc(procKey) + '"><div class="proc-head" data-proc-toggle="' + esc(procKey) + '">' + (open ? "▾" : "▸") + " 过程 · " + procBuf.length + ' 步</div><div class="proc-body">' + procBuf.join("") + "</div></div>"]);
+                      }
+                      procBuf = null;
+                    };
+                    for (const e of list) {
+                      const dk = e.ts ? dayKey(e.ts) : "";
+                      if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; } // 日期分隔断组（件九：新分节重显署名行）
+                      const eh = entryHtml(e, s); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
+                      if (!eh) continue; // 开关关闭的条目（思考）不断组也不占位
+                      // 审查 P1-1（review-282d-a）：过程组判据补 data-role="proc"——#47 任务生命周期行
+                      //（trow task-life data-role="task"）同以 <div class="trow 开头，仅前缀判据会把它
+                      // 吞进过程组（默认收起不可见/proc-off 下隐藏）=回归 #47 常显特性。旧全量路径用
+                      // DOM 判据 dataset.role==="proc"，此处字符串等价判据。
+                      if (eh.startsWith('<div class="trow') && eh.indexOf('data-role="proc"') > -1) {
+                        if (!procBuf) { procBuf = []; procKey = eKey(e); }
+                        procBuf.push(eh);
+                        lastAiChain = false; // 件九：过程组是强分隔——组后新正文重显署名
+                      } else {
+                        flushProc();
+                        // 件九（层级降噪）string 版：cont 类注入首 class（entryHtml 的 ai 正文恒以
+                        // '<div class="message-ai"' 开头——精确前缀替换非模糊匹配）
+                        const isAi = eh.startsWith('<div class="message-ai"');
+                        const gapBreak = lastAiTs && e.ts && e.ts - lastAiTs > 300_000;
+                        let out = eh;
+                        if (isAi && lastAiChain && !gapBreak) out = out.replace('<div class="message-ai"', '<div class="message-ai cont"');
+                        if (isAi) { lastAiChain = true; lastAiTs = e.ts || lastAiTs; } else { lastAiChain = false; lastAiTs = 0; }
+                        desired.push([eKey(e), out]);
+                      }
+                    }
+                    flushProc();
+                    // W-PORT-A R-4：发送乐观回显气泡（时间线权威流之后、wait-card 之前；惰性超时清理同拍）
+                    echoSweep(s.session_id);
+                    const eqs = S.echo.get(s.session_id) || [];
+                    for (const eq of eqs) desired.push(["echo:" + eq.key, '<div class="msg-user-row msg-echo' + (eq.state === "fail" ? " echo-fail" : "") + '" data-echo-key="' + esc(eq.key) + '"><div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : "发送中…") + "</div></div>"]);
+                    if (s.status === "DONE" && s._terminal === "interrupted") desired.push(["note:stopped", noteHtml("已停止 · 生成在此中断")]);
+                    if (s.status === "ERROR" && s.last_error) desired.push(["note:err", noteHtml("⚠ " + oneLine(s.last_error))]);
+                    if (s.status === "ERROR" && s.auth_hint) desired.push(["note:auth", noteHtml("🔑 " + oneLine(s.auth_hint))]); /* #102 批 A：引擎登录态失效指引行 */
+                    rk4(host, desired);
+                    syncWaitCard(true);
+                    autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
+                    S.forceScroll = false; // 审查 P2-1（review-282d-a）：一次性强滚标志复位与旧路径对齐
+                    return;
+                  }
+                  // ---- rk 缺席兜底：旧全量重灌逐字节保留（零删） ----
+                  pane.textContent = "";
                   if (!s) { pane.appendChild(noteNode(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")); return; }
                   const trunc = S.logsTruncated.get(s.session_id) || 0;
                   if (trunc > 0) pane.appendChild(noteNode("更早的 " + trunc + " 条已截断 · 仅显示最近记录"));
@@ -2669,12 +2824,16 @@
                 // #164 增量追加统一入口：过程条目续入活动组（组头步数递增）、非过程条目断组；
                 // 插入位保持在 wait-card 之前（syncWaitCard 随后会把卡挪回末尾）
                 function appendEntryNode(pane, n, dayNode) {
-                  const wait = pane.querySelector(".wait-card[data-b2-wait]");
-                  const ins = (node) => { if (wait && wait.parentNode === pane) pane.insertBefore(node, wait); else pane.appendChild(node); };
+                  // #282 四批 S4：keyed 宿主 [data-conv-body] 在场时增量插入落宿主内——否则
+                  // 游离节点挂宿主外与下一帧 keyed 副本双渲染。宿主本身位于 wait-card 之前，
+                  // 落宿主尾=时间线末尾、wait-card 仍殿后。插入节点无 data-rk（下一帧单口以
+                  // 非键残留清场收敛为 keyed 副本，单帧收敛可接受）
+                  const rkHost = pane.querySelector("[data-conv-body]");
+                  const ins = (node) => { if (rkHost) rkHost.appendChild(node); else { const wait = pane.querySelector(".wait-card[data-b2-wait]"); if (wait && wait.parentNode === pane) pane.insertBefore(node, wait); else pane.appendChild(node); } };
                   if (dayNode) { ins(dayNode); openProcGrp = null; } // 新的一天：断组
                   if (!n) return;
                   if (n.dataset.role === "proc") {
-                    if (!(openProcGrp && openProcGrp.isConnected && openProcGrp.parentElement === pane)) {
+                    if (!(openProcGrp && openProcGrp.isConnected && openProcGrp.parentElement === (rkHost || pane))) {
                       openProcGrp = procGroupNode(n.dataset.x || "");
                       ins(openProcGrp);
                     }
@@ -2744,18 +2903,28 @@
                   return ts.some((t) => t && t.source === "board");
                 };
                 window.__ccDeck005SsotDraftOpen = window.__ccDeck005SsotDraftOpen || false;
+                // #282 S5 签名跳帧（N1 同款模式）：pane 级签名——html 未变的帧零 DOM 写
+                //（任务勾选瞬态/hover/折叠态逐帧存活），数据真变才重建（重建=语义变化点，
+                // 可接受）。签名挂 pane.dataset（节点被外部清空时签名随宿主消失=防陈旧跳帧）。
+                const htmlSig = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "h" + (h >>> 0).toString(36); };
+                function paneSigWrite(pane, sig, html) {
+                  if (pane.dataset.rkSig === sig && pane.childElementCount) return false;
+                  pane.dataset.rkSig = sig;
+                  pane.innerHTML = html;
+                  return true;
+                }
                 function renderTasks() {
                   const pane = UI.panes[1];
                   const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   const allTodos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
                   const visible0 = allTodos.filter((t) => !hiddenTaskKeys.has(s.session_id + "#" + t.id));
                   const ssot = ssotBoardMode();
                   // P2 切源：镜像主显；本地条目折叠组（本地草稿在镜像在场时非团队真相，降权）
                   const localTodos = ssot ? visible0.filter((t) => t.source !== "board") : [];
                   const todos = ssot ? visible0.filter((t) => t.source === "board") : visible0;
-                  if (!todos.length && !localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'; return; }
-                  if (!todos.length && localTodos.length) { pane.innerHTML = '<div class="pane-summary">任务进度 · 团队看板</div><div class="readonly-banner">团队看板暂无任务 · 本地草稿 ' + localTodos.length + ' 条（见下方折叠组）</div>' + ssotDraftHtml(localTodos); wireSsotDraft(); return; }
+                  if (!todos.length && !localTodos.length) { paneSigWrite(pane, "empty", '<div class="pane-summary">任务清单</div><div class="readonly-banner">暂无任务清单</div>'); return; }
+                  if (!todos.length && localTodos.length) { const lh = '<div class="pane-summary">任务进度 · 团队看板</div><div class="readonly-banner">团队看板暂无任务 · 本地草稿 ' + localTodos.length + ' 条（见下方折叠组）</div>' + ssotDraftHtml(localTodos); if (paneSigWrite(pane, "local:" + htmlSig(lh), lh)) wireSsotDraft(); return; } // 签名吃全量 html（折叠开合/行文变化必重建）
                   const doneAll = todos.filter((t) => t.status === "completed");
                   const doneWindow = doneAll.length && doneAll.every((t) => typeof t.updated_at === "number") ? doneAll.filter((t) => (t.updated_at || 0) >= Date.now() - 86400e3) : doneAll;
                   const doneList = doneWindow.slice(-15);
@@ -2781,8 +2950,7 @@
                   html += "</div>";
                   if (doneList.length < doneAll.length) html += '<div class="readonly-banner">已完成仅显示最近 15 条（共 ' + doneAll.length + " 条）</div>";
                   if (localTodos.length) html += ssotDraftHtml(localTodos);
-                  pane.innerHTML = html;
-                  if (localTodos.length) wireSsotDraft();
+                  if (paneSigWrite(pane, "full:" + htmlSig(html), html) && localTodos.length) wireSsotDraft();
                 }
                 // P0-4 本地草稿折叠组（SSOT P2：默认收起、点按展开、行内 ✕ 照旧）
                 function ssotDraftHtml(items) {
@@ -2895,15 +3063,48 @@
                 function renderArtifacts() {
                   const pane = UI.panes[2];
                   const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   const arts = Array.isArray(s.artifacts) ? s.artifacts : [];
-                  if (!arts.length) { pane.innerHTML = '<div class="pane-summary">输出物</div><div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>'; return; }
+                  if (!arts.length) { paneSigWrite(pane, "empty", '<div class="pane-summary">输出物</div><div class="readonly-banner">暂无输出物（会话写入文件后登记）</div>'); return; }
                   if (artOpenSid !== s.session_id) { artOpenDirs = new Set(); artOpenSid = s.session_id; artOpenInit = false; }
                   const layout = artLayoutItems(arts);
                   if (!artOpenInit && layout.groups.length) { artOpenDirs.add(layout.groups[0].dir); artOpenInit = true; }
+                  // #282 S5 keyed：稳定内层容器 [data-af-body]（一次创建，.artifact-browser
+                  // 类随宿主保留=CSS 祖先选择器不破）承载 keyed 子块——未变组（同目录同文件
+                  // 集同开合态）零触碰：在途下载的 meta 定点写不再被帧重建打成孤儿节点（原
+                  // 隐性丢失面），变化组单点替换。rk 缺席回落旧整树重建（零删）。
+                  const rk = window.__ccDeck005Reconcile;
+                  if (rk) {
+                    // 审查 P1-2（review-282b-a）：本 pane 双协议（空态走 paneSigWrite/内容态
+                    // 走 keyed）——keyed 路径必清空态签名，否则 empty→keyed→empty 序列下
+                    // 陈旧 rkSig 让第二次 empty 误跳帧，错显上一会话产物树。
+                    if (pane.dataset.rkSig !== undefined) delete pane.dataset.rkSig;
+                    let host = pane.querySelector("[data-af-body]");
+                    if (!host) {
+                      pane.textContent = "";
+                      host = document.createElement("div");
+                      host.className = "artifact-browser";
+                      host.setAttribute("data-af-body", "");
+                      pane.appendChild(host);
+                    }
+                    const desired = [];
+                    // #168 汇总条简化：N 文件 · M 文件夹 + 全部下载（cwd 已在 workspace 头，不再挂 chip）
+                    desired.push(["cap", '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>']);
+                    desired.push(["sum", '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>"]);
+                    if (s.artifacts_truncated) desired.push(["trunc", '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>']);
+                    layout.groups.forEach((g) => desired.push(["g:" + g.dir, artGroupNode(g, s.cwd, artOpenDirs.has(g.dir)).outerHTML]));
+                    if (layout.loose.length) {
+                      const loose = document.createElement("div");
+                      loose.className = "art-loose";
+                      for (const a of layout.loose) loose.appendChild(artFileNode(a, s.cwd, false));
+                      desired.push(["loose", loose.outerHTML]);
+                    }
+                    desired.push(["foot", '<div class="af-foot">仅收录文档、表格、图片与安装包等交付物 · ' + layout.files.length + " 项已登记 · 清单来自来源会话实时同步</div>"]);
+                    rk(host, desired);
+                    return;
+                  }
                   const wrap = document.createElement("div");
                   wrap.className = "artifact-browser";
-                  // #168 汇总条简化：N 文件 · M 文件夹 + 全部下载（cwd 已在 workspace 头，不再挂 chip）
                   wrap.innerHTML = '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>' +
                     '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>" +
                     (s.artifacts_truncated ? '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>' : "");
@@ -3110,7 +3311,7 @@
                 function renderMore() {
                   const pane = UI.panes[3];
                   const s = curSession();
-                  if (!s) { pane.innerHTML = '<div class="readonly-banner">未选择会话</div>'; return; }
+                  if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   let html = '<div class="detail-panel-list">';
                   // 上部：ctxMeter 水位计
                   if (s.context_usage) html += ctxMeterHtml(s);
@@ -3118,7 +3319,12 @@
                   // W-CTXFIX B3：压缩前状态摘要（有摘要才渲染，原生 details 默认折叠）
                   if (s.pre_compact_summary) html += '<details class="pcsum"><summary>压缩前状态摘要<span>已自动注入恢复</span></summary><pre>' + esc(s.pre_compact_summary) + "</pre></details>";
                   // 本回合时长 + 输入输出 tokens（原 .metric 改普通键值行）
-                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b>' + fmtDur(Math.max(0, Date.now() - s.turn_started_at)) + "</b><span>本回合已运行</span></div>";
+                  // #282 S5：时长行用占位符（签名剔时变成分），跳帧路径对 [data-turn-elapsed]
+                  // 定点写——WORKING 选中会话逐帧不再整 pane 重建（details 折叠态存活）
+                  const dStandby = s.status === "WORKING" && !isRealWorking(s); /* #291 审查 B-P2-2：详情与卡同屏一致 */
+                  const elapsedTxt = s.status === "WORKING" && !dStandby && s.turn_started_at ? fmtDur(Math.max(0, Date.now() - s.turn_started_at)) : "";
+                  if (dStandby) html += '<div class="kv-row"><b style="color:var(--dim)">待开工</b><span>已接单未开工或挂起（无近期工具活动）</span></div>';
+                  else if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-turn-elapsed>__ELAPSED__</b><span>本回合已运行</span></div>';
                   const u = s.usage;
                   if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + tokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + tokStr(u.input_tokens || 0) + " · 出 " + tokStr(u.output_tokens || 0) + "）</span></div>";
                   html += "</div>"; // 关闭 detail-panel-list
@@ -3182,7 +3388,20 @@
                   if (s.relay_session_id) html += '<div class="kv-row kv-row-copy" data-copy-relay-session-id="' + esc(s.relay_session_id) + '"><b>' + esc(String(s.relay_session_id).slice(0, 16)) + '…</b><span>SDK 会话</span><button class="kv-copy-btn" type="button" title="复制 SDK 会话 ID" aria-label="复制 SDK 会话 ID">⧉</button></div>';
                   html += "</div>"; // 关闭标识节
                   if (s.status === "DONE" || s.status === "ERROR") html += '<button class="danger-btn" type="button" data-session-delete style="margin-top:14px">删除会话</button>';
+                  // #282 S5 签名跳帧：elapsed 占位符不进签名（时变行定点写），其余内容未变=零重建。
+                  // 审查 P2（review-282b-b）：占位文本不用字符串 replace 回填——pre_compact_summary
+                  // 含 __ELAPSED__ 字面量时会首错替换（时长行裸显占位/摘要被吃）；统一 querySelector
+                  // 定点写（写路径与跳帧路径同款，三行收口）
+                  const sig = "more:" + htmlSig(html);
+                  if (pane.dataset.rkSig === sig && pane.childElementCount) {
+                    const el = pane.querySelector("[data-turn-elapsed]");
+                    if (el && elapsedTxt) el.textContent = elapsedTxt;
+                    return;
+                  }
+                  pane.dataset.rkSig = sig;
                   pane.innerHTML = html;
+                  const elFresh = pane.querySelector("[data-turn-elapsed]");
+                  if (elFresh) elFresh.textContent = elapsedTxt;
                 }
                 function confirmDelete() {
                   const s = curSession();
@@ -4317,14 +4536,17 @@
 
                   // #160 置灰看门狗（旧壳 #96 同机制）：renderMyList 纯事件驱动——DONE/ERROR
                   // 会话静默超阈值后不再有事件触发重渲，idleDimmed 判定再对 .idle 也挂不上。
-                  // 60s 逐行对账：DOM 行的 .idle 与重算结果不符才整列重渲——过滤/分组口径
-                  // 天然对齐（不在 DOM 的行不参与），稳态零开销；跨过阈值的时刻本就无交互。
+                  // #282 S7：S1 keyed 地基上失配改单卡类切换（清单 §2.1 建议口径）——idle 只
+                  // 拼卡根 class（markup 单点），类切换与重建产物等价；不再整列重渲（滚动/
+                  // hover 零扰动）。60s 逐行对账：过滤/分组口径天然对齐（不在 DOM 的行不参与），
+                  // 稳态零开销；跨过阈值的时刻本就无交互。
                   setInterval(() => {
                     if (!S.hasSnapshot) return;
                     for (const card of UI.sessionList.querySelectorAll(".queue-card[data-session-card]")) {
                       const s = S.sessions.get(card.dataset.sessionCard);
                       if (!s) continue; // 删除竞态中的孤儿行交给 onDeleted/observer 收口
-                      if (card.classList.contains("idle") !== idleDimmed(s)) { renderMyList(); return; }
+                      const dim = idleDimmed(s);
+                      if (card.classList.contains("idle") !== dim) card.classList.toggle("idle", dim);
                     }
                   }, 60000);
                 }
