@@ -16,7 +16,7 @@ const fake = createServer((req, res) => {
   }
   res.writeHead(404).end(); // A 态：无版本接口（老 relay 形状）
 });
-await new Promise((r) => fake.listen(PORT, "127.0.0.1", r));
+await new Promise((r) => fake.listen(PORT, r)); // 通配绑定=与 relay 同绑定面，保证 EADDRINUSE 稳定复现
 console.log(`[sandbox] mode=${mode} 假占口者监听 :${PORT}`);
 
 const dataDir = mkdtempSync(join(tmpdir(), "296sandbox-"));
