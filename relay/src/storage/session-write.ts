@@ -136,3 +136,37 @@ export function shadowSessionDiff(
 export function resetSessionWriteWarnForTest(): void {
   warned = false;
 }
+
+// ---------- #292-B4b：boot 对账哨（auto 态骨架，零行为切换的安全步） ----------
+// CCR_BOOT_FROM = events（缺省，现行为）| auto（对账哨：boot 后库行 vs 回放卡差异
+// 日志——为切源（db 优先 adopt）提供生产对账数据，不改任何 adopt 行为）| db（切源
+// 态，接任实现：库行转 ReplayedSession 形状优先喂 adopt，回放兜底缺行——依赖 B4c
+// 导入器停灌后库行才具备权威性，灰度序=db 开关最后翻）。
+export type BootFromMode = "events" | "auto" | "db";
+
+export function bootFromMode(): BootFromMode {
+  const raw = process.env.CCR_BOOT_FROM;
+  if (raw === "auto" || raw === "db") return raw;
+  return "events";
+}
+
+/** boot 对账：session 表行 vs 回放卡（adopt 前调用）。差异分三类日志（库多行=直写
+ *  落了但 events 已压缩掉对应卡；回放多卡=库 lag（帧节流/降级窗）；status 不一致=
+ *  切源风险面清单）。auto 态只记日志不动作——生产跑一段零差异后再翻 db。 */
+export function bootReconcile(
+  port: StoragePort,
+  replayedIds: Set<string>,
+): { dbOnly: string[]; replayOnly: string[]; statusMismatch: string[] } {
+  const rows = port.query<{ id: string; status: string }>("SELECT id, status FROM session");
+  const dbIds = new Set(rows.map((r) => r.id));
+  const dbOnly = [...dbIds].filter((id) => !replayedIds.has(id));
+  const replayOnly = [...replayedIds].filter((id) => !dbIds.has(id));
+  const statusMismatch: string[] = [];
+  const r = { dbOnly, replayOnly, statusMismatch };
+  if (dbOnly.length === 0 && replayOnly.length === 0) {
+    console.log(`[boot-reconcile] 库↔回放零差异（${rows.length} 会话）——切源（CCR_BOOT_FROM=db）风险面清零`);
+  } else {
+    console.warn(`[boot-reconcile] 库多 ${dbOnly.length} 行（events 已压缩或直写先行）/回放多 ${replayOnly.length} 卡（库 lag：帧节流/降级窗）——切源前需收敛；样本：dbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")}`);
+  }
+  return r;
+}
