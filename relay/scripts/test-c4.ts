@@ -144,8 +144,36 @@ console.log("§D 降级：");
   process.env.CCR_DATA_DIR = savedData;
 }
 
+// §F（PM 审查 FK 陷阱钉住）：冷启新库首帧写——quiet 建库无 group 行+直写带 project_gid
+// →group_id NULL 化落行（零 FK 撞）；组行在位后 REPLACE 自愈归因
+{
+  process.env.CCR_DATA_DIR = SB("../data/test-c4-fk/"); // 新库（quiet 首建=无导入）
+  const { ensureStoreQuiet } = await import("../src/storage/read-mode.js");
+  const dirsF = resolveDirs();
+  const portF = ensureStoreQuiet({ ...dirsF, dataDir: process.env.CCR_DATA_DIR });
+  const stF = { session_id: "ext-c4-fk-0001", relay_session_id: "c4-fk-0001", project_gid: "pg-not-exist", cwd: "/tmp/fk", status: "WORKING", updated_at: Date.now(), started_at: Date.now() } as never;
+  sw.shadowWriteSession(stF); // 首帧：组不在库→NULL 化
+  const rowF = portF.query<{ id: string; group_id: string | null }>("SELECT id, group_id FROM session WHERE id = ?", ["ext-c4-fk-0001"]);
+  assert4(rowF.length === 1 && rowF[0]?.group_id === null, `F1 冷启新库首帧写：未知组 NULL 化落行零 FK 撞（实 group_id=${rowF[0]?.group_id ?? "无行"}）`);
+  // 组行在位后 REPLACE 自愈归因——组行走真导入器（import-org）灌库（手拼 INSERT 撞
+  // NOTNULL 的坑实录：DML 一律经源码语句/导入器，不手拼）
+  const { writeFileSync: wfF } = await import("node:fs");
+  const orgDirF = process.env.CCR_ORG_DIR!;
+  wfF(join(orgDirF, "projects.json"), JSON.stringify({ groups: [{
+    id: "pg-not-exist", project_id: undefined, name: "FK 组", anchor_dir: "/tmp/fk-g", status: "active", tier: "轻立项",
+    single_card: false, headcount: [], role_defaults: {}, created_at: Date.now(), updated_at: Date.now(),
+  } satisfies never] }, null, 2));
+  const { ensureStore } = await import("../src/storage/read-mode.js");
+  ensureStore(resolveDirs()); // 读前触发=import-org 灌组行
+  const stF2 = { ...stF, updated_at: Date.now() } as never;
+  sw.shadowWriteSession(stF2);
+  const rowF2 = portF.query<{ group_id: string | null }>("SELECT group_id FROM session WHERE id = ?", ["ext-c4-fk-0001"]);
+  assert4(rowF2[0]?.group_id === "pg-not-exist", `F2 组行在位后 REPLACE 自愈归因（实 ${rowF2[0]?.group_id}）`);
+  process.env.CCR_DATA_DIR = SB("../data/test-c4-data/");
+}
+
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
-for (const d of ["../data/test-c4-org/", "../data/test-c4-data/"]) {
+for (const d of ["../data/test-c4-org/", "../data/test-c4-data/", "../data/test-c4-fk/"]) {
   try { rmSync(SB(d), { recursive: true, force: true }); } catch {}
 }
 process.exit(fail > 0 ? 1 : 0);
