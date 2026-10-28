@@ -54,11 +54,38 @@ function withSecHeaders(res: Response): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
+
+// ---------- #CORSBRIDGE 云桥浏览器通道 CORS（1028 Nova 联不通根修） ----------
+// 手机 App 无同源策略；网页/Nova（webview）fetch 云桥必过 CORS——原响应无
+// ACAO 头=浏览器把 401/400/200 全报「网络错误」（用户 ×49 实锤），轮询降级
+// 通道（为公司代理掐 WS 设计）在浏览器域整体失效。桥帧为 nacl.box 密文+token
+// 鉴权，开放 CORS 不减安全面（预检放行 content-type 即可）。
+const CLOUD_PATHS = new Set(["/cloud", "/cloud-poll", "/wan"]);
+function cloudCorsHeaders(req: Request): Record<string, string> {
+  return {
+    "access-control-allow-origin": req.headers.get("origin") ?? "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "access-control-max-age": "86400",
+  };
+}
+function cloudCorsWrap(req: Request, res: Response): Response {
+  try { const u = new URL(req.url); if (!CLOUD_PATHS.has(u.pathname)) return res; } catch { return res; }
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(cloudCorsHeaders(req))) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    return withSecHeaders(await routeFetch(req, env));
+    if (req.method === "OPTIONS") {
+      try { const u = new URL(req.url); if (CLOUD_PATHS.has(u.pathname)) return new Response(null, { status: 204, headers: cloudCorsHeaders(req) }); } catch {}
+    }
+    return cloudCorsWrap(req, withSecHeaders(await routeFetch(req, env)));
   },
 };
+
+
 
 async function routeFetch(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url);
