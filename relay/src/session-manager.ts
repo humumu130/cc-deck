@@ -4687,7 +4687,7 @@ export class SessionManager {
     let bestIsExternal = false; // #294 PM 保活断点修复：managed PM（SDK 面板开会话）同样可为值守——external 优先、同类取最近
     for (const s of this.sessions.values()) {
       if (s.state.historical) continue;
-      if (!s.state.external && !this.managedSessions.has(s.state.session_id)) continue; // external 或 managed（SDK spawn 的 PM 面板会话）
+      // #294：不筛形态——external（终端开）和 SDK spawn 的（managed/面板开）都可当值守 PM。historical 仍排除。
       if (this.leaderId && s.state.session_id === this.leaderId) continue;
       const pid = s.state.cli_pid;
       if (!pid) continue;
