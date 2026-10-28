@@ -394,6 +394,7 @@ export interface SessionState {
   cli_pid?: number;
   elapsed_hint?: number;
   turn_started_at?: number;
+  last_tool_use_at?: number; // #291 帧分类判活：0=从未有工具活动（接单未开工）；正数=最近工具帧 ts；undefined=老 relay 未下发（降级干活）
   usage?: TokenUsage;
   context_usage?: number; // 当前上下文水位 tokens（最后一条 assistant 的 usage；水位条数据源）
   context_limit?: number; // 上下文窗口上限（relay 按模型下发；缺省兜底 200k）
@@ -1107,4 +1108,23 @@ export function pairErrNote(raw: string | null, fails: number): string {
   else if (raw.includes("无效")) head = "配对码无效 · 请核对电脑端弹出的 8 位码";
   else return raw;
   return fails >= 3 ? `${head}\n已连续输错 ${fails} 次 · 连续 5 次将暂停配对 10 分钟` : head;
+}
+
+/**
+ * #291 帧分类判活（心跳≠工作，用户 1028 定立·方案升级版）：WORKING 会话分「真干活中」
+ * 与「待命（已接单·待开工/挂起）」。主判据=turn 生命周期直报（turn_started_at 随终态
+ * 清算），帧分类（last_tool_use_at 10min 新鲜窗）为兜底细分——与 web 端
+ * session-domain isRealWorking 逐句同源（三端口径一致，测试锚互锁）。
+ *   干活中 = 近 10min 有工具帧 | 无工具帧数据但活跃 turn（managed spawn 起手窗）
+ *          | 双字段皆缺（老 relay 未下发——降级按干活，不误伤）
+ *   待命   = 其余 WORKING（0=接单未开工；有值超窗=挂起）
+ */
+export function isRealWorking(s: { status?: string; last_tool_use_at?: number } | null | undefined, now: number = Date.now()): boolean {
+  if (!s || s.status !== "WORKING") return false;
+  const FRESH_MS = 10 * 60 * 1000;
+  const t = s.last_tool_use_at;
+  const at = typeof now === "number" ? now : Date.now();
+  if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
+  if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
+  return false; // 0=从未有工具活动（接单未开工）；有值但超窗（挂起）——同待命
 }

@@ -1085,6 +1085,14 @@ export class SessionManager {
       this.emitChainAudit("transition-illegal", detail, sid);
     }
     s.state.status = next;
+    // #291 turn 生命周期补清算：终态（DONE/ERROR）时清 turn_started_at——
+    // 「WORKING ⟔ 活跃 turn」判活的主判据半边。不清的残留面：终态卡字段陈挂 +
+    // 后续无 turn 翻活路径（重启接管/自愈等 setExternalStatus 不带 turnStartedAt）
+    // 复用 WORKING 态时旧值被误读成「活跃 turn」=接单未开工形态误判干活中。
+    // WAITING 不清（权限问询是 turn 内挂起，回来继续跑）；帧面：清算后调用方
+    // SESSION_UPDATED 的条件携带自然不带，端上 merge 不动本地→SNAPSHOT/重连收敛
+    //（假翻活路径只发生在 relay 重启后=端上必重连收 SNAPSHOT，无长窗缝隙）
+    if (next === "DONE" || next === "ERROR") s.state.turn_started_at = undefined;
   }
 
   /** [W-SMIMPL ①] seatGate 事实注入（W-SMDESIGN 候选 1）：在册性/外部性/Leader 三轴
@@ -1745,6 +1753,7 @@ export class SessionManager {
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
       remote_mode: false,
+      last_tool_use_at: 0, // #291：0=从未有工具活动——hook 心跳/唤醒消息不刷此键，「接单未开工」可判（undefined 才是老 relay 降级档）
       ...(opts?.engine ? { engine: opts.engine } : {}),
       ...(opts?.provider ? { engine_provider: opts.provider } : {}),
     };
@@ -2503,6 +2512,10 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return;
     const entry: LogEntry = { ts: Date.now(), kind, text, tool, ...meta };
+    // #291 帧分类判活：external 咽喉口同口径——工具帧刷新、心跳帧（system 回显/
+    // user_message 注入）不刷。与 managed onLog 写点成对，别处裸 push logs 不存在
+    //（bridge 全部日志帧都过此口；扫描活动帧 bridge.ts:624 亦然）
+    if (kind === "tool_use" || kind === "tool_result") s.state.last_tool_use_at = entry.ts;
     // #73 同 id 原地替换（与托管 onLog 同语义）：外部 CLI 转录把同一条消息的流式
     // 增长快照逐行落盘，bridge 按 message.id 识别增长链后复用稳定 id——中间快照
     // 替换既有条目而非新增，时间线不再增量刷屏。替换不占 500 条帽（新条目才计）
@@ -2746,6 +2759,7 @@ export class SessionManager {
         action_summary: "启动中",
         started_at: Date.now(),
         turn_started_at: Date.now(),
+        last_tool_use_at: 0, // #291：0=从未有工具活动（spawn 起手 turn 在跑但还没吐工具帧——按真干活处理由端上 turn 分支兜住）
         updated_at: Date.now(),
         stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
         // #17 雇员身份随卡落位：Leader/派单 worker/随手办置 true（spawn 传
@@ -3169,6 +3183,9 @@ export class SessionManager {
             }
           }
           const entry: LogEntry = { ts: Date.now(), kind, text, ...logMeta };
+          // #291 帧分类判活：工具帧（tool_use/tool_result）刷新最近工具活动时刻——
+          // 心跳类（user_message/system 回显）不刷，「WORKING 但零工具活动」由端上分层
+          if (kind === "tool_use" || kind === "tool_result") managed.state.last_tool_use_at = entry.ts;
           // 同 id 流式块原地替换，避免时间线被增量刷屏
           const i = logMeta.id ? managed.logs.findIndex((e) => e.id === logMeta.id) : -1;
           if (i >= 0) managed.logs[i] = entry;

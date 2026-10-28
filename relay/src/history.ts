@@ -239,12 +239,14 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       }
       case "SESSION_ERROR": {
         s.status = "ERROR";
+        s.turn_started_at = undefined; // #291：终态清算与 transition 同口径（回放面）
         s.last_error = (e.payload as { message: string }).message;
         rs.logs.push({ ts: e.ts, kind: "system", text: `错误: ${s.last_error}` });
         break;
       }
       case "SESSION_DONE": {
         s.status = "DONE";
+        s.turn_started_at = undefined; // #291：终态清算与 transition 同口径（回放面）
         const p = e.payload as { terminal_reason: string; duration_ms: number; stats: SessionState["stats"] };
         s.done_reason = p.terminal_reason;
         s.duration_ms = p.duration_ms;
@@ -264,6 +266,9 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         const li = p.id ? rs.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs.logs[li] = entry;
         else rs.logs.push(entry);
+        // #291 帧分类判活（回放恢复）：工具帧恢复最近工具活动时刻——重启后
+        // last_tool_use_at 不归零（老卡 undefined→首个工具帧起算，降级窗内不误伤）
+        if (p.kind === "tool_use" || p.kind === "tool_result") s.last_tool_use_at = e.ts;
         if (rs.logs.length > 1500) rs.logs.splice(0, rs.logs.length - 1500); // W-INJECT④：对齐 MAX_LOGS_PER_SESSION
         break;
       }

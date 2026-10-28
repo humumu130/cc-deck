@@ -252,7 +252,13 @@ export interface SessionState {
   external?: boolean;         // true = 用户自开 CLI 会话（hooks 桥接），仅单向可见 + 远程审批
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
-  turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
+  turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）；#291 起随终态（DONE/ERROR）清算——「WORKING ⟔ 活跃 turn」直报判活的主判据
+  // #291 帧分类判活（心跳≠工作）：最近一次工具活动帧（tool_use/tool_result）时刻。
+  // 0 = 建卡以来从未有过工具活动（「已接单·待开工」形态的负空间——hook 心跳/消息
+  // 注入/状态回显都不刷此字段）；正数 = 最近工具帧 ts（端上配 10min 新鲜窗判真活）。
+  // undefined = 老 relay 未下发/回放未恢复——端上降级按干活中处理（不误伤），SNAPSHOT
+  // 全量下发（cloneState），增量面不携带（端上收 SESSION_LOG 工具帧本地刷新）
+  last_tool_use_at?: number;
   usage?: TokenUsage;         // 会话累计 token 用量（统计页口径）
   context_usage?: number;     // 当前上下文水位 tokens（最后一条 assistant 的 usage：input+缓存读+缓存写；水位条数据源）
   context_limit?: number;     // 上下文窗口上限（contextLimitOf 按模型算出后随 state 持久下发，SNAPSHOT 也带上）
