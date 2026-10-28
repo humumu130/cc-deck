@@ -193,6 +193,20 @@ if [ "$SKIP_APP" != "1" ]; then
   face_ver_check "②" "$NOVA_WC/index.html"
   rm -rf "$NOVA_WC/preview" "$NOVA_WC/site" "$NOVA_WC/.wrangler"
   rsync -a --delete "${RSYNC_EX[@]}" "$SRC/" "$NOVA_WC/"
+  # 1028 #294 补丁：Nova relay.mjs 在 Resources/resources/ 子目录——deploy 面②此前只同步
+  # web-console 不同步 relay，导致 TypeScript 修复（需 build-plugin.mjs 重建 bundle）部署后
+  # Nova 仍跑旧 relay（PM 保活不生效根因）。这里补一行：cc-plugins 的 relay.mjs 同步到 Nova。
+  NOVA_RELAY_DIR='/Applications/CC Deck Nova.app/Contents/Resources/resources'
+  NOVA_RELAY="$NOVA_RELAY_DIR/relay.mjs"
+  if [ -f "$COPY/scripts/relay.mjs" ]; then
+    mkdir -p "$NOVA_RELAY_DIR"
+    if cmp -s "$COPY/scripts/relay.mjs" "$NOVA_RELAY"; then
+      ok "面② relay.mjs 已同步（无变化）"
+    else
+      cp "$COPY/scripts/relay.mjs" "$NOVA_RELAY"
+      ok "面② relay.mjs 已同步（⚠️ 需重启 Nova 才生效）"
+    fi
+  fi
   ok "面② rsync 完成（重启 Nova 进程后运行面才换新）"
 else
   echo "⏭️  S2 跳过（--skip-app）"
