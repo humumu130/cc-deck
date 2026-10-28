@@ -584,6 +584,13 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                   <Text style={s.pairBtnT}>
                     {snap.cloudBusy ? "配对中…" : cloudEntry?.cloud ? "重新配对云桥" : "配对云桥"}
                   </Text>
+                  {/* #conn-ux-P0-4 置灰原因行：cloudReady 三条件（有云配置+当前活动
+                      云源+LAN 已连）缺一即置灰——给一行人话，消灭「按钮为什么点不了」 */}
+                  {!snap.cloudBusy && !cloudReady ? (
+                    <Text style={{ fontSize: 10, marginTop: 4, color: c.dim }}>
+                      {!cloudEntry?.cloud ? "需先在同一 WiFi 直连这台电脑后再配对" : cloudEntry.id !== activeId ? "切到该云源所在连接后再配对" : !snap.connected ? "电脑端未连接，先连上再配对" : "当前非直连通道，暂不能配对"}
+                    </Text>
+                  ) : null}
                 </Pressable>
                 {cloudEntry?.cloud ? (
                   <Pressable
