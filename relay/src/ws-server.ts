@@ -1,9 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { connect as netConnect } from "node:net"; // #296 让位守望（客户端模式重探）
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
+// #296 relay 单通道收敛：版本单源+让位决策（纯函数，沙盒断言三态覆盖）
+import { resolveRelayVersion, probeOccupant, decideYield } from "./version.js";
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
 import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
@@ -531,7 +534,7 @@ export function startServer(
       const hello = opts.lanAuthHello?.();
       if (!hello) { res.writeHead(501).end(); return; }
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" })
-        .end(JSON.stringify({ ok: true, relay_dev: hello.relay_dev, nonce: hello.nonce }));
+        .end(JSON.stringify({ ok: true, relay_dev: hello.relay_dev, nonce: hello.nonce, relay: resolveRelayVersion() })); // #296 版本随 hello 自报（旧端忽略未知字段）
       return;
     }
     if (url.pathname === "/api/lan-auth" && req.method === "POST") {
@@ -629,6 +632,20 @@ export function startServer(
     }
     // 领取配对码（--pair CLI / /cc-deck-pair 用）：loopback + bridgeToken，
     // 与 /bridge/hook 同信任模型（能读本机 bridge.json 的进程本就可信）
+    // #296 ①版本自报：GET /api/version（loopback + x-bridge-token 鉴权，同 pair-issue
+    // 口径）。消费方：让位协议探测（同 dataDir token 相同→互探可达；异 dataDir 403→
+    // 探测方判 no-interface=语义正确）；Nova 壳启动探测/一键接管；诊断面板。
+    if (req.method === "GET" && url.pathname === "/api/version") {
+      const remote = req.socket.remoteAddress ?? "";
+      const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+      if (!isLoopback || (req.headers["x-bridge-token"] ?? "") !== cfg.bridgeToken) {
+        res.writeHead(403).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify({ ok: true, relay: resolveRelayVersion(), ts: Date.now() }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/pair-issue") {
       const remote = req.socket.remoteAddress ?? "";
       const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
@@ -1133,6 +1150,9 @@ export function startServer(
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
+          // #296 ①版本可见：SNAPSHOT 自报 relay 版本（旧客户端忽略未知字段=向前兼容；
+          // 新客户端/诊断面据此展示「源 relay vX」）
+          relay_version: resolveRelayVersion(),
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
@@ -1297,10 +1317,44 @@ export function startServer(
   // #2025-10 架构审查 C 路发现：无 error 监听 → EADDRINUSE 被吞 → 僵尸 relay
   // （已持锁但不监听端口不退出）。加 error 监听器：端口冲突时打日志并 process.exit(1)，
   // 让 launchd KeepAlive 重启出干净实例（而非僵尸共存）。
+  // #296 ②让位协议（用户 1028 拍板「谁新谁赢」）：绑口失败不再盲退——探测占用者
+  // 版本再决策（decideYield 纯函数单源，沙盒断言覆盖三态）。
+  //   yield（占用者 ≥ 己）：内嵌形态（CCR_PARENT_PID=壳子进程）静默退（壳监督线程
+  //   「端口被外部占=不重拉」既有逻辑接管，壳直连占用者）；插件/独立形态转客户端
+  //   模式继续——不退进程、不触发 onReady（不广播 mDNS/不写 pid/不覆盖 bridge.json），
+  //   云通道与桥面照常，仅不再服务本端口。
+  //   contend（占用者更旧/无版本接口/探不通）：warn 指引（重启 Claude Code 或壳一键
+  //   接管）+ 压 5s 退（防插件 supervisor 热旋重拉烧 CPU，同 index.ts 单实例锁口径）。
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`[relay] 端口 ${cfg.port} 被占用（可能已有实例），退出让 launchd 重启。`);
-      process.exit(1);
+      console.error(`[relay] 端口 ${cfg.port} 被占用，探测占用者版本（#296 让位协议）…`);
+      probeOccupant(cfg.port, cfg.bridgeToken).then((probe) => {
+        const own = resolveRelayVersion();
+        const decision = decideYield(own, probe);
+        if (decision.action === "yield") {
+          console.log(`[relay] 让位：${decision.reason}`);
+          if (process.env.CCR_PARENT_PID) {
+            console.log("[relay] 内嵌形态：端口已由更新 relay 服务，本进程静默退出（壳将直连占用者）");
+            process.exit(0);
+          }
+          console.log(`[relay] 客户端模式继续（不再服务 ${cfg.port}）：${decision.reason}；本进程云通道/桥面照常`);
+          // 审查 A/B-P1：客户端模式不重听端口——占用者退场后本进程持 dataDir 锁占位
+          // 不服务=僵尸。60s 重探端口：占用者已退即 exit(0)，让托管方（壳 supervisor/
+          // launchd KeepAlive/bat 循环）重拉干净实例重新 bind（exit 0 属 KeepAlive 重拉
+          // 语义；60s 间隔无热旋）。占用者仍在则继续客户端模式等下一拍。
+          const yieldWatch = setInterval(() => {
+            try {
+              const probe = netConnect({ port: cfg.port, host: "127.0.0.1", timeout: 800 });
+              probe.on("error", () => { clearInterval(yieldWatch); console.log("[relay] 让位守望：占用者已退场，退出待托管方重拉"); process.exit(0); });
+              probe.on("connect", () => probe.destroy());
+            } catch { /* 探测异常忽略等下拍 */ }
+          }, 60_000);
+          return; // 不退进程：listen 已失败，onReady 不触发，其余启动序照常
+        }
+        console.warn(`[relay] ${decision.reason}`);
+        setTimeout(() => process.exit(1), 5_000);
+      });
+      return;
     }
     console.error(`[relay] server error: ${err.message}`);
     process.exit(1);

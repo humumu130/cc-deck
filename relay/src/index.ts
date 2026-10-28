@@ -65,6 +65,15 @@ process.on("unhandledRejection", (reason) => {
       // 压 5s 再退：supervisor bat 循环重启，立即退出会热旋（每秒拉起即退烧 CPU）。
       // 顶层 await 永挂阻断后续初始化，5s 后由 timer 收走进程
       console.log(`[relay] 数据目录已被 pid=${prev} 的 relay 占用（单实例锁），5s 后让位退出`);
+      // #296 让位可观测（行为不变，仅版本透视）：同 dataDir 双开（插件 vs 壳内嵌）
+      // 被锁先拦、走不到 EADDRINUSE 让位协议——此处探测占用者版本入日志，供「一键
+      // 接管」与人工排查判断谁在压口（探测后台跑不阻塞让位，日志晚到无妨）。
+      void import("./version.js").then(async (v) => {
+        const probe = await v.probeOccupant(cfg.port, cfg.bridgeToken);
+        const occ = probe.kind === "version" ? `v${probe.version}` : probe.kind === "no-interface" ? "旧版（无版本接口）" : "未知（探测不通）";
+        const own = v.resolveRelayVersion();
+        console.log(`[relay] #296 占用者透视：${occ}（本版 ${own}，端口 ${cfg.port}）${probe.kind === "version" && v.isRelayNewer(own, probe.version) ? "——占用者为旧版，可让 CC Deck 壳一键接管" : ""}`);
+      }).catch(() => {});
       setTimeout(() => process.exit(0), 5_000);
       await new Promise<never>(() => {});
     }

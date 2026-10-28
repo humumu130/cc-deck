@@ -1037,12 +1037,53 @@ function connectLan(ctx) {
           host.title = "";
           host.dataset.diag = "ok";
         } else {
-          host.textContent = "未检测到本机 relay 服务";
-          host.title = "";
+          // #296 ④失败原因透出（排障不再静默）；③一键接管行（occupant.takeover=true 时）
           host.dataset.diag = "none";
+          host.title = "";
+          // 审查 A-P2：textContent 化（诊断行不拼 HTML，杜绝注入口）
+          host.textContent = "未检测到本机 relay 服务" + (lastProbeFail ? " · " + lastProbeFail : "");
         }
       }
-      function paintRelayDiag() { document.querySelectorAll("[data-relay-diag]").forEach((el) => paintRelayDiagRow(el)); }
+      // #296 ③一键接管：occupant 透视（壳 record_occupant_if_serving 探测结果经
+      // relay-takeover-available 事件推来 / relay_status.occupant 轮询兜底）
+      let takeoverOccupant = null;
+      async function doRelayTakeover(btn) {
+        const core = window.__TAURI__ && window.__TAURI__.core;
+        if (!core || typeof core.invoke !== "function") return;
+        if (btn) { btn.disabled = true; btn.textContent = "接管中…"; }
+        try {
+          await core.invoke("relay_takeover");
+          takeoverOccupant = null;
+          if (btn) btn.textContent = "已接管";
+          const again = await probeLocalRelay();
+          if (again) applyLocalProbe(again);
+          if (typeof toast === "function") toast("已接管本机 relay（旧实例已停，内嵌新版服务中）");
+        } catch (e) {
+          if (btn) { btn.disabled = false; btn.textContent = "一键接管"; }
+          if (typeof toast === "function") toast("接管失败：" + String((e && e.message) || e).slice(0, 90));
+        }
+      }
+      // 审查 A-P1 修正：接管行独立于 diag 分支——旧 relay 健康占口（diag=ok，前端正连着
+      // 它）是主场景，按钮必须可达；节点重建（createTextNode/createElement，无 HTML 拼接）
+      function paintTakeoverRow(host) {
+        let row = host.querySelector("[data-relay-takeover]");
+        const occ = takeoverOccupant;
+        if (!occ || !occ.takeover) { if (row) row.remove(); return; }
+        if (!row) {
+          row = document.createElement("span");
+          row.dataset.relayTakeover = "1";
+          row.style.cssText = "margin-left:10px";
+          const btn = document.createElement("button");
+          btn.className = "secondary-btn"; btn.type = "button";
+          btn.style.cssText = "margin:0 6px;padding:2px 10px";
+          btn.textContent = "一键接管";
+          btn.addEventListener("click", () => { void doRelayTakeover(btn); });
+          row.appendChild(document.createTextNode("检测到旧版 relay 占用端口" + (occ.occupant_version ? "（v" + occ.occupant_version + "）" : "（版本未知）")));
+          row.appendChild(btn);
+          host.appendChild(row);
+        }
+      }
+      function paintRelayDiag() { document.querySelectorAll("[data-relay-diag]").forEach((el) => { paintRelayDiagRow(el); paintTakeoverRow(el); }); }
       async function refreshRelayDiag() {
         paintRelayDiag();
         if (relayDiagBusy) return;
@@ -1466,21 +1507,32 @@ function connectLan(ctx) {
         } catch (_) {}
         return null;
       })();
+      // #296 ④排障黑洞根修：探活失败不再静默 null——原因留档（诊断行显示 + healTimer
+      // 排障），成功时清空。原因分类：invoke 异常 / HTTP 非 2xx / 响应形状坏 / 超时
+      // （TimeoutError）/ 连接拒绝（TypeError=fetch 网络层）。
+      let lastProbeFail = "";
       async function probeLocalRelay() {
         if (shellProbe) {
           try {
             const j = await shellProbe();
-            return j && j.ok && j.port && j.token ? { port: Number(j.port), token: String(j.token), lanIp: String(j.lan_ip || "") } : null;
-          } catch (_) { return null; }
+            if (j && j.ok && j.port && j.token) { lastProbeFail = ""; return { port: Number(j.port), token: String(j.token), lanIp: String(j.lan_ip || "") }; }
+            lastProbeFail = j && j.ok === false ? "local-info 返回 ok:false" : "local-info 响应缺 port/token";
+            return null;
+          } catch (e) { lastProbeFail = "probe_local 调用异常：" + String((e && e.message) || e).slice(0, 80); return null; }
         }
         if (!isHttpPage) return null;
         const port = location.port || (location.protocol === "https:" ? "443" : "80");
         try {
           const r = await fetch("http://127.0.0.1:" + port + "/local-info", { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined });
-          if (!r.ok) return null;
+          if (!r.ok) { lastProbeFail = "local-info HTTP " + r.status; return null; }
           const j = await r.json().catch(() => null);
-          return j && j.ok && j.token ? { port: Number(j.port) || Number(port), token: String(j.token), lanIp: String(j.lan_ip || "") } : null;
-        } catch (_) { return null; }
+          if (j && j.ok && j.token) { lastProbeFail = ""; return { port: Number(j.port) || Number(port), token: String(j.token), lanIp: String(j.lan_ip || "") }; }
+          lastProbeFail = "local-info 响应形状坏";
+          return null;
+        } catch (e) {
+          lastProbeFail = ((e && e.name) === "TimeoutError") ? "探活超时（1.5s）" : "连接被拒（relay 未监听）";
+          return null;
+        }
       }
       // #158-批3 探测命中统一落库：token 无条件写最新（#21 教训：relay 换代/令牌轮换后旧
       // token 被 401 拒且永不自愈——不等缓存空）；探测结果留 localRelayInfo 供诊断行消费
@@ -1494,6 +1546,38 @@ function connectLan(ctx) {
         try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
       }
       let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后交给 6s 周期自愈）
+      // #296 ③接管事件监听（一次性挂载）：壳探测到旧占用者即推 relay-takeover-available
+      // → 记 occupant 并刷诊断行（弹条形态=诊断行内联按钮，随连接页常在）
+      if (!window.__relayTakeoverWired) {
+        window.__relayTakeoverWired = true;
+        try {
+          const ev = window.__TAURI__ && window.__TAURI__.event;
+          if (ev && typeof ev.listen === "function") {
+            void ev.listen("relay-takeover-available", (e) => {
+              takeoverOccupant = (e && e.payload) || null;
+              paintRelayDiag();
+            });
+          }
+          const core = window.__TAURI__ && window.__TAURI__.core;
+          if (core && typeof core.invoke === "function") {
+            // 轮询兜底（事件丢失场景）：随诊断行 6s 节流刷 relay_status.occupant
+            const origRefresh = refreshRelayDiag;
+            refreshRelayDiag = async function () {
+              paintRelayDiag();
+              try {
+                const st = await core.invoke("relay_status");
+                const occ = st && st.occupant;
+                const next = occ && occ.takeover ? occ : null;
+                if (!!next !== !!takeoverOccupant || (next && takeoverOccupant && JSON.stringify(next) !== JSON.stringify(takeoverOccupant))) {
+                  takeoverOccupant = next;
+                  paintRelayDiag();
+                }
+              } catch (_) {}
+              return origRefresh();
+            };
+          }
+        } catch (_) {}
+      }
       // W-NOVAFIX B1：LAN/桌面形态配对链接与弹窗。桌面壳 location 是 tauri.localhost 不可分享
       // ——用探测结果（local-info 的 lan_ip + port）拼 LAN 可达地址；浏览器形态页面即 relay，
       // location.origin 直用。云形态不走此链（openCloudPairUI 输码）。
@@ -4290,21 +4374,30 @@ function connectLan(ctx) {
       // 或 token 轮换后旧 token 401 永不自愈（#21），重探命中即刷 token 重走连接链。
       // online/connecting 不动作（ws 层自带退避重连）；15 次未果（约 90s）停表
       if (shellProbe) {
-        let healTries = 0;
-        const healTimer = setInterval(async () => {
-          if (ctx.stopped) { clearInterval(healTimer); return; }
-          const conn = ctx.status; // W-WINPAIR-R2：并行多源下 healTimer 只看本机链自身状态（桥 connection 会随视角在云态，不再当本机健康判据）
-          if (conn === "online" || conn === "connecting") { clearInterval(healTimer); return; }
-          if (++healTries > 15) { clearInterval(healTimer); return; }
+        // #296 ⑤永久自愈（去 15 次停表上限——用户 10-28 23:53 冷启失败卡死整晚的实证
+        // 机制）：离线 6s 快频 / 在线 60s 轻巡两档，永久重试；掉线即恢复快频，
+        // unconfigured/offline 态持续重探——「首 90s relay 不可用、之后可用」场景最终必连上。
+        // 审查 B-P0 修正：online 态只刷 token 不重连（connectLan 入口无条件 close 健康
+        // ws——在线强拆=60s 一次闪断回归，只在 offline/未配置态才走重连）。
+        let healDelayMs = 6000;
+        const healTick = async () => {
+          if (ctx.stopped) return;
+          const conn = ctx.status; // W-WINPAIR-R2：并行多源下 healTimer 只看本机链自身状态
+          if (conn === "online") { healDelayMs = 60000; } // 在线降巡（轻探一拍 local-info）
+          else if (conn === "connecting") { healDelayMs = 60000; }
+          else { healDelayMs = Math.min(6000, healDelayMs); }
           const again = await probeLocalRelay();
-          if (ctx.stopped) { clearInterval(healTimer); return; } // W-WINPAIR：probe 等待期间切到云源——本机重连作废
+          if (ctx.stopped) return; // W-WINPAIR：probe 等待期间切到云源——本机重连作废
           if (again) {
-            applyLocalProbe(again);
+            applyLocalProbe(again); // token 无条件刷（#21 轮换自愈），不触发重连
             ctx.probing = false;
-            connectLan(ctx);
-            clearInterval(healTimer); // 连接链接管后续重试
+            if (conn !== "online" && conn !== "connecting") connectLan(ctx); // 仅未连上才重连（B-P0）
+            healDelayMs = 60000; // 连上降巡（掉线由下一拍轻探发现，恢复快频）
           }
-        }, 6000);
+          // 递归排程（#296 ⑤永久自愈）：离线 6s 快频、在线 60s 轻巡，永不停表
+          setTimeout(healTick, healDelayMs);
+        };
+        setTimeout(healTick, healDelayMs);
       }
       // #158-批3 桌面壳启动检查更新（旧壳 8643-8653 范式）→ UIPOLISH2 件七（2026-10-11 用户拍板）
       // 改提醒制：5s 后台查一次，命中新版**不再静默 downloadAndInstall**（自动覆盖用户安装位——

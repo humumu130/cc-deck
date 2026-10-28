@@ -125,11 +125,28 @@ async fn probe_local() -> Option<Value> {
     let endpoint = format!("http://127.0.0.1:{}/local-info", relay_port());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(1500))
+        // #296 ⑥根修（1029 dev 真机实锤）：reqwest 默认读系统代理但**不解析 macOS
+        // ExceptionsList bypass**——127.0.0.1 探活被导去系统代理（代理拒绝/已死回环）
+        // → probe 恒 null → 前端从未发起 ws（=用户 10-28「零入站 TCP」全解释）。
+        // curl/浏览器遵守 bypass 所以手测通——reqwest 是唯一盲区。loopback 探测
+        // 永远禁代理（no_proxy），直连。
+        .no_proxy()
         .build()
         .ok()?;
     let resp = match client.get(&endpoint).send().await {
         Ok(r) if r.status().is_success() => r,
-        _ => return None,
+        Ok(r) => {
+            // #296 ④排障黑洞根修：失败不再静默——HTTP 应答非 2xx 打原因（入 stdout
+            // →embedded-relay.log/壳日志；前端诊断行经 relay_status.err 透出）
+            println!("[embedded-relay] probe_local: {endpoint} HTTP {}", r.status());
+            return None;
+        }
+        Err(e) => {
+            // 连不通三类（超时/拒绝/代理扰）逐类打日志——用户 10-28 冷启失败整晚
+            // 零线索的实证机制补口
+            println!("[embedded-relay] probe_local: {endpoint} 连接失败: {e}");
+            return None;
+        }
     };
     match resp.json::<Value>().await {
         Ok(j)
@@ -609,6 +626,9 @@ static EMBEDDED_RELAY_ERR: std::sync::Mutex<Option<String>> = std::sync::Mutex::
 // #66 relay 存续意愿：本方成功 spawn 置 true；用户手动停（relay_toggle off）与
 // 应用退出（kill_embedded_relay）置 false。监督线程据此区分「该重拉」与「别添乱」
 static RELAY_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// #296 ③一键接管：端口占用者透视（版本/是否建议接管）。前端弹条与状态行经
+// relay_status.occupant 消费；takeover_available=true 时 emit relay-takeover-available
+static OCCUPANT_INFO: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
 // #36 M2 并行测试变体（2026-10-03 用户拍板）：构建期 CCDECK_BUILD_M2=1 烙入——与
 // 生产 CC Deck 同机并存互不干扰（默认端口 8788、数据/组织根 ~/.cc-deck-m2、断
@@ -638,6 +658,123 @@ fn deck_root(home: &str) -> std::path::PathBuf {
 fn port_listening(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
+
+// ── #296 relay 单通道收敛：版本探测/比较/占用者记录（谁新谁赢） ──
+
+/// relay 版本比较（语义与 relay/src/version.ts 及 expo-app/updates.ts 单源一致）：
+/// core 三段数值序 → 正式 > 预发布 → 同预发布比通道尾号数值；-nova 等壳通道烙印
+/// 透明（test.27-nova ≡ test.27）。Some(true)=a 新于 b；解析失败 None=不可比。
+fn relay_version_newer(a: &str, b: &str) -> Option<bool> {
+    let parse = |v: &str| -> Option<(Vec<u64>, Option<String>)> {
+        let v = v.trim().trim_start_matches('v');
+        let (core_s, pre_s) = match v.split_once('-') {
+            Some((c, p)) => (c, Some(p)),
+            None => (v, None),
+        };
+        let parts: Vec<u64> = core_s.split('.').map(|x| x.parse::<u64>().unwrap_or(0)).collect();
+        if parts.len() != 3 { return None; }
+        // 通道烙印透明：pre 首个 "-" 前的段（test.27-nova → test.27）
+        let pre = pre_s.map(|p| p.split('-').next().unwrap_or(p).to_string());
+        Some((parts, pre))
+    };
+    let (ac, ap) = parse(a)?;
+    let (bc, bp) = parse(b)?;
+    for i in 0..3 {
+        if ac[i] != bc[i] { return Some(ac[i] > bc[i]); }
+    }
+    match (ap, bp) {
+        (None, Some(_)) => Some(true),   // 正式 > 预发布
+        (Some(_), None) => Some(false),
+        (None, None) => Some(false),
+        (Some(x), Some(y)) => {
+            let tail = |p: &str| -> u64 {
+                // 通道尾号：test.73 → 73（数字串取末段；无数字=0）
+                let digits: String = p.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+                let d: String = digits.chars().rev().collect();
+                if d.is_empty() { 0 } else { d.parse().unwrap_or(0) }
+            };
+            let (xn, yn) = (tail(&x), tail(&y));
+            if xn != yn { Some(xn > yn) } else { Some(false) }
+        }
+    }
+}
+
+/// 探测端口上 relay 的版本（None=无版本接口/鉴权不通/坏响应=老 relay 或异 dataDir）。
+/// reqwest 1.5s（同 probe_local 栈）；token 读 <dataDir>/bridge-token（与占用者同
+/// dataDir 时鉴权可达——壳 dataDir 与内嵌 relay 同源）。
+async fn probe_port_relay_version(port: u16, data_dir: &std::path::Path) -> Option<String> {
+    let token = std::fs::read_to_string(data_dir.join("bridge-token")).ok()?.trim().to_string();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(1500))
+        .no_proxy() // #296 ⑥同款根修：loopback 探测禁代理（见 probe_local 注）
+        .build().ok()?;
+    let resp = client
+        .get(format!("http://127.0.0.1:{port}/api/version"))
+        .header("x-bridge-token", token)
+        .send().await.ok()?;
+    if !resp.status().is_success() { return None; }
+    let v: serde_json::Value = resp.json().await.ok()?;
+    let relay = v.get("relay")?.as_str()?.trim().to_string();
+    if relay.is_empty() { None } else { Some(relay) }
+}
+
+/// 内嵌 relay 版本：Resources/plugin.json（build-plugin 从仓库根 VERSION 烙印，与插件
+/// 清单同源）；打包链未含 plugin.json 时兜底=壳自身版本（内嵌 relay 随壳发=同版本
+/// 语义，CARGO_PKG_VERSION 与 tauri.conf/package.json 同源烙印链；relay_spawn_env 的
+/// CCR_RELAY_VERSION 同口径双保险）。
+fn embedded_relay_version(app: &tauri::AppHandle) -> Option<String> {
+    let res = app.path().resource_dir().ok()?;
+    for p in [res.join("plugin.json"), res.join("resources").join("plugin.json")] {
+        if !p.exists() { continue; }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&p).ok()?) {
+            if let Some(s) = v.get("version").and_then(|x| x.as_str()) {
+                let t = s.trim().to_string();
+                if !t.is_empty() { return Some(t); }
+            }
+        }
+    }
+    Some(env!("CARGO_PKG_VERSION").to_string())
+}
+
+/// 启动/开关时探测并记录占用者（端口已有 relay 的版本感知）：占用者 ≥ 内嵌=静默用
+/// 对方（takeover=false，谁新谁赢）；旧/无版本=建议接管（true→前端弹条一键接管）。
+/// tauri::async_runtime::spawn 异步跑（reqwest 探测 1.5s 上限），不卡启动序。
+fn record_occupant_if_serving(app: &tauri::AppHandle) {
+    let port = relay_port();
+    if !port_listening(port) {
+        *OCCUPANT_INFO.lock().unwrap() = None;
+        return;
+    }
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok();
+    let data_dir = match home.map(|h| deck_root(&h).join("data")) {
+        Some(d) => d,
+        None => return,
+    };
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let occupant: Option<String> = probe_port_relay_version(port, &data_dir).await;
+        let own: Option<String> = embedded_relay_version(&handle);
+        // takeover 判定：占用者旧/未知版本=true（怂恿接管）；own 兜底恒 Some（保守位）
+        let takeover = match (&occupant, &own) {
+            (_, None) => false,
+            (None, Some(_)) => true,
+            (Some(o), Some(w)) => relay_version_newer(w, o).unwrap_or(false),
+        };
+        let info = serde_json::json!({
+            "port": port,
+            "occupant_version": occupant,
+            "embedded_version": own,
+            "takeover": takeover,
+        });
+        println!("[embedded-relay] #296 port occupied: {:?}", info);
+        if takeover {
+            use tauri::Emitter;
+            let _ = handle.emit("relay-takeover-available", info.clone());
+        }
+        *OCCUPANT_INFO.lock().unwrap() = Some(info);
+    });
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ResourceState {
@@ -844,6 +981,11 @@ fn relay_spawn_env(port: u16, data_dir: &std::path::Path, inject_cs: &std::path:
         ("CCR_INJECT_CS".into(), inject_cs.to_string_lossy().into_owned()),
         ("CCR_NOHOOK_IDLE_MS".into(), "60000".into()),
         ("CCR_PARENT_PID".into(), parent_pid.to_string()),
+        // #296 版本注入：内嵌 relay 自报=壳版本（CARGO_PKG_VERSION 与 tauri.conf/
+        // package.json 同源，version.mjs --write 烙印链覆盖）。Resources 不打包
+        // plugin.json 时 relay 侧文件探测链落空——env 最高位兜底，谁新谁赢比较
+        // 两侧恒有真值。
+        ("CCR_RELAY_VERSION".into(), env!("CARGO_PKG_VERSION").to_string()),
     ]
 }
 
@@ -974,6 +1116,8 @@ fn relay_status_value() -> Value {
         "embedded": EMBEDDED_RELAY.lock().unwrap().is_some(),
         "node": node,
         "err": err,
+        // #296 ③一键接管：占用者版本/建议接管态（前端弹条与状态行消费；null=端口空闲）
+        "occupant": OCCUPANT_INFO.lock().unwrap().clone(),
     })
 }
 
@@ -1189,6 +1333,104 @@ async fn node_install(app: tauri::AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({ "started": true }))
 }
 
+/// 按端口找占用 pid（mac: lsof / win: netstat——系统标配零新依赖）
+fn find_port_pid(port: u16) -> Option<u32> {
+    let out = if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd").args(["/C", &format!("netstat -ano | findstr :{port}")]).output().ok()?
+    } else {
+        // 审查 B-P1-2：-sTCP:LISTEN 只取监听者——不滤会混入客户端 pid（壳 webview 常驻
+        // /ws 连接），首 pid 命中客户端即误判「非 relay 拒杀」接管随机失败
+        std::process::Command::new("lsof").args(["-ti", &format!("tcp:{port}"), "-sTCP:LISTEN"]).output().ok()?
+    };
+    if !out.status.success() { return None; }
+    let text = String::from_utf8_lossy(&out.stdout);
+    if cfg!(target_os = "windows") {
+        // netstat 行形如 `TCP 127.0.0.1:8787 0.0.0.0:0 LISTENING 12345`——取 LISTENING 行尾 pid
+        for line in text.lines() {
+            let l = line.trim();
+            if l.contains("LISTENING") {
+                if let Some(pid) = l.split_whitespace().last().and_then(|x| x.parse().ok()) {
+                    return Some(pid);
+                }
+            }
+        }
+        None
+    } else {
+        text.lines().map(|l| l.trim()).filter(|l| !l.is_empty())
+            .filter_map(|l| l.parse().ok()).find(|&p| p != std::process::id())
+    }
+}
+
+/// 进程命令行（特征校验用；mac: ps / win: wmic——系统标配）
+fn process_cmdline(pid: u32) -> Option<String> {
+    let out = if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd").args(["/C", &format!("wmic process where processid={pid} get commandline")]).output().ok()?
+    } else {
+        std::process::Command::new("ps").args(["-p", &pid.to_string(), "-o", "command="]).output().ok()?
+    };
+    if !out.status.success() { return None; }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
+/// #296 ③一键接管：杀「占 8787 且命令行含 relay.mjs/cc-deck 特征」的旧占用者并重拉
+/// 内嵌 relay。铁律零误杀：特征不全=只返回指引不杀；自家人（本壳子进程）拒杀。
+#[tauri::command]
+async fn relay_takeover(app: tauri::AppHandle) -> Result<Value, String> {
+    let port = relay_port();
+    // 占用者可能已退（用户手慢）：端口空了直接补拉
+    if !port_listening(port) {
+        spawn_embedded_relay(&app)?;
+        RELAY_WANTED.store(true, Ordering::SeqCst);
+        wait_port_ready(port, 8000);
+        *OCCUPANT_INFO.lock().unwrap() = None;
+        return Ok(relay_status_value());
+    }
+    let pid = find_port_pid(port)
+        .ok_or_else(|| format!("找不到 {port} 端口占用进程（lsof/netstat 无果）——请手动处理"))?;
+    let cmdline = process_cmdline(pid)
+        .ok_or_else(|| format!("无法读取 pid={pid} 的命令行（特征校验不过不杀）——请手动处理"))?;
+    // 审查 B-P1-2 特征收紧：裸 "cc-deck" 过宽（任意带仓库路径的进程即中，如 git/编辑器）。
+    // 判定=relay.mjs（插件/打包形态主特征）或（cc-deck 且 relay/index.ts——dev 直跑形态
+    // tsx src/index.ts 的 cmdline 常为 tsx+脚本路径，cwd 不进 cmdline，故 cc-deck 需与
+    // relay 词联合出现才算）。特征不全=零误杀拒杀（铁律）。
+    let lower = cmdline.to_lowercase();
+    let is_relay = lower.contains("relay.mjs")
+        || (lower.contains("cc-deck") && (lower.contains("relay") || lower.contains("index.ts")));
+    if !is_relay {
+        return Err(format!("pid={pid} 非 cc-deck relay（命令行不含 relay.mjs / cc-deck+relay 特征，零误杀拒杀）——请手动处理。cmdline={cmdline}"));
+    }
+    // 占用者若是本应用子进程（自家人）：拒绝（它失败归监督线程管）
+    let self_spawned = EMBEDDED_RELAY.lock().unwrap().as_ref().map(|c| c.id() == pid).unwrap_or(false);
+    if self_spawned {
+        return Err("占用者是本应用内嵌 relay（无需接管）".into());
+    }
+    println!("[embedded-relay] takeover: killing pid={pid} ({cmdline})");
+    let kill_out = if cfg!(target_os = "windows") {
+        std::process::Command::new("taskkill").args(["/PID", &pid.to_string(), "/F"]).output()
+    } else {
+        std::process::Command::new("kill").arg(pid.to_string()).output()
+    };
+    match kill_out {
+        Ok(o) if o.status.success() => {}
+        Ok(o) => return Err(format!("杀占用进程失败：{}", String::from_utf8_lossy(&o.stderr))),
+        Err(e) => return Err(format!("杀占用进程失败：{e}")),
+    }
+    // 等端口释放（进程收尾/TIME_WAIT），再重拉内嵌
+    for _ in 0..20 {
+        if !port_listening(port) { break; }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    if port_listening(port) {
+        return Err(format!("旧进程已杀但端口未释放（4s 内仍监听）——请稍后在设置里手动开启"));
+    }
+    spawn_embedded_relay(&app)?;
+    RELAY_WANTED.store(true, Ordering::SeqCst);
+    wait_port_ready(port, 8000);
+    *OCCUPANT_INFO.lock().unwrap() = None;
+    Ok(relay_status_value())
+}
+
 #[tauri::command]
 fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
     if !on {
@@ -1210,6 +1452,9 @@ fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
     }
     if port_listening(relay_port()) {
         println!("[embedded-relay] port {} already serving - nothing to do", relay_port());
+        // #296 ②③让位协议壳侧：端口已有 relay 时探测其版本——旧/无版本记 OCCUPANT_INFO
+        // 并 emit（前端弹条一键接管）；≥ 内嵌静默用对方（谁新谁赢）。探测异步不卡开关。
+        record_occupant_if_serving(&app);
         RELAY_WANTED.store(true, Ordering::SeqCst);
         return Ok(relay_status_value()); // 已有 relay（插件/手动），视为"开启"状态
     }
@@ -1546,7 +1791,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen, storage_shadow_write, node_install])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_takeover, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click, web_diag, web_fullscreen, storage_shadow_write, node_install])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
@@ -1587,6 +1832,9 @@ fn main() {
             } else {
                 RELAY_WANTED.store(true, Ordering::SeqCst);
                 println!("[embedded-relay] port {} already serving at boot - takeover armed", relay_port());
+                // 审查 A/B-P1：开机即被占=一键接管最常见入口——此处必须探测占用者并
+                // emit（此前只挂 relay_toggle，主场景弹条永不出现）
+                record_occupant_if_serving(app.handle());
             }
             // #66 子进程监督常驻（WANT 门控：从未启用/用户手动停时静默空转）
             supervise_embedded_relay(app.handle().clone());

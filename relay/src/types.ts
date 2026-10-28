@@ -903,6 +903,7 @@ export interface PeerMeta {
   platform?: string;  // App：OS+型号（"android·Pixel 8"）；浏览器：平台（"Windows"）
   ua?: string;        // 浏览器 UA 截断摘要（"Chrome·Windows" 式；App 不报）
   app?: string;       // 应用标识+版本（"CC Deck 0.3.35" / 网页控制台标识）
+  relay_version?: string; // #296 对端自报其连接的 relay 版本（端上从 SNAPSHOT.relay_version 学得后随 pair_req 回填；旧端缺席=unknown 降级不炸）
 }
 
 // COMMAND_PEERS 返回的设备条目（议题①）：kind 按 dev 前缀派生（rl- 是 relay 自己，
