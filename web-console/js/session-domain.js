@@ -700,7 +700,30 @@
                   const card = UI && UI.sessionList.querySelector('[data-session-card="' + cssEsc(sid) + '"]');
                   if (card) { card.classList.add("enter"); S.forceScroll = true; card.click(); } // 复用地基选中链（选中态 + observer 同步）；#B3-17 新卡入场
                 }
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
+                // #291 帧分类判活（心跳≠工作，用户 1028 定立）。判定=帧分类单判据：
+                //   干活中 = 近 15min 有工具帧（tool_use/tool_result——真工作证据）
+                //          | last_tool_use_at 缺（老 relay 未下发——降级干活，不误伤）
+                //   待命（已接单·待开工/挂起）= 有字段但 0（从未有工具活动）或超窗
+                // 「turn 生命周期」不在端上判定层（审查 291-A 终版裁决）：turn_started_at
+                // 由 relay 状态机承担（WORKING⟔活跃 turn：onPrompt/spawn 翻活、Stop/
+                // 静默 15min 收殓、本批补终态清算）——若端上再加 turn 新鲜窗分支，spawn
+                // 建卡即写 turn_started_at=now，挂起卡前 15min 会复活「判干活」误判
+                //（本批要杀的形态）；起手窗（读任务未吐工具帧）误显待命是分钟级且首个
+                // 工具帧即自纠，代价可接受。turn_started_at 面上仅作计时显示。
+                // 窗口 15min 对齐 relay sweepWorkingIdle hooked 静默窗（900s——审查
+                // 291-A P2-1：本仓 worker 自测链 10min+ 单工具是常态，10min 窗在
+                // [10,15)min 段把长工具误判待命，与 relay 防误判设计正面冲突）
+                function isRealWorking(s, now) {
+                  if (!s || s.status !== "WORKING") return false;
+                  const FRESH_MS = 15 * 60 * 1000;
+                  const t = s.last_tool_use_at;
+                  const at = typeof now === "number" ? now : Date.now();
+                  if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
+                  if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
+                  return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
+                }
+                window.__ccDeck005IsRealWorking = isRealWorking; // team-domain 计数同源（跨文件共享）
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -822,6 +845,10 @@
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
                   if (s) s.updated_at = entry.ts || Date.now();
+                  // #291 帧分类判活（增量面）：工具帧本地刷新 last_tool_use_at——relay 增量
+                  // 帧不带此键（SNAPSHOT 全量权威），实时性由本行补（与 relay pushExternalLog/
+                  // onLog 两咽喉同口径：tool_use/tool_result 刷，心跳类不刷）
+                  if (s && (entry.kind === "tool_use" || entry.kind === "tool_result")) s.last_tool_use_at = entry.occurred_at || entry.ts || Date.now(); /* #291 审查 A-P2①：occurred_at（活动真实时刻）优先，与 relay 两咽喉同口径——scan 回灌旧工具活动时不虚胖窗口 */
                   // #221 同族①（W-INJECT3 扩展）：回显对账双兜底——原唯一路径「精确文本匹配」
                   // 对回显形态差异（空白规整/短回显变体）失配=「发送中…」气泡永挂（用户实锤：
                   // CLI 已回复后续内容气泡仍滞留）。a) 匹配放宽（trim+多空白折叠）b) 回合推进
@@ -989,7 +1016,7 @@
                     }
                     if (!hitRole) continue;
                     // E5 离线判定：编制内已同步且 WORKING 计数=0 → idle 置灰（与 dock 整队健康灯同判）
-                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" && !/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")) ? 1 : 0); }, 0); /* 1027 用户裁定：WORKING⟺有活应闭环——在跑计数=干活成员（worker/QA），PM/Leader 是管理岗不计入（他们恒有活但不是「在跑工人」） */
+                    const running = hc.reduce((n, m) => { const x = m && S.sessions.get(m.session_id); return n + (x && x.status === "WORKING" && isRealWorking(x) && !/^(pm|leader|产品经理|项目经理|领队)$/i.test(String(m.role || "")) ? 1 : 0); }, 0); /* 1027 用户裁定：在跑计数=干活成员（worker/QA，管理岗不计入）；#291 精化：WORKING 再过 isRealWorking——待命（接单未开工/挂起）不占在跑计数（用户 1028：面板数字从此可直接信） */
                     out.push({ gid: p.id, name: String(p.name || p.id), accent: GRP_ACCENTS[pi % GRP_ACCENTS.length], idle: running === 0, running, kind: hitRole }); // W-CRABINTEGRATE：kind=pm|leader（头像变体判定源）；W-ENGLM2 F：running 随行下发（chip 数字位=活跃数）
                   }
                   return out;
@@ -1029,6 +1056,7 @@
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
                     pmStandby: session.pm_standby === true, // #287 值守 PM 待命态（快照派生）：替代 DONE 假死
+                    standby: status === "working" && !isRealWorking(session), // #291 帧分类判活：接单未开工/挂起（灰呼吸点+待开工标，不占在跑计数）
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
                     idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
                   };
@@ -1131,7 +1159,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + item.status + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -1207,7 +1235,7 @@
                       arts: s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path) : [],
                     };
                   });
-                  const running = roster.filter((r) => r.status === "WORKING").length;
+                  const running = roster.filter((r) => r.status === "WORKING" && (() => { const rs = S.sessions.get(r.sid); return rs ? isRealWorking(rs) : true; })()).length; /* #291 审查 B-P1-2：同屏口径一致（行灯已真判定，计数跟上；rs 未同步保守按干活，与行灯降级一致） */
                   const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
                   const entries = Array.isArray(boardEntries) ? boardEntries : null;
                   const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
@@ -1236,8 +1264,10 @@
                   }
                   // 区二：成员 roster（行点击=直开成员会话，data-slim-open 既有链；异源未同步=灰行不隐行 #99件5 口径）
                   const rosterRows = model.roster.slice().sort(teamDrawerRosterSort).map((r) => {
-                    const st = ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[r.status] || "closed";
-                    const stWord = ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[r.status] || "离线";
+                    // #291 帧分类判活：WORKING 行过真判定——待命（接单未开工/挂起）灰点+「待开工」
+                    const rStandby = r.status === "WORKING" && (() => { const rs = S.sessions.get(r.sid); return rs ? !isRealWorking(rs) : false; })();
+                    const st = rStandby ? "standby" : ({ WORKING: "working", WAITING: "blocked", ERROR: "error", DONE: "idle" })[r.status] || "closed";
+                    const stWord = rStandby ? "待开工" : ({ WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" })[r.status] || "离线";
                     return '<div class="roster-row' + (r.online ? "" : " offline") + '" data-slim-open="' + esc(r.sid) + '" role="button" tabindex="0" title="' + esc((r.pm ? "✦ " : "") + r.title + " · " + (r.nick || r.role || "成员") + " · " + stWord + (r.online ? " · 点击直开" : " · 会话未同步")) + '"><i class="lamp-dot ' + st + '"></i><span class="rr-name">' + (r.pm ? "✦ " : "") + esc(r.nick || r.title.slice(0, 14)) + '</span><span class="rr-role">' + esc(r.role || "worker") + '</span><span class="rr-ctx">' + (r.pct !== null ? r.pct + "%" : "") + "</span></div>";
                   }).join("");
                   const rosterSec = '<div class="dr-sec"><span>成员 ' + model.rosterN + '</span><span class="dr-sub">在跑 ' + model.running + " · 点击行直开</span></div>"
@@ -2067,7 +2097,7 @@
                     }
                     subEl.dataset.act = act;
                     subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
-                    subEl.textContent = act ? "⚙ Running " + act.slice(0, 110) : "";
+                    subEl.textContent = act ? (isRealWorking(s) ? "⚙ Running " : "⏸ 待开工 ") + act.slice(0, 110) : ""; /* #291 审查 B-P2-2：dock 与卡同屏一致（待命不走秒语义） */
                     subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
                   } else {
                     if (subEl) subEl.remove();
@@ -2193,7 +2223,7 @@
                         const chips = slimTeamObj.members.map((m) => {
                           const ms = S.sessions.get(m.session_id);
                           if (!ms) return ""; // 编制在、会话未同步：不出胶囊
-                          const mst = ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[ms.status] || "done";
+                          const mst = ms.status === "WORKING" && !isRealWorking(ms) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[ms.status] || "done"; /* #291 待命灰呼吸 */
                           const badge = SLIM_KEEP_ROLE.test(String(m.role || "")) ? "✦" : /^(qa|reviewer|验收)$/i.test(String(m.role || "")) ? "QA" : "W";
                           const unread = unreadSet && unreadSet.has(m.session_id);
                           return '<span class="member-chip' + (unread ? " unread" : "") + '" data-slim-open="' + esc(m.session_id) + '" role="button" tabindex="0" title="直开 ' + esc(ms.title || m.session_id) + '"><span class="mc-ava">' + badge + '<i class="status-dot ' + mst + '"></i></span><span class="mc-name">' + esc(ms.title || m.session_id) + "</span></span>";
@@ -3285,8 +3315,10 @@
                   // 本回合时长 + 输入输出 tokens（原 .metric 改普通键值行）
                   // #282 S5：时长行用占位符（签名剔时变成分），跳帧路径对 [data-turn-elapsed]
                   // 定点写——WORKING 选中会话逐帧不再整 pane 重建（details 折叠态存活）
-                  const elapsedTxt = s.status === "WORKING" && s.turn_started_at ? fmtDur(Math.max(0, Date.now() - s.turn_started_at)) : "";
-                  if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-turn-elapsed>__ELAPSED__</b><span>本回合已运行</span></div>';
+                  const dStandby = s.status === "WORKING" && !isRealWorking(s); /* #291 审查 B-P2-2：详情与卡同屏一致 */
+                  const elapsedTxt = s.status === "WORKING" && !dStandby && s.turn_started_at ? fmtDur(Math.max(0, Date.now() - s.turn_started_at)) : "";
+                  if (dStandby) html += '<div class="kv-row"><b style="color:var(--dim)">待开工</b><span>已接单未开工或挂起（无近期工具活动）</span></div>';
+                  else if (s.status === "WORKING" && s.turn_started_at) html += '<div class="kv-row"><b data-turn-elapsed>__ELAPSED__</b><span>本回合已运行</span></div>';
                   const u = s.usage;
                   if (u && (u.input_tokens || u.output_tokens)) html += '<div class="kv-row"><b>' + tokStr((u.input_tokens || 0) + (u.output_tokens || 0)) + "</b><span>本回合 tokens（入 " + tokStr(u.input_tokens || 0) + " · 出 " + tokStr(u.output_tokens || 0) + "）</span></div>";
                   html += "</div>"; // 关闭 detail-panel-list

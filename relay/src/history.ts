@@ -129,7 +129,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; provider?: string; started_at?: number };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; provider?: string; started_at?: number; last_tool_use_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -144,6 +144,9 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
           started_at: p.started_at && p.started_at > 0 ? p.started_at : e.ts,
           updated_at: e.ts,
           stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+          // #291 审查 A-P2-2：CREATED 帧带键则回放归一落 0（新 relay 帧）；老帧缺省
+          // undefined=降级档（过渡期可接受，首个工具帧即起算）
+          ...(p.last_tool_use_at !== undefined ? { last_tool_use_at: p.last_tool_use_at } : {}),
         },
         logs: [],
       };
@@ -239,12 +242,14 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       }
       case "SESSION_ERROR": {
         s.status = "ERROR";
+        s.turn_started_at = undefined; // #291：终态清算与 transition 同口径（回放面）
         s.last_error = (e.payload as { message: string }).message;
         rs.logs.push({ ts: e.ts, kind: "system", text: `错误: ${s.last_error}` });
         break;
       }
       case "SESSION_DONE": {
         s.status = "DONE";
+        s.turn_started_at = undefined; // #291：终态清算与 transition 同口径（回放面）
         const p = e.payload as { terminal_reason: string; duration_ms: number; stats: SessionState["stats"] };
         s.done_reason = p.terminal_reason;
         s.duration_ms = p.duration_ms;
@@ -264,6 +269,9 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         const li = p.id ? rs.logs.findIndex((x) => x.id === p.id) : -1;
         if (li >= 0) rs.logs[li] = entry;
         else rs.logs.push(entry);
+        // #291 帧分类判活（回放恢复）：工具帧恢复最近工具活动时刻——重启后
+        // last_tool_use_at 不归零（老卡 undefined→首个工具帧起算，降级窗内不误伤）
+        if (p.kind === "tool_use" || p.kind === "tool_result") s.last_tool_use_at = e.ts;
         if (rs.logs.length > 1500) rs.logs.splice(0, rs.logs.length - 1500); // W-INJECT④：对齐 MAX_LOGS_PER_SESSION
         break;
       }

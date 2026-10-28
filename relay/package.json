@@ -120,7 +120,8 @@
     "test:orgagg": "tsx scripts/test-org-agg.ts",
     "test:msp": "tsx scripts/test-msp.ts",
     "test:cbs": "tsx scripts/test-cbs.ts",
-    "test:spa": "tsx scripts/test-spa.ts"
+    "test:spa": "tsx scripts/test-spa.ts",
+    "test:fc": "tsx scripts/test-fc.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

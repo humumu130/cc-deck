@@ -80,7 +80,7 @@ function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
     const arts = s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path).length : 0;
     return { sid: m.session_id, role, nick: String(m.nick || ""), pm: SLIM_KEEP_ROLE_RE.test(role), s, pct, arts };
   });
-  const running = roster.filter((r) => r.s?.status === "WORKING").length;
+  const running = roster.filter((r) => r.s?.status === "WORKING" && isRealWorking(r.s)).length; /* #291：待命不占在跑计数 */
   const artsTotal = roster.reduce((n, r) => n + r.arts, 0);
   const artsPeople = roster.filter((r) => r.arts > 0).length;
   const roleBadge = (role: string, pm: boolean) => (pm ? "✦" : /^(qa|reviewer|验收)$/i.test(role) ? "QA" : "W");
@@ -106,7 +106,8 @@ function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
         <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>成员编制 · {roster.length} 席 · {running} 在跑</Text>
         {roster.map((r) => {
           const st = r.s?.status;
-          const lamp = st === "WORKING" ? c.working : st === "ERROR" ? c.error : st === "WAITING" ? c.working : c.faint;
+          const standby = st === "WORKING" && !isRealWorking(r.s); /* #291 待命：灰灯+「待开工」 */
+          const lamp = standby ? c.faint : st === "WORKING" ? c.working : st === "ERROR" ? c.error : st === "WAITING" ? c.working : c.faint;
           const name = r.nick || r.s?.title || r.sid.slice(0, 8);
           return (
             <Pressable
@@ -121,7 +122,7 @@ function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
               <Text style={{ flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 }} numberOfLines={1}>{name}</Text>
               {r.pct != null ? <Text style={{ color: c.faint, fontSize: 10.5, fontVariant: ["tabular-nums"] }}>{r.pct}%</Text> : null}
               {r.arts > 0 ? <Text style={{ color: c.faint, fontSize: 10.5 }}>◈{r.arts}</Text> : null}
-              <Text style={{ color: c.faint, fontSize: 10, width: 34, textAlign: "right" }}>{st ? PM_STATUS_ZH[st] ?? st : "未同步"}</Text>
+              <Text style={{ color: c.faint, fontSize: 10, width: 34, textAlign: "right" }}>{standby ? "待开工" : st ? PM_STATUS_ZH[st] ?? st : "未同步"}</Text>
             </Pressable>
           );
         })}
@@ -2788,7 +2789,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             const gFill = lv === "done" ? c.ctxSafeFill : lv === "working" ? c.ctxAttentionFill : c.ctxCriticalFill;
             const on = Math.round((pct / 100) * 12);
             const u = s.usage;
-            const turnRun = s.status === "WORKING" && s.turn_started_at ? fmtElapsed(Math.max(0, Date.now() - s.turn_started_at)) : null;
+            const turnRun = s.status === "WORKING" && isRealWorking(s) && s.turn_started_at ? fmtElapsed(Math.max(0, Date.now() - s.turn_started_at)) : null; /* #291：待命不走秒 */
             const turnTok = u && (u.input_tokens || u.output_tokens) ? fmtTok((u.input_tokens ?? 0) + (u.output_tokens ?? 0)) : null;
             return (
               <View>
@@ -3095,7 +3096,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         {s.status === "WORKING" ? (
           <View style={d.dockWork}>
             <LiveStatusLine
-              summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
+              summary={s.compacting ? "⟳ 正在压缩上下文…" : !isRealWorking(s) ? "⏸ 待开工 · " + (s.action_summary || "已接单未开工") : s.action_summary} /* #291 审查 B-P2-2：详情与卡同屏一致 */
               startedAt={s.turn_started_at ?? s.updated_at}
               color={c.working}
               tok={undefined}
@@ -3430,3 +3431,4 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
 // 输入法风格麦克风矢量图标：胶囊 + U 形支架 + 立柱 + 底座（替代 emoji）
 import { makeStyles } from "../components/detail-styles";
 import { TAB_PAD_L, TAB_GAP } from "../components/detail-consts";
+import { isRealWorking } from "../protocol"; /* #291 帧分类判活（待命分层） */

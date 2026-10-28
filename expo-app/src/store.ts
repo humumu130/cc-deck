@@ -2612,6 +2612,14 @@ class RelayStore {
       case "SESSION_LOG": {
         // W-MSGFIX：兜底对账 key 用 full 优先（text=截断版时 includes(pk) 对长文恒失配）
         if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, String(msg.payload.full || msg.payload.text || ""));
+        // #291 帧分类判活（增量面）：工具帧本地刷新 last_tool_use_at（relay 增量帧
+        // 不带此键，SNAPSHOT 全量权威；与 web onLog 同口径，心跳类不刷）。
+        // 审查 B-P2-2：对象替换而非原地突变（#91 口径）——SessionCard 是 memo，
+        // 突变不触发重渲，standby→working 翻转原先要等下一个 SESSION_UPDATED
+        if (msg.payload.kind === "tool_use" || msg.payload.kind === "tool_result") {
+          const s = conn.sessions.get(sid);
+          if (s) conn.sessions.set(sid, { ...s, last_tool_use_at: (typeof msg.payload.occurred_at === "number" ? msg.payload.occurred_at : msg.payload.ts) || Date.now() });
+        }
         this.pushLog(conn, sid, msg.payload);
         break;
       }

@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { ENGINE_ACCENT, statusColor, withA, mix, type ThemeColors } from "../theme";
+import { isRealWorking } from "../protocol"; /* #291 帧分类判活 */
 import { inferEngine } from "../engine-infer";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
@@ -992,7 +993,9 @@ const SessionCard = memo(function SessionCard({
   // #100 后台任务态：主回合空闲但仍有子 Agent 在跑——灯转黄呼吸 + ⑂N 徽标 + 不置灰
   const bgCount = (s.subagents ?? []).filter((a) => !a.ended_at).length;
   const bgLive = bgCount > 0 && s.status !== "WORKING";
-  const dotColor = bgLive ? c.working : color;
+  // #291 帧分类判活：WORKING 过真判定——待命（接单未开工/挂起）灰呼吸点，不占在跑计数
+  const standby = s.status === "WORKING" && !isRealWorking(s);
+  const dotColor = standby ? c.faint : bgLive ? c.working : color;
   const deletable = (s.status === "DONE" || s.status === "ERROR") && !bgLive; // #100 后台在跑禁删（删会话会杀后台任务）
   // 空闲超时置灰：isIdleSession 单一口径（#140 起与「折叠空闲」共用，防漂移）——
   // DONE/ERROR 且静默超阈值（#121 可配置，负数 = 永不）才蒙层，刚完成的保持鲜亮；
@@ -1033,7 +1036,7 @@ const SessionCard = memo(function SessionCard({
         // 其余全部隐藏；行间分隔由 swipeWrapM 的极淡 hairline 承担（平铺行，不再堆卡间距）；
         // 点击/左滑交互与其他档一致
         <View style={styles.rowM}>
-          {s.status === "WORKING" || bgLive ? (
+          {standby || s.status === "WORKING" || bgLive ? (
             <BlinkDot color={dotColor} />
           ) : (
             <View style={[styles.dot, { backgroundColor: color }]} />
@@ -1064,7 +1067,7 @@ const SessionCard = memo(function SessionCard({
                  语义徽章/状态灯/身份头像三分离）；词表外引擎回落源色（不丢信息） */
               srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
               dotColor={dotColor}
-              breathe={s.status === "WORKING" || bgLive}
+              breathe={standby || s.status === "WORKING" || bgLive}
               size={compact ? 26 : 34}
             />
             <View style={styles.srowMain}>
@@ -1090,7 +1093,9 @@ const SessionCard = memo(function SessionCard({
                 <Elapsed s={s} />
               </View>
               <View style={styles.srowR2}>
-                {s.status === "WORKING" ? (
+                {standby ? (
+                  <Text style={[styles.srowSum, { color: c.faint }]} numberOfLines={1}>待开工 · {s.action_summary || "已接单未开工"}</Text>
+                ) : s.status === "WORKING" ? (
                   <LiveStat s={s} />
                 ) : s.status === "WAITING" && s.waiting_request ? (
                   <Text style={[styles.srowSum, styles.sumWaiting]} numberOfLines={1}>需要确认 · {s.action_summary || ""}</Text>
@@ -1581,7 +1586,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         seen.add(g.id);
         const running = g.headcount.reduce((n, m) => {
           const x = m && sessionsBySid.get(m.session_id);
-          return n + (x && x.status === "WORKING" ? 1 : 0);
+          return n + (x && x.status === "WORKING" && isRealWorking(x) ? 1 : 0); /* #291：待命不占在跑计数（真判定） */
         }, 0);
         for (const m of g.headcount) {
           if (!m || !SLIM_KEEP_ROLE.test(String(m.role || ""))) continue;
