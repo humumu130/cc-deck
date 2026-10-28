@@ -11,8 +11,6 @@ import { ackTapGuard, capabilityCardModel, capsuleSubline, pairErrNote, todoSurf
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
-import { fgSupported } from "../notify";
-import KeepAliveCard from "../KeepAliveCard";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
 
@@ -646,9 +644,10 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             </View>
           ) : null}
 
-          {/* #60 后台保活豁免状态卡：ColorOS 等国产 ROM 会冻结后台进程（FGS 也拦不住），
-              电池优化豁免是实证有效的根治入口。未豁免给「去优化」直达系统对话框 */}
-          {fgSupported() ? <KeepAliveCard detail style={s.kaWrap} /> : null}
+          {/* #289 保活卡收敛：App 级设置域唯一入口=设置页「通用与偏好」末行（SettingsPage:1147）
+              ——添加连接页退役本卡（连接流程与电池豁免无关；原 detail 态整宽卡在每次添加/
+              编辑连接时重复打扰，属设置域引导污染非设置视野的同族面）。fgSupported import
+              随本卡退役，未用引用勿留 */}
 
           {/* 次入口「手动添加」：默认收起，展开后两框（地址+令牌/配对码），形态自动识别 */}
           {!editId ? (
@@ -813,8 +812,6 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
-  // #60 后台保活豁免卡样式随组件迁至 src/KeepAliveCard.tsx（#85 抽共享），此处只留外层定位
-  kaWrap: { width: "100%", maxWidth: 340, marginBottom: 20 },
   // E4a 能力卡：行=label 左 value 右、全单行截断（390 宽行高恒定）；不可用值弱化
   capCard: { width: "100%", maxWidth: 340, borderWidth: 1, borderColor: c.line, borderRadius: 10, padding: 12, marginBottom: 20 },
   capRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 5 },
@@ -949,7 +946,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   backT: { color: c.dim, fontSize: 14 },
 });
 
-// #60 后台保活豁免卡：迁至 src/KeepAliveCard.tsx（#85 抽共享，SettingsPage 同显）
+// #60 后台保活豁免卡：迁至 src/KeepAliveCard.tsx（#85 抽共享；#289 起唯一消费点=SettingsPage——本页已退役挂载）
 
 // 编辑态顶部状态行（2026-09-16 方案 A 对齐小优化①）：详情页不再只是表单——
 // 进页先看到这条源连没连上、走的哪条通道。数据取 useRelay 快照 sources（与
