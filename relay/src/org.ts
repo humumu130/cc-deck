@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
 import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
+import { writeDispatchToDb } from "./storage/write-dispatch.js"; // #292 cutover 批1：dispatch 双写
 import { atomicWriteJson } from "./fs-safe.js";
 import { applyOrgChange } from "./org-schema.js";
 import type { SessionEngine } from "./types.js";
@@ -373,6 +374,10 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
     writeFileSync(dispatchLogPath(d), JSON.stringify(e) + "\n", { flag: "a" });
+    // #292 cutover 批1：dispatch 双写（文件+SQLite）——文件保留为审计原始账+导入器兜底，
+    // SQLite 直写为后续读源切换的权威写入。import runner 的 checkpoint 机制会检测到
+    // 文件中的条目已在库中（同 id），不会重复导入。
+    try { writeDispatchToDb(e); } catch (dbErr) { console.warn(`[org] 台账 SQLite 直写失败（文件已写成功，降级由导入器追赶）:`, dbErr instanceof Error ? dbErr.message : String(dbErr)); }
     return true;
   } catch (e2) {
     console.warn(`[org] 台账写入失败: ${e2 instanceof Error ? e2.message : String(e2)}`);
