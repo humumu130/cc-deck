@@ -19,6 +19,9 @@ process.env.CCR_DATA_DIR = SB("../data/test-c4-data/");
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_PARENT_PID;
 delete process.env.CCR_RELAY_CHILD;
+// #292-cutover-P1（C-C6）：本套件主体断言 SQLite 行为（§W 帧写/§S 影子比对需库
+// 行），全套件 json 跑结构性不成立——env 钉 sqlite 档（json 子段 §D/§O 套件内
+// 自管）。json 档全套件覆盖面 = test-c2 + test-brm + test-c5（KEEP_READ_MODE 通道）。
 delete process.env.CCR_STORAGE_READ_MODE;
 delete process.env.CCR_SESSION_WRITE_MODE;
 delete process.env.CCR_PORT;
@@ -173,18 +176,24 @@ console.log("§D 降级：");
   process.env.CCR_DATA_DIR = SB("../data/test-c4-data/");
 }
 
-// §B（B4b 对账哨）：三态差异分类正确性
+// §B（B4b 对账哨）：三态差异分类正确性（cutover-P1 后：Map 入参+statusMismatch 实装）
 {
   const { bootReconcile, bootFromMode } = sw;
-  // 构造：库有 a/b/c，回放有 b/c/d——dbOnly=[a]、replayOnly=[d]
+  // 构造：库有 a/b/c，回放有 b/c/d——dbOnly=[a]、replayOnly=[d]；b 的 status 两边不同
   const fakePort = {
     query: () => [{ id: "a", status: "WORKING" }, { id: "b", status: "DONE" }, { id: "c", status: "WORKING" }],
   } as never;
-  const r = bootReconcile(fakePort, new Set(["b", "c", "d"]));
+  const replay = new Map([
+    ["b", { state: { status: "WORKING" } }],
+    ["c", { state: { status: "WORKING" } }],
+    ["d", { state: { status: "DONE" } }],
+  ]);
+  const r = bootReconcile(fakePort, replay as never);
   assert4(r.dbOnly.length === 1 && r.dbOnly[0] === "a", `B1 库多行分类（实 ${JSON.stringify(r.dbOnly)}）`);
   assert4(r.replayOnly.length === 1 && r.replayOnly[0] === "d", `B2 回放多卡分类（实 ${JSON.stringify(r.replayOnly)}）`);
-  const r2 = bootReconcile({ query: () => [{ id: "x", status: "WORKING" }] } as never, new Set(["x"]));
-  assert4(r2.dbOnly.length === 0 && r2.replayOnly.length === 0, "B3 零差异路径");
+  assert4(r.statusMismatch.length === 1 && r.statusMismatch[0].includes("b"), `B-P1-6 statusMismatch 实装（db=DONE/events=WORKING 实 ${JSON.stringify(r.statusMismatch)}）`);
+  const r2 = bootReconcile({ query: () => [{ id: "x", status: "WORKING" }] } as never, new Map([["x", { state: { status: "WORKING" } }]]) as never);
+  assert4(r2.dbOnly.length === 0 && r2.replayOnly.length === 0 && r2.statusMismatch.length === 0, "B3 零差异路径（含 statusMismatch 零）");
   assert4(bootFromMode() === "events" && process.env.CCR_BOOT_FROM === undefined, "B4 缺省 events（现行为不动）");
   process.env.CCR_BOOT_FROM = "auto";
   assert4(bootFromMode() === "auto", "B5 auto 态识别");

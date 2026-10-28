@@ -43,6 +43,12 @@ export interface ObservedFile {
    * 同毫秒二次写+等长覆盖形态下假有效=投影陈旧=写回抹写，import-util 头注早已论证）。 */
   mtimeNs: string;
   text: string;
+  /** #292-cutover-P1（C-C2）：大源（>SIZE_MEMO_MAX_BYTES）双未变短路标记——text 为
+   * 空串（不承载内容），lineCount 复用基线值；显式认该旗的调用方（observeNdjson）
+   * 据此免全文处理，不认的旧调用方对大源只会看到「内容为空」——大源面目前仅
+   * events.ndjson 一个消费者，见 observeNdjson 承接注释。 */
+  unchanged?: boolean;
+  lineCount?: number;
 }
 
 /** 单文件观测骨架：stat 先于 read（定稿序，理由见头注）。裸调不吞 IO 异常（容错边界见头注）。
@@ -70,8 +76,28 @@ export function statThenRead(file: string): ObservedFile {
   if (hit !== undefined && hit.mtimeNs === mtimeNs && hit.size === st.size) {
     return { mtimeMs, mtimeNs, text: hit.text }; // 双未变短路：跳过全文读
   }
+  // #292-cutover-P1（C-C2 events observe 短路）：超 memo 上限的大源（events.ndjson
+  // 生产 35MB 且 2.47MB/天增长）此前每次全文读 ~90ms 纯税（checkpoint 全命中也付）。
+  // 大源短路层：size+mtimeNs 双未变（与 memo 同判据）→unchanged:true + text 空串 +
+  // lineCount 复用基线。显式认旗的调用方（observeNdjson）免全文处理；首见大源
+  // （无基线）仍全文读一次建基线。真变更（append/压缩）mtimeNs 已变→不命中短路。
+  if (st.size > SIZE_MEMO_MAX_BYTES) {
+    const sc = LARGE_SHORTCIRC.get(file);
+    if (sc !== undefined && sc.mtimeNs === mtimeNs && sc.size === st.size) {
+      return { mtimeMs, mtimeNs, text: "", unchanged: true, lineCount: sc.lineCount };
+    }
+    const text = readFileSync(file, "utf8");
+    const lines = text.split("\n");
+    const lineCount = lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    LARGE_SHORTCIRC.set(file, { mtimeNs, size: st.size, lineCount });
+    OBS_MEMO.delete(file); // 超限源不 memo 全文（防大源常驻内存），短路层只记三元组
+    return { mtimeMs, mtimeNs, text };
+  }
   const text = readFileSync(file, "utf8");
-  if (st.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st.size, text });
-  else OBS_MEMO.delete(file); // 超限源不 memo（曾 memo 过的膨胀源顺手清出，防滞留旧 text）
+  OBS_MEMO.set(file, { mtimeNs, size: st.size, text });
   return { mtimeMs, mtimeNs, text };
 }
+
+/** #292-cutover-P1（C-C2）：大源（>SIZE_MEMO_MAX_BYTES）短路三元组——不存 text
+ * （防 35MB 常驻内存），只记 mtimeNs+size+lineCount 供双未变判快进。 */
+const LARGE_SHORTCIRC = new Map<string, { mtimeNs: string; size: number; lineCount: number }>();

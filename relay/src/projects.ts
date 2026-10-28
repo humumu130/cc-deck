@@ -1289,8 +1289,10 @@ function writeConfirms(list: OrgConfirm[], dir?: string): boolean {
     // 只留最近 200 条已决 + 全部 pending（确认历史是审计面但不无限涨）
     const pending = list.filter((c) => c.status === "pending");
     const decided = list.filter((c) => c.status !== "pending").slice(-200);
-    writeFileSync(confirmsFilePath(d), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n", "utf-8");
-    return true;
+    // #292-cutover-P1（B-F3）：confirms.json 改原子写（tmp+rename）——裸 writeFileSync
+    // 的半写窗口×导入器「坏 JSON=清域+落 checkpoint」= 待决确认单被静默清空且空态合法化
+    // （projects.json 同族文件 T0a 已落 atomicWriteJson，本件补齐）
+    return atomicWriteJson(confirmsFilePath(d), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n");
   } catch (e) {
     console.warn(`[projects] 确认单写入失败: ${e instanceof Error ? e.message : String(e)}`);
     return false;

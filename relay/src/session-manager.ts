@@ -3,8 +3,9 @@ import { notificationsListOf } from "./decision-ledger-projection.js";
 import { readTitleOverrides } from "./title-derive.js";
 import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { atomicWriteJson } from "./fs-safe.js"; // #292-cutover-P1（B-F3）：notifications/deliverables 原子写
 import { withStorageTx } from "./storage/org-write-tx.js";
-import { shadowWriteSession } from "./storage/session-write.js";
+import { shadowWriteSession, tombstoneSession } from "./storage/session-write.js";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -377,16 +378,20 @@ function readDeliverables(dataDir: string): DeliverableEntry[] {
   }
 }
 
-function appendDeliverable(dataDir: string, e: DeliverableEntry): void {
+function appendDeliverable(dataDir: string, e: DeliverableEntry): boolean {
   // #292-B3 批2 范式（deliverables.json→artifact 表追赶；显式 dataDir——cfg.dataDir
   // 可能≠env CCR_DATA_DIR，锁错库=互斥失效，见 withStorageTx 头注）
+  // #292-cutover-P1（B-F3+B-F7）：①writeFileSync→atomicWriteJson（半写×导入器
+  // 坏 JSON 清域=交付清单静默清空，B 路审查 F3 同族）；②catch{} 静默吞→显式 warn
+  // +返回 false（磁盘满/AV 锁文件时调用方当成功=文件库两丢零日志，B-F7）
+  let ok = true;
   withStorageTx({ dataDir }, () => {
     const list = readDeliverables(dataDir).filter((x) => !(x.sid === e.sid && x.path === e.path));
     list.push(e);
-    try {
-      writeFileSync(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
-    } catch {}
+    ok = atomicWriteJson(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    if (!ok) console.warn(`[deliverable] 交付清单写入失败（文件/库均无此记录，调用方应知悉）：sid=${e.sid} path=${e.path}`);
   });
+  return ok;
 }
 
 // 手动命名的跨重启持久化（2026-09-16）：外部会话重启后经 ensureExternal 从 transcript
@@ -1047,9 +1052,13 @@ export class SessionManager {
     // 高频域（每通知一写）：追赶成本见 test-c3 §P 计时断言（>50ms 阈值改异步）
     this.trimNotifications();
     withStorageTx({ dataDir: this.cfg.dataDir }, () => {
+      // #292-cutover-P1（B-F3）：notifications.json 改原子写——裸 writeFileSync 半写窗口
+      // ×导入器「坏 JSON=清域+落 checkpoint」= 通知生命周期（已读/已忽略）静默清空
       try {
         mkdirSync(this.cfg.dataDir, { recursive: true });
-        writeFileSync(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
+        if (!atomicWriteJson(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n")) {
+          console.warn("[notify] 通知账原子写失败（fs-safe 已告警，此处补语义面）");
+        }
       } catch (e) {
         console.warn(`[notify] 通知账写入失败: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -2458,6 +2467,9 @@ export class SessionManager {
     this.sessions.delete(id);
     this.lastStoreTodos.delete(id);
     this.allowRules.dropSession(id); // #212 会话删除清 session 级记住规则
+    // #292-cutover-P1（A-1/B-F1）：库侧墓碑（shadow 期即写，翻 db 前积累正确墓碑，
+    // 否则 dbRowsToReplayed 收养已删行=删卡复活；失败不炸删卡主链）
+    try { tombstoneSession(this.cfg.dataDir, id); } catch { /* 尽力而为 */ }
     if (s.state.external) {
       this.deletedExtIds.add(id);
       appendDeletedExt(this.cfg.dataDir, id);

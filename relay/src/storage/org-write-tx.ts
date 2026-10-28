@@ -46,7 +46,12 @@ let txDepth = 0; // #292-B2 A-P2-2/B-A6：嵌套防护——出口互调出口�
  * （文件态由 fn 自身原子写保证；库锁释放）；正常→commit+导入追赶（追赶失败 warn
  * 降级——文件账在，下次读前触发兜底）。SQLite 不可用→fn 纯文件执行（降级一次告警）。 */
 export function withOrgWriteTx<T>(dir: string | undefined, fn: () => T): T {
-  return withStorageTx(dir ? { orgDir: dir } : undefined, fn);
+  // #292-cutover-P1（C-C1）：org 域写口（三口+八口）的导入追赶转 deferred——
+  // commit 后同步追赶在 org 三源变更时触发下游 10 表全清+全量重灌（35MB events
+  // 实测 98.8s 单线程冻结）。改 setImmediate 后：①写调用点立即返回（用户操作
+  // 不再冻结 1.5 分钟）；②突发 org 操作合并去抖（同 tick 一赶）；③读者走读前
+  // 触发自带追赶=自愈（与 B3 通知域同款一致性窗口论证）。文件账先成=降级安全。
+  return withStorageTx(dir ? { orgDir: dir } : undefined, fn, { deferredSync: true });
 }
 
 /** #292-B3：显式 dirs 变体——dataDir 域写口（notifications/deliverables 在
@@ -106,14 +111,30 @@ export function withStorageTx<T>(dirsOverride: Partial<ReadModeDirs> | undefined
   // observe）同步阻塞不可接受。一致性窗口论证：窗口内读者（viaReadMode）走读前
   // 触发自带追赶=自愈（读到的或旧或新皆一致快照），窗口仅到下个事件循环 tick——
   // 最终一致，无丢账面（文件账先成）
+  //
+  // #292-cutover-P1（C-C2 追赶合并去抖）：突发 K 条通知=K 个排队 pass，每个 pass
+  // 全文读 35MB events（memo 2MB 上限失效）≈90ms 纯税×K——200 条实测阻塞 20s、
+  // 1k 条 84s。同 tick 批量写只付一次追赶（合并语义：checkpoint 幂等，多写一赶=
+  // 全部生效）。在途标志：同 tick 的后续写看到 pending 直跳过（无重复排队）。
   const sync = () => {
     try {
       ensureStore(dirs);
     } catch (err) {
       console.warn("[org-write-tx] 导入追赶降级（文件账在，读前触发兜底）：", err instanceof Error ? err.message : err);
+    } finally {
+      syncPending.delete(dirs.dataDir);
     }
   };
-  if (opts?.deferredSync) setImmediate(sync);
+  if (opts?.deferredSync) {
+    if (!syncPending.has(dirs.dataDir)) {
+      syncPending.add(dirs.dataDir);
+      setImmediate(sync);
+    }
+    // else: 本 tick 已有在途追赶——它会在跑时看到本写的新 checkpoint（幂等），跳过排队
+  }
   else sync();
   return result;
 }
+
+/** #292-cutover-P1（C-C2）：per-dataDir 在途追赶标志（同 tick 去抖合并——防 K 写=K 次全量 observe 税） */
+const syncPending = new Set<string>();
