@@ -172,6 +172,24 @@ console.log("§D 降级：");
   process.env.CCR_DATA_DIR = SB("../data/test-c4-data/");
 }
 
+// §B（B4b 对账哨）：三态差异分类正确性
+{
+  const { bootReconcile, bootFromMode } = sw;
+  // 构造：库有 a/b/c，回放有 b/c/d——dbOnly=[a]、replayOnly=[d]
+  const fakePort = {
+    query: () => [{ id: "a", status: "WORKING" }, { id: "b", status: "DONE" }, { id: "c", status: "WORKING" }],
+  } as never;
+  const r = bootReconcile(fakePort, new Set(["b", "c", "d"]));
+  assert4(r.dbOnly.length === 1 && r.dbOnly[0] === "a", `B1 库多行分类（实 ${JSON.stringify(r.dbOnly)}）`);
+  assert4(r.replayOnly.length === 1 && r.replayOnly[0] === "d", `B2 回放多卡分类（实 ${JSON.stringify(r.replayOnly)}）`);
+  const r2 = bootReconcile({ query: () => [{ id: "x", status: "WORKING" }] } as never, new Set(["x"]));
+  assert4(r2.dbOnly.length === 0 && r2.replayOnly.length === 0, "B3 零差异路径");
+  assert4(bootFromMode() === "events" && process.env.CCR_BOOT_FROM === undefined, "B4 缺省 events（现行为不动）");
+  process.env.CCR_BOOT_FROM = "auto";
+  assert4(bootFromMode() === "auto", "B5 auto 态识别");
+  delete process.env.CCR_BOOT_FROM;
+}
+
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 for (const d of ["../data/test-c4-org/", "../data/test-c4-data/", "../data/test-c4-fk/"]) {
   try { rmSync(SB(d), { recursive: true, force: true }); } catch {}

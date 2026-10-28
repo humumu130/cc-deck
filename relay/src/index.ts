@@ -303,6 +303,18 @@ const compactEventsTick = (): void => {
 setInterval(compactEventsTick, 6 * 3600_000).unref?.();
 const replayed = boot.sessions; // 单遍流式产物（= reduceHistory(kept) 等价）
 
+// #292-B4b boot 对账哨（CCR_BOOT_FROM=auto 时：库行 vs 回放卡差异日志，零行为切换
+// ——为切源 db 优先 adopt 提供生产对账数据；缺省 events 不跑）
+if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") {
+  try {
+    const { ensureStoreQuiet, resolveDirs: rd } = await import("./storage/read-mode.js");
+    const { bootReconcile } = await import("./storage/session-write.js");
+    bootReconcile(ensureStoreQuiet(rd()), new Set(replayed.keys()));
+  } catch (err) {
+    console.warn("[boot-reconcile] 对账哨降级（boot 不受影响，回放兜底）：", err instanceof Error ? err.message : err);
+  }
+}
+
 const bus = new EventBus({ preload: kept, persistPath });
 const mgr = new SessionManager(bus, cfg);
 // W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
