@@ -261,15 +261,15 @@ const anchor5d = join(TDATA, "team-anchor-d");
 mkdirSync(anchor5d, { recursive: true });
 const ackBadType = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "类型团", anchor_dir: anchor5d, tier: "轻立项", pm_session_id: 12345 }));
 assert(ackBadType.ok === true, "5b non-string pm_session_id ignored (order succeeds)");
-const groupT = (ackBadType.data as { group?: { headcount?: unknown[] } })?.group;
-assert(!!groupT && !(groupT.headcount ?? []).some((r) => /^(pm|leader|产品经理|项目经理|领队)$/i.test(r.role)), "5b no PM row for non-string pm_session_id");
+const groupT = (ackBadType.data as { group?: { headcount?: { role?: unknown }[] } })?.group;
+assert(!!groupT && !(groupT.headcount ?? []).some((r) => /^(pm|leader|产品经理|项目经理|领队)$/i.test(String(r.role))), "5b no PM row for non-string pm_session_id");
 // P3-2：超长 sid（>128）→ 同上收口（不进「不在册」拒——pmSidRaw 已清空）
 const anchor5e = join(TDATA, "team-anchor-e");
 mkdirSync(anchor5e, { recursive: true });
 const ackLong = await waitAck(send("COMMAND_ORG_ACTION", { action: "create", name: "超长团", anchor_dir: anchor5e, tier: "轻立项", pm_session_id: "x".repeat(200) }));
 assert(ackLong.ok === true, "5b overlong pm_session_id ignored (order succeeds)");
-const groupL = (ackLong.data as { group?: { headcount?: unknown[] } })?.group;
-assert(!!groupL && !(groupL.headcount ?? []).some((r) => /^(pm|leader|产品经理|项目经理|领队)$/i.test(r.role)), "5b no PM row for overlong pm_session_id");
+const groupL = (ackLong.data as { group?: { headcount?: { role?: unknown }[] } })?.group;
+assert(!!groupL && !(groupL.headcount ?? []).some((r) => /^(pm|leader|产品经理|项目经理|领队)$/i.test(String(r.role))), "5b no PM row for overlong pm_session_id");
 // 修法 c 纵深单测：sanitize gate 对非 pm 角色外部会话拒（绕过 session-manager 前置门的直调路径）；
 // 同时锁 PM_ROLE_RE 真导出（前席 diff 的 import 缺陷正是此常量未定义——本断言在位即防复发）
 import { adaptOrgAction, PM_ROLE_RE } from "../src/projects.js";

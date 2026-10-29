@@ -30,7 +30,11 @@ function ok(cond: boolean, name: string) {
 class TestCB extends CodeBuddyAgentSession {
   public args(prompt: string): string[] { return this.buildArgs(prompt); }
 }
-const noopCb: AgentCallbacks = { onTurnStart() {}, onTurnEnd() {}, onLog() {}, onUsage() {}, onDock() {}, onInit() {} };
+// noop 桩对齐现 AgentCallbacks 必填面（onTurnStart/onDock 已不在接口；补齐其余必填空实现——行为零变化）
+const noopCb: AgentCallbacks = {
+  onInit() {}, onStatusChange() {}, onWaiting() {}, onWaitingResolved() {}, onStats() {},
+  onUsage() {}, onTodos() {}, onLog() {}, onTurnEnd() {}, onSessionEnd() {},
+};
 const mkSession = (over: Partial<CodeBuddySessionOptions> = {}) =>
   new TestCB({ cwd: "/tmp", model: "", cb: noopCb, ...over });
 

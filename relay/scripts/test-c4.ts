@@ -155,7 +155,7 @@ console.log("§D 降级：");
   const { ensureStoreQuiet } = await import("../src/storage/read-mode.js");
   const dirsF = resolveDirs();
   const portF = ensureStoreQuiet({ ...dirsF, dataDir: process.env.CCR_DATA_DIR });
-  const stF = { session_id: "ext-c4-fk-0001", relay_session_id: "c4-fk-0001", project_gid: "pg-not-exist", cwd: "/tmp/fk", status: "WORKING", updated_at: Date.now(), started_at: Date.now() } as never;
+  const stF = { session_id: "ext-c4-fk-0001", relay_session_id: "c4-fk-0001", project_gid: "pg-not-exist", cwd: "/tmp/fk", status: "WORKING", updated_at: Date.now(), started_at: Date.now() } as any;
   sw.shadowWriteSession(stF); // 首帧：组不在库→NULL 化
   const rowF = portF.query<{ id: string; group_id: string | null }>("SELECT id, group_id FROM session WHERE id = ?", ["ext-c4-fk-0001"]);
   assert4(rowF.length === 1 && rowF[0]?.group_id === null, `F1 冷启新库首帧写：未知组 NULL 化落行零 FK 撞（实 group_id=${rowF[0]?.group_id ?? "无行"}）`);
@@ -166,10 +166,10 @@ console.log("§D 降级：");
   wfF(join(orgDirF, "projects.json"), JSON.stringify({ groups: [{
     id: "pg-not-exist", project_id: undefined, name: "FK 组", anchor_dir: "/tmp/fk-g", status: "active", tier: "轻立项",
     single_card: false, headcount: [], role_defaults: {}, created_at: Date.now(), updated_at: Date.now(),
-  } satisfies never] }, null, 2));
+  } as any] }, null, 2));
   const { ensureStore } = await import("../src/storage/read-mode.js");
   ensureStore(resolveDirs()); // 读前触发=import-org 灌组行
-  const stF2 = { ...stF, updated_at: Date.now() } as never;
+  const stF2 = { ...stF, updated_at: Date.now() } as any;
   sw.shadowWriteSession(stF2);
   const rowF2 = portF.query<{ group_id: string | null }>("SELECT group_id FROM session WHERE id = ?", ["ext-c4-fk-0001"]);
   assert4(rowF2[0]?.group_id === "pg-not-exist", `F2 组行在位后 REPLACE 自愈归因（实 ${rowF2[0]?.group_id}）`);

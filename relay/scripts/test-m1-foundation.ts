@@ -43,6 +43,7 @@ class FaultPort implements StoragePort {
   constructor(private inner: StoragePort, private trip: (sql: string, params: unknown[] | undefined) => boolean) {}
   get path(): string { return this.inner.path; }
   get isOpen(): boolean { return this.inner.isOpen; }
+  get inTransaction(): boolean { return this.inner.inTransaction; }
   open(): void { this.inner.open(); }
   close(): void { this.inner.close(); }
   begin(): void { this.inner.begin(); }

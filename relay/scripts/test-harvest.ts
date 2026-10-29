@@ -45,9 +45,9 @@ writeFileSync(join(dataD, "leader-dispatches.ndjson"), JSON.stringify({ id: did,
 
 console.log("寻址与请求面:");
 const miss = harvestCheck({});
-assert(!miss.ok && miss.error?.includes("dispatch_id 必填"), "dispatch_id 缺失拒");
+assert(!miss.ok && !!miss.error?.includes("dispatch_id 必填"), "dispatch_id 缺失拒");
 const outofbook = harvestCheck({ dispatch_id: "dp-none" });
-assert(!outofbook.ok && outofbook.error?.includes("两本账"), "账外单无指路拒");
+assert(!outofbook.ok && !!outofbook.error?.includes("两本账"), "账外单无指路拒");
 
 console.log("六 gate（全绿单）:");
 const r = harvestCheck({ dispatch_id: did });
@@ -83,10 +83,10 @@ rd.fails; void rd;
 // worktree 缺席降级（§1.4 不炸 500）
 const rw = harvestCheck({ dispatch_id: did, receipt: receiptOk, worktree: join(root, "no-such-wt"), branch: "fix/x" });
 assert(rw.ok === true, "worktree 缺席 → 结构化降级不炸");
-assert(rw.checks.find((c) => c.gate === "commits")?.pass === false && rw.checks.find((c) => c.gate === "commits")?.detail.includes("不存在"), "commits 闸降级占位");
+assert(rw.checks.find((c) => c.gate === "commits")?.pass === false && !!rw.checks.find((c) => c.gate === "commits")?.detail.includes("不存在"), "commits 闸降级占位");
 // 基线不可解析退化
 const ru = harvestCheck({ dispatch_id: did, receipt: receiptOk, worktree: wt, branch: "fix/demo", base: "deadbeef" });
-assert(ru.checks.find((c) => c.gate === "commits")?.detail.includes("退最近 10 条"), "基线不可解析退最近 10 条（leader-harvest 语义）");
+assert(!!ru.checks.find((c) => c.gate === "commits")?.detail.includes("退最近 10 条"), "基线不可解析退最近 10 条（leader-harvest 语义）");
 
 console.log("stages 断点续办（§1.5）:");
 appendDispatch({ ts: Date.now(), id: did, tier: "正经立项", target: "w1", status: "running", session_id: "sess-1", title: "演示单", stage: "merged", stage_detail: "squash 进 dev" }, orgD);
