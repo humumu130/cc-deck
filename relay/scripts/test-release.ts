@@ -48,11 +48,11 @@ console.log("前置机械闸（P2-2）:");
 // 脏仓拒跑（先造脏——dev 分支在场但 porcelain 不干净）
 writeFileSync(join(repo, "dirty.txt"), "x");
 const dirty = rel.run({ channel: "apk-test", confirm: true });
-assert(dirty.ok === false && (dirty as { error?: string }).error?.includes("未提交"), "主仓脏 → 拒跑");
+assert(dirty.ok === false && !!(dirty as { error?: string }).error?.includes("未提交"), "主仓脏 → 拒跑");
 // 分支错拒跑
 g(["checkout", "-qb", "feat-wrong"]);
 const wrongBranch = rel.run({ channel: "apk-test", confirm: true });
-assert(wrongBranch.ok === false && (wrongBranch as { error?: string }).error?.includes("分支"), "非 dev 分支 → 拒跑");
+assert(wrongBranch.ok === false && !!(wrongBranch as { error?: string }).error?.includes("分支"), "非 dev 分支 → 拒跑");
 g(["checkout", "dev"]);
 g(["add", "-A"]); g(["commit", "-qm", "clean again"]);
 // dev 干净 → 可启动（等首轮跑完防单飞窗口串扰）
@@ -62,12 +62,12 @@ await new Promise((res) => setTimeout(res, 800));
 
 console.log("二次确认（拍板 #8）:");
 const noConfirm = rel.run({ channel: "apk-test" });
-assert(noConfirm.ok === false && (noConfirm as { error?: string }).error?.includes("二次确认"), "无 confirm:true 拒");
+assert(noConfirm.ok === false && !!(noConfirm as { error?: string }).error?.includes("二次确认"), "无 confirm:true 拒");
 
 console.log("run 编排+事件+history:");
 const hist = rel.listHistory(5);
 assert(hist[0]?.status === "done", `脚本跑完 status=done（实得 ${hist[0]?.status}）`);
-assert(hist[0]?.urls?.some((u) => u.includes("example.com")), "直链从 stdout 提取");
+assert(!!hist[0]?.urls?.some((u) => u.includes("example.com")), "直链从 stdout 提取");
 const prog = rel.configGet().data.progress as Record<string, string>;
 assert(typeof prog["apk-test"] === "string", "progress 快照面在（轮询消费）");
 const segEvents = events.filter((e) => e.type === "RELEASE_PROGRESS");
@@ -82,10 +82,10 @@ g(["add", "-A"]); g(["commit", "-qm", "slow script"]); // 脚本覆盖后收口�
 const r1 = rel.run({ channel: "apk-test", confirm: true });
 assert(r1.ok === true, "第一跑启动");
 const r2 = rel.run({ channel: "apk-test", confirm: true });
-assert(r2.ok === false && (r2 as { error?: string }).error?.includes("单飞互斥"), "同通道并发拒（409 语义）");
+assert(r2.ok === false && !!(r2 as { error?: string }).error?.includes("单飞互斥"), "同通道并发拒（409 语义）");
 // 未知通道
 const r3 = rel.run({ channel: "nope", confirm: true });
-assert(r3.ok === false && (r3 as { error?: string }).error?.includes("未知通道"), "未知通道拒");
+assert(r3.ok === false && !!(r3 as { error?: string }).error?.includes("未知通道"), "未知通道拒");
 
 console.log("部署边界:");
 process.env.CCR_MAIN_REPO = join(root, "no-such-repo");

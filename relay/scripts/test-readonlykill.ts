@@ -7,9 +7,9 @@ import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { reduceHistory } from "../src/history.js";
+import { reduceHistory, type ReplayedSession } from "../src/history.js";
 import { adoptReplayed } from "../src/lifecycle/adopt.js";
-import type { Envelope, ReplayedSession } from "../src/types.js";
+import type { Envelope } from "../src/types.js";
 
 let pass = 0;
 let fail = 0;
@@ -142,7 +142,7 @@ process.stdin.on("data", (d) => {
   const st2 = mgr.getExternal("ext-rk");
   // historical 断言降级为信息输出：startServer 全监听环境下有间歇性条目替换噪声
   //（测试基建，非产品链——生产侧 historical 语义由 1573 hook 解除+①② 段纯函数断言锁死）
-  console.log(`  info: 注入后 historical=${st2?.state?.historical}（期望非 true；噪声时此值不可信，语义由 ①② 段锁死）`);
+  console.log(`  info: 注入后 historical=${st2?.historical}（期望非 true；噪声时此值不可信，语义由 ①② 段锁死）`);
   try { execSync("tmux kill-session -t rk-e2e", { stdio: "ignore" }); } catch {}
   rmSync(root, { recursive: true, force: true });
 }

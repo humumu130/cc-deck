@@ -17,7 +17,7 @@ function makeClient() {
   c.unpairedNotice = new Map();
   let rotated = 0;
   c.ws = { readyState: 1, terminate: () => rotated++ };
-  const miss = (to: string) => { try { CloudClient.prototype.onFrame.call(c, JSON.stringify({ type: "ROUTE_MISS", to })); } catch { /* 桩缺字段非本面 */ } };
+  const miss = (to: string) => { try { (CloudClient.prototype as any).onFrame.call(c, JSON.stringify({ type: "ROUTE_MISS", to })); } catch { /* 桩缺字段非本面 */ } };
   return { c, miss, rotated: () => rotated };
 }
 
@@ -62,7 +62,7 @@ const ok = (cond: boolean, name: string) => { if (cond) { pass++; console.log(" 
   const { c, miss } = makeClient();
   for (let i = 0; i < 3; i++) miss("ph-a");
   // hello 到达（走 onFrame 同链——设备→relay 方向活）
-  try { CloudClient.prototype.onFrame.call(c, JSON.stringify({ from: "ph-a", t: "sealed", data: { t: "hello", last_seq: 100 } })); } catch { /* 桩缺 seal 链 */ }
+  try { (CloudClient.prototype as any).onFrame.call(c, JSON.stringify({ from: "ph-a", t: "sealed", data: { t: "hello", last_seq: 100 } })); } catch { /* 桩缺 seal 链 */ }
   c.parkedDevices.delete("ph-a"); c.deviceMissCount.delete("ph-a"); // 桩环境 seal 解不开，直验 hello 链的两动作（真链在 005-cloud 全链覆盖）
   ok(!c.parkedDevices.has("ph-a") && !c.deviceMissCount.has("ph-a"), "⑥ hello 到达 unpark+计数清零（真链字段动作）");
 }

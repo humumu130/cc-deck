@@ -1,5 +1,5 @@
 // 日志回放（tsx 转译）：僵尸 park→停推→换桥停→hello 复活
-import { CloudClient } from "../src/cloud-client.ts";
+import { CloudClient } from "../src/cloud-client.js";
 const c = Object.create(CloudClient.prototype) as any;
 c.phones = new Map([["ph-9ba39", { lastSeq: 100, active: true }], ["wb-40d555", { lastSeq: 200, active: true }], ["ph-neverhello", { lastSeq: 50, active: true }]]);
 c.lastHelloAt = new Map([["wb-40d555", Date.now() - 1000], ["ph-9ba39", Date.now() - 1000]]); // ph-9ba39 近期有 hello（场景①验证 park 路径）；neverhello 无
@@ -9,7 +9,7 @@ c.routeMissStreak = 0; c.lastMissKickAt = 0;
 c.deviceMissCount = new Map(); c.parkedDevices = new Set(); c.wbSightings = new Map(); c.unpairedNotice = new Map();
 let rotated = 0;
 c.ws = { readyState: 1, terminate: () => rotated++ };
-const miss = (to: string) => { try { CloudClient.prototype.onFrame.call(c, JSON.stringify({ type: "ROUTE_MISS", to })); } catch (e: any) { console.log("onFrame err:", String(e.message).slice(0, 80)); } };
+const miss = (to: string) => { try { (CloudClient.prototype as any).onFrame.call(c, JSON.stringify({ type: "ROUTE_MISS", to })); } catch (e: any) { console.log("onFrame err:", String(e.message).slice(0, 80)); } };
 for (let i = 1; i <= 5; i++) { c.lastMissKickAt = 0; miss("ph-9ba39"); }
 console.log("① 僵尸 5 miss：parked=", c.parkedDevices.has("ph-9ba39"), "rotated=", rotated);
 const rotBefore = rotated;
