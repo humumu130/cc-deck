@@ -471,24 +471,58 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rule promote <exp_id> [text] [audience] [scope]  经验升格为规则（复制非搬移，promoted_from 溯源）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
+# 【公司侧反馈 #2·1029】python 探测器：python3 → python → py（Windows Git Bash
+# 通常只有 python/py 启动器，裸 python3=command not found）。探测一次全脚本复用。
+PY="$(command -v python3 || command -v python || command -v py || true)"
+if [ -z "$PY" ]; then
+  echo "未找到 python（依次尝试过 python3 / python / py 都不在 PATH）——请安装 Python 3：https://www.python.org/downloads/（Windows 安装时勾选 Add python.exe to PATH）后重开终端重试" >&2
+  exit 1
+fi
+# 【公司侧反馈 #1·1029】Git Bash/MSYS 环境检测——/d/code 形态的路径需转 D:/code
+# 才能被 relay 侧 Node fs 识别（Node 不认 MSYS 虚拟根）。ORG_TEST_GITBASH=1 为
+# 测试注入口（非 Windows 机器强制开转换分支验证）。
+WIN_GITBASH=0
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN_GITBASH=1 ;; esac
+[ "\${ORG_TEST_GITBASH:-0}" = "1" ] && WIN_GITBASH=1
 # 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
 # Leader 会话由 relay spawn，经 childEnv 继承 relay 的 CCR_* —— 沙盒 relay 拉起的
 # Leader 调本 CLI 自动打到沙盒；生产无这些 env 时行为与旧版逐字节一致。
 data="\${CCR_DATA_DIR:-\$HOME/.cc-deck/data}"
 token="\${CCR_TOKEN:-\$(cat "\$data/token" 2>/dev/null || true)}"
 [ -z "$token" ] && { echo "未找到 token（\$data/token 或环境变量 CCR_TOKEN，relay 未初始化？）" >&2; exit 1; }
-port="\${CCR_PORT:-\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "\$data/bridge.json" 2>/dev/null || true)}"
+port="\${CCR_PORT:-\$("$PY" -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "\$data/bridge.json" 2>/dev/null || true)}"
 : "\${port:=8787}"
 
 action="\${1:-}"
 [ -z "$action" ] && { sed -n '3,33p' "$0" | sed 's/^# //' >&2; exit 1; }
 shift || true
 
-abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
+abs() {
+  # 【公司侧反馈 #1·1029】anchor 三形态归一化：D:\\code\\x / D:/code/x 原样（Node
+  # win32 直接可用）；Git Bash 的 /d/code/x → D:/code/x（MSYS 虚拟根 Node 不认，
+  # 仅 WIN_GITBASH=1 时转——真 POSIX 机器 /d/... 是合法绝对路径零变化）；相对路径
+  # 先补 $PWD（Git Bash 下 PWD 常为 /d/ 形态，补全后过同一转换）。
+  local p="$1" d
+  case "$p" in
+    [A-Za-z]:[\\\\/]*) printf '%s' "$p"; return 0 ;;
+    /*) : ;;
+    *) p="$PWD/$p" ;;
+  esac
+  if [ "$WIN_GITBASH" = "1" ]; then
+    case "$p" in
+      /[A-Za-z]/*)
+        d="\$(printf '%s' "\${p:1:1}" | tr 'a-z' 'A-Z')"
+        printf '%s:/%s' "\$d" "\${p:3}"
+        return 0
+        ;;
+    esac
+  fi
+  printf '%s' "$p"
+}
 
 case "$action" in
   status)
-    body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    body="$("$PY" -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
     ;;
   auth-bypass)
     # W-PERMERR：用户明示授权「跳过权限确认」写入口（on=授权/off=撤销；撤销即收回）
@@ -497,12 +531,12 @@ case "$action" in
       on|off) ;;
       *) echo "用法: org auth-bypass <on|off>" >&2; exit 1 ;;
     esac
-    body="$(python3 -c 'import json,sys;print(json.dumps({"action":"auth-bypass","on":sys.argv[1]=="on"},ensure_ascii=False))' "$1")"
+    body="$("$PY" -c 'import json,sys;print(json.dumps({"action":"auth-bypass","on":sys.argv[1]=="on"},ensure_ascii=False))' "$1")"
     ;;
   create)
     [ $# -ge 3 ] || { echo "用法: org create <name> <anchor> <轻立项|正经立项>" >&2; exit 1; }
     a2="$(abs "$2")"
-    body="$(python3 - "$1" "$a2" "$3" <<'PY'
+    body="$("$PY" - "$1" "$a2" "$3" <<'PY'
 import json, sys
 print(json.dumps({"action":"project-create","name":sys.argv[1],"anchor":sys.argv[2],"tier":sys.argv[3]},ensure_ascii=False))
 PY
@@ -510,7 +544,7 @@ PY
     ;;
   set)
     [ $# -ge 2 ] || { echo "用法: org set <id> <active|parked|archived> [note]" >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    body="$("$PY" - "$@" <<'PY'
 import json, sys
 d={"action":"project-status","id":sys.argv[1],"to":sys.argv[2]}
 if len(sys.argv)>3: d["note"]=sys.argv[3]
@@ -520,7 +554,7 @@ PY
     ;;
   tier)
     [ $# -ge 3 ] || { echo "用法: org tier <id> <轻立项|正经立项> <reason>" >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    body="$("$PY" - "$@" <<'PY'
 import json, sys
 print(json.dumps({"action":"project-tier","id":sys.argv[1],"to":sys.argv[2],"reason":sys.argv[3]},ensure_ascii=False))
 PY
@@ -528,7 +562,7 @@ PY
     ;;
   hold)
     [ $# -ge 2 ] || { echo "用法: org hold <id|-> <reason> [condition]" >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    body="$("$PY" - "$@" <<'PY'
 import json, sys
 gid="" if sys.argv[1]=="-" else sys.argv[1]
 d={"action":"suggest-hold","reason":sys.argv[2]}
@@ -546,7 +580,7 @@ PY
     if [ $# -ge 1 ]; then gid="$1"; shift || true; fi
     if [ $# -ge 1 ]; then title="$1"; shift || true; fi
     if [ $# -ge 1 ]; then skills="$1"; shift || true; fi
-    body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
+    body="$("$PY" - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
 import json, sys
 d={"action":"dispatch","anchor":sys.argv[1],"prompt":sys.argv[2]}
 if sys.argv[3]: d["gid"]=sys.argv[3]
@@ -558,7 +592,7 @@ PY
     ;;
   board)
     [ $# -ge 3 ] || { echo "用法: org board upsert|move|del <gid> <text|entry_id> [status]" >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    body="$("$PY" - "$@" <<'PY'
 import json, sys
 op, gid = sys.argv[1], sys.argv[2]
 d={"action":"board","op":op,"gid":gid}
@@ -574,7 +608,7 @@ PY
     ;;
   detail)
     [ $# -ge 1 ] || { echo "用法: org detail <id>" >&2; exit 1; }
-    body="$(python3 - "$1" <<'PY'
+    body="$("$PY" - "$1" <<'PY'
 import json, sys
 print(json.dumps({"action":"project-detail","id":sys.argv[1]},ensure_ascii=False))
 PY
@@ -582,7 +616,7 @@ PY
     ;;
   rate)
     [ $# -ge 3 ] || { echo "用法: org rate <gid> <sid> <good|bad>" >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    body="$("$PY" - "$@" <<'PY'
 import json, sys
 print(json.dumps({"action":"rate","gid":sys.argv[1],"sid":sys.argv[2],"rating":sys.argv[3]},ensure_ascii=False))
 PY
@@ -590,7 +624,7 @@ PY
     ;;
   tag)
     [ $# -ge 3 ] || { echo "用法: org tag <gid> <sid> <tag>..." >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    body="$("$PY" - "$@" <<'PY'
 import json, sys
 print(json.dumps({"action":"tag","gid":sys.argv[1],"sid":sys.argv[2],"tags":sys.argv[3:]},ensure_ascii=False))
 PY
@@ -599,7 +633,7 @@ PY
   member-retire)
     [ $# -ge 2 ] || { echo "用法: org member-retire <gid> <sid> [reason]" >&2; exit 1; }
     reason="\${3:-}"
-    body="$(python3 - "$1" "$2" "$reason" <<'PY'
+    body="$("$PY" - "$1" "$2" "$reason" <<'PY'
 import json, sys
 d={"action":"member-retire","gid":sys.argv[1],"sid":sys.argv[2]}
 if sys.argv[3]: d["reason"]=sys.argv[3]
@@ -613,7 +647,7 @@ PY
     engine="\${4:-}"
     model="\${5:-}"
     provider="\${6:-}"
-    body="$(python3 - "$1" "$2" "$role" "$engine" "$model" "$provider" <<'PY'
+    body="$("$PY" - "$1" "$2" "$role" "$engine" "$model" "$provider" <<'PY'
 import json, sys
 d={"action":"member-add","gid":sys.argv[1],"sid":sys.argv[2],"role":sys.argv[3]}
 if sys.argv[4]: d["engine"]=sys.argv[4]
@@ -627,7 +661,7 @@ PY
     # W-EXPP1 团队经验库（~/.cc-deck/org/experience.json）：append/list/bump/retire/restore
     [ $# -ge 1 ] || { echo "用法: org exp append|list|bump|retire|restore ..." >&2; exit 1; }
     op="$1"; shift
-    body="$(python3 - "$op" "$@" <<'PY'
+    body="$("$PY" - "$op" "$@" <<'PY'
 import json, sys
 op = sys.argv[1]
 args = sys.argv[2:]
@@ -665,7 +699,7 @@ PY
     # W-KWP1 岗位模板库只读查看（写面 P2：模板编辑走手编 org/role-templates.json）
     [ $# -ge 1 ] || { echo "用法: org role list|show ..." >&2; exit 1; }
     op="$1"; shift
-    body="$(python3 - "$op" "$@" <<'PY'
+    body="$("$PY" - "$op" "$@" <<'PY'
 import json, sys
 op = sys.argv[1]
 args = sys.argv[2:]
@@ -688,7 +722,7 @@ PY
     # scope: team | 项目目录路径（相对路径按当前目录补全）
     [ $# -ge 1 ] || { echo "用法: org rule append|list|retire|supersede|promote ..." >&2; exit 1; }
     op="$1"; shift
-    body="$(python3 - "$op" "$@" <<'PY'
+    body="$("$PY" - "$op" "$@" <<'PY'
 import json, sys, os
 op = sys.argv[1]
 args = sys.argv[2:]

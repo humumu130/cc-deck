@@ -6676,8 +6676,14 @@ export class SessionManager {
     { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
-    // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
-    if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
+    // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）。
+    // 【公司侧反馈 #1·1029】startsWith("/") 只认 POSIX 绝对——Windows 宿主上
+    // D:\code\... 合法派单被拒；换 anchorPathError 宿主判定单点（#260 同源，
+    // win32 盘符/posix 斜杠随宿主 OS，文案自解释）
+    if (!input.gid) {
+      const anchorErr = anchorPathError(input.anchor);
+      if (anchorErr) return { ok: false, error: anchorErr };
+    }
     let tier: DispatchTier = "随手办";
     let anchor = input.anchor;
     let group = input.gid ? findGroup(input.gid) : null;
