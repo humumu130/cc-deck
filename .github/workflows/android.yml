@@ -78,11 +78,28 @@ jobs:
           cp app-arm64-v8a-release.apk "CC-Deck-${GITHUB_REF_NAME}.apk"
           cp app-armeabi-v7a-release.apk "CC-Deck-${GITHUB_REF_NAME}-v7a.apk"
 
+      - name: Deploy reminder（console-guardrails ③ 出包≠部署——1030 黄底事故防再犯）
+        shell: bash
+        run: |
+          echo "::warning::⚠️ 本包不含部署，需手动部署面同步——APK 只进 artifact/Release，运行端不会自动更新"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## ⚠️ 部署链提醒（console-guardrails ③）
+          本 CI 只出包。核对表见 artifact 内 DEPLOY-CHECKLIST.md；桌面侧另跑 scripts/deploy-web.sh 四面同步。
+          EOF
+          cat > DEPLOY-CHECKLIST.md <<'CHK'
+          部署清单核对表（console-guardrails ③）
+          ⚠️ 本包不含部署步——运行端不会随 APK 自动更新。
+          - [ ] APK 已挂 Release / 分发链接可下
+          - [ ] 手机端装机后「关于」显示完整通道版本（latest-test.json 已更新）
+          - [ ] 桌面侧部署面同步（若同批有桌面出包）
+          CHK
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CC-Deck-${{ github.ref_name }}
-          path: expo-app/android/app/build/outputs/apk/release/*.apk
+          path: |
+            expo-app/android/app/build/outputs/apk/release/*.apk
+            DEPLOY-CHECKLIST.md
           if-no-files-found: error
 
       - name: Create GitHub Release with APK

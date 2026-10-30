@@ -47,7 +47,9 @@ writeFileSync(wcPath, readFileSync(wcPath, "utf-8").replace(/(CONSOLE_VERSION\s*
 // 双壳同刷（新旧壳共存，2026-10-07 用户拍板）：/app2 的 005 新壳也是在线服务面，
 // 版本回写两处都做，防主/副壳版本号各说各话
 const wc005Path = join(root, "web-console", "index-005.html");
-writeFileSync(wc005Path, readFileSync(wc005Path, "utf-8").replace(/(CONSOLE_VERSION\s*=\s*)"[^"]*"/, `$1"${ver}"`));
+// console-guardrails ④：005 常量唯一定义位=头部 window.__ccDeck005Version（旧正则
+// CONSOLE_VERSION= 在 005 无定义命中=回写静默不命中，版本漂移三源之一）
+writeFileSync(wc005Path, readFileSync(wc005Path, "utf-8").replace(/(__ccDeck005Version\s*=\s*)"[^"]*"/, `$1"${ver}"`));
 
 // 3. 静态资源：网页控制台 + 移动端 PWA 壳 + APK + 注入器源码 + bridge hook（单源复制，防双份漂移）
 // ⚠ 此清单与 desktop-tauri/src-tauri/tauri.conf.json 的 resources 映射需同步维护

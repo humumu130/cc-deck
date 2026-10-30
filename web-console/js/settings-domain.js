@@ -31,7 +31,10 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
       // ⑥d 定版：005 壳出包版本（原 ⑥c-1 预发常量名退役，与全仓 VERSION 单一事实源统一）
-      const CONSOLE_VERSION = "0.7.0-test.73";
+      // console-guardrails ④：常量单源——唯一定义在 index-005.html 头部
+      // window.__ccDeck005Version（build-plugin 回写该处）；此处读值（老壳 index.html
+      // 内联本文件时回落其行内 CONSOLE_VERSION 由 html 定义先行的 <script> 提供）
+      const CONSOLE_VERSION = window.__ccDeck005Version || "dev";
       window.__ccDeck005Version = CONSOLE_VERSION; // ⑥c-2：移动端 IIFE 单一版本源
       // #158-批3 桌面壳版本（旧壳 8252-8266 范式）：INIT_SCRIPT 的 ccDeck 桥未暴露
       // appVersion——直接 __TAURI__.core.invoke("app_version")（返回壳 package.json 版本）。
@@ -48,10 +51,56 @@
               const tag = document.querySelector("[data-settings-version-tag]");
               if (tag) tag.textContent = v + " 通道";
               try { window.dispatchEvent(new CustomEvent("ccdeck:shellver")); } catch (_) {}
+              checkConsoleShellVersion(); // console-guardrails ①：壳版本到位即比对（横幅三态见函数头注）
             }, () => {});
           }
         } catch (_) {}
       }
+      // ---------- console-guardrails ① 版本错配横幅（1030 黄底事故防再犯） ----------
+      // 运行端 console 停 0.7.0-test.4 达 22 天/安装包版本 test.75 说谎的观测兜底：
+      // 壳版本（Tauri app_version，异步到位）vs 界面版本（__ccDeck005Version，构建期
+      // 烙印）。三态：①错配（core 或通道序号落后）→ 顶部非阻断横幅（刷新/更新数据可
+      // 同步——非阻断=不挡操作）；②一致 → 无横幅；③ browser/PWA（无 Tauri invoke，
+      // __shellVer 恒缺）→ 静默跳过（shellVer 探测链天然只在 invoke 成功后写值）。
+      // nova 变体后缀剥除后比对（壳 0.7.0-test.75-nova ≡ 0.7.0-test.75）。
+      function parseChannelVer(v) {
+        const m = /^(\d+\.\d+\.\d+)(?:-(test|snap|dev))?(?:\.(\d+))?/.exec(String(v || "").trim());
+        if (!m) return null;
+        return { core: m[1], channel: m[2] || "", seq: Number(m[3] || 0) };
+      }
+      function consoleShellMismatch(shellV, consoleV) {
+        const a = parseChannelVer(shellV), b = parseChannelVer(consoleV);
+        if (!a || !b) return null; // 解析不出（占位/自定义）→ 不判（宁漏勿误）
+        if (a.core !== b.core) return a.core > b.core ? "core" : "lead";
+        if (a.channel !== b.channel) return "channel";
+        if (a.seq > b.seq) return "seq";
+        return null;
+      }
+      function renderVersionBanner(kind, shellV) {
+        let el = document.getElementById("cc-ver-mismatch");
+        if (!kind) { if (el) el.remove(); return; }
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "cc-ver-mismatch";
+          el.className = "ver-mismatch-banner";
+          const bar = document.querySelector(".windowbar") || document.body.firstElementChild;
+          (bar && bar.parentNode ? bar.parentNode : document.body).insertBefore(el, bar.nextSibling);
+        }
+        el.textContent = kind === "lead"
+          ? "壳 v" + shellV + " 落后于界面 v" + (window.__ccDeck005Version || "?") + " · 更新壳（重装/升级安装包）后可同步"
+          : "界面 v" + (window.__ccDeck005Version || "?") + " 落后于壳 v" + shellV + " · 刷新页面或点「更新数据」可同步（分发链不同步的观测兜底）";
+        el.setAttribute("data-mismatch", kind);
+      }
+      function checkConsoleShellVersion() {
+        const shellV = window.__shellVer;
+        if (!shellV) return; // browser/PWA：无壳版本静默（护栏①三态之三）
+        const kind = consoleShellMismatch(shellV, window.__ccDeck005Version);
+        renderVersionBanner(kind, shellV);
+        const tag = document.querySelector("[data-settings-version-tag]");
+        if (tag && shellV) tag.textContent = "壳 v" + shellV + " · 界面 v" + (window.__ccDeck005Version || "?") + "（" + ((parseChannelVer(window.__ccDeck005Version) || {}).channel || "—") + " 通道）"; // 关于页双版本并显（错配恒可见；通道动态取，审查P2-2）
+      }
+      if (window.__shellVer) checkConsoleShellVersion(); // shellVer 已在（重载/热启动）即查
+      window.addEventListener("ccdeck:shellver", checkConsoleShellVersion);
       // #158-⌘文案 Windows 显示 Ctrl+：启动时全树替换静态 ⌘ 文案（设置卡 ⌘K 搜索 · ⌘N 新建会话；
       // W-TOPBAR ②：windowbar ⌘K 教学提示已退役，walker 全树扫不受影响）；
       // 动态模板走 MOD_KEY 分支。只改命中 text node，禁对容器整体 textContent 赋值——会摧毁子树

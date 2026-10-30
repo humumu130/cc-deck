@@ -50,6 +50,8 @@
       "../../web-console/index-005.html": "web-console/index-005.html",
       "../../web-console/nacl.js": "web-console/nacl.js",
       "../../web-console/qr.js": "web-console/qr.js",
+      "../../web-console/js/": "web-console/js/",
+      "../../web-console/css/": "web-console/css/",
       "../../web-console/manifest.json": "web-console/manifest.json",
       "../../web-console/apple-touch-icon.png": "web-console/apple-touch-icon.png",
       "../../web-console/icon-192.png": "web-console/icon-192.png",

@@ -103,8 +103,9 @@ jobs:
           V="${GITHUB_REF_NAME#v}"
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
-          # 005 新壳（0.7.0-test.3 起桌面主页面）同烙：其关于页无 __shellVer 壳注入，CONSOLE_VERSION 即显示源
-          sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index-005.html
+          # 005 新壳（0.7.0-test.3 起桌面主页面）同烙：常量唯一定义位=头部 __ccDeck005Version
+          #（console-guardrails ④：旧 sed 模式在 005 无命中=烙印静默丢失）
+          sed -i "s/__ccDeck005Version = \"[^\"]*\"/__ccDeck005Version = \"$V\"/" ../web-console/index-005.html
           # #119 test 通道在线更新：endpoint 烙成 test 专用清单，通道隔离在编译期
           # 锁定——test 包永远查不到正式清单，semver 天然按 test.N 序号递增判更新
           # （build-test-desktop.sh 产出该清单）。
@@ -132,7 +133,7 @@ jobs:
           V=$(node -e "console.log(require('./package.json').version)")-dev.${{ github.run_number }}
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
-          sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index-005.html
+          sed -i "s/__ccDeck005Version = \"[^\"]*\"/__ccDeck005Version = \"$V\"/" ../web-console/index-005.html
           echo "stamped: $V"
 
       - name: Build NSIS
@@ -159,6 +160,22 @@ jobs:
         shell: bash
         run: echo "REF_SLUG=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
 
+      - name: Deploy reminder（console-guardrails ③ 出包≠部署——1030 黄底事故防再犯）
+        shell: bash
+        run: |
+          echo "::warning::⚠️ 本包不含部署，需手动部署面同步（scripts/deploy-web.sh）——运行端 console/relay 不会随本包自动更新"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## ⚠️ 部署链提醒（console-guardrails ③）
+          本 CI 只出包不含部署步。出包后必须：`scripts/deploy-web.sh` 四面同步 + 运行端关于页双版本核验（壳 vX · 界面 vY 一致）。核对表见 artifact 内 DEPLOY-CHECKLIST.md。
+          EOF
+          cat > DEPLOY-CHECKLIST.md <<'CHK'
+          部署清单核对表（console-guardrails ③）
+          ⚠️ 本包不含部署步——tag 直出 CI 只出包，运行端界面/relay 不会自动同步！
+          - [ ] scripts/deploy-web.sh 四面同步（cc-plugins/Nova Resources/relay-service/CF）
+          - [ ] -test 通道：latest-test.json 已更新（手机端关于页完整通道版本可见）
+          - [ ] 运行端验证：关于页「壳 vX · 界面 vY」一致（错配横幅不出现=护栏①通过）
+          - [ ] 打包完整抽验：包内 web-console 含 js/ css/ 全量（护栏②通过——tauri.conf 目录映射）
+          CHK
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -168,6 +185,7 @@ jobs:
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
             desktop-tauri/src-tauri/target/release/bundle/latest.json
+            DEPLOY-CHECKLIST.md
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -180,6 +198,7 @@ jobs:
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
             desktop-tauri/src-tauri/target/release/bundle/latest.json
+            DEPLOY-CHECKLIST.md
           generate_release_notes: true
 
   build-tauri-mac:
@@ -298,6 +317,22 @@ jobs:
         shell: bash
         run: echo "REF_SLUG=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
 
+      - name: Deploy reminder（console-guardrails ③ 出包≠部署——1030 黄底事故防再犯）
+        shell: bash
+        run: |
+          echo "::warning::⚠️ 本包不含部署，需手动部署面同步（scripts/deploy-web.sh）——运行端 console/relay 不会随本包自动更新"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## ⚠️ 部署链提醒（console-guardrails ③）
+          本 CI 只出包不含部署步。出包后必须：`scripts/deploy-web.sh` 四面同步 + 运行端关于页双版本核验（壳 vX · 界面 vY 一致）。核对表见 artifact 内 DEPLOY-CHECKLIST.md。
+          EOF
+          cat > DEPLOY-CHECKLIST.md <<'CHK'
+          部署清单核对表（console-guardrails ③）
+          ⚠️ 本包不含部署步——tag 直出 CI 只出包，运行端界面/relay 不会自动同步！
+          - [ ] scripts/deploy-web.sh 四面同步（cc-plugins/Nova Resources/relay-service/CF）
+          - [ ] -test 通道：latest-test.json 已更新（手机端关于页完整通道版本可见）
+          - [ ] 运行端验证：关于页「壳 vX · 界面 vY」一致（错配横幅不出现=护栏①通过）
+          - [ ] 打包完整抽验：包内 web-console 含 js/ css/ 全量（护栏②通过——tauri.conf 目录映射）
+          CHK
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

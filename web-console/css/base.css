@@ -2878,3 +2878,10 @@ div.wq-opt { cursor: default; }
 /* X0 件3/件4：团队侧栏入队与 AGENT_TEAMS 协助提示行（可发现性三件套面板件） */
 .team-x0-hint { padding: 8px 14px 10px; color: var(--dim); font-size: var(--fs-B); line-height: 1.6; border-top: 1px dashed var(--line-soft); }
 .team-x0-hint code { font-family: var(--mono); font-size: var(--fs-B); color: var(--faint); background: var(--surface2); border-radius: 4px; padding: 0 4px; }
+
+/* console-guardrails ① 版本错配横幅（1030 黄底事故防再犯）：非阻断顶条——windowbar
+   下浮层，双主题静态色（不加 color-mix 债），错配观测兜底不挡任何操作 */
+.ver-mismatch-banner { position: sticky; top: 0; z-index: 400; margin: 0; padding: 7px 16px; background: var(--surface2); border-bottom: 1px solid var(--warn-border, #b8860b); color: var(--warn-text, #8a6d1a); font-size: var(--fs-C); line-height: 1.5; text-align: center; }
+.ver-mismatch-banner[data-mismatch="core"] { border-bottom-color: var(--error); color: var(--error); }
+html[data-theme="light"] .ver-mismatch-banner { background: #fdf6e3; }
+html[data-theme="light"] .ver-mismatch-banner[data-mismatch="core"] { background: #fdeaea; }
