@@ -14,6 +14,7 @@ const ws = readFileSync(join(RELAY_ROOT, "src", "ws-server.ts"), "utf-8");
 const cc = readFileSync(join(RELAY_ROOT, "src", "cloud-client.ts"), "utf-8");
 const sd = readFileSync(join(WEB_ROOT, "web-console", "js", "session-domain.js"), "utf-8");
 const ls = readFileSync(join(WEB_ROOT, "expo-app", "src", "screens", "ListScreen.tsx"), "utf-8");
+const mj = readFileSync(join(WEB_ROOT, "web-console", "js", "mobile.js"), "utf-8");
 const pt = readFileSync(join(WEB_ROOT, "expo-app", "src", "protocol.ts"), "utf-8");
 
 let pass = 0, fail = 0;
@@ -68,17 +69,22 @@ ok(ls.includes("if (!src && !relaySource) return null"), "D4 双缺才 null（�
 //         relay-name 文件从未设置 → 空名 → withRelaySource 零注入 → 全链无源身份） ----
 console.log("-- E. relayNameOf 缺省回落（W-SRCLABEL） --");
 {
+  // W-SRC2 本批锚迁：relayNameOf 已收编 settings.ts effectiveRelayName（index.ts :502 单行
+  // 委托）——行为断言改提取 settings.ts 实现（RELAY_NAME_FILE 常量内联化喂 eval）
   const idx = readFileSync(join(RELAY_ROOT, "src", "index.ts"), "utf-8");
-  const m = idx.match(/const relayNameOf = [\s\S]*?\n};/)?.[0] ?? "";
-  ok(m.includes("hostname()"), "E1 relayNameOf helper 在场且回落 hostname");
-  ok(m.includes("relay-name"), "E2 自定义名文件优先（#100 语义保留）");
+  const st = readFileSync(join(RELAY_ROOT, "src", "settings.ts"), "utf-8");
+  const m = st.match(/export function effectiveRelayName[\s\S]*?\n}/)?.[0] ?? "";
+  ok(m.includes("hostname()"), "E1 effectiveRelayName 在场且回落 hostname（index.ts 委托单点）");
+  ok(idx.includes("relayNameOf") && st.includes(`"relay-name"`), "E2 自定义名文件优先（#100 语义保留——RELAY_NAME_FILE 字面量在 settings.ts）");
   const js = m
-    .replace(/\(dataDir: string\): string =>/, "(dataDir) =>")
+    .replace("export function effectiveRelayName", "function effectiveRelayName")
+    .replace(/\(dataDir: string\): string/, "(dataDir)")
+    .replace(/\bRELAY_NAME_FILE\b/g, `"relay-name"`)
     .replace(/\bhostname\(\)/g, "__hn()")
     .replace(/\bjoin\(/g, "__j(")
     .replace(/\breadFileSync/g, "__rf");
   const mk = (rf: (p: string) => string, hn: () => string) =>
-    eval("(function (__rf, __hn, __j) {" + js + " return relayNameOf;})")(
+    eval("(function (__rf, __hn, __j) {" + js + " return effectiveRelayName;})")(
       rf, hn, (a: string, b: string) => a + "/" + b,
     );
   const missing = mk((_p: string) => { throw new Error("ENOENT"); }, () => "MacBook-Pro-Local");
@@ -138,6 +144,15 @@ console.log("-- G. 打标块逻辑直跑（W-SRCLABEL） --");
     ok(s5.get("f")!.relay_source === "存量" && s5.size === 1, "G6 畸形条目跳过、存量卡不受扰");
   }
 }
+
+// ---- H. W-SRC2 本批（t-c2109d08 四路收口）：wan resume 面 + web MERGE_KEYS + mobile per-session ----
+console.log("-- H. wan 面注入/web 增量透传/mobile per-session（本批） --");
+ok((cc.match(/withRelaySource\(this\.mgr\.snapshot\(\)/g) ?? []).length === 6, "H1 wan resume 面三处（probe×2+实发）全包 withRelaySource（phone 3+wan 3）");
+ok((cc.match(/\.\.\.\(this\.extra\?\.relayName\?\.\(\) \? \{ relay_name: this\.extra\.relayName\(\) \} : \{\}\)/g) ?? []).length === 2, "H2 relay_name 双面下发（phone 密封面+wan resume 面——#117 键补齐 wan）");
+ok((cc.match(/\.\.\.\(this\.extra\?\.lanHint\?\.\(\) \? \{ lan_hint: this\.extra\.lanHint\(\) \} : \{\}\)/g) ?? []).length === 2, "H3 lan_hint 双面下发（同 H2 口径）");
+ok(sd.includes('"relay_source"]; // W-SRC2 #134（本批①）'), "H4 web MERGE_KEYS 补 relay_source（SESSION_UPDATED 增量面透传/自愈）");
+ok(mj.includes("const sourceBadge = (s)") && mj.includes("s.relay_source"), "H5 mobile 源徽章 per-session 化（relay_source 优先，回落本源名）");
+ok((mj.match(/sourceBadge\(s\)/g) ?? []).length >= 3, "H6 mobile 逐卡/详情/任务行三调用点穿参（组织确认卡/引擎分组无会话上下文走回落）");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
