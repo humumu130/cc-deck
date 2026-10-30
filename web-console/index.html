@@ -4947,7 +4947,7 @@ function onEvent(ctx, msg) {
       // historical 必须在列（#52）：relay 增量帧恒带该布尔，漏并会让恢复后的会话
       // 永远挂着"历史会话"横幅（本地值只在快照时写过一次）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated",
+        "usage", "turn_count", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated",
         "project_gid", "dispatch_tier", "engine", "activity", "activity_capabilities", "pre_compact_summary"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记；#018 W1a 活动投影；W-CTXFIX B3 压缩前摘要 */
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
@@ -5100,6 +5100,12 @@ function onEvent(ctx, msg) {
     case "SESSION_LOG": {
       if (msg.payload?.kind === "user_message") consumePendingByUserMsg(ctx, sid, msg.payload.text ?? "");
       pushLog(ctx, sid, msg.payload);
+      break;
+    }
+    // M3 结构化输出帧（multica 卷三方案 A）：回合 token/轮次/模型一等事件——总量
+    // 仍走 SESSION_UPDATED.usage，此处只存最近一帧供详情页「最近回合」行消费
+    case "SESSION_USAGE": {
+      lastUsageFrame[sid] = msg.payload;
       break;
     }
     // #79 输出物拉取数据帧（瞬态 seq:0）：ref=本端发起的 command_id。其他设备同拉时
@@ -7955,7 +7961,13 @@ function statsTabHtml(s) {
       ["输出 token", u.output_tokens.toLocaleString()],
       ["缓存读", (u.cache_read_input_tokens ?? 0).toLocaleString()],
       ["缓存写", (u.cache_creation_input_tokens ?? 0).toLocaleString()],
-    ] : []),
+      // M3（multica 卷三）：轮次=已完成回合（turn_count，onUsage 递增）；最近回合模型
+      // =SESSION_USAGE 帧发射时口径（无帧回落 s.model）
+      ["轮次", (s.turn_count ?? 1) + " 回合"],
+      ["最近回合模型", lastUsageFrame[s.session_id]?.model || s.model || "-"],
+    ] : (s.engine && s.engine !== "claude"
+      ? [["Token 用量", "not-wired（" + s.engine + " 引擎暂未接线 usage）"]]
+      : [])),
     [s.status === "ERROR" ? "错误" : "结束原因", s.status === "ERROR" ? (s.last_error || "-") : (s.done_reason || "-")],
     ["Session ID", s.session_id],
   ];
@@ -7966,6 +7978,9 @@ function statsTabHtml(s) {
 // #279⑤ 任务面板治理（对齐手机口径）：任务存储是全会话历史，已完成只显近 24h（有 mtime 时）
 // 再封顶最新 15 条防马拉松日爆量；进行中/待办是可操作项全保留；条目 ✕ 本地先滤 + 上行隐藏。
 // #279④ 行上带 data-tid={t.id} 供 #NNN 跳转定位（relay TodoItem 已带 id；旧清单无号时不带锚）
+// M3 结构化输出帧最近一帧（sid -> SESSION_USAGE payload）——详情页「最近回合模型」行
+// 消费；仅 Claude 路径接线（其他引擎无帧，行值回落 s.model）
+const lastUsageFrame = {};
 const todoHiddenMap = {}; // sid -> content[]（按会话隔离，切会话互不污染）
 function todoHiddenOf(sid) { return todoHiddenMap[sid] || (todoHiddenMap[sid] = []); }
 function hideTodo(content) {

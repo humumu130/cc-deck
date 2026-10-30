@@ -162,6 +162,8 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   generation: { type: "number" },
   /** S3 IssueSnapshot 基线（relfix-s）：认领既有板卡派单时的关键字段快照（收口对比用） */
   task_snapshot: { type: "object" },
+  /** M1 run 机器留档：终态行自动回填的 run 目录名（dispatch-runs/<id>；读侧宽容透传） */
+  run_ref: { type: "string" },
 };
 
 // ---------- reducer 门面 ----------

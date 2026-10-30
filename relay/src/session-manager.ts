@@ -15,7 +15,7 @@ import {
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
-import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
+import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
 import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
@@ -141,6 +141,7 @@ import type {
   PeerMeta,
   SessionActivityPayload,
   SessionEngine,
+  SessionUsagePayload,
   SessionState,
   SessionStatus,
   StatusDockState,
@@ -3241,6 +3242,23 @@ export class SessionManager {
             cache_read_input_tokens: (cur?.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
             cache_creation_input_tokens: (cur?.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
           };
+          // M3 结构化输出帧（multica 卷三方案 A，2026-10-29 批）：回合 usage 升格一等
+          // 结构化事件（token/轮次/模型同帧）——总量仍走 SESSION_UPDATED（usage 字段
+          // 直通），本帧供端上按回合消费/审计对账。走正常 seq（落 events.ndjson，
+          // 回放按帧类型自然收录）。仅 Claude 路径接线（onUsage 只在 SDK 会话回调），
+          // jsonl/codex 未接线=不发帧（not-wired 口径，端上按引擎标记，见 web 消费位）
+          managed.state.turn_count = (managed.state.turn_count ?? 0) + 1;
+          this.bus.emit(managed.state.session_id, "SESSION_USAGE", {
+            scope: "turn",
+            model: managed.state.model,
+            input_tokens: u.input_tokens,
+            output_tokens: u.output_tokens,
+            cache_read_input_tokens: u.cache_read_input_tokens ?? 0,
+            cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0,
+            turn: managed.state.turn_count,
+            source: "result",
+            ts: Date.now(),
+          } satisfies SessionUsagePayload);
           this.emitUpdated(managed, true);
         },
         // #72 上下文水位（per-call 口径，回合内逐调用实时刷新）：assistant 消息自带
@@ -7378,6 +7396,9 @@ export class SessionManager {
     } else {
       appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线 */
     }
+
+    // M1 run 留档①任务书快照（multica 借①，m-observ 织合补）：实际派发注入后全文
+    archiveDispatchPrompt(dispatchId, dispatchPrompt, { tier, ...(input.title ? { title: input.title } : {}), ...(veteran ? { target: veteran } : {}) });
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId: string;
     if (veteran) {

@@ -253,5 +253,13 @@ export const migrations: readonly Migration[] = [
       p.exec("ALTER TABLE dispatch ADD COLUMN generation INTEGER");
       p.exec("ALTER TABLE dispatch ADD COLUMN task_snapshot_json TEXT");
     },
+  {
+    // M1 run 机器留档（multica 借①，2026-10-29 批）：dispatch 表补 run_ref 列（原 v7，收割合并时因 relfix-s S3 同号改 v8）——终态
+    // 行由 appendDispatch 咽喉回填（<artifacts>/dispatch-runs/<id> 三件套机器档目录
+    // 名）。v4/v5 同款增量惯例；可空（审计行/drill/queued-only 不归档不带键，与
+    // DispatchEntry.run_ref?: string 宽容对齐）。
+    version: 8,
+    name: "dispatch-run-ref",
+    up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN run_ref TEXT"),
   },
 ];

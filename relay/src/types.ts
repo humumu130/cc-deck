@@ -253,6 +253,10 @@ export interface SessionState {
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
   turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）；#291 起随终态（DONE/ERROR）清算——「WORKING ⟔ 活跃 turn」直报判活的主判据
+  // M3 结构化输出帧（multica 卷三，2026-10-29 批）：已完成回合计数（onUsage 递增，
+  // SESSION_USAGE 帧同源）。仅 Claude 路径接线——未接线引擎缺省 undefined（端上按
+  // 引擎标 not-wired，宽容口径）。SNAPSHOT/SESSION_UPDATED 直通。
+  turn_count?: number;
   // #291 帧分类判活（心跳≠工作）：最近一次工具活动帧（tool_use/tool_result）时刻。
   // 0 = 建卡以来从未有过工具活动（「已接单·待开工」形态的负空间——hook 心跳/消息
   // 注入/状态回显都不刷此字段）；正数 = 最近工具帧 ts（端上配 10min 新鲜窗判真活）。
@@ -609,6 +613,25 @@ export interface SessionActivityPayload {
   seq_local: number;
 }
 
+// M3 结构化输出帧（multica 深研卷三方案 A / synthesis M3，2026-10-29 批）：回合 usage
+// 升格一等结构化事件。mech3 契词表：source=result（SDK 回合 result 消息）|message_delta
+//（流尾增量，预留）|usage_update|token_count（codex 侧预留）。scope=turn 本批接线
+//（onUsage 每回合一帧）；scope=call（per-call 水位，onContext 口径）类型预留不发射。
+// 仅 Claude SDK 路径接线——jsonl/codex 未接线不发帧，端上按引擎标 not-wired（宽容）。
+export interface SessionUsagePayload {
+  scope: "turn" | "call";
+  /** 发射时会话 model（裸名存储口径——显示链 effective 档换算另算，B1 注释） */
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  /** 本会话第 N 完成回合（onUsage 递增；SessionState.turn_count 同源） */
+  turn: number;
+  source: "result" | "message_delta" | "usage_update" | "token_count";
+  ts: number;
+}
+
 export interface NotificationsUpdatedPayload {
   items: NotificationItem[];
 }
@@ -627,6 +650,7 @@ export type EventType =
   | "SESSION_DONE"
   | "SESSION_LOG"
   | "SESSION_LOG_PATCH" // W-STREAMDELTA：流块删除补丁（终态收敛——外部终端流块随回合结束撤除，正文以转录终条为准）
+  | "SESSION_USAGE" /* M3 结构化输出帧（multica 卷三方案 A）：回合 token/轮次/模型一等事件（正常 seq 落盘，回放自然收录） */
   | "SESSION_ACTIVITY"
   | "TASK_DONE"
   | "SESSION_DELETED"
@@ -662,6 +686,7 @@ export type EventPayloadMap = {
   SESSION_ERROR: SessionErrorPayload;
   SESSION_DONE: SessionDonePayload;
   SESSION_LOG: SessionLogPayload;
+  SESSION_USAGE: SessionUsagePayload; // M3 结构化输出帧（multica 卷三方案 A）
   SESSION_ACTIVITY: SessionActivityPayload;
   TASK_DONE: TaskDonePayload;
   SESSION_DELETED: SessionDeletedPayload;

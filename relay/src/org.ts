@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync }
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
+import { archiveDispatchTerminal } from "./dispatch-run-archive.js"; // M1 run 留档终态钩子（模块无环：只依赖 node/config/artifacts）
 import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
 import { writeDispatchToDb } from "./storage/write-dispatch.js"; // #292 cutover 批1 v2：append 后同步落库
 import { atomicWriteJson } from "./fs-safe.js";
@@ -452,6 +453,11 @@ export interface DispatchEntry {
    *  快照关键字段（text/status/updated_at）——收口时对比「单在跑期间板被谁动过」，
    *  变动即回执附注（对账的根治前置）。新卡派单（无 entry_id）缺省不带。 */
   task_snapshot?: { text?: string; status?: string; updated_at?: number };
+  /** M1 run 机器留档（multica 借①，2026-10-29 批）：终态行由 appendDispatch 咽喉
+   *  自动回填——值为相对 artifacts 根的 run 目录名（dispatch-runs/<id>，三件套：
+   *  任务书快照/事件切片/终态 stats，见 dispatch-run-archive.ts）。审计行/drill/
+   *  queued-only 不归档不带键；读侧（导入器/回读链）宽容透传。 */
+  run_ref?: string;
 }
 
 // S3-P4 组锚豁免谓词（relfix-s 续作）：org 底座 import projects 会环（projects →
