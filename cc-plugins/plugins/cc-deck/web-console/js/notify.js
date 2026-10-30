@@ -113,9 +113,14 @@
                       : '<button class="act" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + ' ↗</button>')
                     : canAck ? '<button class="act" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
                   const x = '<button class="x' + (row.active ? "" : " ghost") + '" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">×</button>';
+                  // UI 精修二批：会话系通知行补引擎品牌迷你标（数据源 row.engine 此前
+                  // 从未可视化；synth 行无引擎零渲染——badge-brand 全局 10.8px 档）
+                  const engMark = row.engine && window.__ccDeck005EngineMarkHtml
+                    ? '<span class="nrow-eng" title="会话引擎">' + window.__ccDeck005EngineMarkHtml(row.engine) + "</span>"
+                    : "";
                   return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="t"><b>' + escapeHtml(row.title) + '</b><div class="s">' + escapeHtml(sub) + "</div></div>"
+                    + '<div class="t">' + engMark + '<b>' + escapeHtml(row.title) + '</b><div class="s">' + escapeHtml(sub) + "</div></div>"
                     + act + x + "</div>";
                 }
 

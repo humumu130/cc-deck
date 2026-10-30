@@ -1136,7 +1136,11 @@
                 window.__ccDeck005EngineBrandSvg = ENGINE_BRAND_SVG; // #264：团队域成员头像借道（IIFE 跨域单口，__ccDeck005SlimUi 同范式）
                 // #227 件四：占位 getter——无品牌 SVG 引擎（zcode/glm/未知）=品牌色圆角字母
                 // （与像素螃蟹同族谱；expo EngineIcon PLACEHOLDER 同源色）
-                const engineBrandSvgOf = (item) => ENGINE_BRAND_SVG[item.engineClass] ?? (() => {
+                // UI 精修二批：class→id 别名——单表键=引擎 id（qwen-code），而部分调用面
+                //（bridge-core ENGINES class 列/消息流头像 engineClass 派生）给的是 class
+                //（qwen）——无别名时 qwen 恒落 PH 字母占位（品牌图在表却查不到的暗病）
+                const ENGINE_BRAND_ALIAS = { qwen: "qwen-code" };
+                const engineBrandSvgOf = (item) => ENGINE_BRAND_SVG[item.engineClass] ?? ENGINE_BRAND_SVG[ENGINE_BRAND_ALIAS[item.engineClass]] ?? (() => {
                   // #286① 审查 B-P2① 修正：PH 只对真未知引擎（engine 非空但未收录）——
                   // 空 class 的 claude 兜底已上移 myCardItem 归一层（engineKey || "claude"），
                   // 此处不再拦空 class（原实现把未知引擎折叠空 class 后又落 claude 蟹，
@@ -1145,6 +1149,25 @@
                   return '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="' + PH[0] + '"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">' + PH[1] + '</text></svg>';
                 })();
                 const b2EngineBadge = (item) => { const brand = engineBrandSvgOf(item); return '<span class="engine-badge ' + item.engineClass + '">' + (brand ? '<span class="badge-brand">' + brand + "</span>" : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(item.engineClass) + '"></use></svg>') + item.engine + "</span>"; };
+                // UI 精修二批（ui-polish-round2）：引擎徽章/单图标跨域单口——mobile/notify/
+                // settings/team/bridge-core 全部借道（与 b2EngineBadge 同构：brand 优先+PH
+                // 字母占位；CSS 侧 .engine-badge .badge-brand 全局 10.8px 档天然生效）
+                window.__ccDeck005EngineBadgeHtml = (engineClass, label) =>
+                  '<span class="engine-badge ' + String(engineClass || "") + '"><span class="badge-brand">' + engineBrandSvgOf({ engineClass, engine: label }) + "</span>" + String(label ?? "") + "</span>";
+                window.__ccDeck005EngineMarkHtml = (engineClass, engineName) =>
+                  '<span class="badge-brand">' + engineBrandSvgOf({ engineClass, engine: engineName ?? engineClass }) + "</span>";
+                // 静态壳水合：index-005 静态 engine-badge（release 屏产物行等纯文字占位）补
+                // 品牌图标——一次性，JS 重渲自然走单口；无对应品牌的类名不动
+                const hydrateStaticEngineBadges = () => {
+                  document.querySelectorAll(".engine-badge").forEach((el) => {
+                    if (el.querySelector(".badge-brand")) return;
+                    const cls = [...el.classList].find((c) => c !== "engine-badge") || "";
+                    if (!cls || (!ENGINE_BRAND_SVG[cls] && cls !== "zcode" && cls !== "glm")) return;
+                    el.insertAdjacentHTML("afterbegin", window.__ccDeck005EngineMarkHtml(cls, el.textContent.trim() || cls));
+                  });
+                };
+                hydrateStaticEngineBadges();
+                document.addEventListener("DOMContentLoaded", hydrateStaticEngineBadges);
                 // W-CRABINTEGRATE（用户 1025 图集点选）：角色蟹头像——PM=举旗蟹 D2 / Leader=皇冠蟹 A1
                 //（claude 引擎替标准蟹；非 claude 保本引擎字形+右上皇冠角标 -15° 金色=通用角色层兜底）。
                 // 角色判定=item.teamRole（pmTeamChipOf 词表单口扩展 kind），worker 卡零变化。

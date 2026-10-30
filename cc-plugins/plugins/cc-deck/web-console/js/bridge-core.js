@@ -36,11 +36,21 @@
                   return String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
                 };
                 const uuid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : "cmd-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10));
+                // W-UIV3 C6：绝对时间（相对时间 hover 提示/验收单全格式共用）；空 ts 返回空串与 relTime 同口径
+                const absTime = (ts) => {
+                  const t = Number(ts || 0);
+                  if (!t) return "";
+                  const d = new Date(t);
+                  const p = (n) => String(n).padStart(2, "0");
+                  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+                };
                 const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["CodeBuddy", "codebuddy"], zcode: ["ZCode", "zcode"] };
                 const engineIcon = (cls) => cls === "claude" ? "chat" : cls === "codex" ? "code" : cls === "trae" ? "sliders" : "server";
                 const engineBadge = (engineKey) => {
                   const key = engineKey || "claude";
                   const pair = ENGINES[key] || [key, ""];
+                  // UI 精修二批：品牌单表借道（session-domain 单口；旧 sprite 映射降级兜底）
+                  if (window.__ccDeck005EngineBadgeHtml) return window.__ccDeck005EngineBadgeHtml(pair[1], escapeHtml(pair[0]));
                   return '<span class="engine-badge ' + escapeHtml(pair[1]) + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + engineIcon(pair[1]) + '"></use></svg>' + escapeHtml(pair[0]) + "</span>";
                 };
                 const toast = (() => {
@@ -430,6 +440,18 @@
                   if (h && (d === h || d.startsWith(h + "/"))) return "~" + displayPath(d.slice(h.length));
                   return displayPath(d) || "/";
                 };
+                // W-UIV3 A4/A5 项目卡路径元信息行：全正斜杠 + ~ 家目录缩写 + 末两级目录优先
+                //（末段=目录名/中文目录名恒完整，超出前缀以 …/ 截断——全量原生路径在卡 title 悬停）
+                const pathMeta = (dir) => {
+                  const d = normDir(dir), h = normDir(bridge.homedir);
+                  const inHome = !!h && (d === h || d.startsWith(h + "/"));
+                  const rel = inHome ? d.slice(h.length) : d;
+                  const segs = rel.split("/").filter(Boolean);
+                  if (!segs.length) return inHome ? "~/" : "/";
+                  let tail = segs.slice(-2).join("/");
+                  if (segs.length > 2) tail = "…/" + tail;
+                  return (inHome ? "~/" : "") + tail;
+                };
                 const basename = (path) => window.__ccDeck005PathUi.baseName(path);
                 const STATUS_WORD = { WORKING: "运行中", WAITING: "待处理", ERROR: "错误", DONE: "完成" };
                 const STATUS_DOT = { WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" };
@@ -509,16 +531,24 @@
                   const parkedList = entries.filter((e) => e.group && (e.group.status === "parked" || e.group.status === "archived"));
                   const unfiledList = entries.filter((e) => !e.group);
                   const card = (entry) => {
-                    // project-cards-v2（用户 1029 十六条）：单列三分区信息架构重做——
-                    // r1 标题（状态点+名称+需行动）/r2 路径（独占 truncate+定位钮 flex:none 不换行）/
-                    // r3 计数徽章行（数字 min-width 居中恒完整）。杀旧三病根：①行2 的 138px 右 margin
-                    // 遗留（会话卡微钮区）+ :has(.identity-cluster) 双模板分叉=被动截断两卡不同款
-                    // ②进行中徽章复用 source-badge（↗ 外链语义错配+第三行悬空）③图标钮 flex-wrap
-                    // 换行成孤儿行。数据钩子（data-project-key/open/title/选择类）零变化=交互零回归
+                    // W-UIV3 项目卡 v3（用户 1030「问题很多」三路审查合并 8 条）——在 pc2 骨架上
+                    // 加 pc3 皮肤层（pc2 基类留给移动端同源词表，不拆交互钩子）：
+                    // ①统计去胶囊（用户点名）：r3 三胶囊（N 会话/活跃/进行中）→纯文本元信息行
+                    //   「N 会话 · W 进行中」（12px 次级色 · 分隔）；组态词（活跃/待确认/已挂起/未立项）
+                    //   退役——组归属已由分组头（活跃项目/待确认/挂起归档/未入项目）表达，卡内不重复。
+                    // ②点语言三态一套（全卡 ≤3 色）：需行动=红 / 进行中=蓝 / 其余灰；未立项=灰空心点
+                    //   （「未立项」胶囊退役，降为标题前小圆点语义）。
+                    // ③需行动徽章唯一胶囊位：降饱和红（cc-badge is-alert）、>9 显 9+、为 0 隐藏。
+                    // ④⑤路径行：pathMeta 全正斜杠+~缩写+末两级优先（末段中文目录名恒完整）。
+                    // 数据钩子（data-project-key/open/title/选择类）零变化=交互零回归。
                     const hot = entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR");
-                    const dot = hot ? "waiting" : ""; // 点语言两态收口：有要处理的=橙/其余灰基色（原 done 实心灰比 waiting 更醒目的层级倒挂退役；0 会话不再专属态）
                     const actions = projectActionItems(entry).length;
                     const working = entry.sessions.filter((s) => s.status === "WORKING").length;
+                    const unfiled = !entry.group;
+                    // 点语言（状态先于活动）：组态优先——未立项=灰空心/挂起归档=灰（组态主导：
+                    // 非活跃组的活动不改点色）；活跃组内 需行动（含 WAITING/ERROR）=红、有进行中=蓝、其余=灰
+                    const parked = !!entry.group && (entry.group.status === "parked" || entry.group.status === "archived");
+                    const dot = unfiled ? "is-idle-o" : parked ? "is-idle" : (actions > 0 || hot) ? "is-act" : working > 0 ? "is-run" : "is-idle";
                     // W-PROJP1 P1-1：快捷链接（reveal 定位高亮）。openPath/probePath 吃原生路径（#158-批4a 口径）：
                     // 组卡 anchor 即 anchor_dir 原值；未立项卡 anchor 是 normDir 产物（分桶 key），必须取分桶保留的
                     // nativeCwd（设计 §1.4/附录 2 坑）。显隐沿 :3684 惯例——恒渲染按钮、无壳桥或无原生路径时
@@ -526,21 +556,20 @@
                     const nativePath = entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || "");
                     const shellOpen = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
                     const openBtn = '<button class="project-open-btn" type="button" data-project-open="' + escapeHtml(nativePath) + '" aria-label="在文件夹中定位" title="在文件夹中定位 · ' + escapeHtml(displayPath(nativePath)) + '"' + (nativePath && shellOpen ? "" : ' style="display:none"') + '><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg></button>';
-                    return '<div class="queue-card pc2' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'
-                      + '<div class="pc2-r1"><i class="status-dot ' + dot + '"></i><strong class="pc2-name">' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="pc2-badge is-action">需行动 ' + actions + "</span>" : "") + "</div>"
-                      + '<div class="pc2-r2"><span class="pc2-path">' + escapeHtml(shortenDir(entry.anchor) || "/") + "</span>" + openBtn + "</div>"
-                      + '<div class="pc2-r3">'
-                      + '<span class="pc2-count">' + entry.sessions.length + " 会话</span>"
-                      + (entry.group ? '<span class="pc2-count">' + (entry.group.status === "active" ? "活跃" : entry.group.status === "pending" ? "待确认" : "已挂起") + "</span>" : '<span class="pc2-count is-dim">未立项</span>')
-                      + (working ? '<span class="pc2-count is-working">' + working + " 进行中</span>" : "")
-                      + "</div></div>";
+                    const metaBits = [entry.sessions.length + " 会话"];
+                    if (working > 0) metaBits.push(working + " 进行中");
+                    return '<div class="queue-card pc2 pc3' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'
+                      + '<div class="pc2-r1"><i class="pc3-dot ' + dot + '"></i><strong class="pc2-name">' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="cc-badge is-alert">需行动 ' + (actions > 9 ? "9+" : actions) + "</span>" : "") + "</div>"
+                      + '<div class="pc2-r2"><span class="pc3-path">' + escapeHtml(pathMeta(entry.group ? entry.anchor : (entry.nativeCwd || entry.anchor))) + "</span>" + openBtn + "</div>"
+                      + '<div class="pc3-meta">' + escapeHtml(metaBits.join(" · ")) + "</div>"
+                      + "</div>";
                   };
-                  const group = (label, list) => list.length ? '<div class="queue-group">' + escapeHtml(label) + " · " + list.length + "</div>" + list.map(card).join("") : "";
+                  const group = (label, list) => list.length ? '<div class="queue-group" data-count="' + list.length + '">' + escapeHtml(label) + "</div>" + list.map(card).join("") : ""; // W-UIV3 A7：计数右对齐（CSS ::after 消费 data-count）
                   // 未立项组头：折叠箭头 + 「未立项 · N」（贴卡副行既有徽标词汇，D2-2）+ hot 点——
                   // 折叠态下组内有 WAITING/ERROR 时亮「抽屉里有要处理的」，不强行展开（卡状态点同词汇）
                   const unfiledHot = unfiledList.some((entry) => entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR"));
                   const unfiledMarkup = unfiledList.length
-                    ? '<button class="queue-group project-unfiled-toggle" type="button" data-project-unfiled-toggle aria-expanded="' + (!unfiledCollapsed) + '"><span class="unfiled-chev">▸</span>未入项目 · ' + unfiledList.length + (unfiledCollapsed && unfiledHot ? '<i class="status-dot waiting"></i>' : "") + "</button>"
+                    ? '<button class="queue-group project-unfiled-toggle" type="button" data-project-unfiled-toggle data-count="' + unfiledList.length + '" aria-expanded="' + (!unfiledCollapsed) + '"><span class="unfiled-chev">▸</span>未入项目' + (unfiledCollapsed && unfiledHot ? '<i class="status-dot waiting"></i>' : "") + "</button>" /* W-UIV3 A7：计数改 ::after 右对齐（与三组组头同款，探针目测不一致收口） */
                       + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
                     : "";
                   const markup = group("活跃项目", activeList) + group("待确认新建项目", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
@@ -561,15 +590,16 @@
                     const hot = projectActionItems(entry).length;
                     const artifacts = artifactsOf(entry);
                     if (liveNode) {
+                      // W-UIV3 C8：页头 live 行——文字 ● 字符与基线不齐，改结构化圆点 span（flex 对齐）
                       liveNode.hidden = false;
-                      liveNode.textContent = "● " + entry.sessions.length + " 会话 · " + (entry.group ? 1 : 0) + " 团队" + (hot ? " · " + hot + " 需行动" : "");
+                      liveNode.innerHTML = '<i class="live-dot" aria-hidden="true"></i>' + entry.sessions.length + " 会话 · " + (entry.group ? 1 : 0) + " 团队" + (hot ? ' · <span class="live-hot">' + hot + " 需行动</span>" : "");
                     }
                     if (metaNode) {
                       const open = bridge.accepts.filter((a) => !a.submitted).length;
                       metaNode.hidden = false;
                       metaNode.innerHTML = '<span>只读聚合 · 目录 ' + escapeHtml(shortenDir(entry.anchor)) + '</span><span class="sep">·</span>'
                         + "<span>输出物 " + artifacts.length + "</span>" + '<span class="sep">·</span>'
-                        + "<span>验收单 " + bridge.accepts.length + (open ? " · " + open + " 张未闭环" : "") + "（全局登记）</span>";
+                        + "<span>验收单 " + bridge.accepts.length + (open ? " · " + open + " 张未闭环" : "") + "</span>";
                     }
                     window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进头部 meta 行
                   } else {
@@ -590,8 +620,23 @@
                 const PSEC_TAKE = 3;
                 const expandedSections = new Set(); // 分区展开态（域内会话态，切项目/刷新回落默认收起）
                 const VROW_K = { WORKING: ["运行中", " run"], WAITING: ["待处理", " wait"], ERROR: ["错误", " err"], DONE: ["完成", ""] };
-                const vrow = (attrs, title, sub, kText, kCls) =>
-                  '<div class="vrow"' + (attrs ? " " + attrs : "") + '><div class="t"><b>' + escapeHtml(title) + "</b>" + (sub ? '<span class="s">' + escapeHtml(sub) + "</span>" : "") + '</div>' + (kText ? '<span class="k' + (kCls || "") + '">' + escapeHtml(kText) + "</span>" : "") + "</div>";
+                // W-UIV3 C1-C6 聚合两行制 vrow v3：标题行（b 两行 line-clamp+ellipsis+title 全量）+
+                // 元信息行（s 独占一行，团队卡不再与标题同行）；k=右侧固定 72px 徽章列（cc-badge
+                // pill：运行中绿实底/待填橙/其余幽灵——B2 每屏实底仅运行中态）。
+                // opts：{idTitle:标题本是裸 UUID（前 8 位等宽+title 全量）, absTs:元信息行的绝对时间
+                // hover, titleHint:行 title 后缀动作提示, subExtra:.s 内追加的原始 HTML（验收单进度条）}
+                const vrow = (attrs, title, sub, kText, kCls, opts) => {
+                  const o = opts || {};
+                  const shownTitle = o.idTitle ? String(title).slice(0, 8) : title;
+                  const rowTitle = String(o.rowTitle || title) + (o.titleHint ? " · " + o.titleHint : "");
+                  const subTitle = o.absTs ? absTime(o.absTs) : "";
+                  return '<div class="vrow v3"' + (attrs ? " " + attrs : "") + ' title="' + escapeHtml(rowTitle) + '">'
+                    + '<div class="t"><b class="' + (o.idTitle ? "v3-id" : "") + '">' + escapeHtml(shownTitle) + "</b>"
+                    + (sub || o.subExtra ? '<span class="s"' + (subTitle ? ' title="' + escapeHtml(subTitle) + '"' : "") + ">" + escapeHtml(sub || "") + (o.subExtra || "") + "</span>" : "")
+                    + "</div>"
+                    + (kText ? '<span class="k cc-badge ' + (kCls === " run" ? "is-run" : kCls === " wait" ? "is-warn" : kCls === " err" ? "is-alert" : "is-neutral") + '">' + escapeHtml(kText) + "</span>" : "")
+                    + "</div>";
+                };
                 function psecMarkup(id, icon, name, rows, emptyText, emptyAttrs) {
                   const expanded = expandedSections.has(id);
                   const shown = expanded ? rows : rows.slice(0, PSEC_TAKE);
@@ -610,7 +655,8 @@
                   return sessions.map((s) => {
                     const ctx = Number(s.context_limit) > 0 ? " · 上下文 " + Math.max(1, Math.min(999, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100))) + "%" : "";
                     const k = VROW_K[s.status] || ["完成", ""];
-                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '" title="在会话域打开"', s.title || s.initial_prompt || s.session_id, relTime(s.updated_at) + ctx, k[0], k[1]);
+                    const bareId = !s.title && !s.initial_prompt; // C3 裸 UUID 标题降级（前 8 位等宽+hover 全量）
+                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '"', s.title || s.initial_prompt || s.session_id, relTime(s.updated_at) + ctx, k[0], k[1], { idTitle: bareId, titleHint: "在会话域打开", absTs: s.updated_at });
                   });
                 }
                 function teamRows(entry) {
@@ -620,10 +666,11 @@
                   return headcount.map((m) => {
                     const sid = m && typeof m.session_id === "string" ? m.session_id : "";
                     const s = sid ? bridge.sessions.get(sid) : null;
+                    const bareId = !s || (!s.title && !s.initial_prompt);
                     const title = s ? (s.title || s.initial_prompt || sid) : sid || "空席位";
                     const sub = (m && m.role ? m.role : "角色未标注") + (m && m.model ? " · " + m.model : "");
                     const k = s ? (VROW_K[s.status] || ["完成", ""]) : ["离线", " wait"];
-                    return vrow((sid ? 'data-domain-jump="session" data-jump-session="' + escapeHtml(sid) + '" title="在会话域打开该成员"' : 'style="cursor:default"'), title, sub, k[0], k[1]);
+                    return vrow((sid ? 'data-domain-jump="session" data-jump-session="' + escapeHtml(sid) + '"' : 'style="cursor:default"'), title, sub, k[0], k[1], { idTitle: !!sid && bareId, titleHint: "在会话域打开该成员", absTs: s ? s.updated_at : 0 });
                   });
                 }
                 function artifactsRows(entry) {
@@ -632,16 +679,24 @@
                     const pN = normDir(a.path);
                     const rel = pN !== anchor && pN.startsWith(anchor + "/") ? displayPath(pN.slice(anchor.length + 1)) : basename(a.path);
                     const eng = ENGINES[a.session && a.session.engine] ? ENGINES[a.session.engine][0] : "";
-                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '" title="查看来源会话"', rel, relTime(a.last_at), eng, "");
+                    return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(a.session.session_id) + '"', rel, relTime(a.last_at), eng, "", { titleHint: "查看来源会话", absTs: a.last_at });
                   });
                 }
                 function acceptsRows() {
-                  return bridge.accepts.map((a) =>
-                    vrow('data-open-acceptance="' + escapeHtml(a.id) + '" title="打开验收表单页"', a.title, "已回填 " + (Number(a.judged) || 0) + "/" + (Number(a.total) || 0) + " · " + relTime(a.created_at), a.submitted ? "已提交" : "待填", a.submitted ? "" : " wait"));
+                  // W-UIV3 C6/C8：验收单行——日期全格式（正式单据语境）+ 回填迷你进度条；k 徽章
+                  // （已提交 neutral 幽灵/待填 warn 橙）
+                  return bridge.accepts.map((a) => {
+                    const judged = Number(a.judged) || 0, total = Number(a.total) || 0;
+                    const pct = total > 0 ? Math.round((judged / total) * 100) : 0;
+                    return vrow('data-open-acceptance="' + escapeHtml(a.id) + '"', a.title,
+                      "已回填 " + judged + "/" + total + " · " + absTime(a.created_at),
+                      a.submitted ? "已提交" : "待填", a.submitted ? "" : " wait",
+                      { titleHint: "打开验收表单页", subExtra: '<span class="v3-prog" aria-hidden="true"><i style="width:' + pct + '%"></i></span>' });
+                  });
                 }
                 function designRows() {
                   return bridge.designDocs.map((d) =>
-                    vrow('data-design-open="' + escapeHtml(d.path) + '" title="新窗打开"', d.title, (Array.isArray(d.tags) && d.tags.length ? d.tags.slice(0, 4).map((t) => "#" + t).join(" ") : ""), d.group, ""));
+                    vrow('data-design-open="' + escapeHtml(d.path) + '"', d.title, (Array.isArray(d.tags) && d.tags.length ? d.tags.slice(0, 4).map((t) => "#" + t).join(" ") : ""), d.group, "", { titleHint: "新窗打开" }));
                 }
 
                 function renderInspector(entry) {
@@ -692,11 +747,13 @@
                   if (!els.body) return;
                   // W-PROJIA 案C：v8 psec 分区长页（四区 + 图纸能力区）；任务分区退役（原 tab
                   // 内容即「去团队域」跳转占位，属用户判定的复制品）；头部摘要见 renderHead
-                  let html = psecMarkup("sessions", "chat", "会话", sessionsRows(entry), "该项目目录暂无会话，新会话由会话域发起。");
+                  let html = '<div class="psec-grid">'; // W-UIV3 C7：宽窗两列网格容器（minmax 420px；窄窗单列，CSS 媒询裁定）
+                  html += psecMarkup("sessions", "chat", "会话", sessionsRows(entry), "该项目目录暂无会话，新会话由会话域发起。");
                   html += psecMarkup("team", "users", "团队", teamRows(entry), entry.group ? "编制为空，成员在团队域维护。" : "该目录未入项目，新建项目确认在团队域发起。");
                   html += psecMarkup("artifacts", "package", "输出物", artifactsRows(entry), "暂无输出物登记，输出物由会话域实时产生。");
                   html += psecMarkup("accepts", "check", "验收单", acceptsRows(), "暂无验收单登记。");
                   if (bridge.designDocsSeen && bridge.designDocs.length > 0) html += psecMarkup("design", "layers", "图纸", designRows(), "图纸目录为空。");
+                  html += "</div>";
                   const lSig = "lp:" + bSigOf(html); // #282 三批 N2：未变帧零重建（长页滚动位存活）
                   if (els.body.dataset.b2lSig !== lSig || !els.body.childElementCount) {
                     els.body.dataset.b2lSig = lSig;

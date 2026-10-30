@@ -486,7 +486,9 @@
       }
 
       const engineIconFor = (engineClass = "") => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
-      const engineBadgeMarkup = (item) => `<span class="engine-badge ${item.engineClass}"><svg class="engine-icon" aria-hidden="true"><use href="#icon-${engineIconFor(item.engineClass)}"></use></svg>${item.engine}</span>`;
+      const engineBadgeMarkup = (item) => window.__ccDeck005EngineBadgeHtml // UI 精修二批：品牌单表借道（旧 sprite 降级兜底）
+              ? window.__ccDeck005EngineBadgeHtml(item.engineClass, item.engine)
+              : `<span class="engine-badge ${item.engineClass}"><svg class="engine-icon" aria-hidden="true"><use href="#icon-${engineIconFor(item.engineClass)}"></use></svg>${item.engine}</span>`;
 
       // FB19 源色块（地基同款）：按源名哈希取色，与 B2 会话卡同一套八色环
       const sessionSourcePalette = ["#3E8E7E", "#5B8FA8", "#8A7AB5", "#A8763E", "#7D9A3C", "#B55F7A", "#4E85C0", "#9A8A4E"];
@@ -1455,7 +1457,7 @@ function connectLan(ctx) {
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
               // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
-              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd">${copy}</div></div>${loginBtn || tag}</div>`;
+              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd">${copy}</div></div>${loginBtn || tag}</div>`;
             }).join(""));
           }
           // W-DESIGNHUB 系统设计图纸区（关于页）：清单非空才显（能力位=SNAPSHOT.design_docs
