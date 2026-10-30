@@ -20,10 +20,8 @@ import { isLiveLine, stripLiveMark } from "../fmt";
 import type { GestureResponderEvent } from "react-native";
 const PEND_PHASES = [0.35, 0.5, 0.65, 0.85, 0.65, 0.5];
 const WAITBOX_READONLY = false; // W-SPLIT-S1C：WaitCard 只读口径随件（值原样——语义注释见 S1 首批回执）
-// W-SPLIT-S1D：过期治理 helper 随 AskBanner 迁入（值原样）
-const WAITBOX_STALE_MS = 10 * 60 * 1000;
-const isWaitStale = (wr?: { received_at?: number } | null): boolean =>
-  !!wr?.received_at && Date.now() - wr.received_at > WAITBOX_STALE_MS;
+// 审批卡永不过期（fix/approval-timeout 批）：W-SPLIT-S1D 迁入的 10min 置灰 helper
+// 是死代码且与「永不过期」铁令相抵，整段删除（活判定原在 DetailScreen，同批退役）
 import { makeStyles } from "./detail-styles";
 import { View } from "react-native";
 import { useTheme } from "../theme-context";

@@ -181,11 +181,11 @@ const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as co
 // agent.answer()/外部 bridge.answerPending()），手表端早有发送面（watch.ts），本端
 // 解锁即闭环。decide/#212 remember 范围等真决议链路原样保留
 const WAITBOX_READONLY = false;
-// #159 件③ 过期治理：waiting_request 超 10min 视为已失效（对齐 relay
-// sweepStalePending 的「CLI 已越过」语义）——卡片置灰禁点，防「点了没反应」假死
-const WAITBOX_STALE_MS = 10 * 60 * 1000;
-const isWaitStale = (wr?: { received_at?: number } | null): boolean =>
-  !!wr?.received_at && Date.now() - wr.received_at > WAITBOX_STALE_MS;
+// 审批卡永不过期（1029 用户铁令①，fix/approval-timeout 批）：#159 件③ 的 10min
+// 客户端猜测性置灰已删——「CLI 已越过」的真失效由 relay sweepStalePending 发
+// WAITING_RESOLVED(superseded) 真实收卡；worker 托管卡 relay 侧本无 TTL，客户端
+// 置灰只会把还活着的卡杀成「点不了」（用户云回流 worker 卡 10min 失效实锤）。
+// received_at 保留（喂「已等待 Xs」显示），不再参与任何禁点判定
 type PermMode = (typeof PERM_CYCLE)[number];
 // P81-8W 权限摘要三端统一词表（specs/081 钉死段；与 web-console PERM_MODE_ZH /
 // 桌面端同表逐字一致，勿改字面——三端单一词表源，本表取代旧局部 PERM_LABEL 四键表）：
@@ -2097,10 +2097,9 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
   // 列表零改渲染层
   const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
-  // #159 件∆：审批卡同款过期置灰。W-APPROVE #232：passive 卡豁免——CLI 本地弹窗无
-  // 超时（事故本体=干等到死），relay 侧注入任意时刻有效；10min TTL 的前提「relay 590s
-  // 已放行=CLI 已越过」对 passive 卡不成立，置灰恰杀隔夜/迟到发现的远程救援主场景
-  const wrStale = wr?.decidable !== false && isWaitStale(wr);
+  // 审批卡永不过期（fix/approval-timeout）：wrStale 置灰判定整段退役——passive 卡
+  // （W-APPROVE #232）与 worker 托管卡一律保持可点；真失效（CLI 已越过）由 relay
+  // superseded 收卡帧驱动收起，客户端不再做时间猜测
   wrRef.current = wr; // E3b 决议定向守卫同步（见 wrRef 声明处）
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待。
@@ -3176,15 +3175,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               /* 005 #166 三级按钮：拒绝=次级描边、允许并记住=第三钮（同次级档次）、
                   允许=唯一实心主钮（done 色）；仅浏览口径下全 disabled 压灰 */
               <View style={[d.wbtns, WAITBOX_READONLY && d.roDim]}>
-                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => decide(false)}>
+                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
                   <Text style={d.btnRejectT}>✕ 拒绝</Text>
                 </PressScale>
                 {wr!.remember ? (
-                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => setRmOpen(true)}>
+                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
                     <Text style={d.btnRememberT}>允许并记住</Text>
                   </PressScale>
                 ) : null}
-                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY || wrStale} onPress={() => decide(true)}>
+                <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(true)}>
                   <Text style={d.btnAllowT}>✓ 允许</Text>
                 </PressScale>
               </View>

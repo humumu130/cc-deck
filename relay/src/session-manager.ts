@@ -755,6 +755,12 @@ export class SessionManager {
   // 四报告落地 5h43m 无人收割实证；内存态即可，重启归零无害=重启后本就需重新盘点）
   private workerDonePending = 0;
   private pmWakeNotifyAt = 0; // #92 W-NOTIFY2 A：PM 唤醒手机通知 60s 频控窗（风暴聚合）
+  // fix/approval-timeout ②：worker 权限审批路由 PM（用户铁令②——团队成员内不应
+  // 出现需用户审批的事）。路由表 key=request_id 前 8 位（PM 回令短码）；value=待
+  // 决议现场。PM（Leader 会话）回复 PM-APPROVE/DENY/ESCALATE <短码> 令牌即代批
+  //（应用面=agent.allow/deny，与用户点卡同一执行面）。内存态：路由是「尽力通知」，
+  // relay 重启丢表无害——worker 卡仍在用户面（回落兜底恒在），PM 漏答同现行为
+  private pmApprovalRoutes = new Map<string, { workerSid: string; rid: string; tool: string; summary: string; askedAt: number }>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -1478,6 +1484,91 @@ export class SessionManager {
       (n) => n.kind === "waiting" && n.sourceContext.sessionId === sessionId && n.key === stableKey("waiting", sessionId, requestId),
       "resolved",
     );
+  }
+
+  // fix/approval-timeout ②：worker 权限审批路由 PM（用户铁令②「团队成员内不应出现
+  // 需用户审批的事」）。路由条件全收口于此：①非提问类（questions 空——用户口径只
+  // Bash 类权限确认，AskUserQuestion 有自己的作答链）②本会话不是 Leader 自己（防
+  // 环）③是 worker（dispatch_tier 在身且非咨询档——咨询=Leader 自己的派单形态）
+  //④PM 在线（Leader 会话在册、agent 在场未死）。任一不满足=return no-op，卡照常
+  // 留用户各端（回落兜底恒在，PM 漏答/离线同此）。注入是「尽力通知」：sendMessage
+  // 失败同 no-op。PM 回令由 applyPmApprovalReply 消化（Leader assistant_text 扫描）
+  private routeWorkerApprovalToPm(managed: ManagedSession, p: WaitingPayload): void {
+    if (p.questions?.length) return;
+    if (!this.leaderId || managed.state.session_id === this.leaderId) return;
+    if (!managed.state.dispatch_tier || managed.state.dispatch_tier === "咨询") return;
+    const leader = this.sessions.get(this.leaderId);
+    if (!leader?.agent || leader.agent.ended) return; // PM 离线：回落用户面（现行为）
+    const rid = String(p.request_id ?? "");
+    if (!rid) return;
+    const shortKey = rid.slice(0, 8);
+    if (this.pmApprovalRoutes.has(shortKey)) return; // 已路由在途（防重）
+    const tool = String(p.tool_name ?? "");
+    const summary = truncate(String(p.input_summary ?? ""), 120);
+    // 路由表有界（cap 50 丢最旧——路由是尽力通知，丢表无害见字段注释）
+    if (this.pmApprovalRoutes.size >= 50) {
+      const oldest = this.pmApprovalRoutes.keys().next().value;
+      if (oldest !== undefined) this.pmApprovalRoutes.delete(oldest);
+    }
+    const workerTitle = managed.state.title || managed.state.session_id.slice(0, 8);
+    const prompt =
+      `【审批路由 ${shortKey}】worker「${workerTitle}」请求使用 ${tool}：${summary}\n` +
+      `作为 PM 请代批（团队成员的权限确认由你消化，仅真有风险才升级用户）：\n` +
+      `- 批准 → 回复一行：PM-APPROVE ${shortKey}\n` +
+      `- 拒绝 → 回复一行：PM-DENY ${shortKey}\n` +
+      `- 升级用户 → 回复一行：PM-ESCALATE ${shortKey}\n` +
+      `不要执行任何工具，一行作答即可。`;
+    try {
+      leader.agent.sendMessage(prompt);
+    } catch (e) {
+      console.warn(`[approval-pm] 注入 PM 失败（回落用户面）: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    this.pmApprovalRoutes.set(shortKey, { workerSid: managed.state.session_id, rid, tool, summary, askedAt: Date.now() });
+    this.pushTimelineLog(managed.state.session_id, "system", `审批已路由 PM 代批：${tool}（${shortKey}）`);
+    console.log(`[approval-pm] worker 审批路由 PM：${tool} ${shortKey}（worker=${workerTitle}）`);
+  }
+
+  // PM 回令消化：Leader 会话 assistant_text 扫描 PM-APPROVE/DENY/ESCALATE <短码>。
+  // 应用面=worker agent.allow/deny（与用户点卡 COMMAND_CONTINUE/REJECT 同一执行面，
+  // 决议后状态机收口+各端收卡帧全走既有链）。迟到的 PM 回令（用户先点了/已被
+  // superseded）→ allow/deny 返回 false，如实记「已被处理」并出表，不重不炸
+  private applyPmApprovalReply(text: string): void {
+    if (this.pmApprovalRoutes.size === 0) return;
+    const re = /\bPM-(APPROVE|DENY|ESCALATE)\b[ \t]+([A-Za-z0-9_-]{6,12})/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const [, action, shortKey] = m;
+      const route = this.pmApprovalRoutes.get(shortKey);
+      if (!route) continue;
+      this.pmApprovalRoutes.delete(shortKey);
+      const worker = this.sessions.get(route.workerSid);
+      if (action === "ESCALATE") {
+        this.pushTimelineLog(route.workerSid, "system", `PM 升级用户处理：${route.tool}（${shortKey}）——卡留用户面`);
+        this.pushTimelineLog(this.leaderId ?? "", "system", `已升级用户：${route.tool}（${shortKey}）`);
+        continue;
+      }
+      const ok = action === "APPROVE"
+        ? worker?.agent?.allow(route.rid, "pm") === true
+        : worker?.agent?.deny(route.rid, "PM 代批拒绝", "pm") === true;
+      if (ok) {
+        this.pushTimelineLog(route.workerSid, "system", `PM 已代批${action === "APPROVE" ? "允许" : "拒绝"}：${route.tool}（${shortKey}）`);
+        this.pushTimelineLog(this.leaderId ?? "", "system", `代批已生效${action === "APPROVE" ? "（允许）" : "（拒绝）"}：${route.tool}（${shortKey}）`);
+        console.log(`[approval-pm] PM 代批${action === "APPROVE" ? "允许" : "拒绝"}：${route.tool} ${shortKey}`);
+      } else {
+        this.pushTimelineLog(this.leaderId ?? "", "system", `代批回令迟到（请求已被处理/收卡）：${shortKey}`);
+      }
+    }
+  }
+
+  /** 时间线 system 行单口（homeLost/PM 路由审计同源）：落 logs+广播+裁剪 */
+  private pushTimelineLog(sessionId: string, kind: LogEntry["kind"], text: string): void {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    const entry: LogEntry = { ts: Date.now(), kind, text };
+    s.logs.push(entry);
+    if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500); // W-INJECT④ 同款预算
+    this.bus.emit(sessionId, "SESSION_LOG", entry);
   }
 
   // #018-R1FIX1 P2-2 确认副作用失败语义：原确认项不 resolved，同 key 原地转 error
@@ -3177,10 +3268,17 @@ export class SessionManager {
           // R1c 源②：WAITING 通知（stableKey=waiting:session:request_id 防重）
           this.syncWaitingNotification(managed);
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
+          // fix/approval-timeout ②：worker 权限卡路由 PM（提问类不路由——用户口径
+          // 只 Bash 类权限确认；PM 离线/不满足路由条件时此调用为 no-op，卡照常留
+          // 用户面=回落兜底）
+          this.routeWorkerApprovalToPm(managed, p);
         },
         onWaitingResolved: (requestId, decision, resolvedBy) => {
           if (!mine()) return;
           touch("waiting_resolved");
+          // fix/approval-timeout ②：路由表出表——用户/PM 任何一方先决议都收口该路由
+          //（迟到的 PM 回令 allow/deny 返 false 走「已被处理」留痕，不重不炸）
+          this.pmApprovalRoutes.delete(String(requestId).slice(0, 8));
           // 根治③续：仅当决议针对"当前挂起"的请求才收口状态——孤儿请求补发的
           // superseded 理论上可能晚于下一个 WAITING 到达（多端并发决议的时序窗口），
           // 无差别收口会把新请求的 WAITING 一并打掉，复刻死锁
@@ -3316,6 +3414,11 @@ export class SessionManager {
             if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
           }
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+          // fix/approval-timeout ②：Leader（PM）的 assistant_text 扫 PM 代批回令
+          //（routeWorkerApprovalToPm 注入的审批请求在此收口消化）
+          if (kind === "assistant_text" && this.leaderId && managed.state.session_id === this.leaderId) {
+            this.applyPmApprovalReply(text);
+          }
           // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
           // 不入 dock；thinking 归 assistant_text（B0 的 ActivityKind 词表无 thinking）
           if (kind !== "user_message") {
