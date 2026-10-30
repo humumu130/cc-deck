@@ -509,22 +509,31 @@
                   const parkedList = entries.filter((e) => e.group && (e.group.status === "parked" || e.group.status === "archived"));
                   const unfiledList = entries.filter((e) => !e.group);
                   const card = (entry) => {
+                    // project-cards-v2（用户 1029 十六条）：单列三分区信息架构重做——
+                    // r1 标题（状态点+名称+需行动）/r2 路径（独占 truncate+定位钮 flex:none 不换行）/
+                    // r3 计数徽章行（数字 min-width 居中恒完整）。杀旧三病根：①行2 的 138px 右 margin
+                    // 遗留（会话卡微钮区）+ :has(.identity-cluster) 双模板分叉=被动截断两卡不同款
+                    // ②进行中徽章复用 source-badge（↗ 外链语义错配+第三行悬空）③图标钮 flex-wrap
+                    // 换行成孤儿行。数据钩子（data-project-key/open/title/选择类）零变化=交互零回归
                     const hot = entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR");
-                    const dot = entry.sessions.length === 0 ? "" : hot ? "waiting" : "done";
+                    const dot = hot ? "waiting" : ""; // 点语言两态收口：有要处理的=橙/其余灰基色（原 done 实心灰比 waiting 更醒目的层级倒挂退役；0 会话不再专属态）
                     const actions = projectActionItems(entry).length;
-                    // FB8 三行制（#248 收敛：行3 引擎徽章/行2 源胶囊退役——拥挤重叠根源，仅留进行中徽章）
                     const working = entry.sessions.filter((s) => s.status === "WORKING").length;
                     // W-PROJP1 P1-1：快捷链接（reveal 定位高亮）。openPath/probePath 吃原生路径（#158-批4a 口径）：
                     // 组卡 anchor 即 anchor_dir 原值；未立项卡 anchor 是 normDir 产物（分桶 key），必须取分桶保留的
                     // nativeCwd（设计 §1.4/附录 2 坑）。显隐沿 :3684 惯例——恒渲染按钮、无壳桥或无原生路径时
                     // display:none（浏览器端不动作），title 悬浮展示全路径（displayPath 原生形态）。
-                    // svg 内联（同产物域 svgUse 输出形态）——本项目域 script 块与产物域不共顶层作用域，
-                    // 借 svgUse 会 ReferenceError 且被订阅循环 try/catch 吞掉（render 整链静默死，实测踩坑）
                     const nativePath = entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || "");
                     const shellOpen = !!(window.ccDeck && typeof window.ccDeck.openPath === "function");
                     const openBtn = '<button class="project-open-btn" type="button" data-project-open="' + escapeHtml(nativePath) + '" aria-label="在文件夹中定位" title="在文件夹中定位 · ' + escapeHtml(displayPath(nativePath)) + '"' + (nativePath && shellOpen ? "" : ' style="display:none"') + '><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg></button>';
-                    return '<div class="queue-card' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(shortenDir(entry.anchor)) + '"><div class="row"><i class="status-dot ' + dot + '"></i><strong>' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="tag action">需行动 ' + actions + "</span>" : "") + '</div><p class="project-card-sub"><span class="project-card-path">' + escapeHtml(shortenDir(entry.anchor)) + " · " + entry.sessions.length + " 会话" + (entry.group ? " · 1 团队" : " · 未入项目") + "</span>" + openBtn + "</p>"
-                      + (working ? '<div class="identity-cluster"><span class="source-badge">进行中 ' + working + "</span></div>" : "") + "</div>";
+                    return '<div class="queue-card pc2' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'
+                      + '<div class="pc2-r1"><i class="status-dot ' + dot + '"></i><strong class="pc2-name">' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="pc2-badge is-action">需行动 ' + actions + "</span>" : "") + "</div>"
+                      + '<div class="pc2-r2"><span class="pc2-path">' + escapeHtml(shortenDir(entry.anchor) || "/") + "</span>" + openBtn + "</div>"
+                      + '<div class="pc2-r3">'
+                      + '<span class="pc2-count">' + entry.sessions.length + " 会话</span>"
+                      + (entry.group ? '<span class="pc2-count">' + (entry.group.status === "active" ? "活跃" : entry.group.status === "pending" ? "待确认" : "已挂起") + "</span>" : '<span class="pc2-count is-dim">未立项</span>')
+                      + (working ? '<span class="pc2-count is-working">' + working + " 进行中</span>" : "")
+                      + "</div></div>";
                   };
                   const group = (label, list) => list.length ? '<div class="queue-group">' + escapeHtml(label) + " · " + list.length + "</div>" + list.map(card).join("") : "";
                   // 未立项组头：折叠箭头 + 「未立项 · N」（贴卡副行既有徽标词汇，D2-2）+ hot 点——

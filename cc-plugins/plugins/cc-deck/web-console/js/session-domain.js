@@ -74,6 +74,9 @@
                   engineCatalog: null, models: [], projects: [],
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id（组织锚 Leader 会话 id，空串=无锚/旧 relay）——列表滤 Leader 卡用
+                  leaderSessionIds: new Set(), // UI 反馈批 1029 件B：全源 Leader 锚 id 并集（源→id 记账见 S._leaderIdBySource）——单值 leaderSessionId 在聚合视角被双源快照互相覆写（后到者赢），远程源 Leader 卡漏滤=「公司电脑源 leader 会话卡删不掉」的根因；过滤改并集判
+                  _leaderIdBySource: {}, // UI 反馈批 1029 件B：{lan:"<sid>", cloud:"<sid>"} 每源最新锚 id 记账（快照到达时按 evSource 换记，缺席字段=清该源——旧 relay）
+                  retiredIds: null, // [W-RETIRED]：SNAPSHOT.retired_session_ids（Set|null；null=旧 relay 零过滤兼容）——退休成员会话默认隐藏沉「已退休成员」归档组（编制退休≠会话删除，历史可查）
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
                   tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
@@ -176,9 +179,15 @@
                   }
                   return out + esc(s.slice(last));
                 }
+                // UI 反馈批 1029 件D：URL 可开体系——所有链接锚点带 data-url-link + 悬停提示；
+                // 点击语义（委托层统一）：修饰键（Ctrl/⌘）点击=显式打开（浏览器 window.open 新 tab /
+                // 桌面壳由壳层 capture 兜底转系统浏览器）；触屏（hover:none）直接点按打开；无修饰键
+                // 桌面/浏览器点击维持现状（壳兜底/原生新 tab）。白名单外协议不成为链接（HTTP_RE 闸）
+                const URL_MOD_KEY = /Mac|iPhone|iPad|iPod/.test(String(navigator.platform || navigator.userAgent)) ? "⌘" : "Ctrl";
+                const urlAnchorAttrs = ' data-url-link title="' + URL_MOD_KEY + '点击在浏览器打开"';
                 function linkifyEscaped(escaped) {
                   return escaped.replace(/\bhttps?:\/\/[^\s<>"')\]]+/g, (u) =>
-                    '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + "</a>");
+                    '<a href="' + u + '" target="_blank" rel="noopener noreferrer"' + urlAnchorAttrs + '>' + u + "</a>");
                 }
                 function userMsgHtml(t) {
                   const s = String(t ?? "");
@@ -187,11 +196,11 @@
                     i % 2 === 1 ? '<span class="task-ref" data-task-ref="' + p + '" title="定位任务清单">#' + p + "</span>" : linkifyEscaped(esc(p))
                   ).join("");
                 }
-                function taskRefRow(t) { // 工具/结果行文本：#NNN 可点 + 绝对路径可点（旧壳 taskRefHtml 口径）
+                function taskRefRow(t) { // 工具/结果行文本：#NNN 可点 + 绝对路径可点（旧壳 taskRefHtml 口径）；UI 反馈批 1029 件D：URL 亦可点（linkifyEscaped，工具行摘要里的地址不再纯文本）
                   const s = String(t ?? "");
-                  if (!/#\d{1,4}(?!\w)/.test(s)) return fpathHtml(s);
+                  if (!/#\d{1,4}(?!\w)/.test(s)) return linkifyEscaped(fpathHtml(s));
                   return s.split(/#(\d{1,4})(?!\w)/g).map((p, i) =>
-                    i % 2 === 1 ? '<span class="task-ref" data-task-ref="' + p + '" title="定位任务清单">#' + p + "</span>" : fpathHtml(p)
+                    i % 2 === 1 ? '<span class="task-ref" data-task-ref="' + p + '" title="定位任务清单">#' + p + "</span>" : linkifyEscaped(fpathHtml(p))
                   ).join("");
                 }
                 const MD_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
@@ -248,11 +257,11 @@
                       // [标题](url)：仅 http(s) 可成为链接，防 javascript: 注入（旧壳口径）
                       const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
                       out += mm && HTTP_RE.test(mm[2])
-                        ? '<a href="' + esc(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + esc(mm[1]) + "</a>"
+                        ? '<a href="' + esc(mm[2]) + '" target="_blank" rel="noopener noreferrer"' + urlAnchorAttrs + '>' + esc(mm[1]) + "</a>"
                         : esc(tok);
                     } else if (tok.startsWith("http")) {
                       const url = tok.replace(URL_TRAIL_PUNCT, "");
-                      out += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + "</a>";
+                      out += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"' + urlAnchorAttrs + '>' + esc(url) + "</a>";
                       if (url.length < tok.length) out += esc(tok.slice(url.length));
                     } else if (FPATH_START_RE.test(tok)) {
                       const p = tok.replace(/[.,;:!?'"）】》]+$/, "");
@@ -512,6 +521,7 @@
                       const agg = (window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource;
                       const keep = agg ? new Map(S.sessions) : null;
                       const keepProjects = agg ? (Array.isArray(S.projects) ? S.projects.slice() : []) : null;
+                      trackLeaderIdForSource(evSource, m.payload); // UI 反馈批 1029 件B：先记该源锚 id（onSnapshot 会覆写单值 S.leaderSessionId——并集记账独立于其外）
                       onSnapshot(m.payload);
                       // t25fix #5：聚合视角下给本源会话打 per-session 源标（relay 不发 relay_source，
                       // 此前全部回退 S.relayName → srcSet 恒 1 → 源标签恒隐藏=用户实测「聚合模式
@@ -551,6 +561,12 @@
                       break;
                     }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
+                    case "RETIRED_SESSIONS_UPDATED": { // [W-RETIRED]：退休名单增量帧（member-retire/member-add/trim/组迁移后 relay delta 广播）——在线端实时归档/复籍，断线端重连 SNAPSHOT 兜底
+                      const list = m.payload && Array.isArray(m.payload.retired_session_ids) ? m.payload.retired_session_ids.filter((x) => typeof x === "string") : [];
+                      S.retiredIds = new Set(list);
+                      renderMyList();
+                      break;
+                    }
                     case "SESSION_CREATED": onSessionCreated(sid, m.payload, evSource); break; // #110：帧通道随行（建卡打源标的锚）
                     case "SESSION_UPDATED": onSessionUpdated(sid, m.payload); break;
                     case "SESSION_HEARTBEAT": onHeartbeat(sid, m.payload); break;
@@ -562,7 +578,7 @@
                     case "SESSIONS_RECONCILE": onReconcile(m.payload); break; // #265 增量续传对账：快路径补发的在线 id 全集，集合外陈旧卡就地清
                     case "SESSION_LOG": onLog(sid, m.payload); break;
                     case "SESSION_LOG_PATCH": onLogRemove(sid, m.payload); break; // W-STREAMDELTA：终态撤流块
-                    case "COLLAB_MODE_UPDATED": onCollabMode(m.payload); break; // W-MODE：协作模式切换（锚卡即时增删）
+                    case "COLLAB_MODE_UPDATED": onCollabMode(m.payload, evSource); break; // W-MODE：协作模式切换（锚卡即时增删）；UI 反馈批 1029 件B：带源记账（切态帧同快照口径维护 S._leaderIdBySource）
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload || {}); break; // [t-7e0c6189] 编制增量（S.projects 原只吃 SNAPSHOT 全量，编制一变列表过滤就陈旧）
                     case "BOARD_UPDATED": { // W-TEAMSNC ④：板帧跟随（第四列抽屉在办概览 ≤1s 新鲜度）——会话域唯一新增消费点；守门三连（B 稿 R1）：gid 有效 + 抽屉开且同 gid 才重渲，稳态早退在 renderSlimDrawer
                       const bgid = m.payload && typeof m.payload.gid === "string" ? m.payload.gid : "";
@@ -638,6 +654,7 @@
                   S.relayName = p.relay_name || location.host;
                   S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
                   S.leaderSessionId = typeof p.leader_session_id === "string" ? p.leader_session_id : ""; // #240：锚 id（缺席重置空串——旧 relay/换源不残留陈旧锚 id 误滤）
+                  S.retiredIds = Array.isArray(p.retired_session_ids) ? new Set(p.retired_session_ids.filter((x) => typeof x === "string")) : null; // [W-RETIRED]：退休名单（缺席=旧 relay 零过滤；快照覆盖=leaderSessionId 同款换源口径）
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
@@ -723,7 +740,26 @@
                   return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
                 }
                 window.__ccDeck005IsRealWorking = isRealWorking; // team-domain 计数同源（跨文件共享）
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint"];
+                // UI 反馈批 1029 件D：消息流 URL 可开——document 级统一接管（#d-session 域与手机屏
+                // #m-* 全覆盖）。语义：修饰键（Ctrl/⌘）点击=显式打开；触屏（hover:none/pointer:coarse）
+                // 直接点按打开；无修饰键桌面/浏览器不接管（桌面壳由 INIT_SCRIPT capture 兜底转系统
+                // 浏览器=现状，浏览器原生新 tab=现状）。壳内（ccDeck/__TAURI__）capture 层必先到先得，
+                // 此处防双开不重发；浏览器/移动 web 走 __ccDeck005OpenUrl（window.open 新 tab，被拦
+                // 降级复制提示）。白名单外协议不可能成为本锚点（HTTP_RE 闸），防御性再验一次
+                document.addEventListener("click", (ev) => {
+                  const a = ev.target && ev.target.closest ? ev.target.closest("a[data-url-link]") : null;
+                  if (!a) return;
+                  const u = a.getAttribute("href") || "";
+                  if (!/^https?:/i.test(u)) return; // 防御：异常 href 不接管（浏览器/壳各自拒绝）
+                  const touchLike = !!(window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches);
+                  if (!(ev.ctrlKey || ev.metaKey || touchLike)) return; // 无修饰键非触屏：维持现状行为
+                  if (window.ccDeck || window.__TAURI__) return; // 壳 capture 层已开系统浏览器，防双开
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  if (window.__ccDeck005OpenUrl) window.__ccDeck005OpenUrl(u);
+                  else { try { window.open(u, "_blank", "noopener"); } catch (_) {} }
+                });
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint", "relay_source"]; // W-SRC2 #134（本批①）：增量 SESSION_UPDATED 透传 relay_source——SNAPSHOT 打标被后到无标增量覆写时自愈（relay 恒注入后此键恒在场，等值覆写零副作用）
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -769,9 +805,30 @@
                 // #240 W-LEADERHIDE：leader 分支的锚卡 upsert 回列表退役——用户口径「会话列表
                 // 不放 Leader 卡」（切回 leader 时锚卡仍随 SNAPSHOT 进 S.sessions，列表渲染集
                 // 由 isLeaderSession 过滤；团队域/组织视图语义不受影响）
-                function onCollabMode(p) {
+                // UI 反馈批 1029 件B：每源 Leader 锚 id 记账（快照/切态帧同口径）。单值
+                // S.leaderSessionId 在聚合视角被双源快照互相覆写（后到者赢）——远程源 Leader 卡
+                // 因此漏滤显形，用户实锤「公司电脑源的 leader 会话无法删除」（删命令经云桥到源机
+                // 被组织锚保护拒）。并集 S.leaderSessionIds 恒覆盖两源，isLeaderSession 过滤改判并集
+                //（#240 W-LEADERHIDE 口径本就是「Leader 形制卡不进会话列表」，本修只是把口径补全到
+                // 全源）。source 缺席（未知通道）不记不清——不污染已记源。
+                function trackLeaderIdForSource(evSource, p) {
+                  if (evSource !== "lan" && evSource !== "cloud") return;
+                  const lid = p && typeof p.leader_session_id === "string" ? p.leader_session_id : "";
+                  if (!S._leaderIdBySource) S._leaderIdBySource = {};
+                  if (!S.leaderSessionIds) S.leaderSessionIds = new Set();
+                  const prev = S._leaderIdBySource[evSource];
+                  if (prev && prev !== lid) S.leaderSessionIds.delete(prev);
+                  S._leaderIdBySource[evSource] = lid;
+                  if (lid) S.leaderSessionIds.add(lid);
+                }
+                function onCollabMode(p, evSource) {
                   if (!p || (p.mode !== "leader" && p.mode !== "no-leader")) return;
                   S.collabMode = p.mode;
+                  if (evSource === "lan" || evSource === "cloud") {
+                    // 件B：切态帧同快照口径换源记账——no-leader=该源锚 id 清记（切回 leader 带
+                    // leader_session 完整卡，下次快照/此帧均可再记上）
+                    trackLeaderIdForSource(evSource, p.mode === "leader" ? p : { leader_session_id: "" });
+                  }
                   if (p.mode === "no-leader") {
                     const lid = typeof p.leader_session_id === "string" ? p.leader_session_id : "";
                     if (lid && S.sessions.has(lid)) onDeleted(lid);
@@ -1055,7 +1112,7 @@
                     time: activityTime ? fmtListTime(activityTime) : "",
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
-                    pmStandby: session.pm_standby === true, // #287 值守 PM 待命态（快照派生）：替代 DONE 假死
+                    pmStandby: session.pm_standby === true && status !== "working", // #287 值守 PM 待命态（快照派生）：替代 DONE 假死；UI 反馈批 1029 件A：pm_standby 只随 SNAPSHOT 派生（实时帧不带、MERGE_KEYS 不收），PM 开工翻 working 后陈标残留=「干活中却显待命」矛盾——闸口收非 working 态（干活期由状态点/秒计时表达，起手窗走 #291 待开工语义，闲置 DONE 恒待命）
                     standby: status === "working" && !isRealWorking(session), // #291 帧分类判活：接单未开工/挂起（灰呼吸点+待开工标，不占在跑计数）
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
                     idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
@@ -1167,6 +1224,10 @@
                   : "";
                   return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
+                // [W-RETIRED] 退休成员会话判定（renderMyList 主列表排除/归档组收集、筛选计数三处共用）——
+                // 名单来自 SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧（relay 判定源=
+                // org 两本账：非 archived 组路由在册而编制外）。null=旧 relay 零过滤兼容
+                const isRetiredSession = (x) => !!(S.retiredIds && x && typeof x.session_id === "string" && S.retiredIds.has(x.session_id));
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
                   const cwd = String(session.cwd || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -1448,7 +1509,7 @@
                   pop.style.position = "fixed";
                   pop.style.zIndex = "96";
                   pop.innerHTML = '<div class="source-menu-head">筛选会话</div>' + SESSION_FILTERS.map((f) => {
-                    const n = f.id === "all" ? S.sessions.size : [...S.sessions.values()].filter(f.test).length;
+                    const n = f.id === "all" ? [...S.sessions.values()].filter((x) => !isRetiredSession(x)).length : [...S.sessions.values()].filter((x) => !isRetiredSession(x) && f.test(x)).length; // W-RETIRED：退休卡不占主列表计数（已沉归档组）
                     return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + '</small></button>';
                   }).join("");
                   const rect = anchor.getBoundingClientRect();
@@ -1553,18 +1614,27 @@
                   // 唯一可靠识别（relay SNAPSHOT 同批补发该字段）。leader 卡显式并入 filterHidden
                   // 记账（observer 遍历 S.sessions 全量，缺记账=「缺卡→重渲→仍缺」死循环，FB17）
                   const isLeaderSession = (x) => {
+                    // UI 反馈批 1029 件B：并集判（全源锚 id）先行——单值 S.leaderSessionId 聚合视角
+                    // 被双源快照互相覆写漏滤远程源 Leader 卡；词表口径保留（编制 role 行兜底）
+                    if (S.leaderSessionIds && S.leaderSessionIds.has(x.session_id)) return true;
                     if (S.leaderSessionId && x.session_id === S.leaderSessionId) return true;
                     const m = slimRoster.bySid.get(x.session_id);
                     return !!(m && /^(leader|领队)$/i.test(String(m.role || "")));
                   };
                   const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
+                  // [W-RETIRED] 退休成员会话（用户 1029 反馈）：主列表默认隐藏，沉列表尾部
+                  // 「已退休成员」折叠归档组（可展开=历史可查，编制退休≠会话删除）。退休判定
+                  // 优先于置顶（用户退休=隐藏，pinned 不豁免）；归档组内卡同走搜索过滤（搜
+                  // 退休成员名可找回），不参与筛选档/瘦身收纳（退休卡已出主列表）
+                  const retiredSessions = liveSessions.filter(isRetiredSession);
+                  const liveNonRetired = liveSessions.filter((x) => !isRetiredSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
                   // #271：saved 休眠卡（已保存待恢复）不享受 pinned 置顶浮置——重启后重建的
                   // 休眠锚卡恒 pinned=true（ensureLeader 重建硬编码）+时间戳取锚写入时刻，
                   // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
                   // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
                   const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
-                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                  const sessions = liveNonRetired.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
                     const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
@@ -1574,7 +1644,7 @@
                   const filterHidden = [...S.sessions.values()].filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
                   // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
-                  const slimHiddenIds = [...liveSessions].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
+                  const slimHiddenIds = [...liveNonRetired].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
                   S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;
                   if (!sessions.length) {
                     const ph = document.createElement("div");
@@ -1621,10 +1691,23 @@
                   // 筛选档（件十三「进行中」档）。活跃与闲置合流平铺（unpinned 本就按置顶+recency
                   // 序，活跃卡自然浮前）。
                   S._collapsedIdleIds = null; // 团队组退役：无折叠缺卡形态（slim 收起走 _slimHiddenIds）
+                  // [W-RETIRED] 尾部「已退休成员」折叠归档组：默认收起、点击组头展开（会话内
+                  // 记忆 S._retiredGroupOpen，mobileProjOpen 同款口径）；组内卡同走搜索过滤。
+                  // 折叠/搜索未命中 → 不在 DOM → 记账 _retiredHiddenIds 供 observer 完整性
+                  // 检查放行（_filterHiddenIds 同口径，防「缺卡→重渲→仍缺」死循环）
+                  const retiredOpen = S._retiredGroupOpen === true;
+                  const retiredShown = retiredOpen ? retiredSessions.filter(sessionSearchTest) : [];
+                  const retiredShownIds = new Set(retiredShown.map((x) => x.session_id));
+                  const retiredHiddenIds = retiredSessions.filter((x) => !retiredShownIds.has(x.session_id)).map((x) => x.session_id);
+                  S._retiredHiddenIds = retiredHiddenIds.length ? new Set(retiredHiddenIds) : null;
+                  const retiredMarkup = retiredSessions.length
+                    ? '<button class="queue-group retired-toggle" type="button" data-retired-toggle aria-expanded="' + retiredOpen + '" title="展开/收起已退休成员的会话"><span class="unfiled-chev">▸</span>已退休成员 · ' + retiredSessions.length + "</button>"
+                      + retiredShown.map((x) => myCardMarkup(myCardItem(x))).join("")
+                    : "";
                   // W-TEAMCHIP2 ②拼装：单段平铺（置顶+活跃+闲置，.list-upper 独占滚动）——
                   // #103 两段式下段 dock 已随本批退役
                   const tpl = document.createElement("template");
-                  tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;
+                  tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup;
                   mountUpper(tpl.content);
                 }
 
@@ -1687,6 +1770,76 @@
                 }
                 async function copySessionId(sid) { return copyWithFallback(sid, "会话 ID 已复制"); }
                 window.__ccDeck005CopyUi = { copyWithFallback }; // 跨 IIFE 共享（手机「更多」复制钮同链，同 __ccDeck005PathUi 口径）
+                // X1 跨机发送浮层（PRD §4.2-3 会话卡远程发送按钮）：目标 dev（op=peers 清单
+                // 预填 datalist，可手输）+ 可选目标会话 + 正文 → COMMAND_XMSG op=send →
+                // 轮询 op=status 到终态回显（injected/被拒可见）。旧 relay/未开 CCR_XMSG：
+                // 命令报错即 toast，浮层不开（能力探测式）。
+                async function openXmsgSend(card, s) {
+                  closeRowMenu();
+                  document.getElementById("xmsg-pop")?.remove();
+                  let peers = [];
+                  try {
+                    const ack = await commandAck("COMMAND_XMSG", { op: "peers" });
+                    if (ack && ack.ok === true && Array.isArray(ack.data?.peers)) peers = ack.data.peers;
+                  } catch { /* 旧 relay：无此命令——靠 send 阶段报错 */ }
+                  const pop = document.createElement("div");
+                  pop.className = "row-menu xmsg-pop";
+                  pop.id = "xmsg-pop";
+                  pop.setAttribute("role", "dialog");
+                  pop.setAttribute("aria-label", "跨机发送");
+                  const dl = document.createElement("datalist");
+                  dl.id = "xmsg-peer-list";
+                  for (const p of peers) {
+                    const o = document.createElement("option");
+                    o.value = p.dev;
+                    o.label = (p.confirmed ? "" : "（首联待确认）") + p.dev;
+                    dl.appendChild(o);
+                  }
+                  pop.appendChild(dl);
+                  const form = document.createElement("form");
+                  form.innerHTML =
+                    '<label>目标设备（rl-）<input name="dev" list="xmsg-peer-list" placeholder="rl-xxxxxxxx" required autocomplete="off" spellcheck="false"></label>'
+                    + '<label>目标会话（可空=对端值班位）<input name="session" placeholder="对端会话 id，留空发值班位" autocomplete="off" spellcheck="false"></label>'
+                    + '<label>正文<textarea name="text" placeholder="要跨机发送的内容…" required></textarea></label>'
+                    + '<div class="xmsg-state" data-xmsg-state></div>'
+                    + '<div class="row-del-actions"><button type="button" data-x-cancel>取消</button><button type="submit">发送</button></div>';
+                  pop.appendChild(form);
+                  document.body.appendChild(pop);
+                  const rect = card.getBoundingClientRect();
+                  const pr = pop.getBoundingClientRect();
+                  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pr.width - 8)) + "px";
+                  pop.style.top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - pr.height - 8)) + "px";
+                  const dismiss = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener("pointerdown", dismiss, true); } };
+                  document.addEventListener("pointerdown", dismiss, true);
+                  form.querySelector("[data-x-cancel]")?.addEventListener("click", () => { pop.remove(); document.removeEventListener("pointerdown", dismiss, true); });
+                  form.querySelector<HTMLInputElement>("[name=dev]")?.focus();
+                  form.addEventListener("submit", async (ev) => {
+                    ev.preventDefault();
+                    const dev = form.querySelector<HTMLInputElement>("[name=dev]")?.value.trim() || "";
+                    const session = form.querySelector<HTMLInputElement>("[name=session]")?.value.trim() || "";
+                    const text = form.querySelector<HTMLTextAreaElement>("[name=text]")?.value || "";
+                    const stateEl = pop.querySelector("[data-xmsg-state]");
+                    if (!/^rl-[0-9a-f]{4,64}$/.test(dev)) { if (stateEl) stateEl.textContent = "目标设备号不合法（rl- 开头）"; return; }
+                    if (!text.trim()) { if (stateEl) stateEl.textContent = "正文必填"; return; }
+                    if (stateEl) stateEl.textContent = "发送中…";
+                    let ack;
+                    try { ack = await commandAck("COMMAND_XMSG", { op: "send", dev, ...(session ? { session } : {}), text, source_session: s.session_id }); }
+                    catch (e) { if (stateEl) stateEl.textContent = "发送失败：" + (e && e.message ? e.message : String(e)); return; }
+                    const v0 = ackVerdict(ack); // null=超时/未连接 三态收口
+                    if (!v0.ok) { if (stateEl) stateEl.textContent = v0.error; return; }
+                    const msgId = ack.data?.msg_id;
+                    // 轮询到终态（≤15s；relay 侧 outbox 继续补发，浮层只做即时回显）
+                    for (let i = 0; i < 15; i++) {
+                      await new Promise((r) => setTimeout(r, 1000));
+                      let st = null;
+                      try { st = await commandAck("COMMAND_XMSG", { op: "status", msg_id }); } catch { continue; }
+                      const state = st && st.ok === true ? st.data?.state : "";
+                      if (state === "injected") { if (stateEl) stateEl.textContent = "✓ 已注入对端"; b2Toast("跨机消息已注入"); setTimeout(() => pop.remove(), 1200); return; }
+                      if (state === "rejected" || state === "failed") { if (stateEl) stateEl.textContent = "✗ " + ((st && st.data?.detail) || state); return; }
+                    }
+                    if (stateEl) stateEl.textContent = "在途（relay 会继续补发，可用 ccops 查 msg_id=" + msgId + "）";
+                  });
+                }
                 // 件五补（2026-10-10 用户补充意见）：置顶 toggle 提取共用——右键菜单 pin 项与
                 // 行尾图钉微钮同链（COMMAND_PIN_SESSION + 乐观归位 + toast），零重复。
                 // 翻转用发送时的意图值而非二次推导：relay 先 emit UPDATED 再回 ACK（:2785→:2792
@@ -1761,6 +1914,13 @@
                     const r = more.getBoundingClientRect();
                     card.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: Math.round(r.left), clientY: Math.round(r.bottom + 2) }));
                   });
+                  UI.sessionList.addEventListener("click", (e) => { // [W-RETIRED] 归档组头折叠/展开（容器级委托：rk reconcile 子树替换不掉监听；组头在卡外不触发选中链）
+                    const tog = e.target.closest("[data-retired-toggle]");
+                    if (!tog) return;
+                    e.stopImmediatePropagation();
+                    S._retiredGroupOpen = S._retiredGroupOpen !== true;
+                    renderMyList();
+                  });
                   // 件五补：标题双击进行内编辑（startRowRename 既有链：Enter 确认/Esc 取消/
                   // COMMAND_RENAME→title-overrides.json 落盘）。relay RENAME 对 historical/ext
                   // 均放行（:2592 仅拦空题），与菜单「重命名」放开口径一致，双击不另设只读闸
@@ -1804,6 +1964,7 @@
                       '<button type="button" role="menuitem" data-row-action="pin">' + (session.pinned ? "取消置顶" : "置顶") + "</button>"
                       + '<button type="button" role="menuitem" data-row-action="rename">重命名</button>'
                       + '<button type="button" role="menuitem" data-row-action="copyid">复制 ID</button>'
+                      + '<button type="button" role="menuitem" data-row-action="xmsg">跨机发送…</button>'
                       + '<button type="button" role="menuitem" class="danger" data-row-action="del">删除</button>';
                     rowMenu.addEventListener("click", async (ev) => {
                       const btn = ev.target.closest("button[data-row-action]");
@@ -1820,6 +1981,8 @@
                         if (target) startRowRename(target, s);
                       } else if (action === "copyid") {
                         copySessionId(s.session_id);
+                      } else if (action === "xmsg") {
+                        await openXmsgSend(card, s); // X1 跨机发送浮层（能力探测式：旧 relay/未开 CCR_XMSG 报错 toast）
                       } else if (action === "del") {
                         openDeleteConfirm(card, s); // 件五补：确认浮层统一（不可裸删，与 hover × 同链）
                       }
@@ -2318,6 +2481,145 @@
                     el.replaceWith(img);
                   });
                 }
+                // ---------- W-UI-ASKRENDER：AskUserQuestion 结构化问卷渲染（三面共享） ----------
+                // relay 侧 detailToolUse 无 AskUserQuestion 专属分支——questions 以
+                // `questions: <JSON>` 键值行拍扁进 detail（capDetail 2000 字可截断）。这里
+                // 客户端反解析回结构（含 relay parseAskQuestions 会剥掉的 preview 在位信息），
+                // 解析失败返回 null → 走通用 trow 渲染（零回归兜底）。
+                function parseAskDetail(detail) {
+                  if (!detail) return null;
+                  const wasTrunc = /\n?…\s*\(\+\d+\s*字符\)\s*$/.test(String(detail)); // capDetail 截断尾标在位 = 原文被截（审查B P1：不可静默）
+                  let raw = String(detail).trim().replace(/\n?…\s*\(\+\d+\s*字符\)\s*$/, ""); // 剥 capDetail 截断尾标
+                  const m = /^questions:\s*([\s\S]+)$/.exec(raw);
+                  if (m) raw = m[1];
+                  let data = null;
+                  let salvaged = false;
+                  try { data = JSON.parse(raw); } catch (_) { data = askSalvageJson(raw); salvaged = data != null; } // 抢救成功 = 原文不完整（relay 产物 parse 失败必因截断）
+                  if (data && !Array.isArray(data) && typeof data === "object" && Array.isArray(data.questions)) data = data.questions;
+                  if (!Array.isArray(data)) return null;
+                  const qs = [];
+                  for (const q of data.slice(0, 4)) { // 与 relay parseAskQuestions 同帽（4 问/6 项）——等待卡题序对齐
+                    if (!q || typeof q !== "object") continue;
+                    const question = typeof q.question === "string" ? q.question.trim() : "";
+                    if (!question) continue;
+                    const options = [];
+                    for (const o of (Array.isArray(q.options) ? q.options : []).slice(0, 6)) {
+                      if (!o || typeof o !== "object") continue;
+                      const label = String(o.label ?? "").trim();
+                      if (!label) continue;
+                      options.push({
+                        label,
+                        desc: typeof o.description === "string" ? o.description.trim() : "",
+                        preview: o.preview != null && o.preview !== "", // 只标记在位，内容不渲染（preview 常为大段代码）
+                      });
+                    }
+                    qs.push({
+                      header: (typeof q.header === "string" && q.header.trim()) || question.slice(0, 24),
+                      question,
+                      multi: q.multiSelect === true || q.multi === true, // 原始 input 用 multiSelect，relay 解析形用 multi
+                      options,
+                    });
+                  }
+                  if (qs.length) {
+                    if (wasTrunc || salvaged) qs.truncated = true; // 截断诚实标志（审查B P1）：部分恢复不谎报完整
+                    return qs;
+                  }
+                  return null;
+                }
+                // 截断 JSON 抢救：capDetail 从任意位置切断。首选括号/引号平衡器（扫描未闭合
+                // 栈 + 剥尾部残词/尾逗号/悬空键值对后补闭合），败则回退「最后一个 '}' 逐位回退
+                // 补尾」。纯展示层 best-effort，双路径仍败 = null 回落通用渲染。
+                // 回退 30 位 × 7 后缀 = 上限 210 次有界 tryParse（≤2000 字符），单行渲染一次
+                // 性可承受；capDetail 只产前缀切，回退的真实增量在「多键尾垃圾」形态——
+                // 审查B P2-1 裁定保留主平衡器+有界回退现状（缩编收益小、动测试风险大）
+                function askSalvageJson(raw) {
+                  const tryParse = (s) => { try { const v = JSON.parse(s); return v; } catch (_) { return undefined; } };
+                  // 平衡器
+                  const stack = []; let inStr = false, escNext = false;
+                  for (let i = 0; i < raw.length; i++) {
+                    const c = raw[i];
+                    if (inStr) { if (escNext) escNext = false; else if (c === "\\") escNext = true; else if (c === '"') inStr = false; continue; }
+                    if (c === '"') inStr = true;
+                    else if (c === "[" || c === "{") stack.push(c);
+                    else if (c === "]" || c === "}") stack.pop();
+                  }
+                  let body = raw + (inStr ? '"' : "");
+                  if (!inStr) {
+                    for (let n = 0; n < 8; n++) { // 剥尾部残词/尾逗号/悬空键值对（最多 8 轮防长尾循环）
+                      if (/[\s,]+$/.test(body)) body = body.replace(/[\s,]+$/, "");
+                      else if (/:\s*$/.test(body)) body = body.replace(/,?\s*"[^"]*"\s*:\s*$/, ""); // 悬空键（值被切走）
+                      else if (/(^|[:,\[]\s*)(?:tru|fals|nul|-?\d+(?:\.\d*)?(?:[eE][+-]?\d*)?)$/.test(body)) body = body.replace(/(?:tru|fals|nul|-?\d+(?:\.\d*)?(?:[eE][+-]?\d*)?)$/, ""); // 半个字面量
+                      else break;
+                    }
+                    body = body.replace(/[\s,]+$/, "");
+                  }
+                  const closers = stack.reverse().map((c) => (c === "{" ? "}" : "]")).join("");
+                  const v1 = tryParse(body + closers);
+                  if (v1 !== undefined) return v1;
+                  // 回退：'}' 逐位回退补尾（平衡器败在结构怪异时兜底）
+                  const suffixes = ["]", "\"}]", "}", "\"}", "]}", "\"]}", "}]"];
+                  for (let i = raw.lastIndexOf("}"), n = 0; i > 0 && n < 30; i = raw.lastIndexOf("}", i - 1), n++) {
+                    for (const suf of suffixes) {
+                      const v = tryParse(raw.slice(0, i + 1) + suf);
+                      if (v !== undefined) return v;
+                    }
+                  }
+                  return null;
+                }
+                // 问卷卡主体（三面共享）：mode "static"=纯展示（时间线展开/手机只读/被动等待卡）
+                // "single"=单问选项点击即答（data-wait-answer 沿用原链） "multi"=多问/多选 chips
+                // toggle（data-wait-chip + wc-label 沿用原提交链——handleWaitSubmit 读 .wc-label）
+                function askGroupsHtml(qs, flags, mode) {
+                  return (qs || []).map((q, qi) => {
+                    const fl = flags && flags[qi];
+                    const hasPrev = (o, oi) => o.preview === true || !!(fl && fl[oi]); // 选项自带（时间线反解析）或借源（等待卡 w.questions 无 preview）
+                    const od = (o) => { const d = o.desc || o.description; const t = typeof d === "string" ? d.trim() : ""; return t.length > 160 ? t.slice(0, 159) + "…" : t; }; // 解析形/relay 形双兼容 + 展示帽（label 不截——multi 答案读 wc-label 原文）
+                    let opts = "";
+                    if (mode === "multi") {
+                      opts = '<div class="wq-opts">' + (q.options || []).map((o, oi) =>
+                        '<button type="button" class="wait-chip row" data-wait-chip="' + qi + ":" + oi + '">'
+                        + '<span class="wo-line1"><span class="wc-label">' + esc(o.label) + "</span>"
+                        + (hasPrev(o, oi) ? '<span class="wo-prev">含预览</span>' : "")
+                        + '<span class="wc-check" aria-hidden="true"></span></span>'
+                        + (od(o) ? '<span class="wo-desc">' + esc(od(o)) + "</span>" : "")
+                        + "</button>").join("") + "</div>";
+                    } else {
+                      opts = '<div class="wq-opts">' + (q.options || []).map((o, oi) => {
+                        const tag = mode === "single" ? 'button type="button" class="wq-opt" data-wait-answer="' + oi + '"' : 'div class="wq-opt"';
+                        const close = mode === "single" ? "button" : "div";
+                        return "<" + tag + '><span class="wo-line1"><span class="wc-label">' + esc(o.label) + "</span>"
+                          + (hasPrev(o, oi) ? '<span class="wo-prev">含预览</span>' : "") + "</span>"
+                          + (od(o) ? '<span class="wo-desc">' + esc(od(o)) + "</span>" : "")
+                          + "</" + close + ">";
+                      }).join("") + "</div>";
+                    }
+                    return '<div class="wait-qgroup" data-wait-qgroup="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") + ">"
+                      + '<div class="wq-head">' + esc(q.header || ("问题 " + (qi + 1))) + (q.multi ? '<span class="wq-multi-tag">可多选</span>' : "") + "</div>"
+                      + '<div class="wq-question">' + esc(q.question || "") + "</div>" + opts + "</div>";
+                  }).join("");
+                }
+                // 等待卡 preview 标记借源：relay parseAskQuestions 剥掉 preview，但同会话时间线里
+                // 该次 tool_use 的 detail 保留原始 input——末位 Ask 条目反解析成功且题干对齐时借其
+                // preview 在位信息（失败/不匹配=无标记，纯降级不阻塞）
+                function askPreviewFlagsFor(s, w) {
+                  try {
+                    if (!s || !Array.isArray(w.questions) || !w.questions.length) return null;
+                    const tl = S.timelines.get(s.session_id) || [];
+                    for (let i = tl.length - 1; i >= 0 && i >= tl.length - 40; i--) {
+                      const e = tl[i];
+                      if (e && e.kind === "tool_use" && e.tool === "AskUserQuestion") {
+                        const qs = parseAskDetail(e.detail);
+                        if (qs && qs.length === w.questions.length
+                          && qs.every((q, qi) => q.question.slice(0, 24) === String(w.questions[qi].question || "").slice(0, 24)
+                            && (q.options || []).length === (w.questions[qi].options || []).length)) { // 选项数同校（审查B P2-2：防同题干异选项错标「含预览」）
+                          return qs.map((q) => (q.options || []).map((o) => !!o.preview));
+                        }
+                        return null; // 末位 ask 条目即当前等待请求，不匹配不再回溯（旧条目借源=错配）
+                      }
+                    }
+                  } catch (_) {}
+                  return null;
+                }
                 // #164 单条消息 HTML（桌面/手机同一渲染路径；返回 "" = 该类开关关闭不渲染）
                 function entryHtml(e, s) {
                   const role = msgRoleOf(e.kind);
@@ -2379,6 +2681,20 @@
                   }
                   if (role === "ai-tool") {
                     const t = e.tool || "";
+                    // W-UI-ASKRENDER：AskUserQuestion 专属渲染——折叠态友好摘要（N 个问题 +
+                    // 首问截断 + header 标签行），展开态结构化问卷卡（每问一卡：header 小标 +
+                    // 正文 + 选项列表 label/description 次行/多选标/含预览标）。反解析失败
+                    // （detail 缺失/不可救）回落下方通用 trow，其他工具零触碰
+                    if (t === "AskUserQuestion") {
+                      const qs = parseAskDetail(e.detail);
+                      if (qs) {
+                        const sum = (qs.truncated ? "≥" : "") + qs.length + " 个问题" + (qs.truncated ? "（已截断）" : "") + " · " + oneLine(qs[0].question || "").slice(0, 44); // 截断时诚实标注（审查B P1）
+                        const tags = '<span class="ask-tags">' + qs.map((q) => '<span class="ask-tag">' + esc(String(q.header || "").slice(0, 12)) + "</span>").join("") + "</span>";
+                        return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">?</span><span class="tname">提问</span><span class="tsum">' + esc(sum) + "</span>" + tags +
+                          '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开 ▾") + "</span></div>" +
+                          (open ? '<div class="ask-card">' + askGroupsHtml(qs, null, "static") + (qs.truncated ? '<div class="wo-desc">原文超长被截断，以上可能不是全部问题</div>' : "") + "</div>" : "") + "</div>";
+                      }
+                    }
                     const isTaskTool = /^Task/.test(t); // Task* 行：摘要单行省略 + 展开看任务描述（旧壳 #204 口径）
                     const taskLife = isTaskLifeTool(t); // #47 任务生命周期行：data-role=task 不进过程组，proc-off 不影响（常显）
                     return '<div class="trow' + (taskLife ? " task-life" : "") + '" data-role="' + (taskLife ? "task" : "proc") + '" data-x="' + ke + '"><div class="tline"><span class="tico">' + (taskLife ? taskLifeIcon() : toolIcon(t)) + '</span><span class="tname">' + esc(t || "tool") + '</span><span' + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefRow(e.text) + "</span>" +
@@ -2402,7 +2718,7 @@
                   }
                   // #B3-13 ⚠ 开头系统/警告行着 --working（旧壳 .msg-sys.warn 口径：/^\s*⚠/）
                   // W-UIFB ⑦：relay 防抢发提示小字号呈现（i=9 附带；文本特征挂 note-xs）
-                  return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + (/防抢发/.test(String(e.text ?? "")) ? " note-xs" : "") + '">' + esc(oneLine(e.text)) + "</div>";
+                  return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + (/防抢发/.test(String(e.text ?? "")) ? " note-xs" : "") + '">' + linkifyEscaped(esc(oneLine(e.text))) + "</div>"; // 件D：note 行 URL 亦可点
                 }
                 function entryNode(e, s) {
                   const html = entryHtml(e, s);
@@ -2640,10 +2956,12 @@
                   const isAsk = Array.isArray(w.questions) && w.questions.length > 0;
                   const single = isAsk && w.questions.length === 1 && !w.questions[0].multi;
                   const waitStart = w.request_started_at || Date.now();
-                  let title, content = "", actions = "";
+                  let title, content = "", actions = "", askBody = "";
+                  // W-UI-ASKRENDER：ask 等待卡问卷化——题干/选项/描述/多选标/含预览标进结构化
+                  // 问卷卡（askGroupsHtml 与时间线展开态/手机只读同源），不再「／」拼纯文本；
+                  // content 只承载过期/被动等人话附注
                   if (isAsk) {
                     title = "等待你的回答 · " + (w.questions[0].header || w.tool_name || "提问");
-                    content = w.questions.map((q) => q.question || "").join(" ／ ");
                   } else {
                     title = "等待你的确认 · " + (w.tool_name || "工具调用");
                     // 审批态：命令全文走 wait-detail mono 块，input_summary 作补充描述
@@ -2659,32 +2977,28 @@
                     actions = '<div class="wait-actions"><button class="deny" data-wait-deny>✕ 拒绝</button>' +
                       '<button class="allow" data-wait-allow>✓ 允许</button></div>';
                   } else if (passive) {
+                    // 被动 ask：问卷只读呈现（静态模式无作答钮——远程无法决定，按钮仍不出现）
+                    askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), "static") + "</div>";
                     content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
                   } else if (isAsk && (w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 90000) {
                     // W-DESKASK（W-ASKFIX 桌面同步）：ask 卡 90s 应答窗（relay
                     // QUESTION_HOLD_MS）——过期 CLI 已放本地选择器，手机/网页晚答注入
                     // 无门（CLI 已死/终态=死卡）——按钮全撤+置灰标注，对齐 expo
                     // AskBanner「已失效（超时）」口径；审批类 10min 治理（#159 件③）不动
+                    askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), "static") + "</div>";
                     content += "\n（已失效（超时）——CLI 已放行本地选择器，此处作答无法送达）";
                   } else if ((w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 600000) {
                     // #159 件③ 过期治理：waiting_request 超 10min 视为已失效（CLI 多已越过，
                     // relay sweepStalePending 同语义）——按钮全撤防「点了没反应」假死
+                    if (isAsk) askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), "static") + "</div>";
                     content += "\n（该请求已超过 10 分钟未处理，已失效——CLI 多已继续）";
                   } else if (isAsk) {
-                    if (single) {
-                      actions = '<div class="wait-actions">' + (w.questions[0].options || []).map((o, i) => '<button data-wait-answer="' + i + '">' + esc(o.label) + "</button>").join("") + '<button class="deny" data-wait-deny>取消提问</button></div>';
-                    } else {
-                      // W-ASKUSER-FIX（B2b 补齐，2026-10-20 用户实锤「多问题只显标题+取消」）：
-                      // 多问题/多选=分组渲染（每题 header+题干+选项 chips），单选组点击即选中、
-                      // 多选组（multi:true）toggle 勾选——「提交回答」统一收齐经 COMMAND_ANSWER
-                      // 上送（answers 按题序，多选拼「、」——expo AskBanner 同交互模型移植）
-                      const groups = w.questions.map((q, qi) => {
-                        const chips = (q.options || []).map((o, oi) =>
-                          '<button type="button" class="wait-chip' + (q.multi ? " toggle" : "") + '" data-wait-chip="' + qi + ":" + oi + '"' + (o.description ? ' title="' + esc(o.description) + '"' : "") + '><span class="wc-label">' + esc(o.label) + "</span>" + (q.multi ? '<span class="wc-check"></span>' : "") + "</button>").join("");
-                        return '<div class="wait-qgroup" data-wait-qgroup="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") + '><div class="wq-head">' + esc(q.header || ("问题 " + (qi + 1))) + (q.multi ? '<span class="wq-multi-tag">可多选</span>' : "") + '</div><div class="wq-question">' + esc(q.question || "") + '</div><div class="wq-chips">' + chips + "</div></div>";
-                      }).join("");
-                      actions = '<div class="wait-multi">' + groups + '</div><div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button><button class="allow" data-wait-submit>提交回答</button></div>';
-                    }
+                    // W-ASKUSER-FIX（B2b 补齐）+ W-UI-ASKRENDER 问卷化：单问=选项行点击即答
+                    // （data-wait-answer 原链），多问/多选=选项行 toggle 勾选（data-wait-chip +
+                    // wc-label 原提交链）；选项行含 description 次行与「含预览」标记
+                    askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), single ? "single" : "multi") + "</div>";
+                    actions = '<div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button>'
+                      + (single ? "" : '<button class="allow" data-wait-submit>提交回答</button>') + "</div>";
                   } else {
                     // 三级按钮：允许（主）、拒绝（次）、允许并记住（第三，点击展开范围选择）
                     actions = '<div class="wait-actions"><button class="deny" data-wait-deny>拒绝并说明</button>' +
@@ -2701,10 +3015,10 @@
                   // 标题行：title + 呼吸点 + elapsed
                   const elapsed = Math.floor((Date.now() - waitStart) / 1000);
                   const titleHtml = '<strong class="wait-title">' + esc(title) + '<span class="wait-dot"></span><span class="wait-elapsed" data-wait-elapsed>' + elapsed + 's</span></strong>';
-                  // 内容：审批态用 wait-detail mono 块展示命令全文，提问态用 p
+                  // 内容：审批态用 wait-detail mono 块展示命令全文；提问态=结构化问卷卡（askBody）+ 附注 p
                   let bodyHtml = "";
                   if (isAsk) {
-                    bodyHtml = content ? '<p class="wait-copy">' + esc(content).replace(/\n/g, "<br>") + "</p>" : "";
+                    bodyHtml = askBody + (content ? '<p class="wait-copy">' + esc(content).replace(/\n/g, "<br>") + "</p>" : "");
                   } else {
                     const cmdFull = w.command_text || w.input_summary || "";
                     bodyHtml = (cmdFull ? '<div class="wait-detail">' + esc(cmdFull) + "</div>" : "") +
@@ -3637,10 +3951,23 @@
                 }
                 function defaultEngineId() { const ready = catalogEntries().find((e) => e.state === "ready"); return ready ? ready.id : "claude"; }
                 function engineStateText(e) {
-                  if (e.state === "ready") return e.models && e.models.length ? e.models.length + " 个模型" : "已就绪 · 使用引擎默认";
+                  if (e.state === "ready") return e.models && e.models.length ? e.models.length + " 个模型" : "已就绪 · 使用默认模型";
                   if (e.state === "needs_auth") return "未登录 · " + oneLine(e.auth_hint || "请先完成引擎登录"); // #102 批 A：装了没登录——黄点+指引
-                  if (e.state === "unsupported") return "不支持 · " + ((e.preflight && e.preflight.reason) || "占位");
-                  return "不可用 · " + oneLine((e.preflight && e.preflight.reason) || "未探测到");
+                  // UI 反馈批 1029 件C：不可用文案产品化——relay preflight 原因是运维口径直出
+                  //（「CLI 未在当前 PATH 探测到」「枚举占位未接入编排」），按用户能采取的动作分层；
+                  // 原始原因经 engineStateHint 保留在行 title 里（排查不丢信息）
+                  const raw = oneLine(String((e.preflight && e.preflight.reason) || "未探测到"));
+                  const label = (ENGINES[e.id] && ENGINES[e.id][0]) || e.label || e.id;
+                  if (e.state === "unsupported" || /枚举占位/.test(raw)) return "即将支持 · 当前版本暂不可用";
+                  if (/未配置 CLI 命令/.test(raw)) return "未配置 · 请在源端补全引擎命令";
+                  if (/provider|密钥|base ?URL/i.test(raw)) return "配置未完成 · " + raw;
+                  return "未安装 · 需先安装 " + label + " CLI";
+                }
+                // UI 反馈批 1029 件C：不可用行的悬停原文（运维口径不上面板但可查）
+                function engineStateHint(e) {
+                  if (e.state === "ready") return "";
+                  if (e.state === "needs_auth") return oneLine(String(e.auth_hint || ""));
+                  return oneLine(String((e.preflight && e.preflight.reason) || ""));
                 }
                 // #368（旧壳 8781-8794 口径）：cwd 预填「上次创建用的目录」优先，无记忆回落
                 // 活动源用户根目录。005 单源——单键记忆（不与旧壳 ccr_cwd@id 多源键纠缠）
@@ -3725,7 +4052,7 @@
                     // #102 批 A：胶囊状态点三色——绿 ready / 黄 needs_auth（未登录）/ 灰 其余不可用
                     const dotCls = !isAuto && entry ? (entry.state === "needs_auth" ? " warn" : entry.state !== "ready" ? " na" : "") : "";
                     html += '<div class="create-label">引擎</div>'
-                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + dotCls + '"></span><span class="engine-badge ' + meta[1] + '">' + esc(isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + dotCls + '"></span><span class="engine-badge ' + (isAuto ? "auto" : meta[1]) + '">' + engineBadgeInner(isAuto ? "" : meta[1], isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
@@ -3813,6 +4140,14 @@
                 function closeCreatePop() { closeEngineMenu(); document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); } // 件九：浮层随弹窗同收
                 // 件九：引擎分组浮层（可用置顶 / 不可用灰置+原因小字；壳复用 .model-menu）
                 function closeEngineMenu() { const m = document.getElementById("b2-engine-menu"); if (m) m.remove(); }
+                // UI 反馈批 1029 件C（用户点名）：引擎菜单/触发胶囊徽章品牌化——复用列表卡
+                // engineBadge 体系（ENGINE_BRAND_SVG 品牌图标 + .badge-brand 尺寸约束 + 引擎
+                // tint 底色，CSS 面 #b2-engine-menu 规则同批）。auto 档非品牌：无图标中性皮
+                function engineBadgeInner(cls, label) {
+                  const iconKey = cls === "qwen" ? "qwen-code" : cls; // 徽章 class=qwen（CSS tint 键）而品牌 SVG 键=qwen-code——别名对齐
+                  const icon = iconKey && ENGINE_BRAND_SVG[iconKey];
+                  return (icon ? '<span class="badge-brand">' + icon + "</span>" : "") + esc(label);
+                }
                 function openEngineMenu(anchor) {
                   closeEngineMenu();
                   const menu = document.createElement("div");
@@ -3833,33 +4168,38 @@
                   const na = catalogEntries().filter((e) => e.state !== "ready" && e.state !== "needs_auth");
                   const needsAuth = catalogEntries().filter((e) => e.state === "needs_auth");
                   let html = "";
-                  html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge claude">自动</span><strong>自动 · 跟随源默认</strong><small>由源端配置决定引擎（不携带 engine 字段）</small></button>'; // W-PORT-A R-7：auto 档置顶恒可选
+                  // UI 反馈批 1029 件C：选中态右缘 ✓ 角标（对比度 增强：底色+描边双通道，CSS 同批）；
+                  // auto 行去冗余（徽章「自动」+标题不再重复「自动 ·」，副题清「不携带 engine 字段」开发术语）
+                  const check = '<span class="opt-check" aria-hidden="true">✓</span>';
+                  html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge auto">' + engineBadgeInner("", "自动") + '</span><strong>跟随源默认</strong><small>不指定引擎 · 由源端与岗位配置决定</small>' + (chosen === "auto" ? check : "") + "</button>"; // W-PORT-A R-7：auto 档置顶恒可选
                   if (ready.length) {
                     html += '<div class="source-menu-head">可用 · ' + ready.length + "</div>";
                     for (const e of ready) {
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "引擎默认") + "</small></button>";
+                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem"><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "默认模型") + "</small>" + (e.id === chosen ? check : "") + "</button>";
                     }
                   }
                   if (needsAuth.length) {
                     html += '<div class="source-menu-head">未登录 · ' + needsAuth.length + "</div>";
                     for (const e of needsAuth) { // #102 批 B：从灰置升级为可点——点行直接弹登录卡（二维码扫码即登录）
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(oneLine(e.auth_hint || "点此扫码登录")) + '"><span class="ep-dot"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>点此扫码登录</small></button>";
+                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(oneLine(e.auth_hint || "点此扫码登录")) + '"><span class="ep-dot warn"></span><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>点此扫码登录</small></button>";
                     }
                   }
                   if (na.length) {
                     html += '<div class="source-menu-head">不可用 · ' + na.length + "</div>";
-                    for (const e of na) { // 灰置不可点（div 非 button）：原因小字透出，不硬闯
+                    for (const e of na) { // 灰置不可点（div 非 button）：产品化原因小字 + 悬停看运维原文
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<div class="source-option" aria-disabled="true"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></div>";
+                      const hint = engineStateHint(e);
+                      html += '<div class="source-option" aria-disabled="true"' + (hint ? ' title="' + esc(hint) + '"' : "") + '><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></div>";
                     }
                   }
                   menu.innerHTML = html;
-                  // W-ENGDROP：名称/描述单行省略后 title 兜底看全文（悬停渐进增强）
+                  // W-ENGDROP：名称/描述单行省略后 title 兜底看全文（悬停渐进增强）；
+                  // UI 反馈批 1029 件C：不可用行的 row title=运维原文优先（产品文案在上、排查细节在悬停）
                   menu.querySelectorAll(".source-option").forEach((o) => {
                     const st = o.querySelector("strong"); if (st) st.title = st.textContent;
-                    const sm = o.querySelector("small"); if (sm) sm.title = sm.textContent;
+                    const sm = o.querySelector("small"); if (sm) sm.title = (o.getAttribute("title") || sm.textContent);
                   });
                   menu.addEventListener("click", (ev) => { // 菜单挂 body，对话域大委托够不到——本层直连（b2-perm-menu 同款模式）
                     const pick = ev.target.closest("[data-engine-choice]");
@@ -3884,7 +4224,7 @@
                       const trig0 = pop0.querySelector("[data-engine-trigger]");
                       if (trig0) {
                         const badge0 = trig0.querySelector(".engine-badge");
-                        if (badge0) { badge0.className = "engine-badge claude"; badge0.textContent = "自动"; }
+                        if (badge0) { badge0.className = "engine-badge auto"; badge0.innerHTML = engineBadgeInner("", "自动"); }
                         const dot0 = trig0.querySelector(".ep-dot");
                         if (dot0) dot0.classList.remove("na");
                         const metaEl0 = trig0.querySelector(".ep-meta");
@@ -3910,7 +4250,7 @@
                   if (trig && entry) {
                     const meta = ENGINES[entry.id] || [entry.label || entry.id, ""];
                     const badge = trig.querySelector(".engine-badge");
-                    if (badge) { badge.className = "engine-badge " + meta[1]; badge.textContent = meta[0]; }
+                    if (badge) { badge.className = "engine-badge " + meta[1]; badge.innerHTML = engineBadgeInner(meta[1], meta[0]); }
                     const dot = trig.querySelector(".ep-dot");
                     if (dot) { dot.classList.toggle("na", entry.state !== "ready" && entry.state !== "needs_auth"); dot.classList.toggle("warn", entry.state === "needs_auth"); }
                     const metaEl = trig.querySelector(".ep-meta");
@@ -4154,8 +4494,8 @@
                     }
                     if (S.hasSnapshot && S.sessions.size) {
                       const domIds = new Set([...UI.sessionList.querySelectorAll("[data-session-card]")].map((c) => c.dataset.sessionCard));
-                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0) && !(S._slimHiddenIds && S._slimHiddenIds.size > 0); // FB17：筛空态是合法形态（含瘦身收空）
-                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k)) && !(S._slimHiddenIds && S._slimHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失（t-7e0c6189：被收起的同口径）
+                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0) && !(S._slimHiddenIds && S._slimHiddenIds.size > 0) && !(S._retiredHiddenIds && S._retiredHiddenIds.size > 0); // FB17：筛空态是合法形态（含瘦身收空；W-RETIRED：归档组收起同口径）
+                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k)) && !(S._slimHiddenIds && S._slimHiddenIds.has(k)) && !(S._retiredHiddenIds && S._retiredHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失（t-7e0c6189：被收起的同口径；W-RETIRED：归档组收起/搜索未命中同放行）
                       if (miss) renderMyList();
                     }
                   });
@@ -4717,6 +5057,7 @@
                   canCmd,
                   // #164 手机渲染路径同源复用：MD/消息 HTML/展开态/开关（桌面与手机同一渲染器）
                   mdHtml, userMsgHtml, taskRefRow, entryHtml, eKey, expanded,
+                  askGroupsHtml, askPreviewFlagsFor, // W-UI-ASKRENDER：ask 问卷卡三面同源（手机只读卡复用）
                   artifactKindFor, // #B3-15 输出物六类分色（手机 mArtifactsHtml 同一判定）
                   artLayoutItems, relDir, artBadgeHtml, // #168 手机行同构复用（分组投影/目录缩略/徽章）
                   convCtl: { proc: () => procShow, think: () => thinkShown, toggle: toggleConv, refresh: updateConvCtrl },

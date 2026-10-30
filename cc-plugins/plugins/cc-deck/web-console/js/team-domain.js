@@ -1527,6 +1527,20 @@
                       openTeamCreate();
                       return;
                     }
+                    // X0 件3：复制入队指令（org join 当前选中组）——新会话可发现性主通道；
+                    // 无选中组时提示先选（复制体走 clipboard API，降级 execCommand 兜底）
+                    const copyJoin = event.target.closest("[data-team-copy-join]");
+                    if (copyJoin) {
+                      event.stopPropagation();
+                      const g = group();
+                      if (!g) { toast("先在左侧选中一个团队，再复制入队指令"); return; }
+                      const cmd = `~/.cc-deck/bin/org join ${g.id}`;
+                      const done = () => toast("已复制入队指令：" + cmd);
+                      if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(cmd).then(done, () => { try { window.prompt("手动复制入队指令：", cmd); } catch (_) {} });
+                      } else { try { window.prompt("手动复制入队指令：", cmd); } catch (_) {} }
+                      return;
+                    }
                     const memberSession = event.target.closest("[data-team-member-session]");
                     if (memberSession) {
                       event.stopPropagation();

@@ -32,14 +32,17 @@
       const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
       // #291 帧分类判活：WORKING 过真判定（#d-session 域 session-domain 挂的全局；缺=老壳降级原样）——待命不占在跑计数
       const isRealW = (s) => (window.__ccDeck005IsRealWorking ? window.__ccDeck005IsRealWorking(s) : true);
-      const stTag = (s) => s.pm_standby ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死
+      const stTag = (s) => (s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死；UI 反馈批 1029 件A：桥缓存 pm_standby 只随快照派生，PM 开工翻 WORKING 后陈标残留=干活中显「待命」矛盾——非 WORKING 态才标（干活期走 STATUS_TAG 正常显示）
       const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
       const allSessions = () => [...bridge.sessions.values()];
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
       const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
-      const sourceBadge = () => `<span class="source-badge">${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || location.host) : (bridge.relayName || location.host))}</span>`; // 件十三：命名映射统一
+      // W-SRC2 #134（本批①三端一致）：源徽章 per-session 化——relay SNAPSHOT 现随每卡下发
+      // relay_source（wan resume 面本批补齐后三通道全覆盖），聚合双源下逐卡显真实归属名；
+      // 无标卡回落本源名（单源观感不变）。无会话上下文的调用点（组织确认卡/引擎分组）不传参走回落。
+      const sourceBadge = (s) => { const raw = (s && typeof s.relay_source === "string" && s.relay_source) || bridge.relayName || location.host; const n = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(raw) : raw; return `<span class="source-badge">${esc(n)}</span>`; }; // 件十三：命名映射统一
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
       const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
         const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -60,7 +63,7 @@
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
         const bg = mBgCount(s);
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
       };
 
       // ---------- 导航栈 ----------
@@ -96,7 +99,7 @@
         const sub = document.querySelector("#mobile-detail-sub");
         if (sub) sub.textContent = s ? (displayPath(s.cwd) || "目录未记录") : "";
         const idn = document.querySelector("#mobile-detail-identity");
-        if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge();
+        if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge(s);
         const tag = target.querySelector(".mobile-head .tag.action");
         if (tag) { const [w] = s ? stTag(s) : ["详情", "info"]; tag.textContent = s && needAction(s) ? "待处理" : w; }
         setSingleActive(target);
@@ -210,9 +213,16 @@
         const pending = open.filter((t) => t.status === "pending");
         return { doneAll, doneList, run, verify, pending };
       }
-      function mWaitCardHtml(w) { // #166 手机端仅浏览模式：按钮禁用态 + 引导文案
+      function mWaitCardHtml(w, s) { // #166 手机端仅浏览模式：按钮禁用态 + 引导文案
+        // W-UI-ASKRENDER：ask 卡问卷化（与桌面等待卡/时间线展开态同源 askGroupsHtml）——
+        // header/题干/选项描述次行/多选标/含预览标结构化呈现，替换「／」拼纯文本；B2 未就绪回落旧形态
+        const api = b2Api();
         const isAsk = Array.isArray(w.questions) && w.questions.length > 0;
         const title = isAsk ? "等待你的回答 · " + (w.questions[0]?.header || w.tool_name || "提问") : "等待你的确认 · " + (w.tool_name || "工具调用");
+        if (isAsk && api && typeof api.askGroupsHtml === "function") {
+          const flags = typeof api.askPreviewFlagsFor === "function" ? api.askPreviewFlagsFor(s, w) : null;
+          return '<div class="wait-card ask" data-wait-card><strong class="wait-title">' + esc(title) + '</strong><div class="wait-multi">' + api.askGroupsHtml(w.questions, flags, "static") + '</div><div class="wait-actions"><button type="button" disabled>取消提问</button></div><div class="wait-readonly-hint">手机端仅浏览 · 请在电脑上处理等待请求</div></div>';
+        }
         const copy = isAsk ? w.questions.map((q) => q.question || "").join(" ／ ") : (w.input_summary || "");
         const actions = isAsk
           ? '<div class="wait-actions"><button type="button" disabled>取消提问</button></div>'
@@ -254,7 +264,7 @@
         try { const tl = api && api.S && api.S.timelines ? api.S.timelines.get(sid) : null; if (Array.isArray(tl)) list = tl; } catch (_) {}
         const cut = sliceTimeline(list, DETAIL_TL_MAX);
         const items = [];
-        if (s && s.waiting_request) items.push(["mw", mWaitCardHtml(s.waiting_request)]);
+        if (s && s.waiting_request) items.push(["mw", mWaitCardHtml(s.waiting_request, s)]);
         const sub = mSubagentNoteHtml(s);
         if (sub) items.push(["msub", sub]);
         if (!cut.items.length) { items.push(["mempty", '<div class="readonly-banner">暂无对话记录</div>']); return items; }
@@ -567,6 +577,7 @@
         const ids = new Set();
         const api = b2Api();
         const S = api && api.S;
+        if (S && S.leaderSessionIds && typeof S.leaderSessionIds.forEach === "function") S.leaderSessionIds.forEach((id) => ids.add(id)); // UI 反馈批 1029 件B：全源锚 id 并集（聚合远程源 Leader 卡同滤）
         if (S && typeof S.leaderSessionId === "string" && S.leaderSessionId) ids.add(S.leaderSessionId);
         const projects = S && Array.isArray(S.projects) ? S.projects : [];
         for (const p of projects) {
@@ -577,11 +588,18 @@
         }
         return ids;
       };
+      const mobileRetiredIds = () => { // [W-RETIRED] 退休成员会话（桌面归档组同批同口径）：B2 S.retiredIds 透传（SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧维护；null=旧 relay 零过滤）
+        const api = b2Api();
+        const S = api && api.S;
+        return S && S.retiredIds instanceof Set ? S.retiredIds : new Set();
+      };
+      let mobileRetiredOpen = false; // 归档组展开账（会话内记忆，mobileProjOpen 同款口径）
       function renderInbox() {
         const list = document.querySelector("#m-inbox [data-mobile-session-list]");
         if (!list) return;
         const leaderIds = mobileLeaderIds();
-        const sessions = allSessions().filter((s) => !leaderIds.has(s.session_id)).sort(byPinnedUpdated);
+        const retiredIds = mobileRetiredIds();
+        const sessions = allSessions().filter((s) => !leaderIds.has(s.session_id) && !retiredIds.has(s.session_id)).sort(byPinnedUpdated);
         // B18 活跃优先（手机同口径）：顶部「进行中」收全部活跃；闲置按项目分组
         // FB16：手机补折叠机制——闲置组默认折叠、组头可点展开（与桌面 B11 同语言）
         const pend = sessions.filter((s) => s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR");
@@ -600,6 +618,12 @@
         // #282 MOB keyed：组级身份对齐（a:active / p:<项目名>）——未变组零触碰（FB16 折叠
         // 态/组内滚动/长按菜单瞬态逐帧存活），变化组单点替换；rk 缺席回落旧整串（零删）
         const activeMarkup = pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span><span class="grp-count" data-session-group-count>${grpIc("activity", true)}${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "";
+        // [W-RETIRED] 尾部「已退休成员」折叠归档组（桌面 renderMyList 同批同口径：默认收起、
+        // 组头点开展开、历史可查非删除）；退休卡不进进行中/闲置分组（sessions 已滤）
+        const retiredSessions = allSessions().filter((s) => !leaderIds.has(s.session_id) && retiredIds.has(s.session_id)).sort(byPinnedUpdated);
+        const retiredMarkup = retiredSessions.length
+          ? `<div class="session-group${mobileRetiredOpen ? "" : " collapsed"}" data-session-group="retired"><div class="queue-group" data-retired-toggle role="button" tabindex="0" aria-expanded="${mobileRetiredOpen}" title="展开/收起已退休成员"><span class="grp-caret">${mobileRetiredOpen ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">退</span><span>已退休成员</span><span class="grp-count" data-session-group-count>${grpIc("users")}${retiredSessions.length}</span></div><div class="grp-body">${retiredSessions.map(mobileCard).join("")}</div></div>`
+          : "";
         const rkM = window.__ccDeck005Reconcile;
         if (rkM) {
           const desired = [];
@@ -611,8 +635,9 @@
             const wN = items.filter((s) => s.status === "WORKING" && isRealW(s)).length; /* #291 真计数 */
             desired.push(["p:" + g, `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${esc(String(g).trim().slice(0, 1) || "团")}</span><span>${esc(g)}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${items.length}${wN ? ` ${grpIc("activity", true)}${wN}` : ""}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`]);
           });
+          if (retiredMarkup) desired.push(["retired", retiredMarkup]);
           rkM(list, desired);
-        } else list.innerHTML = activeMarkup + otherMarkup;
+        } else list.innerHTML = activeMarkup + otherMarkup + retiredMarkup;
         const act = sessions.filter(needAction).length;
         const work = sessions.filter((s) => s.status === "WORKING").length;
         const done = sessions.filter((s) => s.status === "DONE").length;
@@ -652,7 +677,7 @@
       function renderTeam() {
         const screen = screenOf("team");
         if (!screen) return;
-        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id)); // #240：泳道任务卡不吃 Leader 锚卡（同收件箱口径）
+        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id) && !mobileRetiredIds().has(s.session_id)); // #240：泳道任务卡不吃 Leader 锚卡（同收件箱口径）；W-RETIRED：退休卡同滤（归档组只在收件箱呈现）
         const confirms = Array.isArray(bridge.pendingConfirms) ? bridge.pendingConfirms : [];
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         const head = screen.querySelector(".mobile-head h2 small");
@@ -664,7 +689,7 @@
           if (confirms.length) { slot.hidden = false; mSigWrite(slot, "cf:" + confirms.length, `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`); }
           else { slot.hidden = true; slot.textContent = ""; slot.dataset.mSig = ""; }
         }
-        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
+        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}</div><br><span class="tag ${cls}">${w}</span></div>`; };
         const lane = (label, items, mapper) => `<div class="mobile-lane"><div class="mobile-lane-head"><span>${label}</span><span>${items.length}</span></div>${items.map(mapper).join("") || '<div class="mobile-task"><span class="muted">暂无</span></div>'}</div>`;
         const todo = screen.querySelector('[data-team-pane="todo"]');
         // #282 MOB sig 跳帧：三 pane 内容未变零重建（泳道滚动位/成员列表滚动逐帧存活）
@@ -682,7 +707,7 @@
       function renderProject() {
         const screen = screenOf("project");
         if (!screen) return;
-        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id)); // #240：项目聚合 lane/统计不吃 Leader 锚卡（同收件箱口径）
+        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id) && !mobileRetiredIds().has(s.session_id)); // #240：项目聚合 lane/统计不吃 Leader 锚卡（同收件箱口径）；W-RETIRED：退休卡同滤
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         const actN = sessions.filter(needAction).length;
         const artifactsN = sessions.reduce((n, s) => n + (Array.isArray(s.artifacts) ? s.artifacts.length : 0), 0);
@@ -699,8 +724,11 @@
         // #282 MOB sig 跳帧：项目卡/聚合 lane 内容未变零重建
         if (cards) { const h = projects.length ? projects.map((p) => {
           const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
-          const [word, cls] = p.status === "active" ? ["活跃", "done"] : p.status === "parked" ? ["挂起", ""] : ["归档", ""];
-          return `<div class="mobile-project-card"><h3>${svg("folder")} ${esc(p.name)}</h3><p>${esc(displayPath(p.anchor_dir || ""))}${cnt ? " · " + cnt + " 会话" : ""}</p><span class="tag ${cls}">${word}</span></div>`;
+          // project-cards-v2：与桌面 pc2 同源词表/徽章盒——r1 名称+非活跃态徽章（异常显性、
+          // 常态安静）/r2 路径 truncate+会话计数徽章。旧三列栅格（22px 图标列错列+tag 跨两行
+          // +孤立文件夹图标）退役；「活跃」默认态不再占位徽章
+          const st = p.status === "active" ? "" : p.status === "parked" ? '<span class="pc2-count is-dim">已挂起</span>' : '<span class="pc2-count is-dim">已归档</span>';
+          return `<div class="mobile-project-card pc2m"><div class="pc2m-r1"><strong class="pc2m-name">${esc(p.name)}</strong>${st}</div><div class="pc2m-r2"><span class="pc2-path">${esc(displayPath(p.anchor_dir || "") || "/")}</span><span class="pc2-count">${cnt} 会话</span></div></div>`;
         }).join("") : '<div class="readonly-banner">暂无项目组 · 新建项目后在组织侧同步。</div>'; mSigWrite(cards, "pc:" + mHtmlSig(h), h); }
         const laneHost = screen.querySelector("[data-mobile-project-lane]");
         if (laneHost) { const h = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`; mSigWrite(laneHost, "pl:" + mHtmlSig(h), h); }
@@ -802,6 +830,12 @@
         if (mGrp) {
           const gname = mGrp.dataset.mobileGroupToggle;
           if (mobileProjOpen.has(gname)) mobileProjOpen.delete(gname); else mobileProjOpen.add(gname);
+          renderInbox();
+          return;
+        }
+        const rGrp = target.closest("[data-retired-toggle]"); // [W-RETIRED] 手机归档组折叠/展开（桌面同批同口径）
+        if (rGrp) {
+          mobileRetiredOpen = !mobileRetiredOpen;
           renderInbox();
           return;
         }

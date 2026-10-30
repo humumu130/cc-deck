@@ -158,6 +158,19 @@
     #b2-engine-menu .source-option .engine-badge { flex: none; }
     #b2-engine-menu .source-option strong { flex: 0 0 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 名称=标识符优先全显（多模态终验抓的细节：名称不应先于描述被截） */
     #b2-engine-menu .source-option small { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 描述承担窄屏收缩（截断优先于名称） */
+    /* UI 反馈批 1029 件C（用户点名 engineBadge 体系）：引擎菜单+新建触发胶囊品牌化精修——
+       徽章底色/描边走 --engine-color 低饱和 color-mix（与列表卡 srow-r3/identity-cluster 同公式
+       W-UIFB⑥）；选中态底色+内描边+右缘 ✓ 双通道对比；分组头/行距统一节奏；auto 徽章中性皮 */
+    #b2-engine-menu .source-option { gap: 9px; padding: 8px 10px; }
+    #b2-engine-menu .source-menu-head { padding: 7px 8px 4px; }
+    #b2-engine-menu .engine-badge { background: transparent; background: color-mix(in srgb, var(--engine-color, var(--identity-ink)) 14%, transparent); border-color: transparent; border-color: color-mix(in srgb, var(--engine-color, var(--identity-ink)) 32%, transparent); }
+    #b2-engine-menu .engine-badge.auto { --engine-color: var(--dim); }
+    #b2-engine-menu .source-option.active { background: var(--selected-bg); box-shadow: inset 0 0 0 1px var(--selected-line); }
+    #b2-engine-menu .opt-check { flex: none; margin-left: 4px; color: var(--brand); font-size: var(--fs-C); line-height: 1; }
+    #b2-engine-menu .source-option[aria-disabled="true"] { opacity: .72; }
+    #b2-engine-menu .source-option[aria-disabled="true"] .engine-badge { filter: saturate(.35); }
+    .create-pop .engine-picker .engine-badge { background: transparent; background: color-mix(in srgb, var(--engine-color, var(--identity-ink)) 14%, transparent); border-color: transparent; border-color: color-mix(in srgb, var(--engine-color, var(--identity-ink)) 32%, transparent); }
+    .create-pop .engine-picker .engine-badge.auto { --engine-color: var(--dim); }
     .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
     .source-mode button {flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .source-mode button.active { border-color: var(--selected-line); background: var(--selected-bg); color: var(--text-strong); }
@@ -441,6 +454,23 @@
     .project-open-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; margin: -7px 0; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
     .project-open-btn:hover { color: var(--text-strong); background: var(--hover); }
     .project-open-btn .icon-inline { width: 15px; height: 15px; vertical-align: 0; }
+    /* project-cards-v2（用户 1029 十六条重做）：单列三分区——r1 标题/r2 路径/r3 计数徽章行。
+       统一徽章盒（.pc2-badge/.pc2-count 同 padding 同高同圆角=基线对齐）；数字 min-width+居中+
+       tabular-nums=计数永不截断；路径独占 r2 truncate（截断优先级：名称→路径→永不截计数）；
+       间距全 4 的倍数（8/12/4/4/4）；三行恒渲染=卡高天然一致。旧病根：.queue-card p 的
+       138px 右 margin（会话卡微钮遗留）+ :has(.identity-cluster) 双模板不再命中（pc2 无 p/无
+       identity-cluster）；进行中不再复用 source-badge（↗ 外链语义错配退役） */
+    .queue-card.pc2 { gap: 4px; min-height: 72px; padding: 8px 12px; }
+    .pc2-r1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .pc2-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc2-badge, .pc2-count { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; padding: 2px 8px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: var(--fs-C); line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pc2-badge.is-action { border-color: transparent; background: var(--action-bg); color: var(--brand-strong); }
+    .pc2-count.is-working { border-color: color-mix(in srgb, var(--working) 35%, transparent); background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
+    .pc2-count.is-dim { opacity: .72; }
+    .pc2-r2 { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    .pc2-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: var(--fs-B); } /* 尾部省略（shortenDir 已做家目录头部缩短；全路径在卡 title 悬停可查） */
+    .pc2-r2 .project-open-btn { flex: none; margin: -4px -4px -4px 0; } /* flex:none 恒不换行——旧 flex-wrap 孤儿图标行根因 */
+    .pc2-r3 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
     /* W-PROJP1 P1-2：「未立项」置底折叠组头——同 queue-group 标签语言 + 折叠箭头（art-chev 同源 ▸），
        hot 点仅在折叠态显示（「抽屉里有要处理的」提示，不强行展开） */
     button.queue-group.project-unfiled-toggle { display: flex; align-items: center; gap: 6px; width: calc(100% - 6px); padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
@@ -448,6 +478,13 @@
     .project-unfiled-toggle .unfiled-chev { flex: none; font-size: 9px; line-height: 1; transition: transform .15s ease; }
     .project-unfiled-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
     .project-unfiled-toggle .status-dot { margin-left: auto; }
+    /* [W-RETIRED] 会话列表尾部「已退休成员」折叠归档组头——同 unfiled-toggle 语言（置底
+       折叠+chev 旋转）；归档组内退休卡整组降透明（退休≠删除，可查但退视觉权重） */
+    button.queue-group.retired-toggle { display: flex; align-items: center; gap: 6px; width: calc(100% - 6px); padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
+    button.queue-group.retired-toggle:hover { color: var(--text-strong); }
+    .retired-toggle .unfiled-chev { flex: none; font-size: 9px; line-height: 1; transition: transform .15s ease; }
+    .retired-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
+    .retired-toggle ~ [data-session-card] { opacity: .55; }
     .status-dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--st-closed); }
     /* #227 三排定稿：竖条退役；r3 双胶囊（源胶囊左+引擎胶囊右）+右上置顶图钉 */
     .queue-card { position: relative; }
@@ -1830,6 +1867,40 @@
     .v8-relaystat .row-share { margin-left: auto; flex: none; }
     .v8-swrow { display: flex; align-items: center; gap: 10px; padding: var(--setrow-py, 8px) 2px; border-bottom: 1px dashed var(--line-soft); }
     .v8-setcard .v8-swrow:last-of-type { border-bottom: 0; }
+
+    /* ===== conn-page-v2 连接页重设计（三模块 IA+十点反馈） ===== */
+    /* ① 窄条退役：设置二级页不再走 workspace-head 标题条（与 v8-sethead 双层标题割裂），
+       层级感=sethead 主标+副题+留白（六面板统一）；⑨ 卡内尾行底线保险清零 */
+    #d-settings .workspace-head { display: none; }
+    #d-settings .workspace-body { padding-top: 18px; }
+    .v8-sethead { margin: 4px 4px 16px; }
+    .v8-sethead .t { font-size: 17px; font-weight: 650; letter-spacing: .2px; }
+    .v8-setcard .settings-list > :last-child { border-bottom: none; }
+    /* ② 底部独立按钮区退役（验证收纳本机 relay 卡、帮助收纳远程源卡尾文字链） */
+    #d-settings .workspace-footer { display: none; }
+    .conn-foot-link { margin-top: 2px; }
+    .conn-foot-link a { color: var(--faint); text-decoration: none; font-size: var(--fs-C); }
+    .conn-foot-link a:hover { color: var(--brand-strong, var(--brand)); text-decoration: underline; text-underline-offset: 3px; }
+    /* ⑤ relaystat 一行紧凑：动作钮组右侧归位（分享/编辑/验证同 ghost 规格） */
+    .v8-relaystat { align-items: center; }
+    .v8-relaystat .st { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .v8-relaystat .v8-rdot2 { margin-top: 0; }
+    .relaystat-acts { flex: none; display: flex; gap: 6px; margin-left: auto; }
+    .relaystat-acts .row-share { margin-left: 0; }
+    .v8-relaystat p.relay-diag { margin: 4px 0 0; line-height: 1.45; }
+    .v8-relaystat p.relay-diag[data-diag="err"], .v8-relaystat p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .v8-relaystat p.relay-diag[data-diag="ok"] { color: var(--done); }
+    /* ③ 行内改名轻交互（编辑钮点开单行，保存/取消即收） */
+    .conn-rename-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; flex-wrap: wrap; }
+    .conn-rename-row .composer-input { flex: 0 0 12em; width: 12em; border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; background: var(--surface1); color: var(--text); font-size: var(--fs-B); }
+    .conn-rename-row .rname-count { color: var(--faint); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    /* ⑧ 客户端模块：设备行图标按 kind 语义着色（phone=品牌/desktop·browser=信息蓝） */
+    .dev-ico.phone { color: var(--brand-strong, var(--brand)); }
+    .dev-ico.desktop, .dev-ico.browser { color: var(--info); }
+    .conn-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+    .conn-card-foot .primary-btn { flex: none; }
+    /* ④ ghost 钮规格归一（radius 统一 8px，与 v8-prbtn 同档；描边系全页一个模子） */
+    .settings-row .row-share { border-radius: 8px; }
     .v8-swico { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface1); color: var(--info); font-size: 13px; }
     .v8-swtxt { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-A-item); font-weight: 550; }
     .v8-prbtn { flex: none; padding: 2.5px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--dim); font-size: var(--fs-C); font-weight: 600; }
@@ -1849,9 +1920,12 @@
     .settings-row p.relay-diag[data-diag="err"], .settings-row p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
     /* #45 连接行行级分享钮（2026-10-10）：旧壳 srv-share 语义回归——恒渲染、未在线置灰，
        点击开 B1 配对弹窗（QR/8 位码/链接/设备列表四件套）；行内小号描边钮，不挤状态 tag */
-    .settings-row .row-share { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
-    .settings-row .row-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
-    .settings-row .row-share:disabled { opacity: .38; cursor: default; }
+    /* conn-page-v2 ④ ghost 单源：设置域内 row-share 全域同规格（relaystat 动作钮/行内
+       改名钮/远程源行钮——此前 .settings-row 限定打不中 relaystat/改名行=裸默认钮） */
+    #d-settings .row-share { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+    #d-settings .row-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
+    #d-settings .row-share:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: 1px; }
+    #d-settings .row-share:disabled { opacity: .38; cursor: default; }
     /* W-SDEL 服务器条目删除/编辑钮（用户 1013 反馈：删掉失效服务器条目——旧壳 srv-del 语义回归）：
        与 row-share 同语言小描边钮；删除 hover 转 danger（ destructive 动作给视觉预警） */
     .settings-row .row-del, .settings-row .row-edit { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
@@ -1925,16 +1999,20 @@
     .mobile-lane-head {display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: var(--fs-D); font-weight: 700;}
     .mobile-task {padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: var(--fs-A-item);}
     .mobile-task + .mobile-task { margin-top: 6px; }
-    .mobile-project-card { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 11px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
-    .mobile-project-card h3 {margin: 0; color: var(--text-strong); font-size: var(--fs-A-item);}
-    .mobile-project-card p {grid-column: 2; margin: 2px 0 0; color: var(--dim); font-size: var(--fs-B);}
-    .mobile-project-card > .tag { grid-column: 3; grid-row: 1 / span 2; }
+    /* project-cards-v2：手机项目卡改 pc2 同源两行制（r1 名称+非活跃徽章/r2 路径+计数）——
+       旧三列栅格（22px 图标列恒占位错列/tag 跨两行/孤立文件夹图标）退役；徽章盒复用 .pc2-count */
+    .mobile-project-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .mobile-project-card .pc2m-r1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .mobile-project-card .pc2m-name { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: var(--fs-A-item); }
+    .mobile-project-card .pc2m-r2 { display: flex; align-items: center; gap: 4px; min-width: 0; }
     .mobile-project-summary {display: flex; gap: 10px; overflow: auto; padding: 3px 0 10px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font: var(--fs-B) var(--mono); white-space: nowrap;}
     .mobile-project-summary span { flex: 0 0 auto; }
     .mobile-settings { display: grid; gap: 8px; }
+    .mobile-settings[hidden] { display: none; } /* conn-page-v2 P1-1a：display:grid 压死 UA [hidden]=移动详情开态列表不隐（双页叠染根修） */
     .mobile-settings .settings-row { padding: 12px; }
     #m-settings .mobile-settings::before {content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 var(--fs-B) var(--mono); letter-spacing: .04em;}
-    .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
+    .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px;
+    .mobile-settings-detail .mobile-back { flex: 0 0 auto; width: auto; height: auto; padding: 3px 12px; font-size: 13px; } /* conn-page-v2 P1-1b：详情返回钮载文字需自动宽（图标盒 30px 爆框根修） */ height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
     .mobile-back:hover { background: var(--hover); color: var(--text); }
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }
@@ -2170,6 +2248,13 @@
        走确认，不可裸删 */
     .row-menu .row-del-tip { max-width: 200px; padding: 6px 10px 4px; color: var(--text); font-size: var(--fs-E); line-height: 1.45; }
     .row-menu .row-del-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 6px 6px; }
+    /* X1 跨机发送浮层（row-menu 同壳）：目标设备 + 可选目标会话 + 正文 + 发送态回显 */
+    .row-menu.xmsg-pop { min-width: 240px; max-width: 300px; padding: 8px; gap: 6px; }
+    .row-menu.xmsg-pop label { display: flex; flex-direction: column; gap: 3px; color: var(--text); font-size: var(--fs-E); }
+    .row-menu.xmsg-pop input, .row-menu.xmsg-pop textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text-strong); font-size: var(--fs-E); padding: 4px 6px; }
+    .row-menu.xmsg-pop textarea { min-height: 56px; resize: vertical; font-family: var(--sans); }
+    .row-menu.xmsg-pop input:focus, .row-menu.xmsg-pop textarea:focus { border-color: var(--brand); outline: none; }
+    .row-menu.xmsg-pop .xmsg-state { padding: 0 2px; color: var(--text); font-size: var(--fs-E); min-height: 16px; }
     /* 行内改名输入（菜单「重命名」→ 标题原位替换，Enter/失焦回写数据重渲） */
     .row-rename-input { flex: 1 1 auto; min-width: 0; height: calc(20px * var(--ui-scale)); padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
     /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */
@@ -2757,15 +2842,46 @@
 .wait-qgroup .wq-head { font-size: var(--fs-C); font-weight: 600; color: var(--text-strong); display: flex; align-items: center; gap: 6px; }
 .wait-qgroup .wq-multi-tag { font-size: var(--fs-D); color: var(--working); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 4px; font-weight: 500; }
 .wait-qgroup .wq-question { font-size: var(--fs-C); color: var(--dim); margin: 2px 0 6px; }
-.wq-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .wait-chip { border: 1px solid var(--line); background: var(--surface2); color: var(--text); border-radius: 999px; padding: 4px 12px; font-size: var(--fs-C); cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
 .wait-chip:hover { border-color: var(--brand); }
 .wait-chip.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
 .wait-chip .wc-check { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
 .wait-chip.on .wc-check { background: var(--brand); }
+
+/* W-UI-ASKRENDER：AskUserQuestion 结构化问卷卡（时间线展开态 + 等待卡 + 手机只读三面同源）。
+   视觉与 wait-qgroup/chips 同族：同 token（--line-soft/--surface2/--fs-C·D）同圆角节奏，
+   选项从胶囊升级为行式（label 主行 + description 次行），不另起一套样式体系 */
+.trow .ask-tags { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.trow .ask-tag { font-size: var(--fs-D); color: var(--dim); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 5px; line-height: 16px; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.ask-card { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 2px; }
+.wq-opts { display: flex; flex-direction: column; gap: 5px; }
+.wq-opt, .wait-chip.row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: var(--fs-C); cursor: pointer; font-family: inherit; text-align: left; min-width: 0; max-width: 100%; }
+button.wq-opt:hover, .wait-chip.row:hover { border-color: var(--brand); } /* 审查A P2①：hover 只给可点行，纯展示 div.wq-opt 不做可供性暗示 */
+.wq-opt[disabled], .wait-chip.row[disabled] { cursor: default; opacity: .75; }
+div.wq-opt { cursor: default; }
+.wo-line1 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.wq-opt .wc-label, .wait-chip.row .wc-label { font-size: var(--fs-C); color: var(--text); font-weight: 500; word-break: break-word; }
+.wo-desc { font-size: var(--fs-D); color: var(--dim); line-height: 1.45; word-break: break-word; }
+.wo-prev { font-size: var(--fs-D); color: var(--info); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 4px; line-height: 15px; flex: none; }
+.wait-chip.row .wc-check { margin-left: auto; flex: none; width: 7px; height: 7px; border: 1px solid var(--line); background: transparent; }
+.wait-chip.row.on .wc-check { background: var(--brand); border-color: var(--brand); }
+.wq-opt .wo-line1 .wc-label + .wo-prev { margin-left: 2px; }
+/* 选中高亮态沿用 .wait-chip.on（row 变体同享 brand 描边+brand-soft 底，零新造）。
+   row 两行结构口径（审查B P3-2 声明）：label 恒 --text 不随 .on 变色，选中态由勾点+描边+底色承载 */
     /* ---- W-CMDIMPL #216 ①：收割检查结果卡（harvest-result/copy 钮）---- */
     #d-team .harvest-result .inspector-block { margin: 8px 0; border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; }
     #d-team .harvest-result .inspector-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     #d-team .harvest-result .harvest-cmd { display: flex; align-items: center; gap: 8px; min-width: 0; }
     #d-team .harvest-result code { font: var(--fs-C) var(--mono); color: var(--card-sub); word-break: break-all; }
     #d-team .harvest-result .tag[role="button"] { cursor: pointer; user-select: none; flex: none; }
+
+/* X0 件3/件4：团队侧栏入队与 AGENT_TEAMS 协助提示行（可发现性三件套面板件） */
+.team-x0-hint { padding: 8px 14px 10px; color: var(--dim); font-size: var(--fs-B); line-height: 1.6; border-top: 1px dashed var(--line-soft); }
+.team-x0-hint code { font-family: var(--mono); font-size: var(--fs-B); color: var(--faint); background: var(--surface2); border-radius: 4px; padding: 0 4px; }
+
+/* console-guardrails ① 版本错配横幅（1030 黄底事故防再犯）：非阻断顶条——windowbar
+   下浮层，双主题静态色（不加 color-mix 债），错配观测兜底不挡任何操作 */
+.ver-mismatch-banner { position: sticky; top: 0; z-index: 400; margin: 0; padding: 7px 16px; background: var(--surface2); border-bottom: 1px solid var(--warn-border, #b8860b); color: var(--warn-text, #8a6d1a); font-size: var(--fs-C); line-height: 1.5; text-align: center; }
+.ver-mismatch-banner[data-mismatch="core"] { border-bottom-color: var(--error); color: var(--error); }
+html[data-theme="light"] .ver-mismatch-banner { background: #fdf6e3; }
+html[data-theme="light"] .ver-mismatch-banner[data-mismatch="core"] { background: #fdeaea; }
