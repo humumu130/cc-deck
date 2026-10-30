@@ -7,12 +7,12 @@ import { atomicWriteJson } from "./fs-safe.js"; // #292-cutover-P1（B-F3）：n
 import { withStorageTx } from "./storage/org-write-tx.js";
 import { shadowWriteSession, tombstoneSession } from "./storage/session-write.js";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
 import {
-  appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, evaluateCommandPermission,
-  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, writeOrgAnchor,
+  appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, setPmOverride, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
@@ -1103,7 +1103,7 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: "pm-wake" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛 */
+  private emitChainAudit(action: "pm-wake" | "pm-claim" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛；X0 件6：pm-claim */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
@@ -2019,6 +2019,8 @@ export class SessionManager {
     if (prev === next) return;
     s.state.subagents = list.length ? list : undefined;
     s.state.updated_at = at ?? Date.now();
+    // X0 件1：subagent kind 并集入装配观测缓存（能力只增不减——与活跃列表清空语义解耦）
+    if (list.length) this.assemblyObserve(id, { kinds: list.map((x) => x.kind).filter(Boolean) });
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -3001,6 +3003,10 @@ export class SessionManager {
     if (this.activityDockEqual(managed.state.activity, next)) return;
     managed.state.activity = next;
     managed.state.activity_capabilities = { ...dock.capabilities };
+    // X0 件1：managed 会话装配观测——活动帧工具名并集入缓存（唯一咽喉处喂入，
+    // 与 external 的 setExternalSubagents kinds 路对称）
+    const obsTool = (next.activity as { tool?: string } | undefined)?.tool;
+    if (obsTool) this.assemblyObserve(managed.state.session_id, { tools: [obsTool] });
     const act = next.activity;
     const payload: SessionActivityPayload = {
       session_id: managed.state.session_id,
@@ -3961,6 +3967,8 @@ export class SessionManager {
       ensureOrgDir();
       ensureOrgClaudeMd();
       ensureOrgCli(); // #26 M2：物化 ~/.cc-deck/bin/org（Leader 分诊指令通道；测试态跳过）
+      // X0 件3：用户家 ~/.claude/CLAUDE.md org 广播段（幂等一次；测试态同样跳过）
+      try { ensureUserClaudeBroadcast(); } catch { /* 广播面尽力而为 */ }
       // #108：内置铁律种子（PM 不直接编码）——新用户开团即得；幂等（存在即认、
       // 用户退役不复活）、自吞错（种子失败不阻断 Leader 创建）
       ensureBuiltinRulesSeed();
@@ -4774,7 +4782,74 @@ export class SessionManager {
   // 一张。无显式 role 面可用（external 无 role 字段），「最近活跃的 external」即
   // 任务书口径「role=PM 且非锚、最近活跃」的可落地最大似然。全不满足 → null
   // （调用侧写 no_pm_target 审计行哑值守——可观测优于静默喂幽灵）。
+  /** X0 件1：装配观测缓存（sid→{tools,kinds,lastAt}）——被动观测并集清单=探测结果
+   * 缓存（TTL 1h 新鲜窗，任务书口径）。数据源两路喂入：external 会话
+   * setExternalSubagents 的 subagent kind 并集；managed 会话 applyActivity 咽喉的
+   * 工具名并集。并集语义=装配能力只增不减（会话配置生命周期内稳定）；注意不能拿
+   * state.subagents 活跃列表当清单——那是「正在跑」追踪（干完即清+仅 external），
+   * 曾装配过的熟手会被误判无快照拒单（首版实测教训，X0 重派修正）。 */
+  private assemblyObserved = new Map<string, { tools: Set<string>; kinds: Set<string>; lastAt: number }>();
+
+  /** 观测喂入口（装配缓存唯一写口）：tools/kinds 词表小写归一并集，lastAt 刷新。 */
+  private assemblyObserve(sid: string, patch: { tools?: string[]; kinds?: string[] }): void {
+    if (!sid) return;
+    const cur = this.assemblyObserved.get(sid) ?? { tools: new Set<string>(), kinds: new Set<string>(), lastAt: 0 };
+    for (const t of patch.tools ?? []) if (t) cur.tools.add(t.toLowerCase());
+    for (const k of patch.kinds ?? []) if (k) cur.kinds.add(k.toLowerCase());
+    cur.lastAt = Date.now();
+    this.assemblyObserved.set(sid, cur);
+  }
+
+  /** 装配清单读取：缓存新鲜（1h TTL 内）返回 tools∪kinds；无缓存/过期返回 null
+   *（派单侧明确报错——探测数据不足宁拒勿默，PRD §4.7 B+#5）。 */
+  private assemblyInventoryOf(sid: string): string[] | null {
+    const cur = this.assemblyObserved.get(sid);
+    if (!cur || Date.now() - cur.lastAt > 3_600_000) return null;
+    return [...cur.tools, ...cur.kinds];
+  }
+
+  /** X0 件2/件6：org CLI 侧自荐会话定位——CLI 无 session 身份，带 cwd(+ppid) 让 relay
+   * 反查。命中序：pid 精确命中（同 pid 的活会话）> cwd 前缀匹配下最近活跃（尾斜杠/
+   * 段边界归一，sessionStartBroadcast hit() 同口径）> 无。external/managed 均可自荐。 */
+  private locateSelfSession(cwdRaw: string, pid: number): { state: { session_id: string; cli_pid?: number; cwd?: string; external?: boolean; title?: string; updated_at?: number } } | null {
+    const cwd = String(cwdRaw || "").replace(/\/+$/, "").toLowerCase();
+    if (!cwd && !pid) return null;
+    if (pid) {
+      for (const s of this.sessions.values()) {
+        if (s.state.cli_pid === pid && !s.state.historical) return s;
+      }
+    }
+    if (!cwd) return null;
+    let best: { state: { session_id: string; cli_pid?: number; cwd?: string; external?: boolean; title?: string; updated_at?: number } } | null = null;
+    let bestAt = -1;
+    for (const s of this.sessions.values()) {
+      if (s.state.historical) continue;
+      const sc = String(s.state.cwd || "").replace(/\/+$/, "").toLowerCase();
+      if (!sc) continue;
+      if (!(sc === cwd || cwd.startsWith(sc + "/") || sc.startsWith(cwd + "/"))) continue;
+      const at = s.state.updated_at || 0;
+      if (at > bestAt) { bestAt = at; best = s; }
+    }
+    return best;
+  }
+
+  /** X0 件1：装配探测负缓存（sid→lastFailAt，5min TTL——无快照会话的连环派单防刷屏） */
+  private assemblyProbeNegative = new Map<string, number>();
+
   private dutyTargetId(): string | null {
+    // X0 件6：pm override 优先（org pm claim 写入 org/duty.json）——pid 探活，死会话
+    // 自动忽略+清档（=「启动检测旧 PM 死→自动转活/置空」的运行时形态，boot 兜底清理
+    // 见 ensureLeader 同族的启动链；no-leader 模式下若无 override 走既有最近活跃现算）。
+    // X0 件6（重派修正②）：override 仅 no-leader 模式消费——leader 模式值守位由
+    // Leader 承担，claim 不劫持（防 worker 误 claim 改写 leader 模式 PM 目标）；
+    // 探活改 override 自带 cli_pid 自证（不看 sessions 在册）——relay 重启后会话
+    // 尚未重注册期间 override 不被误清档（pid 活即值守），进程死才清档回落现算
+    //（=「启动检测旧 PM 死→自动迁移/置空」的运行时形态）。
+    const ov = readPmOverride();
+    if (ov && ov.cli_pid > 0 && readCollabMode(this.cfg.dataDir) === "no-leader") {
+      try { process.kill(ov.cli_pid, 0); return ov.session_id; } catch { /* pid 死：清档回落 */ }
+      clearPmOverride();
+    }
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
     let best: string | null = null;
     let bestAt = -1;
@@ -5798,6 +5873,126 @@ export class SessionManager {
           this.emitOrgState();
           return { ok: true, data: { needsConfirm: true, confirm } };
         }
+        case "log-append": {
+          // X0 件5（PRD §4.7 #7）：非 deck 会话工作手动补录台账——done 终态行、
+          // target=manual、actor=user。纯审计面（notifyDispatchClosed 协议 (b) 同类
+          // 排除：同步回执即知晓面/无决策对象/入账即自扰——N16⑤ 同口径不进通知账）。
+          // 组归属（验收「台账/看板可见」）：显式 gid 或 cwd 落组锚内（前缀匹配，
+          // 嵌套锚取最长）→ 行带 project_anchor，project-detail receipts（团队域
+          // 活动 tab 数据源）按 anchor 匹配即见；无归属=纯台账行（org status 面）。
+          const text = str("text");
+          if (!text.trim()) return { ok: false, error: "log-append 必须带补录文本" };
+          let anchor = "";
+          const gLa = str("gid") ? findGroup(str("gid")) : undefined;
+          if (gLa) anchor = gLa.anchor_dir;
+          else {
+            const cwdLa = str("cwd").replace(/\/+$/, "");
+            const cwdLow = cwdLa.toLowerCase();
+            if (cwdLow) {
+              let bestLen = -1;
+              for (const g of listGroups()) {
+                const aLow = g.anchor_dir.replace(/\/+$/, "").toLowerCase();
+                if (aLow && (cwdLow === aLow || cwdLow.startsWith(aLow + "/")) && aLow.length > bestLen) {
+                  bestLen = aLow.length;
+                  anchor = g.anchor_dir;
+                }
+              }
+            }
+          }
+          const id = randomUUID();
+          appendDispatch({
+            ts: Date.now(), id, tier: "随手办", target: "manual",
+            status: "done", receipt: truncate(text.trim(), 200),
+            session_id: "", actor: "user",
+            ...(anchor ? { project_anchor: anchor } : {}),
+            ...(str("title") ? { title: truncate(str("title"), 60) } : {}),
+          });
+          return { ok: true, data: { ledgered: true, id, ...(anchor ? { project_anchor: anchor } : {}) } };
+        }
+        case "join": {
+          // X0 件2（PRD §4.7 C+#4）：本机会话自荐入编——CLI 无 session 身份，按
+          // pid 精确命中优先、cwd 前缀+最近活跃兜底定位自荐者；不直接入编（防任意
+          // 混入）——出 member-join 确认卡，用户 ✓ 后 applyConfirmEffects 走
+          // member-add 等效链（seatGate 同口径校验）。
+          const gid = str("gid");
+          const role = str("role") || "worker";
+          if (!gid) return { ok: false, error: "join 必须带 gid（org join <组id> [角色]）" };
+          const g = findGroup(gid);
+          if (!g) return { ok: false, error: `项目组不存在: ${gid}（先 org create 立项）` };
+          if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可入编` };
+          const self = this.locateSelfSession(str("cwd"), Number(str("pid")) || 0);
+          if (!self) {
+            return { ok: false, error: "未定位到你的会话（按 cwd 最近活跃匹配）——请在项目目录内运行 org join，或先在 cc-deck 面板打开一个会话后再试" };
+          }
+          // 外部会话仅可入 pm 词表身份行（seatGate 轴④既定设计：身份行非派单对象、
+          // 允许外部——生产 PM 主会话即外部会话；泛 worker 席是派单对象，外部会话
+          // 接不了单=死席）。提案口提前拒给可读指引（决议口 seatGate 仍兜陈旧卡），
+          // 防「出卡→用户 ✓→入编失败」的空转卡。
+          if (self.state.external && !PM_ROLE_RE.test(role)) {
+            return { ok: false, error: `外部会话不可入 ${role} 编制（worker 席是派单对象，须为 deck 管理会话）——值守身份可 org join ${gid} pm，或值守位接管用 org pm claim` };
+          }
+          const confirm = addConfirm({
+            kind: "member-join",
+            title: `入队申请：${g.name} · ${role}`,
+            reason: `会话 ${self.state.session_id.slice(0, 8)}（${self.state.external ? "external" : "managed"}${self.state.title ? "·" + truncate(self.state.title, 24) : ""}）自荐入编为 ${role}`,
+            payload: { gid, sid: self.state.session_id, role },
+          });
+          this.emitOrgState();
+          return { ok: true, data: { needsConfirm: true, confirm, sid: self.state.session_id } };
+        }
+        case "pm-claim": {
+          // X0 件6（PRD §4.6 前半）：活 PM 会话接管值守位——写 org/duty.json override，
+          // dutyTargetId 优先消费（仅 no-leader 模式；pid 自证探活，死进程自动清档=
+          // 自动迁移/置空语义）。SNAPSHOT 的 pm 面随 emitOrgState 广播即时体现（远端
+          // 感知）。leader 模式值守由 Leader 承担，claim 拒收（防误 claim 劫持 PM 目标）。
+          if (readCollabMode(this.cfg.dataDir) !== "no-leader") {
+            return { ok: false, error: "当前为 leader 协作模式，值守位由 Leader 会话承担——org pm claim 属 no-leader（双机值守）场景" };
+          }
+          const self = this.locateSelfSession(str("cwd"), Number(str("pid")) || 0);
+          if (!self) return { ok: false, error: "未定位到你的会话——请在项目目录内运行 org pm claim" };
+          const pid = self.state.cli_pid;
+          if (!pid) return { ok: false, error: "会话无 CLI pid（外部会话需在终端活跃时 claim）" };
+          const r = setPmOverride({ session_id: self.state.session_id, cli_pid: pid, cwd: self.state.cwd || "", claimed_at: Date.now() });
+          if (!r.ok) return { ok: false, error: r.error ?? "claim 失败" };
+          this.emitOrgState();
+          this.emitChainAudit("pm-claim", `session=${self.state.session_id.slice(0, 8)} pid=${pid} cwd=${truncate(self.state.cwd || "", 60)}`);
+          return { ok: true, data: { pm_session_id: self.state.session_id, collab_mode: readCollabMode(this.cfg.dataDir) } };
+        }
+        case "agent-teams": {
+          // X0 件4（PRD §4.7 #6）：AGENT_TEAMS 实验特性协助——check=探测现状（含拼写
+          // 双检：官方 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS；PRD 原文 EXPERAMENTAL 为
+          // 笔误备案）；on=一键写入用户 ~/.claude/settings.json env 段（新会话生效）。
+          // Windows Terminal 限制：GUI 终端 setx 只影响新进程树，会话内 env 不可变——
+          // 文档说明走返回文案（CLI 直接可见）。
+          const mode = str("mode") === "on" ? "on" : "check";
+          const VAR = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS";
+          const live = process.env[VAR] === "1" || process.env["CLAUDE_CODE_EXPERAMENTAL_AGENT_TEAMS"] === "1";
+          if (mode === "check") {
+            return {
+              ok: true,
+              data: {
+                enabled: live,
+                var_name: VAR,
+                hint: live ? "AGENT_TEAMS 已开启" : "未开启。一键开启：org agent-teams on（写入 ~/.claude/settings.json env，对新建 CLI 会话生效；Windows Terminal 注意：已开会话不会继承，需新开会话——setx 同限）",
+              },
+            };
+          }
+          try {
+            // 沙盒隔离（ensureUserClaudeBroadcast 同口径）：CCR_ORG_DIR 在场（测试/沙盒
+            // relay）→ 写 org 目录镜像文件，绝不碰用户家 ~/.claude/settings.json
+            const sandbox = !!process.env.CCR_ORG_DIR;
+            const p = sandbox ? join(orgDir(), "agent-teams-settings.json") : join(homedir(), ".claude", "settings.json");
+            let cur: Record<string, unknown> = {};
+            try { cur = JSON.parse(readFileSync(p, "utf-8")) as Record<string, unknown>; } catch { /* 首建 */ }
+            const env = { ...((cur.env as Record<string, string>) ?? {}), [VAR]: "1" };
+            const next = { ...cur, env };
+            mkdirSync(dirname(p), { recursive: true });
+            writeFileSync(p, JSON.stringify(next, null, 2) + "\n", "utf-8");
+            return { ok: true, data: { enabled: true, written: p, hint: `已写入 ${sandbox ? "沙盒镜像" : "~/.claude/settings.json"} env——新开 CLI 会话生效；当前已开会话不继承（Windows Terminal 同限，需新会话）` } };
+          } catch (e) {
+            return { ok: false, error: `settings.json 写入失败: ${e instanceof Error ? e.message : String(e)}` };
+          }
+        }
         case "dispatch": {
           if (p.engine !== undefined && !isSessionEngine(p.engine)) return { ok: false, error: `未知引擎: ${String(p.engine)}` };
           return this.dispatchWorker({
@@ -6430,6 +6625,22 @@ export class SessionManager {
             this.disbandGroupMembers(gid); // M3：编制解散（知情放行的悬账按中断收口）
           }
           break;
+        case "member-join":
+          // X0 件2：入队申请决议（approved=member-add 等效入编，seatGate 同口径校验——
+          // 申请到决议间会话可能已死/入编/角色非法，陈旧卡按 fail 收口留痕；rejected=
+          // 纯留痕无动作）。批准后试排一轮（手动入编腾名额面同 member-add）。
+          if (gid) {
+            const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+            const role = typeof c.payload.role === "string" ? c.payload.role : "worker";
+            if (!sid) return fail("入编决议", { error: "卡载荷缺 sid（陈旧卡）" });
+            const seat = seatGate(sid, role, this.seatGateCtx());
+            if (!seat.ok) return fail("入编决议", { error: seat.reason === "leader" ? "Leader 不可入编" : "会话不在册或角色不可用" });
+            const r = addMember(gid, sid, role, {});
+            if (!r.ok) return fail("入编决议", r);
+            try { this.drainDispatchQueue(gid); } catch { /* 排水失败留队 */ }
+            this.emitBoard(gid);
+          }
+          break;
         case "revive":
           // 复活边直达通常走 project-status；此类型位保留同款联动（清标记，原班走路由表）
           if (gid) {
@@ -6841,7 +7052,13 @@ export class SessionManager {
     // 未触顶一律走既有熟手机制（上下文亲和）或新开（干净冷启动），不为省席位强迫
     // 复用；触顶复用带 role 精确匹配 + 引擎三元组一致两道质量闸，idle 最久优先=
     // 上下文最冷（旧任务残留最少）。
-    let veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
+    // X0 件1 修正（重派③·双层证据）：标签命中席=路由层能力证据已足（Leader 策展
+    // tags，test-dispatch D13「skills 命中越过熟练序」语义保留），装配探测只对
+    //「无标签证据的回落席」把关——两层正交：tags=策展声明，装配观测=实测并集，
+    // 回落席（声明了 skills 但无人带标签）才是公司侧「装配故障静默降级」风险面。
+    const pv = input.gid ? this.pickVeteranDetail(input.gid, input.skills) : null;
+    let veteran: string | null = pv?.sid ?? null;
+    const veteranTagHit = pv?.tagHit ?? false;
     // 停摆杜绝 R3（liveness 门，设计修正）：派单侧**不加** veteran 活性门——saved/DONE/
     // parked 退休态熟手（无 agent/ended）正是 resume 亲和的正当形态，僵尸流 resume 也有
     // 补刀（resumeAgent stop+killTree）；投递唯一咽喉在 COMMAND_MESSAGE/EXT_INPUT 的
@@ -6854,6 +7071,36 @@ export class SessionManager {
           (planned.model && veteranState.model !== planned.model) ||
           (planned.provider && veteranState.engine_provider !== planned.provider)) {
         veteran = null;
+      }
+    }
+    // X0 件1（PRD §4.7 B+#5）：装配探测——veteran 复用前校装配观测缓存（skills 词
+    // 命中，1h TTL 新鲜窗；缓存=external subagent kinds ∪ managed 活动工具名的被动
+    // 观测并集，能力只增不减）> 无数据/过期 → 负缓存防连环重试 + **明确报错拒单**
+    //（公司侧实锤「子 Agent 装配故障 50% 静默降级」对症——宁拒勿默）。skills 词在
+    // 清单零命中 → 降级跳席（清 veteran 走新会话路由）+台账 failed 行记因
+    //（probe_mismatch）。逃生门 CCR_X0_PROBE=0（旧路径原样）。skills 空单=免检
+    //（无要求无从判缺）。词汇域注意：skills 建议用工具名/插件名/subagent kind——
+    // 自由标签词在装配清单恒零命中会恒降级（词汇域对齐归 Leader 运营口径）。
+    // 标签命中席（veteranTagHit）整段免检（重派③）：路由标签=Leader 策展能力证据，
+    // D13「skills 命中越过熟练序」语义原样保留——探测只守无证据回落席。
+    if (veteran && !veteranTagHit && input.skills?.length && process.env.CCR_X0_PROBE !== "0") {
+      const inventory = this.assemblyInventoryOf(veteran);
+      if (inventory === null) {
+        const last = this.assemblyProbeNegative.get(veteran) ?? 0;
+        const first = Date.now() - last > 5 * 60_000;
+        if (first) this.assemblyProbeNegative.set(veteran, Date.now()); // 负缓存 5min：通知面按窗去重（台账恒记每单，防连环拒单刷屏打扰）
+        const msg = `装配探测无数据：熟手 ${veteran.slice(0, 8)} 装配观测缓存为空或过期（1h TTL；未见该会话工具/subagent 活动观测）——拒绝静默降级。该会话先跑任意一轮产生装配观测，或本单去 skills 重派，或 CCR_X0_PROBE=0 关闭探测`;
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
+        if (first) this.notifyDispatchClosed({ id: dispatchId, tier, ...(input.gid ? { gid: input.gid } : {}), anchor, actor }, "failed", msg, veteran); // 首发才进通知账（5min 窗内重复拒单台账行仍全量可查）
+        return { ok: false, error: msg };
+      }
+      const hay = inventory.join(" ").toLowerCase();
+      const hit = input.skills.some((sk) => hay.includes(String(sk).toLowerCase()));
+      if (!hit) {
+        const msg = `装配缺项降级：skills=[${input.skills.join(",")}] 在熟手装配清单（${truncate(hay, 90)}）零命中`;
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
+        console.log(`[dispatch] probe-degrade id=${dispatchId.slice(0, 8)} veteran=${veteran.slice(0, 8)} skills=[${input.skills.join(",")}]`);
+        veteran = null; // 降级：清熟手走新会话路由（编制闸在下方照常拦截触顶态）
       }
     }
     // P0 编制闸：veteran 是否经「触顶复用」路径产生——是则 resume 失败**不得**走
@@ -7220,13 +7467,20 @@ export class SessionManager {
   // 的熟手里按熟练序挑（count/last），全忙或无命中再放宽到全员。技能是偏好不是
   // 硬约束：宁可用不带标签的本项目熟手（resume 上下文连续），也不为标签冷启动。
   // 无 skills 参数时行为与此前完全一致（回归口径）。
-  private pickVeteran(gid: string, skills?: string[]): string | null {
+  /** X0 件1：带「标签命中」标注的熟手查表——tagHit=skills 在路由标签层已命中
+   *（策展证据，装配探测免检）；false=无标签证据的回落席（探测把关面）。 */
+  private pickVeteranDetail(gid: string, skills?: string[]): { sid: string; tagHit: boolean } | null {
     const wanted = (skills ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
-    if (wanted.length === 0) return this.pickVeteranEligible(gid, null);
+    if (wanted.length === 0) {
+      const sid = this.pickVeteranEligible(gid, null);
+      return sid ? { sid, tagHit: false } : null;
+    }
     // 审查修正（三家同报）：标签比对双侧小写归一——写侧 tagRouting 已归一，读侧
     // 再归一道防存量档案（归一前写入的大写标签）静默失配
     const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w)));
-    return hit ?? this.pickVeteranEligible(gid, null);
+    if (hit) return { sid: hit, tagHit: true };
+    const fallback = this.pickVeteranEligible(gid, null);
+    return fallback ? { sid: fallback, tagHit: false } : null;
   }
 
   // 熟手筛（#26 补章加两道）：① 编制门——路由记录在册但已从组编制除名（成员级

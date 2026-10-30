@@ -169,7 +169,11 @@ export type ConfirmKind =
   // 文本永不直入权威通道：orgAction rule-append 缺省出本卡，用户 ✓ 才真正入 rules.json；
   // payload 携带规则草稿 text/audience/scope/created_by，决议副作用在
   // applyConfirmEffects case "rule-append" 落库并回链 confirm_id
-  | "rule-append";
+  | "rule-append"
+  // X0 件2（PRD §4.7 C+#4，2026-10-29）：本机会话自荐入编申请（org join）——
+  // payload 携带 gid/sid/role；approved=member-add 等效入编（seatGate 同口径），
+  // rejected=纯留痕。防任意混入的确认卡门。
+  | "member-join";
 
 export interface OrgConfirm {
   id: string;

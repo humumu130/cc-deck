@@ -124,7 +124,8 @@
     "test:spa": "tsx scripts/test-spa.ts",
     "test:fc": "tsx scripts/test-fc.ts",
     "test:brm": "tsx scripts/test-brm.ts",
-    "test:m-board": "tsx scripts/test-m-board.ts"
+    "test:m-board": "tsx scripts/test-m-board.ts",
+    "test:x0": "tsx scripts/test-x0-onboarding.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

@@ -777,8 +777,14 @@ async function main() {
     const ta3 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 三单（要 rust）", gid: gidTa, skills: ["rust"] }) as { ok: boolean; session_id?: string };
     assert(ta3.ok === true && ta3.session_id === wT2, "skills 命中 → 越过熟练序选带标签熟手（W1=3 让位 W2）");
     assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 2), "W2 再收口（前置）");
-    const ta4 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 四单", gid: gidTa, skills: ["python"] }) as { ok: boolean; session_id?: string };
-    assert(ta4.ok === true && ta4.session_id === wT1, "skills 无命中 → 放宽回熟练序（技能是偏好不是硬约束）");
+    const ta4 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 四单", gid: gidTa, skills: ["python"] }) as { ok: boolean; session_id?: string; error?: string };
+    // X0 件1（重派③）语义升级：无标签证据的回落席须过装配探测——W1 无观测数据
+    // → 明确报错拒单（不再「放宽回熟练序」静默复用）；补装配观测后回落复用照旧
+    //（偏好语义保留，证据补位）。
+    assert(ta4.ok === false && (ta4.error ?? "").includes("装配探测无数据"), "X0 探测：回落席无装配观测 → 明确报错拒单（不静默降级）");
+    (mgr as unknown as { assemblyObserve: (sid: string, patch: { tools?: string[] }) => void }).assemblyObserve(wT1, { tools: ["python"] });
+    const ta4b = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 四单（补观测）", gid: gidTa, skills: ["python"] }) as { ok: boolean; session_id?: string };
+    assert(ta4b.ok === true && ta4b.session_id === wT1, "skills 无命中但装配观测在 → 放宽回熟练序（偏好+实测证据，复用照旧）");
     assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? 0) === 4), "W1 再收口（前置：4>2 奠定退休后余威）");
 
     // b) 成员级退休：编制除名 → 本组悬账中断收口 + 会话休眠 + 路由档案保留 + 编制门跳过

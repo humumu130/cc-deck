@@ -360,6 +360,7 @@ function kindLabel(kind: OrgConfirm["kind"]): string {
     case "archive": return "结项确认";
     case "revive": return "复活确认";
     case "rule-append": return "规则提案"; // W-RULES1：团队规则确认卡通知标签
+    case "member-join": return "入队申请"; // X0 件2：org join 自荐入编确认卡通知标签
   }
 }
 

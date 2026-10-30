@@ -965,6 +965,12 @@ export function startServer(
             // 零写入/无确认卡语义，信任级低于 dispatch（写面）非决议类，可开 HTTP。
             // WS 面同权开放（orgAction 单漏斗 case 同名——W-RULES2 的 P1 教训不复发）
             "harvest-check",
+            // X0 建队完善批（PRD v0.3 §4.6/§4.7，org CLI 新面）：join=自荐入编只出
+            // member-join 待确认卡（零直写，决议仍走用户端——非决议类）；pm-claim=
+            // 值守位接管写 duty.json（信任级同 dispatch 写面：token 已鉴权的本机
+            // CLI）；log-append=台账补录审计行（exp-append 同级）；agent-teams=
+            // 实验特性协助（check 只读，on 写 settings env 段——CLI 由用户亲手运行）
+            "join", "pm-claim", "log-append", "agent-teams",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(
@@ -1227,9 +1233,10 @@ export function startServer(
           // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
           allow_rules: mgr.allowRules.list(),
           // #26 M2 组织：项目组索引 + 待决确认单（cloud-client 云通道快照同步携带，
-          // #117 教训）
+          // #117 教训）；X0 件6：pm 值守面随快照（org pm claim 接管后远端即时感知）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          pm_duty: mgr.pmDutyStatus(),
           // P0 板持久信道（夜审 B2-F1）：板全量随 SNAPSHOT——断连端重连即追平
           //（BOARD_UPDATED 瞬态不补发+板此前不随快照=断连窗口变更全丢的根治）；
           // web 消费面 6896 行早已锚 payload.boards（本批只补 relay 下发）；

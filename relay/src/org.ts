@@ -225,24 +225,100 @@ export const ORG_CLAUDE_MD_RULES_SECTION = `${ORG_CLAUDE_MD_RULES_MARKER}（2026
   （复制为规则，源经验保留）。
 `;
 
+// X0 件3（PRD §4.7 C+#4，2026-10-29）：入队指引段——自荐入编的可发现性主通道之一
+//（另两件=面板「复制入队指令」键 + ~/.claude/CLAUDE.md 广播段）。Leader 分诊遇
+//「需要新成员/该会话想入队」时指路本段；按标记幂等追加（M2/M2P1/RULES 同机制）。
+export const ORG_CLAUDE_MD_X0_MARKER = "## 入队与值守";
+export const ORG_CLAUDE_MD_X0_SECTION = `${ORG_CLAUDE_MD_X0_MARKER}（2026-10-29 起，X0 建队完善）
+
+- 任何本机会话可自荐入编：在项目目录里运行 \`org join <组id> [角色]\`（默认 worker）——
+  申请进待确认队列，用户在面板放行后正式入编（防任意混入，你不代放行）。
+- 非 deck 会话干了活要留痕：\`org log-append "<做了什么>"\` 手动补录台账（一行一条）。
+- 值守 PM 位接管（no-leader 模式双机场景）：\`org pm claim\`——本机会话成为值守 PM，
+  原 PM 会话死亡自动移交。
+`;
+
+// ---------- X0 件6：PM 值守 override（org/duty.json，纯 fs 底座） ----------
+// 「org pm claim」写入的值守位钉选：dutyTargetId 优先消费（pid 探活，死会话自动
+// 忽略+清档=「启动检测旧 PM 死→自动转活/置空」的运行时形态）。独立小文件不并入
+// org.json 锚——锚是 Leader 身份（collab=leader 模式），duty 是 no-leader 值守位，
+// 语义正交；读写全走本模块单口。
+export interface PmOverride {
+  session_id: string;
+  cli_pid: number;
+  cwd: string;
+  claimed_at: number;
+}
+
+export function pmOverridePath(dir?: string): string {
+  return join(dir ?? orgDir(), "duty.json");
+}
+
+let pmOverrideCache: { data: PmOverride | null; loaded: boolean } = { data: null, loaded: false };
+
+export function readPmOverride(dir?: string): PmOverride | null {
+  // 单进程单写口（setPmOverride 同模块）——内存缓存零 fs 热路径；测试沙盒传 dir 时
+  // 绕缓存直读（CCR_ORG_DIR 沙盒态的多目录并存只有测试面）
+  if (!dir) {
+    if (pmOverrideCache.loaded) return pmOverrideCache.data;
+    pmOverrideCache = { data: readPmOverrideUncached(), loaded: true };
+    return pmOverrideCache.data;
+  }
+  return readPmOverrideUncached(dir);
+}
+
+function readPmOverrideUncached(dir?: string): PmOverride | null {
+  try {
+    const raw = JSON.parse(readFileSync(pmOverridePath(dir), "utf-8")) as { pm_override?: unknown };
+    const v = raw.pm_override;
+    if (!v || typeof v !== "object") return null;
+    const o = v as Partial<PmOverride>;
+    if (typeof o.session_id !== "string" || !o.session_id) return null;
+    return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), claimed_at: Number(o.claimed_at) || Date.now() };
+  } catch {
+    return null;
+  }
+}
+
+export function setPmOverride(v: PmOverride, dir?: string): { ok: boolean; error?: string } {
+  try {
+    const d = dir ?? orgDir();
+    mkdirSync(d, { recursive: true });
+    atomicWriteJson(pmOverridePath(d), JSON.stringify({ pm_override: v }, null, 2) + "\n");
+    if (!dir) pmOverrideCache = { data: v, loaded: true };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `duty.json 写入失败: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+export function clearPmOverride(dir?: string): void {
+  try {
+    rmSync(pmOverridePath(dir), { force: true });
+  } catch { /* 不存在/不可删均视为已清 */ }
+  if (!dir) pmOverrideCache = { data: null, loaded: true };
+}
+
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会
 // 抹掉积累。existsSync 为准（内容不比对，存在即认）。增量按标记追加（M2 → M2 补强，
 // 缺哪个补哪个，已有内容零写入——同 id 收敛语义）。
 export function ensureOrgClaudeMd(dir?: string): "created" | "exists" | "upgraded" {
   const p = orgFilePath("CLAUDE.md", dir);
   if (!existsSync(p)) {
-    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION + "\n" + ORG_CLAUDE_MD_RULES_SECTION, "utf-8");
+    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION + "\n" + ORG_CLAUDE_MD_RULES_SECTION + "\n" + ORG_CLAUDE_MD_X0_SECTION, "utf-8");
     return "created";
   }
   const cur = readFileSync(p, "utf-8");
   const hasM2 = cur.includes(ORG_CLAUDE_MD_M2_MARKER);
   const hasM2P1 = cur.includes(ORG_CLAUDE_MD_M2P1_MARKER);
   const hasRules = cur.includes(ORG_CLAUDE_MD_RULES_MARKER);
-  if (hasM2 && hasM2P1 && hasRules) return "exists";
+  const hasX0 = cur.includes(ORG_CLAUDE_MD_X0_MARKER);
+  if (hasM2 && hasM2P1 && hasRules && hasX0) return "exists";
   const parts = [cur.trimEnd()];
   if (!hasM2) parts.push(ORG_CLAUDE_MD_M2_SECTION);
   if (!hasM2P1) parts.push(ORG_CLAUDE_MD_M2P1_SECTION);
   if (!hasRules) parts.push(ORG_CLAUDE_MD_RULES_SECTION);
+  if (!hasX0) parts.push(ORG_CLAUDE_MD_X0_SECTION);
   writeFileSync(p, parts.join("\n\n"), "utf-8");
   return "upgraded";
 }
@@ -475,6 +551,10 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rule retire <id>                           规则退役（停注可溯，不物理删）
 #   org rule supersede <id> <text> [audience] [scope]  替代（新条入库+旧条停注指新）
 #   org rule promote <exp_id> [text] [audience] [scope]  经验升格为规则（复制非搬移，promoted_from 溯源）
+#   org join <gid> [role]                          自荐入编（X0 件2；本机会话→待确认卡，用户放行后入编）
+#   org pm claim                                   值守 PM 位接管（X0 件6；原 PM 死亡自动移交）
+#   org log-append "<文本>"                        台账补录（X0 件5；非 deck 会话工作一行入账）
+#   org agent-teams [check|on]                     AGENT_TEAMS 实验特性协助（X0 件4；on=一键写入用户 settings env）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 # 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
@@ -495,6 +575,33 @@ abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
 case "$action" in
   status)
     body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    ;;
+  join)
+    # X0 件2（PRD §4.7 C+#4）：本机会话自荐入编——CLI 侧无 session 身份，带 cwd+ppid
+    # 给 relay 定位自荐者；入编走待确认卡（用户面板放行，防任意混入）。
+    [ $# -ge 1 ] || { echo "用法: org join <组id> [角色]   自荐入编（默认 worker；面板放行后生效）" >&2; exit 1; }
+    role="\${2:-worker}"
+    body="$(python3 -c 'import json,sys,os;print(json.dumps({"action":"join","gid":sys.argv[1],"role":sys.argv[2],"cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))' "$1" "$role")"
+    ;;
+  pm)
+    # X0 件6（PRD §4.6 前半）：值守 PM 位接管（双机 no-leader 场景）
+    [ "\${1:-}" = "claim" ] || { echo "用法: org pm claim   本机会话接管值守 PM 位（原 PM 死亡自动移交）" >&2; exit 1; }
+    body="$(python3 -c 'import json,os;print(json.dumps({"action":"pm-claim","cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))')"
+    ;;
+  log-append)
+    # X0 件5（PRD §4.7 #7）：非 deck 会话工作手动补录台账（一行一条）。带 cwd 供
+    # relay 归属项目组（cwd 落组锚内 → 行带 project_anchor，组详情回执流/活动可见）
+    [ $# -ge 1 ] || { echo "用法: org log-append \"<做了什么>\"   补录一行已做工作入派单台账" >&2; exit 1; }
+    body="$(python3 -c 'import json,sys,os;print(json.dumps({"action":"log-append","text":sys.argv[1],"cwd":os.getcwd()},ensure_ascii=False))' "$1")"
+    ;;
+  agent-teams)
+    # X0 件4（PRD §4.7 #6）：AGENT_TEAMS 实验特性协助——check=探测现状；on=一键写入
+    # 用户 settings env（Windows Terminal 会话变量限制见 docs 提示，写入后需新会话生效）。
+    case "\${1:-check}" in
+      check|on) ;;
+      *) echo "用法: org agent-teams [check|on]" >&2; exit 1 ;;
+    esac
+    body="$(python3 -c 'import json,sys;print(json.dumps({"action":"agent-teams","mode":sys.argv[1]},ensure_ascii=False))' "\${1:-check}")"
     ;;
   auth-bypass)
     # W-PERMERR：用户明示授权「跳过权限确认」写入口（on=授权/off=撤销；撤销即收回）
@@ -773,5 +880,43 @@ export function ensureOrgCli(): string | null {
   } catch (e) {
     console.warn(`[org] 分诊 CLI 物化失败: ${e instanceof Error ? e.message : String(e)}`);
     return null;
+  }
+}
+
+// ---------- X0 件3（第三件）：用户家 ~/.claude/CLAUDE.md org 上下文广播段 ----------
+// PRD §4.7 C+#4「SessionStart hook 广播」的持久形态：additionalContext 注入（#279，
+// 每会话开始）覆盖 relay 在册会话；本段覆盖「用户项目目录直接开的任意 CLI 会话」的
+// 可发现性——那些会话不经过 relay，只有读用户家 CLAUDE.md 一条通道。幂等 MARKER
+// 追加（org CLAUDE.md 种子同机制）；CCR_ORG_DIR 覆盖态=测试沙盒不碰用户家
+//（ensureOrgCli 同口径）。失败静默（尽力而为的广播面，丢了下轮启动补）。
+export const USER_CLAUDE_BROADCAST_MARKER = "## cc-deck 团队上下文（org 广播段）";
+const USER_CLAUDE_BROADCAST_SECTION = `${USER_CLAUDE_BROADCAST_MARKER}
+
+本机装有 cc-deck（多会话编排）：需要多会话协作/立项级任务时，可在项目目录运行
+\`~/.cc-deck/bin/org status\` 查看团队，\`org join <组id>\` 自荐入编（面板放行生效），
+\`org log-append "<做了什么>"\` 补录台账。单会话内子任务自理，无需接入。
+（本段由 cc-deck 自动维护，可删除；删除后下次 relay 启动不重写——仅启动时补一次。）`;
+
+export function ensureUserClaudeBroadcast(): boolean {
+  if (process.env.CCR_ORG_DIR || process.env.CCR_ORG_BIN_DIR) return false; // 测试沙盒：不碰用户家
+  try {
+    const home = homedir();
+    const marker = join(home, ".claude", ".cc-deck-org-broadcast-seeded");
+    if (existsSync(marker)) return false; // 已种子过（含用户删段后不再重写——删除即尊重）
+    const p = join(home, ".claude", "CLAUDE.md");
+    let cur = "";
+    try {
+      cur = readFileSync(p, "utf-8");
+    } catch {}
+    if (cur.includes(USER_CLAUDE_BROADCAST_MARKER)) { // 段在但标记丢（手搬过）：补标记即可
+      writeFileSync(marker, String(Date.now()), "utf-8");
+      return false;
+    }
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, (cur ? cur.trimEnd() + "\n\n" : "") + USER_CLAUDE_BROADCAST_SECTION + "\n", "utf-8");
+    writeFileSync(marker, String(Date.now()), "utf-8");
+    return true;
+  } catch {
+    return false;
   }
 }
