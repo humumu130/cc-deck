@@ -106,7 +106,7 @@ const sendSealed = (obj: unknown) =>
   phoneWs.send(JSON.stringify({ to: identity.relayDev, data: seal(obj, relayPubkey, phoneKp.secretKey) }));
 // 取该 command_id 的**末个** ack（同 id 重发场景首个是原回执、末个才是幂等重放）
 const ackOf = (id: string) => {
-  const hits = inbox.filter((m) => m.type === "COMMAND_ACK" && m.command_id === id) as (CommandAckPayload & { duplicate?: boolean })[];
+  const hits = inbox.filter((m) => m.type === "COMMAND_ACK" && m.command_id === id) as unknown as (CommandAckPayload & { duplicate?: boolean })[]; // 基线债清障（1030）：inbox 元素类型面收窄后 cast 需 unknown 双跳
   return hits[hits.length - 1];
 };
 const sessionCount = () => mgr.snapshot().length;
@@ -158,7 +158,7 @@ const before3 = sessionCount();
 sendSealed({ command_id: "s4-unc", type: "COMMAND_CREATE", payload: { cwd: dataDir, prompt: "恢复窗重发" }, ts: Date.now() });
 assert(await waitFor(() => {
   const acks = inbox.filter((m) => m.type === "COMMAND_ACK" && m.command_id === "s4-unc");
-  return acks.some((a) => (a as CommandAckPayload & { duplicate?: boolean }).duplicate === true);
+  return acks.some((a) => (a as unknown as CommandAckPayload & { duplicate?: boolean }).duplicate === true); // 基线债清障（1030）：同上 unknown 双跳
 }), "同 id 重发在重投之后仍 duplicate:true（无双重执行面）");
 await wait(150);
 assert(sessionCount() === before3, "重投+重发并存 → 会话数不动（MUL-4257 防双执行）");
@@ -197,7 +197,9 @@ cloud.close();
 await bridge.close();
 // server.close 等全部连接断开才回调——测试面 ws 客户端已 close 但 keep-alive 兜底
 // 可能悬挂，限时 2s 强制走人
-await Promise.race([new Promise<void>((r) => { server.close(() => r()); }), wait(2000).then(() => undefined)]);
+// 基线债清障（1030）：startServer 返回面已改 { close(): Promise<void> }（零参），cb 形态调用
+// 是旧 API 残留——close() 直用 Promise 参与race，2s 上限语义不变
+await Promise.race([server.close().catch(() => undefined), wait(2000).then(() => undefined)]);
 process.chdir(oldCwd);
 rmSync(dataDir, { recursive: true, force: true });
 console.log(`\nS4 结果: ${pass} pass / ${fail} fail`);

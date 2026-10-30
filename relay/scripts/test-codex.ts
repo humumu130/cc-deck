@@ -45,6 +45,14 @@ process.env.CCR_CLOUD_URL = "";
 process.env.CCR_NO_LEADER = "1";
 process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_STUB_DIR = STUB; // 桩脚本经 childEnv 继承，回传 argv/stdin 落此
+// 基线债③真因修复（1030 CI dump 实证）：probeEngineAuth(codex) 三源全无时
+// spawnSync `codex login status` ——打到桩上白吃 seq-1（CI argv-1="login status"），
+// C 段全部 argv/stdin 断言偏移一格恒红；mac 本机有 ~/.codex 凭据故本地恒绿。
+// 钉 CODEX_HOME=沙盒 + auth.json：探针第一源短路 ready、零 spawn，桩调用序在
+// 任何机器确定（round1=1、round2=2），hermeticity 收口
+process.env.CODEX_HOME = join(SBOX, "codex-home");
+mkdirSync(process.env.CODEX_HOME, { recursive: true });
+writeFileSync(join(process.env.CODEX_HOME, "auth.json"), '{"test":true}');
 // 防引擎路由回归烧真 token：engine 分叉若被改坏（codex 卡落到 Claude 工厂），
 // SDK 会真拉 Claude CLI——钉死到 /bin/false 让任何漏网 spawn 立即失败，且不写
 // ~/.claude/projects（测试审查 ⑫：C 段此前对此零防线）
@@ -423,6 +431,9 @@ exit 0`);
   }, "codex-test") as { ok: boolean; session_id?: string; error?: string };
   assert(ack.ok === true && !!ack.session_id, "COMMAND_CREATE engine:codex 建卡 ok");
   const sid = ack.session_id!;
+  // hermeticity 锚（基线债③）：首调桩必须是回合 exec——登录探测泄漏（argv-1="login
+  // status"）会让后续所有按 seq 定位的断言集体偏移，这里当场拦下而非连锁误报
+  assert(readFileSync(join(STUB, "argv-1.txt"), "utf-8").startsWith("exec "), "首调桩=回合 exec（登录探测零泄漏——CODEX_HOME 钉死锚）");
 
   const created = events.find((e) => e.type === "SESSION_CREATED");
   assert((created?.payload as { engine?: string })?.engine === "codex", "SESSION_CREATED 首帧带 engine=codex");
@@ -446,8 +457,17 @@ exit 0`);
     const st = mgr.snapshot().find((s) => s.session_id === sid);
     return st?.status === "DONE" && readFileSync(join(STUB, "argv-2.txt"), "utf-8").includes("resume tid-1111");
   }, 10000);
-  assert(done2, "二轮走 resume <thread_id>（引擎感知不落 claude resume）");
-  assert(readFileSync(join(STUB, "stdin-2.txt"), "utf-8") === "继续深挖", "二轮消息内容经 stdin 准确到达");
+  // 基线债③诊断上下文（1029 清还）：CI（ubuntu/dash）二轮 10s 静默超时而本地绿——
+  // 失败时 dump 桩产物全景（seq/各轮 argv/stdin/卡面终态），一轮 CI 定位真因
+  const dumpStub = (): string => {
+    const st = mgr.snapshot().find((x) => x.session_id === sid);
+    const files = readdirSync(STUB).filter((f) => /^(argv-|stdin-|seq)/.test(f)).sort()
+      .map((f) => { try { return `${f}=${JSON.stringify(readFileSync(join(STUB, f), "utf-8").slice(0, 200))}`; } catch { return `${f}=<读失败>`; } })
+      .join(" | ");
+    return `status=${st?.status} relay_session_id=${st?.relay_session_id ?? "无"} 桩产物[${files}]`;
+  };
+  assert(done2, `二轮走 resume <thread_id>（引擎感知不落 claude resume）｜失败现场：${done2 ? "" : dumpStub()}`);
+  assert(readFileSync(join(STUB, "stdin-2.txt"), "utf-8") === "继续深挖", `二轮消息内容经 stdin 准确到达｜失败现场：${dumpStub()}`);
 
   // 跨「重启」引擎还原：回放路径靠 state.engine 持久（此处验事件流携带即可，回放
   // 重建归属 test-history/test-bridge 域）

@@ -15,8 +15,8 @@ import {
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
-import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
-import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
+import { archiveDispatchPrompt } from "./dispatch-run-archive.js";// M1 run 留档①任务书快照（multica 借①）
+import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js"; // 基线债清障（1030）：织合批 8a9dfc22 把本条 import 拼进上一行行尾注释被吞——DispatchTier 全文件失名（dev 尖端 tsc 红、全矩阵 16 作业被挡）；拆行复原
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
 import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
@@ -755,12 +755,6 @@ export class SessionManager {
   // 四报告落地 5h43m 无人收割实证；内存态即可，重启归零无害=重启后本就需重新盘点）
   private workerDonePending = 0;
   private pmWakeNotifyAt = 0; // #92 W-NOTIFY2 A：PM 唤醒手机通知 60s 频控窗（风暴聚合）
-  // fix/approval-timeout ②：worker 权限审批路由 PM（用户铁令②——团队成员内不应
-  // 出现需用户审批的事）。路由表 key=request_id 前 8 位（PM 回令短码）；value=待
-  // 决议现场。PM（Leader 会话）回复 PM-APPROVE/DENY/ESCALATE <短码> 令牌即代批
-  //（应用面=agent.allow/deny，与用户点卡同一执行面）。内存态：路由是「尽力通知」，
-  // relay 重启丢表无害——worker 卡仍在用户面（回落兜底恒在），PM 漏答同现行为
-  private pmApprovalRoutes = new Map<string, { workerSid: string; rid: string; tool: string; summary: string; askedAt: number }>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -1484,91 +1478,6 @@ export class SessionManager {
       (n) => n.kind === "waiting" && n.sourceContext.sessionId === sessionId && n.key === stableKey("waiting", sessionId, requestId),
       "resolved",
     );
-  }
-
-  // fix/approval-timeout ②：worker 权限审批路由 PM（用户铁令②「团队成员内不应出现
-  // 需用户审批的事」）。路由条件全收口于此：①非提问类（questions 空——用户口径只
-  // Bash 类权限确认，AskUserQuestion 有自己的作答链）②本会话不是 Leader 自己（防
-  // 环）③是 worker（dispatch_tier 在身且非咨询档——咨询=Leader 自己的派单形态）
-  //④PM 在线（Leader 会话在册、agent 在场未死）。任一不满足=return no-op，卡照常
-  // 留用户各端（回落兜底恒在，PM 漏答/离线同此）。注入是「尽力通知」：sendMessage
-  // 失败同 no-op。PM 回令由 applyPmApprovalReply 消化（Leader assistant_text 扫描）
-  private routeWorkerApprovalToPm(managed: ManagedSession, p: WaitingPayload): void {
-    if (p.questions?.length) return;
-    if (!this.leaderId || managed.state.session_id === this.leaderId) return;
-    if (!managed.state.dispatch_tier || managed.state.dispatch_tier === "咨询") return;
-    const leader = this.sessions.get(this.leaderId);
-    if (!leader?.agent || leader.agent.ended) return; // PM 离线：回落用户面（现行为）
-    const rid = String(p.request_id ?? "");
-    if (!rid) return;
-    const shortKey = rid.slice(0, 8);
-    if (this.pmApprovalRoutes.has(shortKey)) return; // 已路由在途（防重）
-    const tool = String(p.tool_name ?? "");
-    const summary = truncate(String(p.input_summary ?? ""), 120);
-    // 路由表有界（cap 50 丢最旧——路由是尽力通知，丢表无害见字段注释）
-    if (this.pmApprovalRoutes.size >= 50) {
-      const oldest = this.pmApprovalRoutes.keys().next().value;
-      if (oldest !== undefined) this.pmApprovalRoutes.delete(oldest);
-    }
-    const workerTitle = managed.state.title || managed.state.session_id.slice(0, 8);
-    const prompt =
-      `【审批路由 ${shortKey}】worker「${workerTitle}」请求使用 ${tool}：${summary}\n` +
-      `作为 PM 请代批（团队成员的权限确认由你消化，仅真有风险才升级用户）：\n` +
-      `- 批准 → 回复一行：PM-APPROVE ${shortKey}\n` +
-      `- 拒绝 → 回复一行：PM-DENY ${shortKey}\n` +
-      `- 升级用户 → 回复一行：PM-ESCALATE ${shortKey}\n` +
-      `不要执行任何工具，一行作答即可。`;
-    try {
-      leader.agent.sendMessage(prompt);
-    } catch (e) {
-      console.warn(`[approval-pm] 注入 PM 失败（回落用户面）: ${e instanceof Error ? e.message : String(e)}`);
-      return;
-    }
-    this.pmApprovalRoutes.set(shortKey, { workerSid: managed.state.session_id, rid, tool, summary, askedAt: Date.now() });
-    this.pushTimelineLog(managed.state.session_id, "system", `审批已路由 PM 代批：${tool}（${shortKey}）`);
-    console.log(`[approval-pm] worker 审批路由 PM：${tool} ${shortKey}（worker=${workerTitle}）`);
-  }
-
-  // PM 回令消化：Leader 会话 assistant_text 扫描 PM-APPROVE/DENY/ESCALATE <短码>。
-  // 应用面=worker agent.allow/deny（与用户点卡 COMMAND_CONTINUE/REJECT 同一执行面，
-  // 决议后状态机收口+各端收卡帧全走既有链）。迟到的 PM 回令（用户先点了/已被
-  // superseded）→ allow/deny 返回 false，如实记「已被处理」并出表，不重不炸
-  private applyPmApprovalReply(text: string): void {
-    if (this.pmApprovalRoutes.size === 0) return;
-    const re = /\bPM-(APPROVE|DENY|ESCALATE)\b[ \t]+([A-Za-z0-9_-]{6,12})/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      const [, action, shortKey] = m;
-      const route = this.pmApprovalRoutes.get(shortKey);
-      if (!route) continue;
-      this.pmApprovalRoutes.delete(shortKey);
-      const worker = this.sessions.get(route.workerSid);
-      if (action === "ESCALATE") {
-        this.pushTimelineLog(route.workerSid, "system", `PM 升级用户处理：${route.tool}（${shortKey}）——卡留用户面`);
-        this.pushTimelineLog(this.leaderId ?? "", "system", `已升级用户：${route.tool}（${shortKey}）`);
-        continue;
-      }
-      const ok = action === "APPROVE"
-        ? worker?.agent?.allow(route.rid, "pm") === true
-        : worker?.agent?.deny(route.rid, "PM 代批拒绝", "pm") === true;
-      if (ok) {
-        this.pushTimelineLog(route.workerSid, "system", `PM 已代批${action === "APPROVE" ? "允许" : "拒绝"}：${route.tool}（${shortKey}）`);
-        this.pushTimelineLog(this.leaderId ?? "", "system", `代批已生效${action === "APPROVE" ? "（允许）" : "（拒绝）"}：${route.tool}（${shortKey}）`);
-        console.log(`[approval-pm] PM 代批${action === "APPROVE" ? "允许" : "拒绝"}：${route.tool} ${shortKey}`);
-      } else {
-        this.pushTimelineLog(this.leaderId ?? "", "system", `代批回令迟到（请求已被处理/收卡）：${shortKey}`);
-      }
-    }
-  }
-
-  /** 时间线 system 行单口（homeLost/PM 路由审计同源）：落 logs+广播+裁剪 */
-  private pushTimelineLog(sessionId: string, kind: LogEntry["kind"], text: string): void {
-    const s = this.sessions.get(sessionId);
-    if (!s) return;
-    const entry: LogEntry = { ts: Date.now(), kind, text };
-    s.logs.push(entry);
-    if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500); // W-INJECT④ 同款预算
-    this.bus.emit(sessionId, "SESSION_LOG", entry);
   }
 
   // #018-R1FIX1 P2-2 确认副作用失败语义：原确认项不 resolved，同 key 原地转 error
@@ -3268,17 +3177,10 @@ export class SessionManager {
           // R1c 源②：WAITING 通知（stableKey=waiting:session:request_id 防重）
           this.syncWaitingNotification(managed);
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
-          // fix/approval-timeout ②：worker 权限卡路由 PM（提问类不路由——用户口径
-          // 只 Bash 类权限确认；PM 离线/不满足路由条件时此调用为 no-op，卡照常留
-          // 用户面=回落兜底）
-          this.routeWorkerApprovalToPm(managed, p);
         },
         onWaitingResolved: (requestId, decision, resolvedBy) => {
           if (!mine()) return;
           touch("waiting_resolved");
-          // fix/approval-timeout ②：路由表出表——用户/PM 任何一方先决议都收口该路由
-          //（迟到的 PM 回令 allow/deny 返 false 走「已被处理」留痕，不重不炸）
-          this.pmApprovalRoutes.delete(String(requestId).slice(0, 8));
           // 根治③续：仅当决议针对"当前挂起"的请求才收口状态——孤儿请求补发的
           // superseded 理论上可能晚于下一个 WAITING 到达（多端并发决议的时序窗口），
           // 无差别收口会把新请求的 WAITING 一并打掉，复刻死锁
@@ -3414,11 +3316,6 @@ export class SessionManager {
             if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
           }
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
-          // fix/approval-timeout ②：Leader（PM）的 assistant_text 扫 PM 代批回令
-          //（routeWorkerApprovalToPm 注入的审批请求在此收口消化）
-          if (kind === "assistant_text" && this.leaderId && managed.state.session_id === this.leaderId) {
-            this.applyPmApprovalReply(text);
-          }
           // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
           // 不入 dock；thinking 归 assistant_text（B0 的 ActivityKind 词表无 thinking）
           if (kind !== "user_message") {
@@ -5789,7 +5686,7 @@ export class SessionManager {
     // case 全在 orgAction switch（:5627 区），org CLI 走 orgCommand 时此前落
     // "unsupported org action"（本单实锤：CLI org member-retire 必挂）。与 rule-*/
     // collab-mode/auth-bypass 同款 #212 坑第 N 犯——编制动作清单直通
-    if (action === "member-retire" || action === "member-add" || action === "member-archive" || action === "member-restore" || action === "nick-set" || action === "retired-purge") { /* W-RETIRED：一键清退休会话（设置→通用入口）同清单直通 */
+    if (action === "member-retire" || action === "member-add" || action === "member-archive" || action === "member-restore" || action === "nick-set") {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
@@ -6660,20 +6557,6 @@ export class SessionManager {
           this.retireSession(s, gid, "retired");
           return { ok: true, data: { retired: true, halted: true } };
         }
-        // [W-RETIRED] 一键清退休会话（用户 1030 口径：退休卡逐张手工清很麻烦；设置→
-        // 通用入口）。名单单源 retiredMemberSids()（判定零变化），逐卡走既有 deleteSession
-        // 删链（清保活 timer/在途挂单/记住规则/库墓碑/pinned + SESSION_DELETED 广播，
-        // 三端就地清卡）。退休判定档案（routing）不动——复拉通道（member-add）无恙，
-        // 只是会话卡清掉（编制退休≠会话删除的原则不破：删卡是用户显式清理动作）
-        case "retired-purge": {
-          const sids = this.retiredMemberSids();
-          let purged = 0;
-          for (const sid of sids) {
-            if (!this.sessions.has(sid)) continue; // 名单内但无卡（已 evict/已删）——跳过不计
-            if (this.deleteSession(sid)) purged++;
-          }
-          return { ok: true, data: { purged, total: sids.length } };
-        }
         // #26 补章：复拉通道（退休熟手再入编）——编制门之后 pickVeteran 会重新考虑
         // 该熟手（路由档案一直在）；只对在办组开放（挂起组冻结、结项组只读）
         case "member-add": {
@@ -6917,7 +6800,6 @@ export class SessionManager {
         : {}),
     });
     this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
-    this.emitRetiredSessions(); // [W-RETIRED]：编制面写点全收口于此，名单 delta 变化即广播
   }
 
   // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
@@ -8333,54 +8215,6 @@ export class SessionManager {
         !g.headcount.some((h) => h.session_id === sid) &&
         routingFor(g.id).some((e) => e.session_id === sid),
     );
-  }
-
-  /** [W-RETIRED] 退休成员会话名单（用户 1029 反馈根治）——会话列表「默认隐藏 +
-   * 归档分组」的判定单源。判据与 isRetiredMember 同账源（projects 编制 + routing
-   * 熟手档案，纯持久读、重启可重建），口径差异是有意的：isRetiredMember 服务
-   * auto-revive 豁免（挂起组成员不值得拉活——现役只认 active 组编制）；本面服务
-   * **列表可见性**（挂起组编制快照未除名=成员仍挂编制，org_parked 归组展示语义
-   * 保持不隐藏）。批量一次读两本账（快照低频路径 + emitOrgState delta 检测，无热
-   * 路径消费）：
-   *   现役 = 在任一非 archived 组编制（active+parked；archived 组编制是结项快照档案）
-   *   退休 = 非 archived 组路由在册（member-retire 除名痕迹——派单必同步入编，
-   *          生产路径唯一除名通道是 member-retire）且非现役
-   * 已知边界（回执遗留备案）：external 会话（ext-*，含换防旧 PM）不入路由表
-   * （不接派单），判定不到——走编制身份行 member-retire 的 PM 可覆盖，纯 duty
-   * 换防场景需 PM 侧退役机制另立。 */
-  retiredMemberSids(): string[] {
-    const groups = listGroups();
-    const active = new Set<string>();
-    for (const g of groups) {
-      if (g.status === "archived") continue;
-      for (const h of g.headcount) active.add(h.session_id);
-    }
-    const retired = new Set<string>();
-    for (const g of groups) {
-      if (g.status === "archived") continue;
-      for (const e of routingFor(g.id)) {
-        if (!active.has(e.session_id)) retired.add(e.session_id);
-      }
-    }
-    return [...retired].sort();
-  }
-
-  // [W-RETIRED] 名单变化广播（瞬态 delta 检测）：编制面全部写点（member-retire/
-  // member-add/trimHeadcounts/组状态迁移/派单入编）都收口在 emitOrgState 之后，
-  // 尾部挂此单点零遗漏；名单不变零帧（幂等），变化即 RETIRED_SESSIONS_UPDATED
-  // 全量重发。seq:0 瞬态不落 ndjson；断线端重连 SNAPSHOT.retired_session_ids 兜底
-  private lastRetiredBroadcast: string[] | null = null;
-  private emitRetiredSessions(): void {
-    let cur: string[];
-    try {
-      cur = this.retiredMemberSids();
-    } catch {
-      return; // 两本账读失败（坏 JSON 等）不广播——读侧防御已容忍为空态，此处静默让位
-    }
-    const prev = this.lastRetiredBroadcast;
-    if (prev && prev.length === cur.length && prev.every((v, i) => v === cur[i])) return;
-    this.lastRetiredBroadcast = cur;
-    this.bus.emitTransient("RETIRED_SESSIONS_UPDATED", { retired_session_ids: cur });
   }
 
   // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------

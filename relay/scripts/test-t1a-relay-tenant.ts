@@ -29,10 +29,12 @@ function assert(cond: boolean, msg: string): void {
   }
 }
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function waitFor(fn: () => boolean, ms = 6000, every = 50): Promise<boolean> {
+// 基线债清障（1030）：谓词放宽 boolean | Promise<boolean>——③ 的轮询谓词是 async
+//（listI 返回 Promise），同步签名在类型层直接红（T1a 批 a0b0e8d1 带入的 3 错之一）
+async function waitFor(fn: () => boolean | Promise<boolean>, ms = 6000, every = 50): Promise<boolean> {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    if (fn()) return true;
+    if (await fn()) return true;
     await wait(every);
   }
   return fn();
@@ -118,7 +120,7 @@ assert(await waitFor(async () => {
 // ④ 重连带 dtok：掐断 cloud 的桥连接 → 自动重连（bridgeUrl 带 dtok）→ 准入过、路由在位
 const devBefore = srv.router.devCount;
 assert(devBefore >= 1, `④ 桥连接在位（devCount=${devBefore}）`);
-await cloud.forceRotateForTest?.();
+await (cloud as { forceRotateForTest?: () => Promise<void> | void }).forceRotateForTest?.(); // 基线债清障：可选测试钩断言式访问（CloudClient 现无此钩，回退路径已内置）
 // 无该测试钩则直接 terminate 内部 ws：借 kick 不可行（owner 面）——用断连重连观察
 void 0;
 // 手动触发重连：terminate 全部桥侧连接（relay dev 顶替语义）
@@ -128,7 +130,7 @@ assert(srv.tenant!.tenantOf(identity.relayDev) === tid, "④ tenantOf(relayDev) 
 
 // ⑤ 默认 off 回归锚：不开 CCR_TENANT 的第二实例不发 login_req（桥侧名册零新增）
 adm.close();
-cloud.stop?.();
+(cloud as { stop?: () => void }).stop?.(); // 基线债清障：同上，可选钩
 await wait(200);
 process.env.CCR_TENANT = "";
 delete process.env.CCR_TENANT_INVITE;
@@ -142,7 +144,7 @@ cloud2.start();
 await wait(1200);
 const after = Object.keys((srv.tenant as unknown as { db: { devices: Record<string, unknown> } }).db).length;
 assert(before === after, "⑤ CCR_TENANT 未设=不发 login_req（名册零新增——渐进开关回归锚）");
-cloud2.stop?.();
+(cloud2 as { stop?: () => void }).stop?.(); // 基线债清障：同上，可选钩
 try { readFileSync(join(dir2, "cloud-tenant.json"), "utf-8"); assert(false, "⑤ off 形态不落凭证"); } catch { assert(true, "⑤ off 形态不落凭证"); }
 
 await srv.close();

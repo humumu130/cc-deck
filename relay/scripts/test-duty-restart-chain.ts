@@ -128,7 +128,10 @@ try {
     const ackL2 = gen2.ensureLeader();
     assert(ackL2.ok === true && created2.length === 0, "R1②⓪ 重启后 Leader 锚重建（零 spawn 合成休眠卡——重启真实形态）");
     const leaderId2 = (ackL2 as { session_id?: string }).session_id ?? "";
-    gen2.resumeAgent(gen2.require(leaderId2), "重启后首回合指令");
+    // 基线债清障（1030）：resumeAgent/require 已收私有（W-SPLIT 后 mixin 域），测试直调改
+    // 结构化断言访问（运行时同一方法，纯类型层）
+    (gen2 as unknown as { resumeAgent: (s: unknown, t: string) => void; require: (id: string) => unknown }).resumeAgent(
+      (gen2 as unknown as { require: (id: string) => unknown }).require(leaderId2), "重启后首回合指令");
     assert(created2.length === 1, "R1②⓪b resumeAgent 拉起重启后首个回合流（fake factory spawn）");
     const cb2 = created2[created2.length - 1]?.cb;
     cb2.onInit(`sdk-duty-r1re-${randomUUID().slice(0, 6)}`, "test-model"); // 灌 sdkId+清 init timer
