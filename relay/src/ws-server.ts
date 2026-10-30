@@ -952,6 +952,7 @@ export function startServer(
           const ORG_HTTP_ACTIONS = new Set([
             "status", "project-create", "project-status", "project-tier", "suggest-hold",
             "dispatch", "board", "project-detail", "rate", "tag",
+            "chain", // #92 W-NOTIFY2 D：派发回执链时间线只读查询（非决议类）
             "member-retire", "member-add", // #26 补章：编制面执行动作（可逆：复拉走 member-add），非决议类
             // W-EXPP1 经验库动作（非决议类：写入面走经验库自身硬校验+软上限+漏斗审计
             // 行，无用户决策卡语义；exp-list/exp-export 只读——org exp 子命令的 HTTP 面）

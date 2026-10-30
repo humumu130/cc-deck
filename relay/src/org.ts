@@ -645,6 +645,18 @@ case "$action" in
     [ "\${1:-}" = "claim" ] || { echo "用法: org pm claim   本机会话接管值守 PM 位（原 PM 死亡自动移交）" >&2; exit 1; }
     body="$(python3 -c 'import json,os;print(json.dumps({"action":"pm-claim","cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))')"
     ;;
+  chain)
+    # #92 W-NOTIFY2 D：派发→收帧→回执→收割 时间线一处可查（只读；org chain [id前缀] [条数=20]）
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+d = {"action": "chain", "tail": 20}
+for a in [x for x in sys.argv[1:] if x]:
+    if a.isdigit() and len(a) <= 3: d["tail"] = int(a)
+    else: d["id"] = a
+print(json.dumps(d, ensure_ascii=False))
+PY
+)"
+    ;;
   log-append)
     # X0 件5（PRD §4.7 #7）：非 deck 会话工作手动补录台账（一行一条）。带 cwd 供
     # relay 归属项目组（cwd 落组锚内 → 行带 project_anchor，组详情回执流/活动可见）

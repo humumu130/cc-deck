@@ -673,7 +673,7 @@ export type EventType =
   | "EXPERIENCE_UPDATED"
   | "RULES_UPDATED"
   | "DISPATCH_DONE"
-  | "NOTIFY_CHAIN_AUDIT" /* #92 W-NOTIFY2 E：派发/回执链审计帧（pm-wake/dispatch-reroute/stale-escalate/dispatch-close/gate-release/recon-autoclose 六动作——#205 补 gate-release、#263 补 recon-autoclose，落盘可检索） */
+  | "NOTIFY_CHAIN_AUDIT" /* #92 W-NOTIFY2 E：派发/回执链审计帧（pm-wake/dispatch-reroute/stale-escalate/dispatch-close/gate-release/recon-autoclose 六动作+failure-escalate 连败升级——#205 补 gate-release、#263 补 recon-autoclose、#92 W-NOTIFY2 E 补 failure-escalate，落盘可检索） */
   | "SETTINGS_UPDATED"
   | "RELAY_NAME_UPDATED" /* #272 源名称改名（瞬态）：relay-name 写盘成功边广播，LAN+cloud 全扇出 */
   | "NOTIFICATIONS_UPDATED"

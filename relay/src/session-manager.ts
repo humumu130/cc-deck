@@ -12,7 +12,7 @@ import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
-  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
@@ -47,6 +47,7 @@ import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
   type ProjectGroup, type ProjectBoard,
 } from "./projects.js";
+import type { DispatchEntry } from "./org.js"; /* #92 W-NOTIFY2 D：chain 时间线原始行类型 */
 // #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
 import { listRouting, rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
 // P0 编制上限配套（2026-10-15）：派单排队底座（触顶全忙排队不扩编；重启不丢）——
@@ -1113,7 +1114,7 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: "pm-wake" | "pm-claim" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose" | "xmsg-send" | "xmsg-recv" | "xmsg-reject" | "xmsg-inject" | "xmsg-ack" | "xmsg-first-contact", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛；X0 件6：pm-claim；X1：xmsg 六词=跨机消息收发/拒/注入/回执/首联（§4.4 域内-审计） */
+  private emitChainAudit(action: "pm-wake" | "pm-claim" | "dispatch-reroute" | "stale-escalate" | "failure-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose" | "xmsg-send" | "xmsg-recv" | "xmsg-reject" | "xmsg-inject" | "xmsg-ack" | "xmsg-first-contact", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛；X0 件6：pm-claim；X1：xmsg 六词=跨机消息收发/拒/注入/回执/首联（§4.4 域内-审计） */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
@@ -4586,7 +4587,12 @@ export class SessionManager {
         // 直接走 appendDispatch 不经此，天然豁免——relay 重启不是 worker 的账）。
         // recordRouting=false = 挂起联动收口：回合中断是用户决策不是 worker 干砸，
         // 熟手评价无感
-        if (recordRouting) recordRoutingResult(e.gid, key, status, receipt);
+        if (recordRouting) {
+          recordRoutingResult(e.gid, key, status, receipt);
+          // #92 W-NOTIFY2 E：失败升级链——worker 连败（failed≥阈值 且 failed>count，无成功
+          // 穿插的计数近似）不只进台账：action 桶可操作通知直达用户（retire/换人/重派决策）
+          if (status === "failed") this.escalateWorkerFailures(e.gid, key);
+        }
       }
       // W-EXPP1 申报捕获（§3.1②）：只认真实交付收口——boardTo==="backlog" 是中断/
       // 兜底口径（中断≠交付，日志捞行有串台风险，与 M12-4/板退 todo 同款排除）；
@@ -4746,6 +4752,32 @@ export class SessionManager {
   //     咨询档（actor=user，承接方即 Leader 自己）与 actor 缺省（旧数据/看门狗行/
   //     重启补记行）不注入。注入 try/catch 尽力而为：通知失败绝不阻断收口主路径
   //    （台账已落，板已搬）。
+  // #92 W-NOTIFY2 E：worker 连败升级（closeOpenDispatches failed 收口边挂点）——路由表
+  // failed 计数是唯一跨单事实源（recordRoutingResult 单写口），此处收口后现读。连败判据
+  // = failed≥阈值 且 failed>count（失败多于成功的计数近似；严格逐单序列不入账，不新建
+  // 状态）。阈值 env CCR_DISPATCH_FAIL_ESCALATE（缺省 3；0/非数=关）。触发面双通道：
+  // ①emitChainAudit("failure-escalate") 落 events.ndjson+chain-audit.jsonl（可检索归因）
+  // ②upsertNotification action 桶可操作（title 直说建议处置）——路由黑名单（failed≥2 且
+  // failed>count 即 pickVeteranEligible 剔除）只挡新派单，用户不知情=静默除名；本通知把
+  // 「worker 已连败、已进黑名单、该决策了」送达。stableKey=dispatch-fail:<gid>:<sid> 一
+  // worker 一行 upsert 刷计数（连败加深同键刷新不刷屏）
+  private escalateWorkerFailures(gid: string, workerSid: string): void {
+    try {
+      const raw = Number(process.env.CCR_DISPATCH_FAIL_ESCALATE ?? "3");
+      const threshold = Number.isFinite(raw) ? raw : 3;
+      if (threshold <= 0) return; // 显式关
+      const entry = routingFor(gid).find((x) => x.session_id === workerSid);
+      if (!entry || entry.failed < threshold || entry.failed <= entry.count) return;
+      this.emitChainAudit("failure-escalate", `worker=${workerSid.slice(0, 12)} 连败 ${entry.failed} 单（成功 ${entry.count}），已进熟手黑名单，升级用户处置`, workerSid);
+      this.upsertNotification("system", `dispatch-fail:${gid}:${workerSid}`, undefined, {
+        title: `worker 连败 ${entry.failed} 单，建议处置`,
+        body: truncate(`会话 ${workerSid.slice(0, 8)} 连续失败 ${entry.failed} 单（成功 ${entry.count}），已不再自动派单。建议：查看该会话失败回执后 member-retire 除名或换人重派。`, 200),
+        severity: "error", group: "action", actionable: true,
+        sessionId: workerSid, domain: "dispatch", returnPath: "dispatch",
+      });
+    } catch { /* 升级尽力而为，绝不炸收口主路径 */ }
+  }
+
   private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string): void {
     this.emitChainAudit("dispatch-close", `id=${e.id.slice(0, 8)} status=${status} worker=${workerSessionId.slice(0, 12)} receipt=${truncate(receipt, 60)}`); /* #92 W-NOTIFY2 C：回执收口入审计流（通知面全链既有——transient/decision-ledger/upsert/failed 单注入 PM） */
     this.bus.emitTransient("DISPATCH_DONE", {
@@ -6568,6 +6600,68 @@ export class SessionManager {
           // 另一条喂养链，磁盘文件不动）。P0 编制上限（2026-10-15）：cap/workers/queued
           // 随详情下发——面板可见席位水位（headcount_cap 缺席=全局缺省值生效）
           return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool, cap: headcountCapOf(g), workers: genericWorkerCount(g.headcount), queued: this.queueDepth(g.id), dispatch_queue: this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === g.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g.id, title: (x.input as { title?: string }).title || "" })) } };
+        }
+        // ---------- #92 W-NOTIFY2 D：派发回执链时间线一处可查（只读；org chain [id前缀] [条数]） ----------
+        // 四态 = 台账行 dispatched(派单)→running(收帧/承接)→done|failed+receipt(回执)
+        // + chain-audit 动作（pm-claim=收割、dispatch-reroute/failure-escalate 等归因侧写）
+        // 按 detail 含 id 前缀并入对应单；无 id 的动作（pm-wake 等会话级）不强行归属，
+        // 随 tail 尾部单列 audit_tail 供回看。台账 readDispatchLog（org.ts byId 末行收敛
+        // 的原始流）按 id 分组取最新 tail 单；drill 行（演练）排除出时间线防污染
+        case "chain": {
+          const idq = str("id");
+          const tailRaw = Number(p.tail ?? 20);
+          const tail = Number.isFinite(tailRaw) ? Math.max(1, Math.min(Math.trunc(tailRaw), 100)) : 20;
+          // readDispatchLog/readDispatchLogFile 都是 byId 末行收敛视图（一单一行）——
+          // 时间线要态序列（dispatched→running→终态），直读 dispatch-log.ndjson 原始行
+          const rows: DispatchEntry[] = [];
+          try {
+            for (const line of readFileSync(dispatchLogPath(), "utf-8").split("\n")) {
+              const t = line.trim();
+              if (!t) continue;
+              try { rows.push(JSON.parse(t) as DispatchEntry); } catch { /* 损坏行跳过 */ }
+            }
+          } catch { /* 无台账=空面 */ }
+          const matched = idq ? rows.filter((x) => x.id.includes(idq)) : rows;
+          const byId = new Map<string, typeof matched>();
+          for (const x of matched) {
+            const list = byId.get(x.id) ?? [];
+            list.push(x);
+            byId.set(x.id, list);
+          }
+          const ids = [...byId.entries()]
+            .sort((a, b) => Math.max(...b[1].map((x) => x.ts ?? 0)) - Math.max(...a[1].map((x) => x.ts ?? 0)))
+            .slice(0, tail);
+          let auditLines: { action: string; detail: string; ts: number }[] = [];
+          try {
+            auditLines = readFileSync(join(this.cfg.dataDir, "chain-audit.jsonl"), "utf-8")
+              .split("\n").filter((l) => l.trim())
+              .map((l) => { try { return JSON.parse(l) as { action: string; detail: string; ts: number }; } catch { return null; } })
+              .filter((x): x is { action: string; detail: string; ts: number } => !!x && typeof x.action === "string");
+          } catch { /* 无审计档=空面 */ }
+          const items = ids.map(([id, list]) => {
+            const states = [...list].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0)).map((x) => ({
+              status: x.status, ts: x.ts,
+              ...(x.receipt ? { receipt: truncate(x.receipt, 120) } : {}),
+              ...(x.failure_reason ? { failure_reason: x.failure_reason } : {}),
+              ...(x.receipt_missing ? { receipt_missing: true } : {}),
+              ...(x.run_ref ? { run_ref: x.run_ref } : {}),
+            }));
+            const audit = auditLines.filter((a) => a.detail.includes(id.slice(0, 8))).slice(-8);
+            return {
+              id, tier: list[list.length - 1]?.tier ?? "", actor: list[list.length - 1]?.actor ?? "",
+              session_id: list[list.length - 1]?.session_id ?? "",
+              /** 四态时间线：台账态 + 审计动作（收割=pm-claim 在场即第四态已发生） */
+              states, audit,
+              harvested: audit.some((a) => a.action === "pm-claim"),
+            };
+          });
+          return {
+            ok: true,
+            data: {
+              items,
+              audit_tail: auditLines.slice(-tail).map((a) => ({ action: a.action, detail: truncate(a.detail, 120), ts: a.ts })),
+            },
+          };
         }
         // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
         case "rate": {
