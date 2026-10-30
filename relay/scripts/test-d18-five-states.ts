@@ -47,6 +47,11 @@ writeFileSync(boardPath, JSON.stringify(legacy, null, 2) + "\n");
 
 try {
   process.env.CCR_ORG_DIR = orgDir;
+  // W-BOARD-FATE-A 读切库：S1/S2 锁的是 json 读路径的惰性迁移**文件副作用**（冷备份+盘上
+  // 落新态）——缺省 sqlite 档下 loadBoard 走库投影（导入面同款旧词映射，读面值等价，
+  // 见 test-import-board-task 段3/段9），不再触发文件迁移；本套件显式钉 json 档测
+  // json 路径原行为（文件迁移收敛改由下次板写/广播链承载）。
+  process.env.CCR_STORAGE_READ_MODE = "json";
 
   // ---------- S1 一次性迁移：就近映射全谱+冷备份+无存量新态 ----------
   console.log("S1 一次性迁移（todo→backlog、doing→claimed、done→done）");

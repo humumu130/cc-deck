@@ -76,8 +76,9 @@ import { importSessionTask } from "./import-session-task.js";
 import { importAcceptance } from "./import-acceptance.js";
 import { importArtifacts } from "./import-artifact.js";
 import { importDispatchLesson } from "./import-dispatch-lesson.js";
+import { importBoardTask } from "./import-board-task.js";
 import { migrations } from "./schema.js";
-import type { OrgConfirm, ProjectGroup } from "../projects.js";
+import type { BoardEntry, OrgConfirm, ProjectGroup } from "../projects.js";
 import type { DispatchEntry } from "../org.js";
 
 /** 读模式环境变量名。 */
@@ -306,6 +307,18 @@ export function importAllForShadow(
         boardsDir: join(dirs.orgDir, "boards"),
       }),
     },
+    {
+      // W-BOARD-FATE-A 板卡域（task 表 origin='board' 分区）：排在 session-task 后
+      // （owner_session→session 行归因依赖 session 表先灌）、dispatch-lesson 后
+      // （boards 目录 checkpoint 分键 BOARDS_DIR_CP_SUFFIX 下两域共存，bare boardsDir
+      // 的 loss 账两域互清——本件殿后落账，板卡 loss 不被 D2 重灌清掉，理由见
+      // import-board-task.ts BOARDS_DIR_CP_SUFFIX 头注）。
+      domain: "board-task",
+      run: () => importBoardTask(port, {
+        journalFile: join(dirs.orgDir, "boards-journal.ndjson"),
+        boardsDir: join(dirs.orgDir, "boards"),
+      }),
+    },
     { domain: "acceptance", run: () => importAcceptance(port, join(dirs.dataDir, "acceptances")) },
     { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
     // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
@@ -392,6 +405,39 @@ export function lessonsFromDb(port: StoragePort, gid: string): { id: string; tex
     ts: l.created_at,
     ...(l.source_dispatch_id !== null ? { source_dispatch_id: l.source_dispatch_id } : {}),
   }));
+}
+
+/** 板卡分区（task 表 origin='board'）按组 → BoardEntry[]（W-BOARD-FATE-A 读切库投影）。
+ * 还原面=scope_json.board_entry **规范化快照**（导入时点条目全字段：status 已映射五态、
+ * updated_at 已兜底，其余原样——transitions/note/owner_session/dispatch_id/gate/priority/
+ * parent_id/depends_on 等无列字段的保真载体）；快照缺场（不应发生）退列拼最小形状。
+ * 键集=task_ref 前缀 `board/<gid>/`（gid 词表 pg-<hex> 无 LIKE 通配符，免 ESCAPE）。
+ * 排序 ORDER BY ts,id：板文件 append 序的稳定近似（同毫秒并列按 id——json 路径以文件
+ * 序为准，极端并列态两侧序可能不同；消费面以 find/键定位为主，备案）。 */
+export function boardTaskEntriesFromDb(port: StoragePort, gid: string): BoardEntry[] {
+  return port.query<{ task_ref: string; title: string; scope_json: string; status: string; ts: number }>(
+    "SELECT task_ref, title, scope_json, status, ts FROM task WHERE origin = 'board' AND task_ref LIKE ? ORDER BY ts, id",
+    [`board/${gid}/%`],
+  ).flatMap((r) => {
+    let snap: unknown;
+    try {
+      snap = (JSON.parse(r.scope_json) as { board_entry?: unknown }).board_entry;
+    } catch {
+      snap = undefined;
+    }
+    if (typeof snap === "object" && snap !== null) {
+      const o = snap as Record<string, unknown>;
+      if (typeof o.id === "string" && o.id && typeof o.text === "string" && o.text
+        && typeof o.status === "string" && o.status) {
+        const entry = { ...o } as unknown as BoardEntry;
+        if (typeof o.updated_at !== "number" || !Number.isFinite(o.updated_at)) entry.updated_at = r.ts;
+        return [entry];
+      }
+    }
+    // 快照缺场兜底（防御面）：列拼最小形状（id 取 task_ref 尾段=卡 id）
+    const entryId = r.task_ref.slice(`board/${gid}/`.length);
+    return [{ id: entryId, text: r.title, status: r.status as BoardEntry["status"], ts: r.ts, updated_at: r.ts }];
+  });
 }
 
 /** dispatch 段链收敛 → DispatchEntry[]（D2 一行状态机投影：段 id 剥 #rN、同原 id 后写赢、尾 max 条）。

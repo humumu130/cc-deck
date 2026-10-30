@@ -19,7 +19,7 @@ import { applyOrgChange } from "./org-schema.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
 import { withOrgWriteTx } from "./storage/org-write-tx.js";
-import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb } from "./storage/read-mode.js";
+import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb, boardTaskEntriesFromDb } from "./storage/read-mode.js";
 import type { DutyPolicy } from "./leader-duty.js";
 import type { SessionEngine } from "./types.js";
 
@@ -945,8 +945,30 @@ function saveBoardFile(b: ProjectBoard, dir?: string, jr?: BoardJournalRecord): 
   }
 }
 
+// W-BOARD-FATE-A 板卡域读切库（viaReadMode 消费）：json/shadow 档行为零变化（原
+// loadBoardOrEmpty 文件直读原样）；sqlite 档读 task 表板卡分区投影（boardTaskEntriesFromDb
+// ——scope_json 规范化快照逐字段还原），读前 ensureStore 追赶=读己之写成立（写口
+// deferred 追赶只影响时延不影响一致性）。有损备案（同 group 域 trust_light/parked_at
+// 先例——板级元数据无表列）：frozen 恒 false（freeze 执锁在写侧 writableBoard 文件直读，
+// 不受读投影影响；广播链 emitBoard 走 loadBoardFile 文件面亦不变）；updated_at 取条目
+// 最大值（板级-only 写如 freeze 不推进，stale 扫描等消费面退其余信号源）；lessons 键
+// 缺席（经验域已退役，json 路径有则由调用方剥离——6136 面两条路径出参等价）。
+// 旧三态惰性迁移（migrateBoardStatuses 落盘）是 json 路径副作用，sqlite 路径无此写——
+// 导入面已在内存同款映射，投影值等价。
 export function loadBoard(gid: string, dir?: string): ProjectBoard {
-  return loadBoardOrEmpty(gid, dir);
+  return viaReadMode("task", {
+    json: () => loadBoardOrEmpty(gid, dir),
+    sqlite: (port) => {
+      const entries = boardTaskEntriesFromDb(port, gid);
+      return {
+        gid,
+        entries,
+        frozen: false,
+        updated_at: entries.reduce((m, e) => Math.max(m, e.updated_at), 0),
+      };
+    },
+    dirs: { orgDir: dir },
+  });
 }
 
 /** 板写入前置校验：组须存在且 active（挂起=冻结保留、结项=归档只读，§2.2） */

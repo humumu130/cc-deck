@@ -18,6 +18,10 @@
 //        从 0 重放（upsert 覆盖），task 域清重灌（tasks 目录有真实删文件面，必须 DELETE 防残留）。
 //      · task 域重灌触发 = 任一源失效（task 归因链 task→session.cwd→group 依赖 session 全量，
 //        review_required 依赖 accept 集——任一上游变化即联动重算，防陈旧归因）。
+//      · task 表双写者分区（W-BOARD-FATE-A）：清域收窄为 origin='user'（本域 CLI 任务行），
+//        origin='board' 行归 import-board-task.ts（板卡投影）——events.ndjson 高频增长使本域
+//        重灌常态化，整表 DELETE 会把板卡投影每轮抹掉。org 重扫联动（read-mode 聚合）的
+//        下游全清仍整表 DELETE，随后两域各自全量重灌，链路自洽。
 //   4. 坏行走 B2 loss writer：坏 JSON 行/缺字段/状态词表外→拒入+落账不阻断；悬空引用（task 的
 //      session 目录名在 session 表无行）→归因写 NULL+落账；绝不造关联。
 //   5. 行 id 确定性：session.id=事件 session_id 直落（Leader 拍板）；task.id=`task-`+sha12(task_ref)，
@@ -597,7 +601,7 @@ export function importSessionTask(
 
     port.begin();
     try {
-      port.exec("DELETE FROM task");
+      port.exec("DELETE FROM task WHERE origin = 'user'"); // 分区契约：只清 CLI 域行，板卡域（origin='board'）不动（头注 3）
       port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [sources.tasksDir, sources.acceptanceDir]);
       const rows: TaskRow[] = [];
       for (const ref of obsTasks.files) {
