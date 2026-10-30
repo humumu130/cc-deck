@@ -47,7 +47,8 @@ const makeFakeFactory = (created: SpawnRec[]) =>
   (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string; resume?: string }): AgentLike => {
     const a: AgentLike = {
       id: randomUUID(), startedAt: Date.now(), ended: false,
-      sendMessage: () => { setTimeout(() => { if (!a.ended) cb.onTurnEnd(true, "success", 10); }, 10); },
+      sendMessage: () => { setTimeout(() => { if (!a.ended) { cb.onLog("assistant_text", "mboard 模拟回合完成。\n结果：mboard 模拟回合完成", {}); cb.onTurnEnd(true, "结果：mboard 模拟回合完成", 10); } }, 10); }, /* leader-weave-regression 修③：fixture 回执对齐 worker 交付契约——S1 零产出闸（relfix-s）receiptWithResultLine 从会话 assistant 日志探测「结果：」行（非 reason 参），裸 "success" 回合=零产出翻转 failed；onLog 补回执行（test-dispatch emitResultLine 同范式） */
+
       allow: () => false, deny: () => false, answer: () => false,
       stop: async () => { a.ended = true; cb.onSessionEnd("stopped"); },
       setPermissionMode: async () => {},
@@ -56,7 +57,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
     setTimeout(() => {
       if (a.ended) return;
       cb.onInit("sdk-" + a.id.slice(0, 8), model, opts?.permissionMode ?? "default");
-      if (prompt !== undefined) setTimeout(() => { if (!a.ended) cb.onTurnEnd(true, "success", 10); }, 10);
+      if (prompt !== undefined) setTimeout(() => { if (!a.ended) { cb.onLog("assistant_text", "mboard 模拟回合完成。\n结果：mboard 模拟回合完成", {}); cb.onTurnEnd(true, "结果：mboard 模拟回合完成", 10); } }, 10);
     }, 20);
     return a;
   };

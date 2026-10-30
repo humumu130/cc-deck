@@ -480,6 +480,16 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
   // #G5 失败分类学写侧单点：failed 行自动 failure_reason（receipt 错误串→分类器），
   // 调用方（spawn 失败/回合收口/看门狗等全部出口）零改动——全台账 failed 行带枚举
   if (e.status === "failed" && !e.failure_reason) e.failure_reason = classifyDispatchFailure(e.receipt ?? "");
+  // M1 run 留档终态钩子（appendDispatch 咽喉单点，multica 借①）：done/failed 行
+  // 写盘前归档三件套并回填 run_ref（内部自滤审计行/drill/queued-only；失败只 warn
+  // 不阻断台账——归档面尽力而为，run_ref 缺省=未归档口径与旧行兼容）。
+  // leader-weave-regression 修④：本段在四批织合（7a65f4e6 收编）时丢失——import 与
+  // dispatch-run-archive.ts 文件都在、钩子体没进（m-observ 套件 A2/A6 10✗ 的直接
+  // 因果：终态行 run_ref 恒空+三件套零产出）。从 09d20b77 原分支逐字搬回。
+  if ((e.status === "done" || e.status === "failed") && !e.run_ref && e.drill !== true) {
+    const ref = archiveDispatchTerminal(e, dir ?? orgDir());
+    if (ref) e.run_ref = ref;
+  }
   // S3-P4 入队幂等咽喉（relfix-s，multica「入队幂等=存储约束」的写侧单点形态；
   // 续作修订=与 S2 同步收窄到非组锚）：新**开单**行（dispatched/queued）落账前查
   // 同锚活单——不同 id 且活（dispatched/running/queued）→ 拒写。与 S2（dispatchWorker

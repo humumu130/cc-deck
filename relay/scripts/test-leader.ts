@@ -84,9 +84,17 @@ async function main() {
   // read-mode.ts 钦定回滚档；投影自身语义由 test-storage-driver/shadow 套件覆盖，
   // 不在本测试职责内
   const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
+  const prevPmDuty = process.env.CCR_PM_DUTY;
   process.env.CCR_STORAGE_READ_MODE = "json";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
+  // leader-weave-regression 修②：duty 值守显式关——duty-chain 批（448d31b3）把
+  // CCR_PM_DUTY 由 opt-in 反转 opt-out 缺省开后，本套件缺省环境里 duty 喂活链
+  // （feedPM→resume-backlog 注入 renewable prompt→spawn 新 agent→mine() 切换）
+  // 介入 Leader 回合收口路径：L6「onSessionEnd 兜底全清」实测——测试持旧 agent cb
+  // 调 onSessionEnd 时 mine()=false 早退，兜底从未到达（问一/问二 running 残留）。
+  // 产品语义（缺省开）不动，测试面显式隔离（worker env 军规同款：显式覆盖）。
+  process.env.CCR_PM_DUTY = "0";
   delete process.env.CCR_CWD; // sticky 豁免分支的前提（设了 CCR_CWD 时该分支本就跳过）
   try {
     const cfg: RelayConfig = {
@@ -658,6 +666,7 @@ async function main() {
     }
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
+    if (prevPmDuty === undefined) delete process.env.CCR_PM_DUTY; else process.env.CCR_PM_DUTY = prevPmDuty;
     if (prevReadMode === undefined) delete process.env.CCR_STORAGE_READ_MODE; else process.env.CCR_STORAGE_READ_MODE = prevReadMode;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;
     if (prevCwdEnv === undefined) delete process.env.CCR_CWD; else process.env.CCR_CWD = prevCwdEnv;
