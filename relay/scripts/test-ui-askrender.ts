@@ -71,6 +71,7 @@ const D1 = 'questions: [{"question":"用哪个数据库？","header":"选库","o
   ok(qs[0].options.length === 2 && qs[0].options[0].label === "SQLite" && qs[0].options[0].desc === "嵌入式零运维", "A1 选项 label/description 解析");
   ok(qs[0].options[1].preview === true && qs[0].options[0].preview === false, "A1 preview 在位标记（第二项 true 首项 false）");
   ok(qs[0].header === "选库", "A1 header 解析");
+  ok(qs.truncated !== true, "A1 完整解析：无截断标志");
 }
 {
   // capDetail 2000 帽截断形态一：切在选项区（'}' 之后）——平衡器/回退双路径可救
@@ -78,11 +79,13 @@ const D1 = 'questions: [{"question":"用哪个数据库？","header":"选库","o
   const f1 = JSON.stringify([big1]);
   const qs1 = parseAskDetail2("questions: " + f1.slice(0, 260) + "… (+" + (f1.length - 260) + " 字符)");
   ok(qs1 !== null && qs1.length === 1, "A2 截断抢救（选项区切断）：可部分恢复（得 " + (qs1 ? qs1.length : "null") + " 问）");
+  ok(qs1 !== null && qs1.truncated === true, "A2 截断抢救携带 truncated 诚实标志（尾标在位——审查B P1 批修）");
   // 截断形态二：切在首问超长题干中间（首个 '}' 之前——平衡器主路径的用武之地）
   const big2 = { question: "长问" + "很长的描述".repeat(400), header: "截断B", options: [{ label: "A" }, { label: "B" }] };
   const f2 = JSON.stringify([big2]);
   const qs2 = parseAskDetail2("questions: " + f2.slice(0, 900) + "… (+" + (f2.length - 900) + " 字符)");
   ok(qs2 !== null && qs2.length === 1 && qs2[0].header === String(qs2[0].question).slice(0, 24), "A2 截断抢救（题干中段切断·无 '}' 锚点）：平衡器拼回，header 回落题干前缀");
+  ok(qs2 !== null && qs2.truncated === true, "A2 题干中段切断同样携带 truncated 标志");
 }
 {
   ok(parseAskDetail2("questions: [乱码不是JSON") === null, "A3 垃圾 detail → null（回落通用渲染）");
@@ -102,6 +105,7 @@ const D1 = 'questions: [{"question":"用哪个数据库？","header":"选库","o
 {
   const qs = parseAskDetail2('questions: [{"question":"含 } 花括号的问句？","header":"h","options":[{"label":"A"}]},');
   ok(qs !== null && qs[0].question === "含 } 花括号的问句？", "A7 问句内嵌 '}' + 尾逗号截断 → 抢救成功不炸");
+  ok(qs !== null && qs.truncated === true, "A7 无尾标但走抢救路径 → 同样标 truncated（parse 失败必因不完整）");
 }
 {
   const qs = parseAskDetail2('questions: [{"header":"无题干"}]');
@@ -154,6 +158,12 @@ const FLAGS = QS.map((q) => q.options.map((o) => o.preview));
   ok(Array.isArray(fl) && fl[0][1] === true && fl[0][0] === false, "C2 末位 ask 条目对齐 → preview 借源成功");
   S.timelines.set(sid, [{ kind: "tool_use", tool: "AskUserQuestion", detail: 'questions: [{"question":"完全另一个问题","options":[{"label":"x"}]}]' }]);
   ok(askPreviewFlagsFor2({ session_id: sid }, w) === null, "C3 题干不匹配 → null（不回溯旧条目防错配）");
+  {
+    // C4 选项数不一致（同题干异选项）→ null——审查B P2-2 批修：防错标「含预览」
+    S.timelines.set(sid, [{ kind: "tool_use", tool: "AskUserQuestion", detail: 'questions: [{"question":"用哪个数据库？","options":[{"label":"SQLite"},{"label":"PostgreSQL"}]}]' }]);
+    const w3 = { questions: [{ question: "用哪个数据库？", options: [{ label: "SQLite" }, { label: "MongoDB" }, { label: "PostgreSQL" }] }] };
+    ok(askPreviewFlagsFor2({ session_id: sid }, w3) === null, "C4 每问选项数不一致 → null（不借源）");
+  }
 }
 
 // ---------- D entryHtml 行为级 ----------
@@ -195,6 +205,18 @@ const FLAGS = QS.map((q) => q.options.map((o) => o.preview));
   const eTask = { kind: "tool_use", tool: "TaskCreate", text: "新建 某任务", ts: 4 };
   const h5 = mk(eTask, sStub);
   ok(h5.includes('data-role="task"') && h5.includes("task-life"), "D5 TaskCreate 行零回归（生命周期行不进过程组）");
+  {
+    // D6 截断问卷折叠态诚实标注——审查B P1 批修：部分恢复不谎报确切问数
+    const big = { question: "切在选项区的长问句？", header: "截断D", options: [{ label: "A", description: "x".repeat(300), preview: "code" }, { label: "B", description: "y".repeat(300) }] };
+    const f = JSON.stringify([big]);
+    const eTr = { kind: "tool_use", tool: "AskUserQuestion", text: "AskUserQuestion", detail: "questions: " + f.slice(0, 260) + "… (+" + (f.length - 260) + " 字符)", ts: 5 };
+    const h6 = mk(eTr, sStub);
+    ok(h6.includes("≥") && h6.includes("个问题（已截断）"), "D6 截断问卷折叠态：「≥N 个问题（已截断）」诚实摘要");
+    ok(!h6.includes("ask-card"), "D6 折叠态问卷卡仍不渲染");
+    (stubs.expanded as Set<string>).add((stubs.eKey as (e: unknown) => string)(eTr));
+    const h7 = mk(eTr, sStub);
+    ok(h7.includes("ask-card") && h7.includes("原文超长被截断"), "D6 截断问卷展开态：卡尾截断提示行");
+  }
 }
 
 // ---------- E syncWaitCard 源码面 ----------
@@ -221,6 +243,7 @@ const FLAGS = QS.map((q) => q.options.map((o) => o.preview));
 {
   for (const cls of [".ask-card", ".wq-opt", ".wait-chip.row", ".wo-prev", ".ask-tag", ".wo-desc", ".wq-opts"])
     ok(css.includes(cls), "H 样式类在位：" + cls);
+  ok(css.includes("button.wq-opt:hover") && !css.includes(".wq-chips"), "H 审查批修锁：hover 收窄至 button.wq-opt + 死规则 .wq-chips 已清（审查A P2①③）");
   ok(css.includes("W-UI-ASKRENDER：AskUserQuestion 结构化问卷卡"), "H 样式块注释锚在位");
 }
 

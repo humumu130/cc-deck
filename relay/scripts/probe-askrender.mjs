@@ -11,7 +11,7 @@ const WebSocket = require("/Users/xdd/dev/cc-deck/relay/node_modules/ws/index.js
 const side = process.argv[2] || "after";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = side === "after" ? 9341 : 9342;
-const WTREE = side === "after" ? "/private/tmp/cc-deck-w-ui-askrender" : "/private/tmp/cc-deck-w-approval-timeout"; // before=同基线 commit 干净树（改前对照）
+const WTREE = side === "after" ? "/private/tmp/cc-deck-w-ui-askrender" : "/private/tmp/cc-deck-w-approval-timeout"; // before=基线+1 干净树（86f5c772，仅 relay CORS 修不触 web-console，对照等效——审查B P3-6 修正表述）
 const OUT = "/tmp/w-askrender";
 const URL0 = `file://${WTREE}/web-console/index-005.html`;
 mkdirSync(OUT, { recursive: true });

@@ -2488,11 +2488,13 @@
                 // 解析失败返回 null → 走通用 trow 渲染（零回归兜底）。
                 function parseAskDetail(detail) {
                   if (!detail) return null;
+                  const wasTrunc = /\n?…\s*\(\+\d+\s*字符\)\s*$/.test(String(detail)); // capDetail 截断尾标在位 = 原文被截（审查B P1：不可静默）
                   let raw = String(detail).trim().replace(/\n?…\s*\(\+\d+\s*字符\)\s*$/, ""); // 剥 capDetail 截断尾标
                   const m = /^questions:\s*([\s\S]+)$/.exec(raw);
                   if (m) raw = m[1];
                   let data = null;
-                  try { data = JSON.parse(raw); } catch (_) { data = askSalvageJson(raw); }
+                  let salvaged = false;
+                  try { data = JSON.parse(raw); } catch (_) { data = askSalvageJson(raw); salvaged = data != null; } // 抢救成功 = 原文不完整（relay 产物 parse 失败必因截断）
                   if (data && !Array.isArray(data) && typeof data === "object" && Array.isArray(data.questions)) data = data.questions;
                   if (!Array.isArray(data)) return null;
                   const qs = [];
@@ -2518,11 +2520,18 @@
                       options,
                     });
                   }
-                  return qs.length ? qs : null;
+                  if (qs.length) {
+                    if (wasTrunc || salvaged) qs.truncated = true; // 截断诚实标志（审查B P1）：部分恢复不谎报完整
+                    return qs;
+                  }
+                  return null;
                 }
                 // 截断 JSON 抢救：capDetail 从任意位置切断。首选括号/引号平衡器（扫描未闭合
                 // 栈 + 剥尾部残词/尾逗号/悬空键值对后补闭合），败则回退「最后一个 '}' 逐位回退
-                // 补尾」。纯展示层 best-effort，双路径仍败 = null 回落通用渲染
+                // 补尾」。纯展示层 best-effort，双路径仍败 = null 回落通用渲染。
+                // 回退 30 位 × 7 后缀 = 上限 210 次有界 tryParse（≤2000 字符），单行渲染一次
+                // 性可承受；capDetail 只产前缀切，回退的真实增量在「多键尾垃圾」形态——
+                // 审查B P2-1 裁定保留主平衡器+有界回退现状（缩编收益小、动测试风险大）
                 function askSalvageJson(raw) {
                   const tryParse = (s) => { try { const v = JSON.parse(s); return v; } catch (_) { return undefined; } };
                   // 平衡器
@@ -2601,7 +2610,8 @@
                       if (e && e.kind === "tool_use" && e.tool === "AskUserQuestion") {
                         const qs = parseAskDetail(e.detail);
                         if (qs && qs.length === w.questions.length
-                          && qs.every((q, qi) => q.question.slice(0, 24) === String(w.questions[qi].question || "").slice(0, 24))) {
+                          && qs.every((q, qi) => q.question.slice(0, 24) === String(w.questions[qi].question || "").slice(0, 24)
+                            && (q.options || []).length === (w.questions[qi].options || []).length)) { // 选项数同校（审查B P2-2：防同题干异选项错标「含预览」）
                           return qs.map((q) => (q.options || []).map((o) => !!o.preview));
                         }
                         return null; // 末位 ask 条目即当前等待请求，不匹配不再回溯（旧条目借源=错配）
@@ -2678,11 +2688,11 @@
                     if (t === "AskUserQuestion") {
                       const qs = parseAskDetail(e.detail);
                       if (qs) {
-                        const sum = qs.length + " 个问题 · " + oneLine(qs[0].question || "").slice(0, 44);
+                        const sum = (qs.truncated ? "≥" : "") + qs.length + " 个问题" + (qs.truncated ? "（已截断）" : "") + " · " + oneLine(qs[0].question || "").slice(0, 44); // 截断时诚实标注（审查B P1）
                         const tags = '<span class="ask-tags">' + qs.map((q) => '<span class="ask-tag">' + esc(String(q.header || "").slice(0, 12)) + "</span>").join("") + "</span>";
                         return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">?</span><span class="tname">提问</span><span class="tsum">' + esc(sum) + "</span>" + tags +
                           '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开 ▾") + "</span></div>" +
-                          (open ? '<div class="ask-card">' + askGroupsHtml(qs, null, "static") + "</div>" : "") + "</div>";
+                          (open ? '<div class="ask-card">' + askGroupsHtml(qs, null, "static") + (qs.truncated ? '<div class="wo-desc">原文超长被截断，以上可能不是全部问题</div>' : "") + "</div>" : "") + "</div>";
                       }
                     }
                     const isTaskTool = /^Task/.test(t); // Task* 行：摘要单行省略 + 展开看任务描述（旧壳 #204 口径）
