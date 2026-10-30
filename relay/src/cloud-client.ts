@@ -193,7 +193,35 @@ export class CloudClient {
     const base = this.url ?? this.cfg.cloudUrl;
     const sep = base.includes("?") ? "&" : "?";
     // rk=公钥上报给桥：桥发现帧（网页 to:"*" disc）下发 {dev,rk}，浏览器无需预知 relay 指纹
-    return `${base}${sep}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    let u = `${base}${sep}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    // T1a 租户登录态：已登录设备带 dtok（桥验签绑租户——revoked/伪造即 401）
+    const cred = this.identity.loadTenantCred();
+    if (cred) u += `&dtok=${encodeURIComponent(cred.token)}`;
+    return u;
+  }
+
+  // T1a 租户握手（PRD §4.4/§4.5，G6 密钥发现配套）：CCR_TENANT=1 才活动。
+  // ① 无凭证 + CCR_TENANT_INVITE 在场 → login_req（携本机公钥；桥侧验邀请后签发
+  //    设备 token 入名册——relay 从此不再依赖「配对码换公钥」旧链）
+  // ② 已有凭证 → cloud-peers.json 存量上报一次每进程（桥主 import-approve 收编）
+  // 幂等：登录成功后 invite 失效由桥侧预算闸兜底；上报重复由桥侧同 relay pending 替换
+  private tenantHandshake(): void {
+    if (process.env.CCR_TENANT !== "1") return;
+    const cred = this.identity.loadTenantCred();
+    if (!cred) {
+      const invite = (process.env.CCR_TENANT_INVITE ?? "").trim();
+      if (!invite) {
+        console.log("[cloud] CCR_TENANT=1 但无登录凭证且未设 CCR_TENANT_INVITE——租户层未激活（向租户主索取邀请码后写入 env 重启）");
+        return;
+      }
+      this.send({ to: "*", data: { t: "login_req", invite, dev: this.identity.relayDev, pubkey: this.identity.keypair.publicKey } });
+      console.log("[cloud] tenant login_req sent (invite attached)");
+      return;
+    }
+    // 已登录：存量上报（cloud-peers.json 全量——桥侧 pending 记录，桥主确认入租户）
+    const peers = [...this.identity.peers.entries()].map(([dev, e]) => ({ dev, pubkey: e.pubkey, name: e.name }));
+    this.send({ to: "*", data: { t: "peers_report", peers } });
+    if (peers.length) console.log(`[cloud] tenant peers_report sent (${peers.length} devices, pending bridge-owner approval)`);
   }
 
   private connect(): void {
@@ -250,6 +278,10 @@ export class CloudClient {
           relay_pubkey: this.identity.keypair.publicKey,
         });
       }
+      // T1a 租户握手（CCR_TENANT=1 时）：未登录且持有邀请码→login_req（携公钥，
+      // 桥侧校验后签发设备 token）；已登录→cloud-peers.json 上报一次每进程
+      //（存量迁移数据源，PRD §4.5——桥主确认收编入租户）
+      this.tenantHandshake();
     });
     ws.on("message", (raw) => {
       this.lastRecv = Date.now();
@@ -552,6 +584,26 @@ export class CloudClient {
     } catch {
       return;
     }
+    // T1a 租户登录回帧（桥侧终结帧，非密封中转）：login_ok 落凭证（后续重连带
+    // dtok）；login_err 人话指引（邀请码失效/限速/换钥冒名）；peers_report_ok 静默
+    if (f.type === "login_ok") {
+      const p = f as unknown as { token?: unknown; tenant?: unknown; exp?: unknown };
+      if (typeof p.token === "string" && typeof p.tenant === "string" && typeof p.exp === "number") {
+        this.identity.saveTenantCred({ tenant: p.tenant, token: p.token, exp: p.exp });
+        console.log(`[cloud] tenant login ok tenant=${p.tenant} exp=${new Date(p.exp).toISOString()}（后续连接携带 dtok）`);
+        // 同连接补一拍存量上报（G6：首登即可见 pending 面他设备——不等下次重连；
+        // 幂等由桥侧「同 relay pending 替换」承接）
+        const peers = [...this.identity.peers.entries()].map(([dev, e]) => ({ dev, pubkey: e.pubkey, name: e.name }));
+        if (peers.length) this.send({ to: "*", data: { t: "peers_report", peers } });
+      }
+      return;
+    }
+    if (f.type === "login_err") {
+      const p = f as unknown as { error?: unknown };
+      console.log(`[cloud] tenant login rejected: ${String(p.error ?? "?")}——检查 CCR_TENANT_INVITE 邀请码（15min 时效/一码一设备），或向租户主重新索取`);
+      return;
+    }
+    if (f.type === "peers_report_ok") return;
     // 桥告知目标手机不在线：标记下线等对方 ping/hello 恢复，避免持续向虚空加密下发
     if (f.type === "ROUTE_MISS" && f.to) {
       const to = f.to; // 窄化捕获（setTimeout 闭包内 TS 不保 string）

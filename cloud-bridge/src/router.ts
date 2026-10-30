@@ -8,9 +8,23 @@ export interface RouterHooks {
   close(connId: string, code: number, reason: string): void;
 }
 
+// T1a 租户过滤视图（PRD §4.4/§4.5）：TenantService 实现注入，双形态共享单源。
+// 恒活读（内存态零 await）——六触点：register 准入（含同钥拒重入）/relay-online
+// 广播/disc 发现（RELAYS）/pair_req 广播/定向路由/wan 固定目标（同走定向）。
+// 缺省不注入=纯配对模型现状（迁移连续性：未开租户的桥零行为差异）。
+export interface TenantFilter {
+  tenantOf(dev: string): string | null;
+  isRevoked(dev: string): boolean;
+  visible(a: string, b: string): boolean; // §4.4 null-tenant 矩阵（窗口/strict 两档）
+  // 管理帧终结（桥侧终结非中转）：login_req/tenant_op/peers_report。async——
+  // 回执经 hooks.send 出，失败自吞不炸连接
+  onManagementFrame(connId: string, from: string, data: { t: string } & Record<string, unknown>): Promise<void>;
+}
+
 export interface RouterOptions {
   hooks: RouterHooks;
   log?: (msg: string) => void;
+  tenant?: TenantFilter;
 }
 
 // 8MB 防御性上限：SNAPSHOT/图片上传等合法帧可达 MB 级（1MB 时快照密文刚超线，
@@ -24,6 +38,12 @@ export class CloudRouter {
   private keyOf = new Map<string, string>();  // dev → 公钥（relay 连接时上报，发现帧用；公钥本身公开无害）
 
   constructor(private opts: RouterOptions) {}
+
+  // T1a：租户过滤视图后挂（服务构造需先引用 router 的 hooks——两相成环的解法）。
+  // 注入前=纯配对模型现状（六触点全放行）
+  setTenant(tenant: TenantFilter): void {
+    this.opts.tenant = tenant;
+  }
 
   get devCount(): number {
     return this.connOf.size;
@@ -48,6 +68,9 @@ export class CloudRouter {
   // 避免设备闪断重连期间双连接重复投递。rk 为可选公钥（relay 连接上报）。
   register(connId: string, dev: string, rk?: string): void {
     if (dev.length < 1 || dev.length > MAX_DEV) throw new Error("bad dev");
+    // T1a 触点①：吊销设备拒绝注册（B2 踢出四缺口之「同钥拒重入」——活线断后
+    // 同 dev 重连在此被拒；adapter 升级口另有一层 admission，双保险）
+    if (this.opts.tenant?.isRevoked(dev)) throw new Error("device revoked");
     const old = this.connOf.get(dev);
     if (old !== undefined && old !== connId) {
       this.devOf.delete(old);
@@ -67,6 +90,8 @@ export class CloudRouter {
       const frame = JSON.stringify({ type: "relay-online", rd: dev });
       for (const [d, target] of this.connOf) {
         if (d === dev) continue; // 上线的 relay 自己无需唤醒
+        // T1a 触点②：relay-online 广播按租户矩阵过滤（跨租户不可见上线事件）
+        if (this.opts.tenant && !this.opts.tenant.visible(dev, d)) continue;
         this.opts.hooks.send(target, frame);
       }
     }
@@ -118,11 +143,24 @@ export class CloudRouter {
         this.reply(connId, { type: "ERROR", error: "bad frame" });
         return;
       }
+      // T1a 触点⑤：管理帧桥侧终结（login_req/tenant_op/peers_report——PRD §3.2
+      // 管理帧非密封中转）。异步执行，回执经 hooks.send；不阻塞本帧处理
+      if (this.opts.tenant && (d.t === "login_req" || d.t === "tenant_op" || d.t === "peers_report")) {
+        const tenant = this.opts.tenant;
+        void tenant.onManagementFrame(connId, from, d as { t: string } & Record<string, unknown>).catch((e) => {
+          this.opts.log?.(`tenant frame error: ${e}`);
+          this.reply(connId, { type: "ERROR", error: "tenant op failed" });
+        });
+        return;
+      }
       // 发现帧：回在线 relay 列表（dev+公钥）。网页烘焙的 relay 指纹在 relay 换
       // keypair 后失配，ROUTE_MISS 前先发现真实身份
       if (d.t === "disc") {
+        // T1a 触点③：RELAYS 按租户矩阵过滤（问者只见同租户+迁移窗 null；G6 消费面）
+        const tenant = this.opts.tenant;
         const relays = this.devs()
           .filter((dev) => dev.startsWith("rl-"))
+          .filter((dev) => !tenant || tenant.visible(from, dev))
           .map((dev) => ({ dev, rk: this.keyOf.get(dev) ?? "" }));
         this.reply(connId, { type: "RELAYS", relays });
         return;
@@ -134,11 +172,19 @@ export class CloudRouter {
       if (d.t === "pair_req") {
         for (const [dev, target] of this.connOf) {
           if (!dev.startsWith("rl-") || target === connId) continue;
+          // T1a 触点④：配对定位广播按租户矩阵过滤（跨租户收不到）
+          if (this.opts.tenant && !this.opts.tenant.visible(from, dev)) continue;
           this.opts.hooks.send(target, JSON.stringify({ to: dev, from, data: m.data }));
         }
         return;
       }
       this.reply(connId, { type: "ERROR", error: "bad frame" });
+      return;
+    }
+    // T1a 触点⑥：定向路由（含 /wan 固定目标）跨租户=笼统 ROUTE_MISS——目标存
+    // 在与否不可探测（PRD §4.4「跨租户=笼统拒绝（不可探测）」）
+    if (this.opts.tenant && !this.opts.tenant.visible(from, m.to)) {
+      this.reply(connId, { type: "ROUTE_MISS", to: m.to });
       return;
     }
     const target = this.connOf.get(m.to);

@@ -1,8 +1,10 @@
 // Cloudflare 形态冒烟：起 `wrangler dev`（workerd 本地运行，不需要账号），
 // 等健康检查就绪后跑与 Node 形态相同的 bridgeSmoke 协议断言。
 import { spawn, execSync } from "node:child_process";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { WebSocket } from "ws";
-import { bridgeSmoke } from "../../cloud-bridge/scripts/smoke.js";
+import { bridgeSmoke, tenantSmoke } from "../../cloud-bridge/scripts/smoke.js";
 
 let failures = 0;
 function assert(cond: unknown, msg: string): asserts cond {
@@ -15,7 +17,7 @@ function assert(cond: unknown, msg: string): asserts cond {
   }
 }
 
-const PORT = 8791;
+const PORT = 8793; // 8791 常被他会在跑的 wrangler dev 占（本机多 worktree 并行）
 const TOKEN = "changeme-cloudtoken"; // 与 wrangler.toml [vars] 保持一致
 const root = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
@@ -45,12 +47,21 @@ function clearStale(): void {
 }
 clearStale();
 
-const proc = spawn("npx", ["wrangler", "dev", "--port", String(PORT)], {
+// T1a：--var 注入 ADMIN_KEY（wrangler dev 本地形态；生产走 wrangler secret put）
+const ADMIN_KEY = "cf-dev-admin-key-0123456789abcdef";
+const WRANGLER_BIN = "/Users/xdd/.npm/_npx/32026684e21afda6/node_modules/.bin/wrangler";
+const proc = spawn(WRANGLER_BIN, ["dev", "--port", String(PORT), "--var", `ADMIN_KEY:${ADMIN_KEY}`], {
   cwd: root,
   shell: true,
   stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
 });
+// T1a：DO storage 本地持久（.wrangler/state）跨 wrangler dev 存续——租户名册会带着
+// 上一轮矩阵的 revoked/dev 状态进下一轮（实测：上轮被踢的 RLA 本轮 connect 即拒）。
+// 产品面持久是验收点（重启不丢名册）；测试面每轮清 state=矩阵可重入
+try {
+  rmSync(join(root, ".wrangler", "state"), { recursive: true, force: true });
+} catch { /* 无旧态=干净 */ }
 proc.stdout.on("data", (d) => process.stdout.write(`[wrangler] ${d}`));
 proc.stderr.on("data", (d) => process.stderr.write(`[wrangler] ${d}`));
 
@@ -105,6 +116,9 @@ try {
       "安全响应头: 出口统一补齐（nosniff/referrer/frame/HSTS）");
   }
   await bridgeSmoke(`ws://127.0.0.1:${PORT}`, TOKEN, assert);
+
+  // T1a 租户全链矩阵（与 Node 形态同一 tenantSmoke=同构断言；DO storage 持久面）
+  await tenantSmoke(`ws://127.0.0.1:${PORT}`, TOKEN, ADMIN_KEY, assert);
 
   // 轮询传输的发现帧（现实拓扑：relay 走 ws 上报 rk，浏览器被代理掐 ws 时降级 poll）：
   // POST disc → 桥回 RELAYS 入 poll 队列 → GET 取回，与 ws 路径行为一致。

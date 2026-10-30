@@ -4,6 +4,7 @@
 // ../../cloud-bridge/src/router.ts 的 CloudRouter，协议完全一致。
 import { DurableObject } from "cloudflare:workers";
 import { CloudRouter } from "../../cloud-bridge/src/router.ts";
+import { TenantService, type TenantDb, type TenantStore } from "../../cloud-bridge/src/tenant.ts";
 
 interface Env {
   CLOUD_TOKEN: string;
@@ -11,6 +12,23 @@ interface Env {
   PUBLIC_TOKEN?: string; // 可选：开源公共桥场景的公开 token（与 CLOUD_TOKEN 任一匹配即放行，连接统一受 DO 内限流保护）
   ROUTER: DurableObjectNamespace<RouterDO>;
   ASSETS?: Fetcher; // [assets] 静态托管绑定：/app 路径映射网页控制台
+  // T1a（PRD §4.4）：桥主密钥（wrangler secret put ADMIN_KEY）。在场=租户层开启
+  //（名册/登录流/过滤六触点）；缺省=纯配对模型现状零差异（渐进开关 §5）
+  ADMIN_KEY?: string;
+}
+
+// DO storage 形态租户名册（PRD §4.5：CF=RouterDO storage 单键整库）——
+// 与 Node 形态 FileStore 同一 TenantStore 接口，双形态同构的落点
+class DoStore implements TenantStore {
+  constructor(private ctx: DurableObjectState) {}
+  async load(): Promise<TenantDb | null> {
+    const db = (await this.ctx.storage.get<TenantDb>("tenant-db")) ?? null;
+    if (db && db.v !== 1) return null;
+    return db;
+  }
+  async save(db: TenantDb): Promise<void> {
+    await this.ctx.storage.put("tenant-db", db);
+  }
 }
 
 // #28 审查补：/view/ results POST 每 IP 限流窗（isolate 内存级，见使用处注释）
@@ -404,6 +422,27 @@ export class RouterDO extends DurableObject {
   // 同 dev 重连时新旧 connId 不同，CloudRouter 的顶替守卫才不会误判
   // HTTP 长轮询会话（connId = "poll:"+sid）没有 WebSocket，下行帧入队等 GET 来取
   private polls = new Map<string, { dev: string; queue: string[]; resolver: (() => void) | null; lastSeen: number; closed: boolean }>();
+  // T1a 租户服务（ADMIN_KEY 在场才装配）：constructor 里建（router 字段就绪后）
+  private tenantSvc: TenantService | null = null;
+  constructor(ctx: DurableObjectState, private env: Env) {
+    super(ctx, env);
+    if (this.env.ADMIN_KEY) {
+      this.tenantSvc = new TenantService({
+        store: new DoStore(ctx),
+        adminKey: this.env.ADMIN_KEY,
+        send: (connId, frame) => this.deliver(connId, frame),
+        onKick: (dev) => {
+          const conn = this.router.connOfDev(dev);
+          if (conn) {
+            this.router.unregister(conn);
+            this.closeConn(conn, 4003, "revoked");
+            console.log(`[cloud-bridge] kick dev=${dev} live line closed`);
+          }
+        },
+      });
+      this.router.setTenant(this.tenantSvc);
+    }
+  }
   private router = new CloudRouter({
     hooks: {
       send: (connId, frame) => {
@@ -552,11 +591,27 @@ export class RouterDO extends DurableObject {
     console.log(`[do-life] attach dev=${dev} conn=${"?"} replaced=${replaced} ip=${req.headers.get("CF-Connecting-IP") ?? "?"}`);
 
     const connId = crypto.randomUUID();
+    // T1a 连接准入（adapter 层双保险，与 Node 桥同刀）：revoked 恒拒+dtok 验签。
+    // 拒绝发生在 acceptWebSocket 之前——连接不进路由表（外部视角=未注册）
+    if (this.tenantSvc) {
+      const dtok = url.searchParams.get("dtok") ?? undefined;
+      const admit = await this.tenantSvc.checkAdmission(dev, dtok).catch(() => ({ ok: false as const, reason: "admission error" }));
+      if (!admit.ok) {
+        console.log(`[cloud-bridge] reject admission dev=${dev}: ${admit.reason}`);
+        return new Response("device rejected", { status: 401 });
+      }
+    }
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], [dev, connId]);
     // rk 进 attachment：DO 休眠唤醒 rehydrate 重建路由表时带回，发现帧不因唤醒丢公钥
     pair[1].serializeAttachment(JSON.stringify({ dev, connId, rk, wanTo: wanTo || undefined, ip: req.headers.get("CF-Connecting-IP") }));
-    this.router.register(connId, dev, rk || undefined);
+    try {
+      this.router.register(connId, dev, rk || undefined);
+    } catch (e) {
+      // T1a：revoked register 抛（触点①）——accept 后立即掐线
+      try { pair[1].close(4003, "device revoked"); } catch { /* 已关 */ }
+      console.log(`[cloud-bridge] register rejected dev=${dev}: ${e instanceof Error ? e.message : e}`);
+    }
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -607,7 +662,12 @@ export class RouterDO extends DurableObject {
       this.polls.set(sid, p);
     }
     p.lastSeen = Date.now();
-    this.router.register("poll:" + sid, p.dev);
+    try {
+      this.router.register("poll:" + sid, p.dev);
+    } catch {
+      // T1a：revoked 设备 poll 会话同样拒（同钥拒重入——poll 兜底传输不是绕道口）
+      return null;
+    }
     return p;
   }
 
@@ -639,12 +699,55 @@ export class RouterDO extends DurableObject {
   // 休眠唤醒后 CloudRouter 内存表已丢，但 WebSocket 与附件还在运行时：
   // 首个事件到达时按附件重建路由表，否则 handleFrame 全部静默丢弃、对端 ROUTE_MISS
   private rehydrated = false;
+  // T1a 租户管理帧回执出口：poll 会话入队 / ws 直发（不拆 wan 信封——管理帧
+  // 只回发起连接，wan 连接的上行恒为信封形态到不了管理帧分支）
+  private deliver(connId: string, frame: string): void {
+    if (connId.startsWith("poll:")) {
+      const s = this.polls.get(connId.slice(5));
+      if (s && !s.closed) {
+        if (s.queue.length >= 500) s.queue.shift();
+        s.queue.push(frame);
+        s.resolver?.();
+        s.resolver = null;
+      }
+      return;
+    }
+    for (const ws of this.ctx.getWebSockets(connId)) {
+      try {
+        ws.send(frame);
+      } catch { /* 濒死连接——丢弃回执 */ }
+    }
+  }
+  private closeConn(connId: string, code: number, reason: string): void {
+    if (connId.startsWith("poll:")) {
+      const s = this.polls.get(connId.slice(5));
+      if (s) {
+        s.closed = true;
+        s.resolver?.();
+        s.resolver = null;
+        this.polls.delete(connId.slice(5));
+      }
+      return;
+    }
+    for (const ws of this.ctx.getWebSockets(connId)) {
+      try {
+        ws.close(code, reason);
+      } catch { /* 已在关闭流程 */ }
+    }
+  }
   private rehydrate(): void {
     if (this.rehydrated) return;
     this.rehydrated = true;
     for (const ws of this.ctx.getWebSockets()) {
       const a = this.attachOf(ws);
-      if (a?.dev && a.connId) this.router.register(a.connId, a.dev, a.rk || undefined);
+      if (a?.dev && a.connId) {
+        try {
+          this.router.register(a.connId, a.dev, a.rk || undefined);
+        } catch {
+          // T1a：revoked 设备休眠唤醒重建时 register 抛——掐线（同钥拒重入）
+          try { ws.close(4003, "device revoked"); } catch { /* 已关 */ }
+        }
+      }
     }
   }
 

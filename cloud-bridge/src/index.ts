@@ -4,6 +4,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { loadConfig } from "./config.js";
 import { CloudRouter } from "./router.js";
+import { TenantService, type TenantStore } from "./tenant.js";
+import { FileStore } from "./store-file.js";
 
 // 网页端静态文件目录（仓库 web-console/，部署布局 /opt/cc-cloud-bridge/web-console/）
 const webDir = (name: string) => fileURLToPath(new URL(`../web-console/${name}`, import.meta.url));
@@ -42,19 +44,34 @@ const HEARTBEAT_MS = 30_000;
 const HEARTBEAT_MISS_LIMIT = 20;
 
 // Node 形态云桥：HTTP upgrade 鉴权（/cloud?token=&dev=）后交 CloudRouter。
-// 桥不持久化任何状态，重启即清空（补发由 relay 的 seq 机制负责）。
+// 桥不持久化任何状态，重启即清空（补发由 relay 的 seq 机制负责）——T1a 起租户
+// 名册例外：注入 tenantOpts 时经 TenantStore 文件持久（PRD §4.5 双形态同构）。
 // #373 /wan：手表明文透传通道——手表连 /wan?token=&dev=wt-*&to=rl-*，桥把它的
 // 明文 relay 帧包成 {to, data:{t:"wan",from,frame}} 信封交路由；relay→手表方向
 // 解信封还原明文帧。信任模型：桥可信（自家部署），仅此通道不走端到端密文。
-export function startCloudServer(port: number, token: string, extraPorts: number[] = []): {
+export interface TenantOptions {
+  adminKey: string; // 桥主（PRD §4.4 上游层；env CLOUD_ADMIN_KEY）
+  store: TenantStore;
+  strict?: () => boolean;
+}
+export function startCloudServer(port: number, token: string, extraPorts: number[] = [], tenantOpts?: TenantOptions): {
   port: number;
   close: () => Promise<void>;
   router: CloudRouter;
+  tenant: TenantService | null;
 } {
   const wss = new WebSocketServer({ noServer: true });
   const socks = new Map<string, WebSocket>();
   const wanConns = new Map<string, { ws: WebSocket; to: string }>();
   let nextId = 0;
+
+  const sendRaw = (connId: string, frame: string): void => {
+    const ws = socks.get(connId);
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    try {
+      ws.send(frame);
+    } catch { /* 半开连接——租户管理帧回执尽力而为 */ }
+  };
 
   const router = new CloudRouter({
     hooks: {
@@ -88,6 +105,26 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     },
     log: (m) => console.log(`[cloud-bridge] ${m}`),
   });
+
+  // T1a 租户服务（可选注入——缺省=纯配对模型现状，零行为差异）：
+  // 管理帧回执走 sendRaw（不拆 wan 信封——管理帧只发给发起连接）；onKick=活线断
+  const tenant = tenantOpts
+    ? new TenantService({
+        store: tenantOpts.store,
+        adminKey: tenantOpts.adminKey,
+        strict: tenantOpts.strict,
+        send: sendRaw,
+        onKick: (dev) => {
+          const conn = router.connOfDev(dev);
+          if (conn) {
+            socks.get(conn)?.close(4003, "revoked");
+            router.unregister(conn);
+            console.log(`[cloud-bridge] kick dev=${dev} live line closed`);
+          }
+        },
+      })
+    : null;
+  if (tenant) router.setTenant(tenant);
 
   const onRequest = (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -169,7 +206,9 @@ export function startCloudServer(port: number, token: string, extraPorts: number
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => {
+    // T1a 连接准入（六触点之外的 adapter 层双保险）：revoked 恒拒（同钥拒重入）；
+    // dtok 在场必须验签且 dev 一致（ph-* 随机 dev 防冒名；窗口模式缺席=回落名册双轨）
+    const attach = (ws: WebSocket): void => {
       const connId = `c${++nextId}`;
       socks.set(connId, ws);
       if (isWan) wanConns.set(connId, { ws, to: wanTo });
@@ -205,8 +244,31 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         }
         router.handleFrame(connId, data.toString());
       });
-      router.register(connId, dev, rk || undefined);
-    });
+      try {
+        router.register(connId, dev, rk || undefined);
+      } catch (e) {
+        // T1a：revoked 设备 register 抛（触点①）——握手后立即掐线
+        console.log(`[cloud-bridge] register rejected dev=${dev}: ${e instanceof Error ? e.message : e}`);
+        ws.close(4003, "device revoked");
+      }
+    };
+    if (tenant) {
+      const dtok = url.searchParams.get("dtok") ?? undefined;
+      tenant
+        .checkAdmission(dev, dtok)
+        .catch(() => ({ ok: false as const, reason: "admission error" }))
+        .then((r) => {
+          if (!r.ok) {
+            console.log(`[cloud-bridge] reject admission dev=${dev}: ${r.reason}`);
+            socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+            socket.destroy();
+            return;
+          }
+          wss.handleUpgrade(req, socket, head, (ws) => attach(ws));
+        });
+    } else {
+      wss.handleUpgrade(req, socket, head, (ws) => attach(ws));
+    }
   });
 
   const heartbeat = setInterval(() => {
@@ -238,6 +300,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
   return {
     port,
     router,
+    tenant,
     close: () =>
       new Promise((resolve) => {
         clearInterval(heartbeat);
@@ -259,8 +322,14 @@ interface HbWs extends WebSocket {
 
 function main(): void {
   const cfg = loadConfig();
-  startCloudServer(cfg.port, cfg.token, cfg.extraPorts);
-  console.log(`[cloud-bridge] listening :${cfg.port}${cfg.extraPorts.map((p) => ` :${p}`).join("")} path=/cloud`);
+  const tenantOpts = cfg.adminKey
+    ? { adminKey: cfg.adminKey, store: new FileStore(cfg.tenantDbPath ?? "data/tenants.json") }
+    : undefined;
+  startCloudServer(cfg.port, cfg.token, cfg.extraPorts, tenantOpts);
+  console.log(
+    `[cloud-bridge] listening :${cfg.port}${cfg.extraPorts.map((p) => ` :${p}`).join("")} path=/cloud` +
+      (tenantOpts ? ` tenants=on db=${cfg.tenantDbPath ?? "data/tenants.json"}` : ""),
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

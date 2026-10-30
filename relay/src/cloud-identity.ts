@@ -34,6 +34,12 @@ export interface CloudIdentity {
   importPeers(entries: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[]): number;
   // #42 设备改名（hello 顺带实名化用）：同名不写盘，改名即持久化
   renamePeer(dev: string, name: string): void;
+  // T1a 租户登录态（PRD §4.4 设备 token）：data/cloud-tenant.json 持久。
+  // loadTenantCred 返回 null=未登录；saveTenantCred 写穿；clearTenantCred 吊销/过期自清
+  tenantCredPath: string;
+  loadTenantCred(): { tenant: string; token: string; exp: number } | null;
+  saveTenantCred(cred: { tenant: string; token: string; exp: number }): void;
+  clearTenantCred(): void;
 }
 
 export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
@@ -77,6 +83,21 @@ export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
   };
   let lastPeerFlush = 0;
 
+  // T1a 租户登录态（data/cloud-tenant.json）：桥签名设备 token。损坏/过期读作 null
+  //（cloud-client 会带邀请码重登）
+  const tenantCredPath = join(dataDir, "cloud-tenant.json");
+  const loadTenantCred = (): { tenant: string; token: string; exp: number } | null => {
+    try {
+      if (!existsSync(tenantCredPath)) return null;
+      const c = JSON.parse(readFileSync(tenantCredPath, "utf-8")) as { tenant?: unknown; token?: unknown; exp?: unknown };
+      if (typeof c.tenant !== "string" || typeof c.token !== "string" || typeof c.exp !== "number") return null;
+      if (c.exp < Date.now()) return null;
+      return { tenant: c.tenant, token: c.token, exp: c.exp };
+    } catch {
+      return null;
+    }
+  };
+
   return {
     keypair,
     relayDev: devId(keypair.publicKey, "rl"),
@@ -119,6 +140,16 @@ export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
       if (!e || !name || e.name === name) return;
       e.name = name;
       persistPeers();
+    },
+    tenantCredPath,
+    loadTenantCred,
+    saveTenantCred(cred) {
+      writeFileSync(tenantCredPath, JSON.stringify(cred, null, 2), "utf-8");
+    },
+    clearTenantCred() {
+      try {
+        writeFileSync(tenantCredPath, "", "utf-8");
+      } catch { /* 尽力而为 */ }
     },
   };
 }
