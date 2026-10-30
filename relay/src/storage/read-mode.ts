@@ -117,7 +117,8 @@ export interface ReadModeDirs {
   dataDir: string;
   /** 组织目录（projects.json / confirms.json / dispatch-log.ndjson / boards）。 */
   orgDir: string;
-  /** 任务目录根（~/.claude/tasks 形态；resolveDirs 保证缺省 <dataDir>/tasks）。 */
+  /** 任务目录根（<session-uuid>/<task-id>.json 两层形态；唯一事实源=用户家 ~/.claude/tasks
+   *  ——Claude Code 任务店根，与 relay dataDir 无关）。 */
   tasksDir: string;
 }
 
@@ -126,7 +127,14 @@ export function resolveDirs(override?: Partial<ReadModeDirs>): ReadModeDirs {
   return {
     dataDir,
     orgDir: override?.orgDir ?? process.env.CCR_ORG_DIR ?? join(homedir(), ".cc-deck", "org"),
-    tasksDir: override?.tasksDir ?? join(dataDir, "tasks"),
+    // #292R 根修（task 表 0 行）：原缺省把 tasks 拼在 relay 数据目录下
+    //（旧值=data 目录下拼 tasks 子目录——不存在，实测 0 文件），而 task 唯一事实源是用户家
+    // ~/.claude/tasks（导入器头注 :2 自述；实测 2097 文件）——缺省值指向空目录，导入器
+    // 段 2「清 task 域重灌 0 行」恒产出空表（生产 checkpoint 实勘：data/tasks 键
+    // lineCount=0 记账在案）。非设计性停灌（CCR_SESSION_IMPORT 只停 session 域，
+    // task 照灌——import-session-task.ts :476 注释）。修=缺省对齐事实源 + 补
+    // CCR_TASKS_DIR env 口径（对齐 dataDir/orgDir 双 override 惯例，沙盒/迁移可指它处）。
+    tasksDir: override?.tasksDir ?? process.env.CCR_TASKS_DIR ?? join(homedir(), ".claude", "tasks"),
   };
 }
 

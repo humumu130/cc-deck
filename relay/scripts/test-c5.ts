@@ -14,6 +14,7 @@ for (const d of ["org/", "data/"]) { try { rmSync(SB(d), { recursive: true, forc
 if (process.env.KEEP_READ_MODE !== "1") delete process.env.CCR_STORAGE_READ_MODE; // 缺省 sqlite 档
 process.env.CCR_ORG_DIR = SB("org/");
 process.env.CCR_DATA_DIR = SB("data/");
+process.env.CCR_TASKS_DIR = SB("data/tasks-none/"); // #292R 审查 A-P1-2：空目录隔离（同 c2-c4）
 
 let pass = 0, fail = 0;
 function ok(cond: boolean, name: string, extra = ""): void {

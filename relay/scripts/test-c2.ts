@@ -18,6 +18,7 @@ for (const d of ["../data/test-c2-org/", "../data/test-c2-data/", "../data/test-
 }
 process.env.CCR_ORG_DIR = SB("../data/test-c2-org/");
 process.env.CCR_DATA_DIR = SB("../data/test-c2-data/");
+process.env.CCR_TASKS_DIR = SB("../data/test-c2-tasks-none/"); // #292R 审查 A-P1-2：空目录隔离——防新缺省（~/.claude/tasks）把生产任务文件全量灌进沙盒
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_PARENT_PID;
 delete process.env.CCR_RELAY_CHILD;

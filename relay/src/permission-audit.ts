@@ -13,6 +13,7 @@ import { ensureStore } from "./storage/read-mode.js";
 import { loadSqliteDriver } from "./storage/sqlite.js";
 import { orgDir } from "./org.js";
 import type { StoragePort } from "./storage/port.js";
+import { resolveDirs } from "./storage/read-mode.js"; // #292R 审查 A-P0-1：audit 与主链同源解析
 
 /** 目录域/环境域三值（§6.1 production/sandbox；unknown=判不出 fail-closed）。 */
 export type DirScope = "production" | "sandbox" | "unknown";
@@ -90,10 +91,14 @@ export interface PermissionAuditRow {
   created_at: number;
 }
 
-/** 审计端口（ensureStore 端口缓存复用——热写零快进税；tasksDir 缺省 <dataDir>/tasks
- * 与 resolveDirs 缺省口径一致）。#158 批1：sqlite 驱动不可用（原生二进制缺失/平台
- * 不匹配）或建库失败时返回 null——审计是尽力而为面（§6.3 绝不阻断主路径），调用方
- * 拿 null 即跳过落库（appendPermissionAudit/readPermissionAudit 已 null 容忍）。 */
+/** 审计端口（ensureStore 端口缓存复用——热写零快进税；tasksDir 走 resolveDirs 同源
+ * 解析——#292R 审查 A-P0-1：原硬编码 join(dataDir, "tasks") 是旧缺省拼法的旁路残留，
+ * 与修复后的 resolveDirs 缺省形成**乒乓清灌**（audit 调用者的旧 path 键在 checkpoint
+ * 无记录→task 域段 2 判失效→DELETE FROM task 灌 0 行；8 个权限审计热写点每次权限确认
+ * 触发一轮——生产实测 task 2097 被清回 0 的同型机制）。收敛单口后 audit 与主链同键
+ * 快进互不踩）。#158 批1：sqlite 驱动不可用（原生二进制缺失/平台不匹配）或建库失败
+ * 时返回 null——审计是尽力而为面（§6.3 绝不阻断主路径），调用方拿 null 即跳过落库
+ * （appendPermissionAudit/readPermissionAudit 已 null 容忍）。 */
 export function auditStore(dataDir: string): StoragePort | null {
   const driver = loadSqliteDriver();
   if (!driver.ok) {
@@ -101,7 +106,8 @@ export function auditStore(dataDir: string): StoragePort | null {
     return null;
   }
   try {
-    return ensureStore({ dataDir, orgDir: orgDir(), tasksDir: join(dataDir, "tasks") });
+    // #292R：与主链同源（resolveDirs 单口——CCR_TASKS_DIR env + ~/.claude/tasks 缺省）
+    return ensureStore(resolveDirs({ dataDir }));
   } catch (e) {
     warnAuditSkipped(e instanceof Error ? e.message : String(e));
     return null;
