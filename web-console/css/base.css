@@ -430,9 +430,16 @@
        区别由选中底承载；用户实拍「标题消失」=旧包橙底+深字，绿/灰底+深字两代均已不复现） */
     /* v8 scard 件：头像 tile / 点分 meta 行 / 活跃时间弱化 / 分组头 */
     #d-team .team-ava { flex: 0 0 auto; width: 26px; height: 26px; margin-right: 9px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--line); color: var(--brand-hover); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-    #d-team .team-meta { color: var(--dim); }
+    /* UI 精修二批（用户实锤②）：团队卡对齐会话卡语言——第二行（席位/待确认/活跃元信息）
+       淡化到 --faint 同族；源标签完整显示不截断（会话卡口径：极端长才 ellipsis+title 悬浮） */
+    #d-team .team-meta { color: var(--faint); }
     #d-team .team-meta .icon-inline { width: 12px; height: 12px; }
     #d-team .team-ago { color: var(--faint); }
+    /* 完整版（补全 WIP 半步）：全局 .queue-card .identity-cluster 是 absolute 右贴+
+       nowrap（WIP 只覆写了 wrap 没摘 absolute——右下角悬浮溢出截断的根因没除）。
+       对齐会话卡 srow-r3 语言：静态流式行、靠左、换行铺满、极端长才 ellipsis */
+    #d-team .queue-card[data-team-project] .identity-cluster { position: static; right: auto; bottom: auto; justify-content: flex-start; margin: 5px 0 0; flex-wrap: wrap; gap: 4px; }
+    #d-team .queue-card[data-team-project] .src-cap { max-width: 100%; flex: 0 1 auto; }
     #d-team .team-grp { display: flex; align-items: center; gap: 5px; margin: 10px 2px 5px; font-size: var(--fs-micro, 10.5px); font-weight: 600; color: var(--faint); letter-spacing: .3px; }
     #d-team .team-grp .icon-inline { width: 10px; height: 10px; }
     #d-team .team-grp-n { padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-variant-numeric: tabular-nums; }
@@ -2046,6 +2053,14 @@
        意义，移除掉简洁」（品牌图/codex 修复后色点更无存在必要；三条 :has 隐藏规则
        同批清，隐藏条件因 b2EngineBadge 未包 badge-brand 从未生效过） */
     .engine-badge .badge-brand { display: inline-flex; align-items: center; }
+    /* UI 精修二批：badge-brand 脱离 engine-badge 上下文的通用档（notify 行/移动 kv 行/
+       消息作者/上下文表/移动成员头像）——10.8 默认，既有高特异覆盖（ai-ava 24px）不动 */
+    .badge-brand { display: inline-flex; align-items: center; flex: none; }
+    .badge-brand svg, .badge-brand img { width: 10.8px; height: 10.8px; display: block; }
+    .badge-brand img { object-fit: contain; }
+    .nrow-eng { display: inline-flex; margin-right: 4px; vertical-align: -1px; } /* 通知行引擎迷你标 */
+    #stage-mobile .avatar .badge-brand svg, #stage-mobile .avatar .badge-brand img { width: 14px; height: 14px; } /* 移动成员卡头像档 */
+    .v8-swico.engine-badge { gap: 5px; } /* v8 引擎行：图标与文字同档间距 */
     .engine-badge .badge-brand svg, .engine-badge .badge-brand img { width: 10.8px; height: 10.8px; display: block; } /* #248：12×0.9=10.8，列表/详情 head 统一档 */
     .engine-badge .badge-brand img { object-fit: contain; } /* W-CSSMICRO2：同上，徽章 10.8 方盒同病灶（详情 head 同族走本全局规则） */
     .engine-badge .engine-icon { width: 10.8px; height: 10.8px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -2885,3 +2900,15 @@ div.wq-opt { cursor: default; }
 .ver-mismatch-banner[data-mismatch="core"] { border-bottom-color: var(--error); color: var(--error); }
 html[data-theme="light"] .ver-mismatch-banner { background: #fdf6e3; }
 html[data-theme="light"] .ver-mismatch-banner[data-mismatch="core"] { background: #fdeaea; }
+
+/* UI 精修二批（用户实锤③）：X0 入队提示收折叠区——折叠=一行低调小链（faint→brand 悬停），
+   展开=人话一句话+命令 code+复制钮；CLI 运维指引退出主界面常驻 */
+.team-x0 { border-top: 1px dashed var(--line-soft); padding: 4px 14px 10px; }
+.team-x0 summary { list-style: none; cursor: pointer; color: var(--faint); font-size: var(--fs-C); user-select: none; }
+.team-x0 summary::-webkit-details-marker { display: none; }
+.team-x0 summary:hover, .team-x0[open] summary { color: var(--brand); }
+.team-x0-body { margin-top: 6px; color: var(--dim); font-size: var(--fs-B); line-height: 1.6; }
+.team-x0-cmd { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; flex-wrap: wrap; }
+.team-x0-cmd code { font-family: var(--mono); font-size: var(--fs-B); color: var(--text); background: var(--surface2); border: 1px solid var(--line-soft); border-radius: 6px; padding: 3px 8px; }
+.team-x0-sub { color: var(--faint); font-size: var(--fs-C); margin-top: 6px; }
+.team-x0-sub code { font-family: var(--mono); background: var(--surface2); border-radius: 4px; padding: 0 4px; }

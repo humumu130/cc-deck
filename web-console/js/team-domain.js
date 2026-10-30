@@ -40,7 +40,9 @@
                 window.__ccDeckAnchorFormatOk = anchorFormatOk;
                 const group = () => state.projects?.find((item) => item.id === state.selected);
                 const engine = (key) => engines.get(key) || [key || "引擎未知", ""];
-                const engineBadge = (key) => { const value = engine(key); return '<span class="engine-badge ' + value[1] + '">' + escape(value[0]) + "</span>"; };
+                const engineBadge = (key) => { const value = engine(key); return window.__ccDeck005EngineBadgeHtml // UI 精修二批：品牌单表借道（成员卡 identity-cluster 徽章补图标）
+                    ? window.__ccDeck005EngineBadgeHtml(key, escape(value[0]))
+                    : '<span class="engine-badge ' + value[1] + '">' + escape(value[0]) + "</span>"; };
                 // W-UIPOLISH ⑧：源名统一走 sourceDisplayName 映射（localhost→本机）——
                 // 件十三只清了 9 处，团队域整域漏网（用户实锤团队名称旁仍挂 localhost）
                 const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));

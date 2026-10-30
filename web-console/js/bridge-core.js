@@ -41,6 +41,8 @@
                 const engineBadge = (engineKey) => {
                   const key = engineKey || "claude";
                   const pair = ENGINES[key] || [key, ""];
+                  // UI 精修二批：品牌单表借道（session-domain 单口；旧 sprite 映射降级兜底）
+                  if (window.__ccDeck005EngineBadgeHtml) return window.__ccDeck005EngineBadgeHtml(pair[1], escapeHtml(pair[0]));
                   return '<span class="engine-badge ' + escapeHtml(pair[1]) + '"><svg class="engine-icon" aria-hidden="true"><use href="#icon-' + engineIcon(pair[1]) + '"></use></svg>' + escapeHtml(pair[0]) + "</span>";
                 };
                 const toast = (() => {
