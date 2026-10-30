@@ -1115,6 +1115,9 @@ export function moveBoardEntry(
   if (e.transitions[e.transitions.length - 1]?.status !== t.status) e.transitions.push({ status: t.status, ts: Date.now() });
   if (t.review_required === true) e.review_required = true;
   else if (t.review_required === false) delete e.review_required;
+  // 基线债②同类缺口：存量无 ts 旧卡（schema 收严前落盘）搬卡即回填，防
+  // 「必需字段 ts 缺失」拒写——同 moveEntryByDispatch 口径（详见该函数头注）
+  if (typeof e.ts !== "number") e.ts = Date.now();
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
   // W-CMDIMPL T0b：reducer 写严格——搬卡改后态 schema 校验拒写
@@ -1144,6 +1147,11 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
   if (!e || e.status === to) return;
   const jPrev = sideOf(e);
   e.status = to;
+  // 基线债②（1029 清还·公司侧/CI 同红）：schema 收严（ts 必需）前落盘的存量卡无 ts
+  // 字段——搬卡改后态过闸被「必需字段 ts 缺失」拒写，F-08 中断退 todo 断链（活没
+  // 交付卡死 doing）。upsert 建卡口恒带 ts（:318），无 ts 卡只可能是旧文件/手写
+  // 残留：搬卡即回填（updated_at 同刻），一次落盘后随文件持久——旧卡兼容不破闸
+  if (typeof e.ts !== "number") e.ts = Date.now();
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
   // W-CMDIMPL T0b：reducer 写严格——裸设置器同样过闸（第四写口不断链）；void 返回

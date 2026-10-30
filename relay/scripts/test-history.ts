@@ -182,7 +182,14 @@ const mgr = new SessionManager(bus2, cfg);
 const n = mgr.adopt(reduceHistory(kept2));
 assert(n === 1, "收养 1 个历史会话");
 const snap = mgr.snapshot();
-assert(snap.length === 1 && snap[0].historical === true && snap[0].title === "t", "快照含历史会话");
+// 基线债①（1029 清还）定性（考古实证）：M1.1（e39a29ce）起 adopt() 对收养会话
+// 无条件 rs.state.historical = true（断言当时成立）；#247（4bac2966，W-READONLY-KILL
+// 用户铁口径 2026-10-24「收编不降级」）移除该无条件置位——historical 只留给
+// 「重启时被打断」的会话（reduceHistory 尾环对 WORKING/WAITING 无终态置位），干净
+// 终态（事件流含 SESSION_DONE）收养卡不再降级只读。本断言自 #247 起恒红=落后于
+// 刻意语义演进，非产品回归；按现行口径断言：收养卡在场、标题保留、不降级只读
+//（historical 不置位；STOP/MESSAGE 拒绝由 agent 不在场保证——下方两断言仍在）
+assert(snap.length === 1 && snap[0].historical !== true && snap[0].title === "t", "快照含历史会话（干净终态收养不降级只读——#247 口径，historical 不置位）");
 const ack = mgr.handleCommand(
   { command_id: "c1", type: "COMMAND_STOP", ts: Date.now(), payload: { session_id: snap[0].session_id } },
   "test-client",

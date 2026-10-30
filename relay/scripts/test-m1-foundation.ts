@@ -242,13 +242,17 @@ try {
   // ---------- 轴② 迁移幂等：已迁库重跑零变化 + 空库直跑全量 DDL ----------
   console.log("轴② 迁移幂等:");
   const masterBefore = JSON.stringify(port.query("SELECT name, sql FROM sqlite_master ORDER BY name"));
+  // 基线债④（1029 清还）：版本号不再写死——migrations 尾版动态读（schema.ts 随批次
+  // 增迁，写死 to=3/user_version=3 在 v4+ 上线即恒红；m-observ 遗留 3 同款建议）
+  const TAIL = migrations.at(-1)!.version;
+  const ALL_APPLIED = JSON.stringify(migrations.map((m) => m.version));
   const re = runMigrations(port, migrations);
-  assert(re.applied.length === 0 && re.from === 3 && re.to === 3, `已迁库重跑零迁移（applied=[]，from/to=3，实际 applied=${JSON.stringify(re.applied)}）`);
-  assert(JSON.stringify(port.query("SELECT name, sql FROM sqlite_master ORDER BY name")) === masterBefore && (port.query<Record<string, number>>("PRAGMA user_version")[0]?.user_version) === 3, "重跑后 schema 零变化（sqlite_master 全等+user_version=3）");
+  assert(re.applied.length === 0 && re.from === TAIL && re.to === TAIL, `已迁库重跑零迁移（applied=[]，from/to=尾版${TAIL}，实际 applied=${JSON.stringify(re.applied)} from=${re.from} to=${re.to}）`);
+  assert(JSON.stringify(port.query("SELECT name, sql FROM sqlite_master ORDER BY name")) === masterBefore && (port.query<Record<string, number>>("PRAGMA user_version")[0]?.user_version) === TAIL, `重跑后 schema 零变化（sqlite_master 全等+user_version=尾版${TAIL}）`);
   const emptyPort = createSqlitePort({ dataDir, filename: "empty-migrate.sqlite3" });
   emptyPort.open();
   const reEmpty = runMigrations(emptyPort, migrations);
-  assert(JSON.stringify(reEmpty.applied) === "[1,2,3]" && ALL_18.every((t) => tableNames(emptyPort).includes(t)), "空库直跑全量 DDL：applied=[1,2,3] 且 18 表全建");
+  assert(JSON.stringify(reEmpty.applied) === ALL_APPLIED && ALL_18.every((t) => tableNames(emptyPort).includes(t)), `空库直跑全量 DDL：applied=[1..${TAIL}] 且 18 表全建`);
   emptyPort.close();
 
   // ---------- 轴③+⑤a 断点续跑+events 批原子性（独立库实验场，恢复走 ensureStore 主路径） ----------
