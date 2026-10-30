@@ -2912,3 +2912,73 @@ html[data-theme="light"] .ver-mismatch-banner[data-mismatch="core"] { background
 .team-x0-cmd code { font-family: var(--mono); font-size: var(--fs-B); color: var(--text); background: var(--surface2); border: 1px solid var(--line-soft); border-radius: 6px; padding: 3px 8px; }
 .team-x0-sub { color: var(--faint); font-size: var(--fs-C); margin-top: 6px; }
 .team-x0-sub code { font-family: var(--mono); background: var(--surface2); border-radius: 4px; padding: 0 4px; }
+
+/* ==================== W-UIV3 徽章 token 层 + 项目卡 v3 + 聚合两行制（1030 用户令，纯追加段） ==================== */
+/* 本段是 W-UIV3 视觉大修唯一落点（与 ui-polish-round2 分界：不触碰 .source-badge/.engine-badge/
+   标签对齐与引擎图标位既有规则；类名全新命名空间 cc-badge/pc3-/v3-/psec-grid，零重名）。
+   设计口径：B1 唯一徽章 token=20px 高/999px 圆/11px/500；B2 降级规则=非活跃幽灵样式
+   （透明/微透底+同色系描边），饱和实底仅保留给「运行中」态——每屏实底胶囊数与运行中行数
+   一致（状态本身稀疏，常态 ≤ 个位数）。主题：暗色直落，html[data-theme=light] 覆写。 */
+
+/* ---------- B1 徽章 token 层（唯一 Badge 组件；后续全站替换的落点） ---------- */
+.cc-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: none; height: 20px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+.cc-badge.is-neutral { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.10); color: #9ca3af; }
+.cc-badge.is-accent { background: rgba(96,165,250,.15); border-color: rgba(96,165,250,.32); color: #60a5fa; }
+.cc-badge.is-live { background: rgba(251,191,36,.15); border-color: rgba(251,191,36,.32); color: #fbbf24; }
+.cc-badge.is-run { background: rgba(53,220,151,.16); border-color: rgba(53,220,151,.42); color: var(--done); } /* 运行中=全站唯一保留饱和实底语义的态（C5 绿） */
+.cc-badge.is-warn { background: rgba(229,137,91,.13); border-color: rgba(229,137,91,.34); color: var(--st-blocked); } /* 待填/待处理橙（C5） */
+.cc-badge.is-alert { background: rgba(224,138,133,.14); border-color: rgba(224,138,133,.34); color: #E08A85; } /* 需行动降饱和红（A3） */
+html[data-theme="light"] .cc-badge.is-neutral { background: rgba(15,23,42,.05); border-color: rgba(15,23,42,.12); color: #6b7280; }
+html[data-theme="light"] .cc-badge.is-accent { background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.28); color: #2563eb; }
+html[data-theme="light"] .cc-badge.is-live { background: rgba(180,83,9,.12); border-color: rgba(180,83,9,.28); color: #b45309; }
+html[data-theme="light"] .cc-badge.is-warn { background: rgba(194,65,12,.10); border-color: rgba(194,65,12,.28); color: #c2410c; }
+html[data-theme="light"] .cc-badge.is-alert { background: #FDE8E8; border-color: rgba(192,57,43,.28); color: #C0392B; } /* A3 拍板值原样（浅色域） */
+
+/* ---------- A 项目卡 v3 皮肤层（.pc3 挂在 .pc2 骨架上——数据钩子/交互零变化） ---------- */
+#d-project .queue-card.pc3 { gap: 3px; padding: 12px 14px; margin-bottom: 8px; block-size: auto; min-height: 0; } /* A7 密度统一；block-size:auto 解密度定高裁切（三行卡随内容长高，探针实锤第三行被裁半） */
+#d-project .queue-card.pc3 .pc2-name { font-size: 14px; font-weight: 600; } /* A4 标题 14/600 */
+.pc3-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); } /* A2 点语言三态：红/蓝/灰 */
+.pc3-dot.is-act { background: var(--error); }
+.pc3-dot.is-run { background: var(--info); }
+.pc3-dot.is-idle-o { background: transparent; border: 1.5px solid var(--faint); width: 7px; height: 7px; } /* 未立项=灰空心（降为标题前小圆点语义） */
+#d-project .queue-card.pc3 .pc3-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: 11px; font-weight: 400; font-family: var(--mono); } /* A4 路径 11/400 三级色。中段省略由 pathMeta「…/」前缀承担（rtl 法实测会重排路径段序——~/ 尾挂混乱，弃） */
+#d-project .queue-card.pc3 .pc3-meta { color: var(--dim); font-size: 12px; font-weight: 400; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* A1 统计去胶囊：纯文本元信息行（12px 次级 · 分隔，用户点名项） */
+#d-project .queue-card.pc3 .pc2-r1 .cc-badge.is-alert { margin-left: auto; } /* 唯一胶囊位右贴（标题行） */
+#d-project .queue-card.pc3 .pc2-r2 { position: static; }
+#d-project .queue-card.pc3 .pc2-r2 .project-open-btn { position: absolute; top: 10px; right: 10px; margin: 0; } /* A8 文件夹图标绝对定位右上（不再挤路径行） */
+/* A7 分组标题：12px/500 + 计数右对齐（项目列表容器内收口，不波及会话/通知的 queue-group） */
+#d-project [data-project-queue] .queue-group { display: flex; align-items: baseline; gap: 6px; margin: 14px 2px 6px; color: var(--dim); font-size: 12px; font-weight: 500; letter-spacing: .02em; }
+#d-project [data-project-queue] .queue-group::after { content: attr(data-count); margin-left: auto; color: var(--faint); font-weight: 500; font-variant-numeric: tabular-nums; }
+/* A8 列表底 24px 渐隐遮罩（滚动边缘暗示） + 新建钮 24×24 图标钮 */
+#d-project [data-project-queue] { position: relative; }
+#d-project [data-project-queue]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 24px; pointer-events: none; background: linear-gradient(transparent, var(--surface1)); z-index: 1; }
+#d-project .queue-head .icon-btn { width: 24px; height: 24px; font-size: 16px; border-radius: 6px; }
+
+/* ---------- C 聚合 Dashboard 两行制（vrow.v3） ---------- */
+#d-project .vrow.v3 { align-items: flex-start; padding: 9px 12px; gap: 10px; }
+#d-project .vrow.v3 .t { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; } /* C2 两行制：标题行+元信息行（团队卡不再同行） */
+#d-project .vrow.v3 .t b { font-weight: 500; font-size: 13px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; } /* C1 两行 line-clamp 消灭硬切断括号；C4 标题 500（粗体只留状态词与数字） */
+#d-project .vrow.v3 .t b.v3-id { font-family: var(--mono); font-size: 12px; letter-spacing: .03em; } /* C3 裸 UUID 前 8 位等宽（title 悬停全量） */
+#d-project .vrow.v3 .t .s { margin-left: 0; display: flex; align-items: center; gap: 6px; color: #6b7280; font-size: 11px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* B4 状态/元信息文字降权 11/400/#6b7280 */
+html[data-theme="light"] #d-project .vrow.v3 .t .s { color: #6b7280; }
+#d-project .vrow.v3 .k { width: 72px; margin-left: auto; align-self: center; } /* C5 右侧固定 72px 徽章列对齐 */
+.v3-prog { flex: none; width: 56px; height: 4px; border-radius: 2px; background: var(--line-soft); overflow: hidden; } /* C8 验收单迷你进度条 */
+.v3-prog i { display: block; height: 100%; border-radius: 2px; background: var(--done); }
+/* C7 宽窗两列网格（minmax 420px；980px 以下单列）；C8 分区去整宽分隔线改留白 */
+#d-project .workspace-body .psec-grid { display: grid; grid-template-columns: 1fr; column-gap: 28px; align-items: start; }
+@media (min-width: 980px) {
+  #d-project .workspace-body .psec-grid { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+}
+#d-project .proj-section + .proj-section { border-top: 0; padding-top: 2px; } /* C8 整宽分隔线退役，纯留白分区 */
+#d-project .psec h5 .jump { color: var(--dim); } /* C8 「全部 N 条 ▾」与状态橙解耦：默认次级灰 */
+#d-project .psec h5 .jump:hover { color: var(--info); text-decoration: none; } /* hover 蓝 accent */
+/* C8 页头 live 行：结构化圆点（对齐）+ 需行动数字橙 */
+#d-project .workspace-head .live { display: inline-flex; align-items: center; gap: 6px; }
+#d-project .workspace-head .live .live-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--done); }
+#d-project .workspace-head .live .live-hot { color: var(--st-blocked); font-weight: 500; }
+/* B3 括号计数语言退役：本域计数一律「词 N」直排或 cc-badge，不再出方括号计数 */
+
+/* ---------- A/B 移动端项目卡同步（pc2m：统计去胶囊 + 幽灵态徽章） ---------- */
+.mobile-project-card .pc3-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 12px; }
+.mobile-project-card .pc2m-r1 .cc-badge.is-neutral { background: transparent; border-color: rgba(255,255,255,.14); } /* B2 非活跃幽灵样式（已挂起/已归档） */
+html[data-theme="light"] .mobile-project-card .pc2m-r1 .cc-badge.is-neutral { background: transparent; border-color: rgba(15,23,42,.16); }

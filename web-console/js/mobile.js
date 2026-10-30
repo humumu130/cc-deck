@@ -724,11 +724,10 @@
         // #282 MOB sig 跳帧：项目卡/聚合 lane 内容未变零重建
         if (cards) { const h = projects.length ? projects.map((p) => {
           const cnt = sessions.filter((s) => getSessionProject(s) === p.name).length;
-          // project-cards-v2：与桌面 pc2 同源词表/徽章盒——r1 名称+非活跃态徽章（异常显性、
-          // 常态安静）/r2 路径 truncate+会话计数徽章。旧三列栅格（22px 图标列错列+tag 跨两行
-          // +孤立文件夹图标）退役；「活跃」默认态不再占位徽章
-          const st = p.status === "active" ? "" : p.status === "parked" ? '<span class="pc2-count is-dim">已挂起</span>' : '<span class="pc2-count is-dim">已归档</span>';
-          return `<div class="mobile-project-card pc2m"><div class="pc2m-r1"><strong class="pc2m-name">${esc(p.name)}</strong>${st}</div><div class="pc2m-r2"><span class="pc2-path">${esc(displayPath(p.anchor_dir || "") || "/")}</span><span class="pc2-count">${cnt} 会话</span></div></div>`;
+          // W-UIV3 项目卡 v3 同步（桌面 pc3 同款语言）：统计去胶囊（「N 会话」纯文本元信息行，
+          // 用户点名项）+非活跃态 cc-badge neutral 幽灵徽章（B2 透明底）；路径行 truncate 不变
+          const st = p.status === "active" ? "" : p.status === "pending" ? '<span class="cc-badge is-neutral">待确认</span>' : p.status === "parked" ? '<span class="cc-badge is-neutral">已挂起</span>' : '<span class="cc-badge is-neutral">已归档</span>'; // W-UIV3：pending 三态漏支补齐（旧 ternary 把待确认组错标已归档，探针实锤）
+          return `<div class="mobile-project-card pc2m"><div class="pc2m-r1"><strong class="pc2m-name">${esc(p.name)}</strong>${st}</div><div class="pc2m-r2"><span class="pc2-path">${esc(displayPath(p.anchor_dir || "") || "/")}</span><span class="pc3-meta">${cnt} 会话</span></div></div>`;
         }).join("") : '<div class="readonly-banner">暂无项目组 · 新建项目后在组织侧同步。</div>'; mSigWrite(cards, "pc:" + mHtmlSig(h), h); }
         const laneHost = screen.querySelector("[data-mobile-project-lane]");
         if (laneHost) { const h = `<div class="mobile-lane"><div class="mobile-lane-head"><span>项目聚合</span><span>只读</span></div>${sessions.sort(byPinnedUpdated).slice(0, 12).map((s) => { const [w] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}">${svg("chat")} ${esc(sessionTitle(s))} · ${w}<br><span class="muted">在会话中查看 ›</span></div>`; }).join("") || '<div class="mobile-task"><span class="muted">暂无会话</span></div>'}</div>`; mSigWrite(laneHost, "pl:" + mHtmlSig(h), h); }
