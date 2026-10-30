@@ -392,6 +392,10 @@ section("\nS7 端到端：CLI 免卡直写→派单注入（Legion 断言）→a
   // ⑥ retire → 停注 + 审计行
   const rid = directEntry!.id;
   assert(mgr.orgAction("rule-retire", { id: rid }).ok, "orgAction rule-retire");
+  // S1/S2 夹具适配（relfix-s 批）：先收口 d1（上报改动过零产出闸）——S2 目录锁拒同锚
+  // 活单在制时的新派单，不收口则 d2 被闸拦（闸正确工作，夹具原样两单同锚悬着）
+  created[0]!.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });
+  created[0]!.cb.onTurnEnd(true, "success", 5);
   const d2 = mgr.dispatchWorker({ anchor: ANCHOR, prompt: "再发一版" });
   assert(d2.ok && !(created[1]!.prompt ?? "").includes("出包必带验收单"), "retire 后停注（下一单无该规则）");
   const ledger = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8");

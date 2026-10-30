@@ -1345,7 +1345,17 @@ export function startServer(
         return;
       }
       const ack = mgr.handleCommand(cmd, clientId);
-      ws.send(JSON.stringify({ type: "COMMAND_ACK", ...ack }));
+      // S4 uncertain 三分（relfix-s 批，MUL-4257 语义）：上面 shape/unsupported 分支
+      // =明确失败（客户端换新 command_id 重试安全）；此处写已执行——socket 开放=
+      // 成功；非开放（客户端发完命令即断的窄窗/CLOSING）=成功未知（uncertain）：
+      // readyState 守卫防 CLOSING 态 send 抛错炸连接，回执丢弃**不重执行**——客户端
+      // 重连同 id 重发由 handleCommand 幂等重放首回执承接（duplicate 标记可辨）。
+      // LAN 直连面无桥中转，ack 无法跨连接缓存重投，幂等重放即收敛面
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "COMMAND_ACK", ...ack }));
+      } else {
+        console.warn(`[ws] S4 uncertain ack（成功未知）：${cmd.type} ${cmd.command_id} 已执行但 socket=${ws.readyState}——回执丢弃，待客户端同 id 重试幂等重放`);
+      }
     });
   });
 

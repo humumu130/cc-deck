@@ -71,6 +71,8 @@ interface DispatchLine {
   failure_reason?: string; /* #G5：失败分类枚举（appendDispatch 咽喉自动落，v5 列透传） */
   retry_of?: string; /* #G5：瞬态自动重试标记（值=原单 id，v5 列透传） */
   priority?: string; /* #G3：派单优先级透传（P0/P1/P2，v5 列透传） */
+  generation?: number; /* S3（relfix-s v7）：dispatched 行世代戳（收口 CAS 比对源） */
+  task_snapshot?: { text?: string; status?: string; updated_at?: number }; /* S3（relfix-s v7）：认领既有卡的板基线（收口对比用） */
 }
 
 interface LessonEntryRaw {
@@ -238,9 +240,9 @@ function applyDispatchLine(
     // 开段 1：id 原样、attempt=1、parent=NULL、created_at=本行 ts
     port.exec(
       `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
-         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), 1, NULL, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
-      [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? ""], /* W-SMIMPL ② v4 列 + #G3/#G5 三列透传（NULLIF 空串=不带键） */
+         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority, generation, task_snapshot_json)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), 1, NULL, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
+      [e.id, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? "", typeof e.generation === "number" ? e.generation : null, e.task_snapshot ? JSON.stringify(e.task_snapshot) : null], /* W-SMIMPL ② v4 列 + #G3/#G5 三列透传（NULLIF 空串=不带键）+ S3 generation/task_snapshot（relfix-s v7 两列） */
     );
     segs.set(e.id, { segId: e.id, attemptNo: 1, terminal: TERMINAL_STATUS.has(e.status) });
     dispatchIds.add(e.id);
@@ -258,9 +260,9 @@ function applyDispatchLine(
     }
     port.exec(
       `INSERT INTO dispatch (id, task_id, group_id, tier, target_member_id, source_session_id, actor, command_id,
-         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''))`,
-      [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? ""], /* W-SMIMPL ② v4 列 + #G3/#G5 三列（重投新段按本行重置） */
+         status, receipt, attempt_no, parent_dispatch_id, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority, generation, task_snapshot_json)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
+      [segId, groupId, e.tier, targetMemberId, sourceSessionId, actor, e.status, receipt, nextAttempt, seg.segId, e.ts, e.ts, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? "", typeof e.generation === "number" ? e.generation : null, e.task_snapshot ? JSON.stringify(e.task_snapshot) : null], /* W-SMIMPL ② v4 列 + #G3/#G5 三列（重投新段按本行重置）+ S3 generation/task_snapshot（relfix-s v7 两列） */
     );
     segs.set(e.id, { segId, attemptNo: nextAttempt, terminal: TERMINAL_STATUS.has(e.status) });
     dispatchIds.add(segId);
@@ -269,8 +271,8 @@ function applyDispatchLine(
   // 当前段推进：status/归因列末行覆盖；created_at 不动（=首行 ts）；receipt 只被非空覆盖
   port.exec(
     `UPDATE dispatch SET status = ?, tier = ?, group_id = ?, target_member_id = ?, source_session_id = ?,
-       actor = ?, receipt = COALESCE(NULLIF(?, ''), receipt), receipt_missing = ?, failure_reason = COALESCE(NULLIF(?, ''), failure_reason), retry_of = COALESCE(NULLIF(?, ''), retry_of), priority = COALESCE(NULLIF(?, ''), priority), updated_at = ? WHERE id = ?`,
-    [e.status, e.tier, groupId, targetMemberId, sourceSessionId, actor, receipt, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? "", e.ts, seg.segId], /* W-SMIMPL ② v4 列 + #G3/#G5 三列（同段末行覆盖，非空才覆） */
+       actor = ?, receipt = COALESCE(NULLIF(?, ''), receipt), receipt_missing = ?, failure_reason = COALESCE(NULLIF(?, ''), failure_reason), retry_of = COALESCE(NULLIF(?, ''), retry_of), priority = COALESCE(NULLIF(?, ''), priority), generation = COALESCE(?, generation), task_snapshot_json = COALESCE(?, task_snapshot_json), updated_at = ? WHERE id = ?`,
+    [e.status, e.tier, groupId, targetMemberId, sourceSessionId, actor, receipt, e.receipt_missing === true ? 1 : 0, e.failure_reason ?? "", e.retry_of ?? "", e.priority ?? "", typeof e.generation === "number" ? e.generation : null, e.task_snapshot ? JSON.stringify(e.task_snapshot) : null, e.ts, seg.segId], /* W-SMIMPL ② v4 列 + #G3/#G5 三列（同段末行覆盖，非空才覆）+ S3 generation/task_snapshot（relfix-s：非空才覆，收口行 generation 透传不洗掉） */
   );
   segs.get(e.id)!.terminal = TERMINAL_STATUS.has(e.status);
 }

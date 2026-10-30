@@ -394,7 +394,8 @@ export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEnt
     id: string; tier: string; target_member_id: string | null; source_session_id: string | null;
     actor: string; status: string; receipt: string | null; created_at: number; updated_at: number;
     receipt_missing: number | null; failure_reason: string | null; retry_of: string | null; priority: string | null;
-  }>("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority FROM dispatch ORDER BY created_at, updated_at, id");
+    generation: number | null; task_snapshot_json: string | null;
+  }>("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority, generation, task_snapshot_json FROM dispatch ORDER BY created_at, updated_at, id");
   const byId = new Map<string, DispatchEntry>();
   for (const r of rows) {
     byId.set(r.id.replace(/#r\d+$/, ""), {
@@ -412,6 +413,9 @@ export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEnt
       ...(r.failure_reason ? { failure_reason: r.failure_reason as DispatchEntry["failure_reason"] } : {}),
       ...(r.retry_of ? { retry_of: r.retry_of } : {}),
       ...(r.priority ? { priority: r.priority } : {}),
+      // S3（relfix-s v7 列）：世代戳+板基线（null 不带键=旧行与 json 缺省对齐；快照 JSON 宽容 parse）
+      ...(r.generation !== null && r.generation !== undefined ? { generation: r.generation } : {}),
+      ...(r.task_snapshot_json ? (() => { try { const sn = JSON.parse(r.task_snapshot_json) as DispatchEntry["task_snapshot"]; return sn && typeof sn === "object" ? { task_snapshot: sn } : {}; } catch { return {}; } })() : {}),
     });
   }
   const all = [...byId.values()];

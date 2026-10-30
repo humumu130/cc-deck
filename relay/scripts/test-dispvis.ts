@@ -79,6 +79,7 @@ try {
 
   // 触发消费证据：回合完成（onTurnEnd true → closeOpenDispatches done 收口）
   const agent1 = created[created.length - 1];
+  agent1.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 }); // S1 夹具适配（relfix-s）：上报改动过零产出闸
   agent1.cb.onTurnEnd(true, "success", 10);
   const r2 = detail();
   const d1rows2 = (r2.data?.receipts ?? []).filter((x) => x.id === d1.dispatch_id);

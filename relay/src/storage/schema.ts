@@ -241,4 +241,17 @@ export const migrations: readonly Migration[] = [
     name: "#292-B2 import_checkpoint.mtime_ns（B 路审查真根修：ms 取整在等长覆盖写形态下同毫秒碰撞=checkpoint 假有效=投影陈旧=写回抹写；org 三源先行接入，其余六域逐批补传参）",
     up: (p) => p.exec("ALTER TABLE import_checkpoint ADD COLUMN mtime_ns TEXT"),
   },
+  {
+    // S3 一致性三小改（relfix-s，multica mech2 P3/P7 范式）：dispatch 表补两列——
+    // generation=dispatched 行世代戳（收口 CAS 比对：末行世代失配=单已被重投推进，
+    // 旧引用跳过写，防 drain 残留覆盖新世代）；task_snapshot_json=认领既有板卡派单时
+    // 的关键字段基线（收口对比「单在跑期间板被谁动过」，对账根治前置）。两列全可空
+    //（旧行/新卡派单不带，宽容口径与 DispatchEntry 可选字段对齐）。
+    version: 7,
+    name: "relfix-s S3 dispatch generation + task_snapshot（世代 CAS + IssueSnapshot 基线）",
+    up: (p) => {
+      p.exec("ALTER TABLE dispatch ADD COLUMN generation INTEGER");
+      p.exec("ALTER TABLE dispatch ADD COLUMN task_snapshot_json TEXT");
+    },
+  },
 ];

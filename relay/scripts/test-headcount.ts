@@ -146,7 +146,8 @@ async function main() {
     // W-SCHEDFIX2：DONE 熟手活流直注免换流（不 spawn）——本段锁「排水复用走 resume
     // 换流承接」的台账/队列收敛语义，杀流走 resume 路径保持断言前提
     created[0].agent.ended = true;
-    created[0].cb.onTurnEnd(true, "success", 5); // w1 交付收口
+    // S1 夹具适配（relfix-s 批）：收口前上报一处文件改动过零产出闸（本套件夹具不写「结果：」回执行，全部 onTurnEnd 前同款注入）
+    created[0].cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[0].cb.onTurnEnd(true, "success", 5); // w1 交付收口
     await wait(80); // microtask 排水 + resume init
     dump("w1收口后");
     const g3 = findGroup(gid)!;
@@ -155,7 +156,7 @@ async function main() {
     const led3 = readDispatchLog().find((e) => e.id === d3);
     assert(led3?.status === "running" && led3.session_id === (r1.ok ? r1.session_id : ""), `队首单收敛 running 承接=w1（实际 ${led3?.status}/${led3?.session_id?.slice(0, 8)}）`);
     // w1 resume 流（created 末位）收口 → 台账 done
-    created[created.length - 1].cb.onTurnEnd(true, "success", 5);
+    created[created.length - 1].cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[created.length - 1].cb.onTurnEnd(true, "success", 5);
     await wait(60);
     dump("d3交付后");
     const led3b = readDispatchLog().find((e) => e.id === d3);
@@ -164,7 +165,7 @@ async function main() {
     const led4 = readDispatchLog().find((e) => e.id === d4);
     assert(led4?.status === "running" || led4?.status === "done", `第二排队单接续（实际 ${led4?.status ?? "无"}）`);
     if (led4?.status === "running") {
-      created[created.length - 1].cb.onTurnEnd(true, "success", 5);
+      created[created.length - 1].cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });       created[created.length - 1].cb.onTurnEnd(true, "success", 5);
       await wait(40);
       dump("d4交付后");
     }
@@ -265,7 +266,7 @@ async function main() {
     // 再把 H8 会话改 DONE→idle（live 保持 WORKING）
     const sH8 = rH8.ok ? rH8.session_id : "";
     const h8AgentIdx = created.findIndex((x) => x.cwd === anchor2 && x.resume === undefined && x.prompt?.includes("触顶先清验证"));
-    if (h8AgentIdx >= 0) created[h8AgentIdx].cb.onTurnEnd(true, "success", 5);
+    if (h8AgentIdx >= 0) created[h8AgentIdx].cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     if (h8AgentIdx >= 0) created[h8AgentIdx].cb.onTurnEnd(true, "success", 5);
     await wait(40);
     const stH8 = sessionsOf(mgr).get(sH8);
     if (stH8) { stH8.state.status = "DONE"; stH8.state.updated_at = now - 2 * HOUR; }
@@ -310,7 +311,7 @@ async function main() {
     const sA = rA.ok ? rA.session_id : "";
     await wait(30);
     const idxA = created.findIndex((x) => x.prompt?.includes("熟手养成单"));
-    if (idxA >= 0) created[idxA].cb.onTurnEnd(true, "success", 5);
+    if (idxA >= 0) created[idxA].cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     if (idxA >= 0) created[idxA].cb.onTurnEnd(true, "success", 5);
     await wait(60);
     const stA0 = sessionsOf(mgr).get(sA);
     assert(!!stA0 && stA0.state.status === "DONE", `前置：熟手 A 已收口 DONE（实际 ${stA0?.state.status ?? "无"}）`);

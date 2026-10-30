@@ -12,9 +12,9 @@ import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
-  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, setPmOverride, writeOrgAnchor,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
 } from "./org.js";
-import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试
+import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
 import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
@@ -742,7 +742,7 @@ export class SessionManager {
   private cloudCmds = createCloudCommands(this);
   // W-SPLIT-S3c：组织/看板/任务域命令 mixin
   private boardCmds = createBoardCommands(this);
-  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string }[]>(); /* #G5：retry_of 随在途记录（收口行透传源） */
+  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string; generation?: number; task_snapshot?: { text?: string; status?: string; updated_at?: number } }[]>(); /* #G5：retry_of 随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板基线比对源 */
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
   // chain 起算无对账风险；跨重启持久化属 #71 产品面
@@ -862,6 +862,10 @@ export class SessionManager {
     cfg: RelayConfig,
   ) {
     this.cfg = cfg;
+    // S3-P4 组锚豁免注入（relfix-s 续作，幂等）：org 底座不能 import projects（环），
+    // 组锚判定经注册口注入——appendDispatch 幂等咽喉遇组锚跳过（组内并行合法：组锚
+    // ≠worker 真实写面，实证见 dispatchWorker S2 闸注释）
+    registerAnchorLockExempt((a) => findGroupByAnchor(a) !== null);
     this.allowRules = new AllowRuleStore(cfg.dataDir);
     // #212 规则集任何 mutation（落规则/删除/会话清理）后瞬态广播最新全量——
     // 在线端设置页「记住的规则」实时收敛；离线端重连 SNAPSHOT.allow_rules 兜底
@@ -3349,15 +3353,41 @@ export class SessionManager {
           // ——done 且无「结果：」行时 receipt_missing:true 透传台账（worker 静默收工
           // 可见化：看板「无回执」角标+通知账一行；failed 不标=本身即异常信号不双计）
           const receiptProbe = delivered ? this.receiptWithResultLine(managed.state.session_id, reason) : { receipt: reason, hasResultLine: true };
-          this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
-            receiptProbe.receipt, false,
+          // S1 零产出闸（relfix-s 批，multica poisoned.go 假成功翻转范式）：done 收口
+          // 三复合判定——files_changed===0 ∧ 该席有在途派单 ∧ 回执无「结果：」行——
+          // 全中则 done 翻转 failed（failure_reason=zero_output 收口侧显式落值），唤醒
+          // 链复用 notifyDispatchClosed（failed 单即时注入既有面，零新增升级链）。
+          // 白名单（误报代价不对称，向放行方向 err，multica 同款原则）：回执带「结果：」
+          // 行=worker 显式交付结论（纯调研类单天然带「…｜改动文件：无」声明）→ 正常
+          // done+receipt_missing 观测标记不变；用户中断/换家失联（delivered=false）不
+          // 过闸（中断口径另有收口语义）；stats 未知（外部会话无统计）不判零——宁漏
+          // 勿误。L-1026-1 零产出吞单根治件。
+          let closeStatus: "done" | "failed" = ok ? "done" : "failed";
+          let closeReceipt = receiptProbe.receipt;
+          const zeroOutputBlocked = delivered
+            && ok
+            && managed.state.stats.files_changed === 0
+            && !receiptProbe.hasResultLine
+            && (this.openDispatches.get(managed.state.session_id)?.length ?? 0) > 0;
+          if (zeroOutputBlocked) {
+            closeStatus = "failed";
+            closeReceipt = `零产出闸：done 被拒（0 文件改动且有单在身但回执无「结果：」行）｜${truncate(receiptProbe.receipt, 120)}`;
+            console.log(`[dispatch] S1 zero-output gate flipped done→failed: session=${managed.state.session_id.slice(0, 8)}`);
+          }
+          this.closeOpenDispatches(managed.state.session_id, closeStatus,
+            closeReceipt, false,
             // 路由表记账恢复原判：failed 回合照记（干砸也是 worker 的账，failed 计数
             // 是避开调度的信号）；仅「成功被用户中断」与「换家失联」不记——
-            // 中断≠交付，换家≠干砸
-            !(ok && reason === "interrupted") && !homeLost,
+            // 中断≠交付，换家≠干砸。S1 翻转单不记路由账（零产出≠干砸：熟手可能只是
+            // 回执漏写，failed 计数会错杀调度面——闸的语义是「质检拒收待复核」）
+            !(ok && reason === "interrupted") && !homeLost && !zeroOutputBlocked,
             undefined,
-            delivered ? undefined : "backlog",
-            ok && !receiptProbe.hasResultLine ? { receiptMissing: true } : undefined);
+            // 板去向：正常交付=undefined（随 status 走 done）；中断/失败=退 backlog；
+            // S1 翻转=退 backlog（活未验收，PM 复核后再定去向——与 failed 同口径）
+            delivered && !zeroOutputBlocked ? undefined : "backlog",
+            zeroOutputBlocked
+              ? { failureReason: "zero_output" }
+              : ok && !receiptProbe.hasResultLine ? { receiptMissing: true } : undefined);
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -4251,7 +4281,7 @@ export class SessionManager {
   // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
   //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
   // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
-  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string }): void {
+  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string; /** S3 世代 CAS（relfix-s）：dispatched 行世代戳（收口前比对防旧引用覆盖新世代） */ generation?: number; /** S3 板基线（relfix-s）：认领既有卡时的快照（收口对比「板被谁动过」） */ task_snapshot?: { text?: string; status?: string; updated_at?: number } }): void {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
@@ -4348,7 +4378,7 @@ export class SessionManager {
     }
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog", opts?: { receiptMissing?: boolean }): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog", opts?: { receiptMissing?: boolean; /** S1 零产出闸（relfix-s）：收口行显式 failure_reason（跳过文本分类器——闸的判定是结构性的，receipt 前缀「零产出闸」会被分类器误落 logic_error） */ failureReason?: DispatchFailureReason }): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     // P0 排队排水挂点前置说明：方法尾部对本批受影响 gid 逐个 drainDispatchQueue——
@@ -4363,9 +4393,40 @@ export class SessionManager {
         })()
       : all
         ? q.splice(0)
-        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string } => !!x);
+        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string; generation?: number; task_snapshot?: { text?: string; status?: string; updated_at?: number } } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
     for (const e of es) {
+      // S3 世代 CAS（relfix-s，multica dispatched_at generation token 范式）：收口写前
+      // 与台账该 id 末行比对——①末行已终态（done/failed）→ 该单已被别的路径收口
+      //（drain 残留引用/双挂收口），跳过重写（append-only 末行赢语义下旧收口会
+      // 覆盖新终态）；②末行 generation 存在且 ≠ 内存引用的 generation → 该单已被
+      // 重投推进到新世代，本引用过期，跳过。两跳都 warn 留痕（对账面可见）。
+      // 旧行无 generation（宽容）：不参与判定照旧写。
+      const lastRow = readDispatchLog().find((x) => x.id === e.id);
+      if (lastRow && (lastRow.status === "done" || lastRow.status === "failed")) {
+        console.warn(`[dispatch] S3-CAS 跳过收口：单 ${e.id.slice(0, 8)} 台账末行已终态（${lastRow.status}），本引用为残留（drain/双挂）`);
+        continue;
+      }
+      if (lastRow && typeof lastRow.generation === "number" && typeof e.generation === "number" && lastRow.generation !== e.generation) {
+        console.warn(`[dispatch] S3-CAS 跳过收口：单 ${e.id.slice(0, 8)} 世代失配（台账 gen=${lastRow.generation} vs 引用 gen=${e.generation}）——已被重投推进，本引用过期`);
+        continue;
+      }
+      // S3-P7 板基线对比（relfix-s，multica IssueSnapshot 范式）：认领既有卡的单在跑
+      // 期间板被移动（status 变/text 改）→ 回执附注一行（对账可见：谁在单外动了板）。
+      // 快照缺席（新卡/无 gid/快照失败）静默跳过；对比只读不改板（收口搬卡另有路径）。
+      // 找卡口径=dispatch_id 匹配（与下方 taskHit 同源——认领卡在派单流程挂 dispatch_id）。
+      const boardDriftNote = (() => {
+        if (!e.gid || !e.task_snapshot) return "";
+        try {
+          const cur = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
+          if (!cur) return "";
+          const snap = e.task_snapshot;
+          const drifts: string[] = [];
+          if (snap.status && cur.status !== snap.status) drifts.push(`status ${snap.status}→${cur.status}`);
+          if (snap.text && snap.text !== truncate(cur.text, 60)) drifts.push("文本已改");
+          return drifts.length ? `｜单外板变动：${drifts.join("，")}（收口对比基线）` : "";
+        } catch { return ""; }
+      })();
       // W-TASKFLOW task_ref（2026-10-12 用户拍板）：回执头部携带 [task_ref:卡id]——
       // 台账/通知文本与板卡、派单 prompt 头同键，回执流按 ref 精确对卡（废除按标题
       // 模糊对账的启发式）。卡定位按 dispatch_id（relay 内部精确键）；无 gid/无卡
@@ -4377,13 +4438,16 @@ export class SessionManager {
         : undefined;
       const taskRef = taskHit?.id ?? "";
       const titleSeg = taskHit?.text ? ` ${truncate(taskHit.text, 40)}` : "";
-      const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}` : receipt;
+      const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}${boardDriftNote}` : `${receipt}${boardDriftNote}`;
       appendDispatch({
         ts: Date.now(), id: e.id, tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
         status, receipt: truncate(refReceipt, 200), session_id: key,
         // W-SMIMPL ②：回执契约标记透传（done 无「结果：」行=账面闭环内容空，纯观测）
         ...(opts?.receiptMissing && status === "done" ? { receipt_missing: true } : {}),
+        // S1 零产出闸（relfix-s）：显式 failure_reason 优先（org.appendDispatch 咽喉只在
+        // 未带值时跑文本分类器——显式带值=结构判定直达，防「零产出闸」前缀误落 logic_error）
+        ...(opts?.failureReason ? { failure_reason: opts.failureReason } : {}),
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
         ...(e.actor ? { actor: e.actor } : {}),
         // M12-5 引擎字段同 id 透传（收敛末行不丢——读侧末行赢，收口行不带会把
@@ -4395,6 +4459,9 @@ export class SessionManager {
         // retry_of 会把 dispatched 行的标记洗掉（web「自动重试」标识恰在重试再
         // 失败/收口时刻消失=最有价值时刻），与 engine 字段透传同口径
         ...(e.retry_of ? { retry_of: e.retry_of } : {}),
+        // S3 世代透传（relfix-s）：收口行带 generation（末行赢语义下防字段被洗掉，
+        // 后续审计面可按世代分辨段链）；快照不透传（一次性基线，收口对比已消费）
+        ...(e.generation !== undefined ? { generation: e.generation } : {}),
       });
       // #40 M4 派单完成回调（谁派活谁收通知）：收口即通知——端上广播帧恒发；
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
@@ -7009,6 +7076,27 @@ export class SessionManager {
     if (!anchorSt.isDirectory()) {
       return { ok: false, error: `锚路径不是目录: ${anchor}（是个文件——派单需要目录锚，请核对路径拼写）` };
     }
+    // S2 目录锁（relfix-s 批，multica「同 agent 同目标 NOT EXISTS 双活防」应用层形态；
+    // 续作修订=收窄到无 gid 随手办面）：同锚目录已有活派单 → 拒新单。2026-09-27 混合
+    // 工作区坏包事故根因闸级根治：两个 worker 同目录并行写，构建读磁盘不认分支。
+    // **gid 豁免（续作实证修订）**：gid 组派的 anchor 恒=组锚（上面 g.anchor_dir 覆盖），
+    // 而组内多活单并行是生产主流形态（dispatch-log 实测：同组锚存活区间重叠历史
+    // 1838 对、近 3 天 100 对——七线 worker 常态）；worker 真实写面=任务书指定的
+    // worktree 绝对路径（多会话并行纪律强制），组锚≠真实写面，按组锚硬拦=误伤主流
+    // 编排。目录锁只在「台账锚=真实写面」的无 gid 随手办面执行（anchor=CLI cwd）。
+    // 其余豁免：queue_replay/redispatch_of 重入（同单 id 段链）；归一化同路径（尾斜杠/
+    // 大小写口径与 findGroupByAnchor norm 同族）。完成后（终态）即可再派——活单集
+    // 实时取台账收敛视图，零常驻状态。
+    if (!input.queue_replay && !input.redispatch_of && !input.gid) {
+      const normAnchor = (p: string) => p.replace(/\/+$/, "").toLowerCase();
+      const mine = normAnchor(anchor);
+      const clash = readDispatchLog().find((e) =>
+        (e.status === "dispatched" || e.status === "running" || e.status === "queued")
+        && typeof e.project_anchor === "string" && normAnchor(e.project_anchor) === mine);
+      if (clash) {
+        return { ok: false, error: `目录锁：锚 ${anchor} 已有在制派单（单号 ${clash.id.slice(0, 8)}，${clash.status}，${clash.title ? `「${truncate(clash.title, 30)}」` : "见台账"}）——同目录并行写会互相污染（0927 坏包教训），等其完成/失败后可再派，或换锚目录` };
+      }
+    }
     // M12-3 重投段链（运行时台账侧）：带 redispatch_of = 同一单再战——新行沿用原单
     // root id（同 id 追加行：读侧 readDispatchLog 收敛视图末行赢=重投后即见 running；
     // 导入侧 import-dispatch-lesson 按行序终态切分自动出 <id>#r<N> 段、attempt+1、
@@ -7254,7 +7342,18 @@ export class SessionManager {
     // 闸前已清 null，veteran 非空即其在编引擎可信），新会话用 planned.engine ?? claude。
     const dispatchEngine = (veteran ? this.sessions.get(veteran)?.state.engine : undefined) ?? planned.engine ?? "claude";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined);
-    // M5 双活数据层防（multica claim NOT EXISTS 内嵌拒范式，卷一 §Top5-1，消 #257
+    // S3 世代+快照（relfix-s）：generation=dispatched 行 ts（重投即新世代）；认领既有
+    // 板卡（entry_id）时快照关键字段（收口对比「单在跑期间板被谁动过」——P7 基线）
+    const dispatchGeneration = Date.now();
+    const taskSnapshot = (() => {
+      if (!input.gid || !input.entry_id) return undefined;
+      try {
+        const card = loadBoard(input.gid).entries.find((x) => x.id === input.entry_id);
+        if (!card) return undefined;
+        return { text: truncate(card.text, 60), status: card.status, updated_at: card.updated_at };
+      } catch { return undefined; }
+    })();
+    // M5 双活数据层防（m-board，multica claim NOT EXISTS 内嵌拒范式，卷一 §Top5-1，消 #257
     // 族 TOCTOU 窗）：veteran 认领的「同席活单检查+dispatched 落账」整段入 org 写锁
     // 域（BEGIN IMMEDIATE 串行化——同 session 已有异 id 的 dispatched/running 行=
     // 第二并发任务，数据层拒收；应用层 pickVeteran 忙检查与状态翻 WORKING 之间的
@@ -7266,18 +7365,18 @@ export class SessionManager {
       const clash = withStorageTx(undefined, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields });
+          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) });
           return null;
         }
         return c;
       });
       if (clash) {
         const msg = `同席活单拒收（数据层双活防）：熟手 ${veteran.slice(0, 8)} 已有活单 #${clash.id.slice(0, 8)}（${clash.status}）在制——本单拒派；等该单终态或改派他席`;
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: msg, session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields });
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: msg, session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration });
         return { ok: false, error: msg, dispatch_id: dispatchId }; /* dispatch_id 随拒收返回：调用方/审计按 id 关联 failed 记因行（编制闸同族但本行含活单语义，对账需要） */
       }
     } else {
-      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记） */
+      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线 */
     }
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId: string;
@@ -7420,7 +7519,7 @@ export class SessionManager {
         return { ok: false, error: am.error ?? "入编失败" };
       }
     }
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields });
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields, generation: dispatchGeneration }); /* S3：running 行透传 generation（收敛末行赢语义下不洗掉世代戳，CAS 比对链全程可判） */
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     // W-RESTARTDESIGN §三：从任务书 prompt 提取约定回执路径（派单纪律固定写
     // ~/.cc-deck/artifacts/w-*.md）——收口后按此精确核对（无提取值回落前缀扫描）
@@ -7429,7 +7528,7 @@ export class SessionManager {
     // 是两个独立缺陷，本批同修）
     const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
     const receiptPath = receiptRel ? join(homedir(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : undefined;
-    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}) }); /* #G5：重试标记随在途记录（收口行透传源） */
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) }); /* #G5：重试标记随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板对比的比对源 */
     if (input.gid) {
       upsertBoardEntry(input.gid, input.entry_id
         ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）

@@ -59,6 +59,10 @@ const makeFakeFactory = (created: SpawnRec[]) =>
         //（与 spawn 路径「spawn 时点取 okNext」语义对齐）
         setTimeout(() => {
           if (a.ended) return;
+          // S1 夹具适配（relfix-s 批）：真 CLI 回合每有 diff 的 tool_result 都回调
+          // onStats——假 worker 等价上报一处文件改动，走 S1 零产出闸的「有改动正常
+          // done」白名单（本套件夹具不写「结果：」回执行，靠 stats 过闸）
+          cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });
           if (emitResultLine) cb.onLog("assistant_text", `分析并动手改了。\n${emitResultLine}`, {});
           cb.onTurnEnd(okNext, okNext ? "success" : "error exit 1", 12);
         }, 10);
@@ -80,6 +84,8 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       cb.onInit("sdk-" + a.id.slice(0, 8), model, opts?.permissionMode ?? "default");
       if (prompt !== undefined) setTimeout(() => {
         if (a.ended) return;
+        // S1 夹具适配（relfix-s 批）：同上——回合收口前上报一处文件改动过闸
+        cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });
         if (emitResultLine) cb.onLog("assistant_text", `分析并动手改了。\n${emitResultLine}`, {});
         cb.onTurnEnd(ok, ok ? "success" : "error exit 1", 12);
       }, 10);
@@ -298,7 +304,7 @@ async function main() {
     }), "utf-8");
     mkdirSync(join(ORG2, "boards"), { recursive: true });
     writeFileSync(join(ORG2, "boards", "g-x.json"), JSON.stringify({
-      entries: [{ id: "e-x", text: "断档在跑", status: "claimed", dispatch_id: "dsp-gid" }],
+      entries: [{ id: "e-x", text: "断档在跑", status: "claimed", dispatch_id: "dsp-gid", ts: 1 }], // ts=板卡必需字段（W-CMDIMPL T0b 严校验后夹具补齐——基点既有红顺手修，非本批引入）
       frozen: false,
     }), "utf-8");
     writeFileSync(join(ORG2, "routing.json"), JSON.stringify({

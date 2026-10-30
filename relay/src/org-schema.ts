@@ -25,9 +25,10 @@ export const DISPATCH_TIERS = ["咨询", "随手办", "轻立项", "正经立项
 // #G3 板卡富模型：优先级三档（对标 multica）——权威=本文件（BOARD_ENTRY_STATUSES 同款），
 // projects.ts re-export。缺省=未标注（不落键，旧行兼容）
 export const BOARD_PRIORITIES = ["P0", "P1", "P2"] as const;
-// #G5 失败分类学：六枚举镜像（权威=dispatch-retry.ts 分类器伴生 DISPATCH_FAILURE_REASONS，
-// 本文件不 import 防依赖面扩散——两处改动需同步，同步责任在本注释）
-export const FAILURE_REASONS = ["network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled"] as const;
+// #G5 失败分类学：七枚举镜像（权威=dispatch-retry.ts 分类器伴生 DISPATCH_FAILURE_REASONS，
+// 本文件不 import 防依赖面扩散——两处改动需同步，同步责任在本注释。
+// zero_output=S1 零产出闸收口侧结构判定值，不经文本分类器）
+export const FAILURE_REASONS = ["network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled", "zero_output"] as const;
 
 // ---------- 基础校验原语 ----------
 
@@ -157,6 +158,10 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   priority: { type: "enum", enumTable: BOARD_PRIORITIES },
   /** W-SMIMPL ②：回执契约可见化——done 无结果行标记（读侧宽容忽略，旧行缺省=有回执） */
   receipt_missing: { type: "boolean" },
+  /** S3 世代 CAS（relfix-s）：dispatched 行世代戳=行 ts；收口侧比对防旧引用覆盖新世代 */
+  generation: { type: "number" },
+  /** S3 IssueSnapshot 基线（relfix-s）：认领既有板卡派单时的关键字段快照（收口对比用） */
+  task_snapshot: { type: "object" },
 };
 
 // ---------- reducer 门面 ----------

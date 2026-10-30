@@ -175,7 +175,8 @@ try {
       && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "claimed",
       "O3① 依赖卡认领放行：spawn+卡 doing 挂接 dispatch_id（M12-1 入口）");
     created[baseO3]?.cb.onInit("sdk-orch-dep", "test-model"); // 清 init timer 防悬挂
-    created[baseO3]?.cb.onTurnEnd(true, "结果：勘察完成｜改动文件：survey.md", 100);
+    // S1 夹具适配（relfix-s 批）：收口前上报一处文件改动过零产出闸（reason 带「结果：」行不算数——闸查的是 assistant 日志）
+    created[baseO3]?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[baseO3]?.cb.onTurnEnd(true, "结果：勘察完成｜改动文件：survey.md", 100);
     const depConv = readDispatchLog().filter((e) => e.id === depDispatchId);
     const lessonsAfterDep = loadBoard(gid).lessons ?? [];
     assert(depConv[depConv.length - 1]?.status === "done" && String(depConv[depConv.length - 1]?.receipt ?? "").includes("勘察完成"),
@@ -226,7 +227,7 @@ try {
     assert(mainAck3.ok === true && mainDispatchId2 !== "" && created.length === baseO6 + 1,
       "O6① 重启后认领重派放行（依赖仍 done，computeReady 同口径；新 dispatch 单非复用悬挂 id）");
     created[baseO6]?.cb.onInit("sdk-orch-main", "test-model");
-    created[baseO6]?.cb.onTurnEnd(true, "结果：主活完成全链绿｜改动文件：main.ts", 100);
+    created[baseO6]?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[baseO6]?.cb.onTurnEnd(true, "结果：主活完成全链绿｜改动文件：main.ts", 100);
     const mainConv = readDispatchLog().filter((e) => e.id === mainDispatchId2);
     const lesson2 = (loadBoard(gid).lessons ?? []).find((l) => l.source_dispatch_id === mainDispatchId2);
     assert(mainConv[mainConv.length - 1]?.status === "done"
@@ -267,7 +268,7 @@ try {
     process.env.CCR_PM_DUTY = "1";
     const rounds0 = dutyRounds().length;
     const entries0 = loadBoard(gid).entries.length;
-    created[leaderIdx]?.cb.onTurnEnd(true, "leader 回合终态", 1); // 值守挂点：Leader 会话限定
+    created[leaderIdx]?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[leaderIdx]?.cb.onTurnEnd(true, "leader 回合终态", 100); // 值守挂点：Leader 会话限定
     const roundNew = dutyRounds()[dutyRounds().length - 1] ?? {};
     assert(dutyRounds().length === rounds0 + 1 && roundNew.kind === "PM_DUTY_ROUND",
       "O9① Leader 回合终态 → 值守检查审计一行（队列全 done 放行 sleep 零注入——细节 C12 已锁）");

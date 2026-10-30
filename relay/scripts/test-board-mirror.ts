@@ -317,6 +317,8 @@ async function main() {
       assert(!!wCard && (!refMatch || wCard.id === refMatch[1]), "task_ref ②：板卡 id = prompt 头 task_ref（预生成同键落板）");
       // 收口：worker 回合终态 → closeOpenDispatches done → 台账 receipt 头带 task_ref
       const wAgentRec = spawned.find((r) => r.prompt === wPrompt);
+      // S1 夹具适配（relfix-s 批）：上报一处文件改动过零产出闸（本夹具不写「结果：」回执行）
+      wAgentRec?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });
       wAgentRec?.cb.onTurnEnd(true, "success", 42);
       const closedRow = readDispatchLog(ORG).find((x) => x.id === (dw.ok ? dw.dispatch_id : "") && (x.status === "done" || x.status === "failed"));
       assert(!!closedRow && (!refMatch || (closedRow.receipt ?? "").startsWith(`[task_ref:${refMatch[1]}]`)), "task_ref ③：收口回执头部携带 [task_ref:卡id]（台账行）");

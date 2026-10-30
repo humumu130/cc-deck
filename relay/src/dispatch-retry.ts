@@ -7,17 +7,21 @@
 // 本模块零 org 依赖（防循环 import）：hasRetryMark 的台账证据读在 session-manager
 // 消费侧内联（readDispatchLog 已在彼 import）。
 
-/** #G5 失败分类学：六枚举（任务书口径）。 */
+/** #G5 失败分类学：六枚举（任务书口径）+ zero_output（S1 零产出闸，relfix-s 批）。
+ *  zero_output 不进 classifyDispatchFailure 文本分类器——它是收口侧的结构判定
+ *  （files_changed===0 ∧ 在途派单 ∧ 回执无「结果：」行三复合，见 session-manager
+ *  onTurnEnd 零产出闸），由闸显式落值；分类器六类语义不变。 */
 export type DispatchFailureReason =
   | "network_error"
   | "timeout"
   | "tool_crash"
   | "model_overload"
   | "logic_error"
-  | "cancelled";
+  | "cancelled"
+  | "zero_output";
 
 export const DISPATCH_FAILURE_REASONS = [
-  "network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled",
+  "network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled", "zero_output",
 ] as const;
 
 /** 瞬态类（自动重试一次的资格集）：网络/超时/模型过载——重跑大概率好；逻辑类

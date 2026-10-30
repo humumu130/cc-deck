@@ -443,6 +443,24 @@ export interface DispatchEntry {
   /** #G3 板卡富模型透传：派单 priority（P0/P1/P2）随全部台账行（与 engine 字段
    *  同层透传口径，审计面可对账）。缺省=未标注。 */
   priority?: string;
+  /** S3 世代 CAS（relfix-s，multica dispatched_at generation token 范式）：dispatched
+   *  行落值=该行 ts——重投/再派产生新 dispatched 行即新世代；收口侧（closeOpenDispatches）
+   *  持派单时点的 generation，append 终态行前与台账末行比对：失配=该单已被重投推进，
+   *  旧引用跳过写（防 drain 残留引用覆盖新世代）。旧行缺省 undefined=不参与判定（宽容）。 */
+  generation?: number;
+  /** S3 IssueSnapshot 基线（relfix-s，multica claim 时打快照范式）：认领既有板卡派单时
+   *  快照关键字段（text/status/updated_at）——收口时对比「单在跑期间板被谁动过」，
+   *  变动即回执附注（对账的根治前置）。新卡派单（无 entry_id）缺省不带。 */
+  task_snapshot?: { text?: string; status?: string; updated_at?: number };
+}
+
+// S3-P4 组锚豁免谓词（relfix-s 续作）：org 底座 import projects 会环（projects →
+// org 单向），组锚判定（findGroupByAnchor）由 session-manager 启动时经此注册口注入。
+// 谓词返回 true=该锚是某组组锚→幂等咽喉跳过（组内并行合法，见 appendDispatch 内
+// 实证注释）。未注册（纯 org 单元测试形态）=无豁免，咽喉按原语义拦。
+let anchorLockExempt: ((anchor: string) => boolean) | null = null;
+export function registerAnchorLockExempt(fn: ((anchor: string) => boolean) | null): void {
+  anchorLockExempt = fn;
 }
 
 export function dispatchLogPath(dir?: string): string {
@@ -456,6 +474,28 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
   // #G5 失败分类学写侧单点：failed 行自动 failure_reason（receipt 错误串→分类器），
   // 调用方（spawn 失败/回合收口/看门狗等全部出口）零改动——全台账 failed 行带枚举
   if (e.status === "failed" && !e.failure_reason) e.failure_reason = classifyDispatchFailure(e.receipt ?? "");
+  // S3-P4 入队幂等咽喉（relfix-s，multica「入队幂等=存储约束」的写侧单点形态；
+  // 续作修订=与 S2 同步收窄到非组锚）：新**开单**行（dispatched/queued）落账前查
+  // 同锚活单——不同 id 且活（dispatched/running/queued）→ 拒写。与 S2（dispatchWorker
+  // 入口人话报错，无 gid 随手办面）双层：本咽喉兜住绕过入口检查的写口。**组锚豁免**
+  //（续作实证修订）：gid 组派台账锚恒=组锚而组内并行是生产主流（dispatch-log 实测
+  // 同组锚存活区间重叠 1838 对/近 3 天 100 对；worker 真实写面=worktree 绝对路径，
+  // 组锚≠真实写面）——组锚命中即跳过（豁免谓词由上层注入：org 底座 import projects
+  // 会环，registerAnchorLockExempt 是唯一注入口，session-manager 启动时挂
+  // findGroupByAnchor）。同 id（段链推进/收口）天然豁免；终态行不拦（收口必经）。
+  if ((e.status === "dispatched" || e.status === "queued") && typeof e.project_anchor === "string" && e.project_anchor
+    && !(anchorLockExempt && anchorLockExempt(e.project_anchor))) {
+    const normAnchor = (p: string) => p.replace(/\/+$/, "").toLowerCase();
+    const mine = normAnchor(e.project_anchor);
+    const clash = readDispatchLog(dir).find((x) =>
+      x.id !== e.id
+      && (x.status === "dispatched" || x.status === "running" || x.status === "queued")
+      && typeof x.project_anchor === "string" && normAnchor(x.project_anchor) === mine);
+    if (clash) {
+      console.warn(`[org] S3-P4 幂等咽喉拒写：锚 ${e.project_anchor} 已有活单 ${clash.id.slice(0, 8)}（${clash.status}），新单 ${e.id.slice(0, 8)} 不落账（防同目录双跑）`);
+      return false;
+    }
+  }
   // W-CMDIMPL T0b：reducer 写严格（§5.6/拍板 #10）——派单台账 schema 校验拒写
   //（含 STAGE 词表：stage 基表+custom. 前缀，拍板 #9；drill 标记在 schema 内放行）
   const chk = applyOrgChange("dispatch-entry", e);

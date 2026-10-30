@@ -132,6 +132,12 @@ export class CloudClient {
   private pairBudgetUntil = 0;
   // 实例字段而非常量：测试可收紧（test-cloud.ts 全局预算用例）
   private pairBudgetMax = 50;
+  // S4 uncertain 三分（relfix-s 批，multica MUL-4257 语义）：写命令已执行但回执
+  // 投递失败（桥断开/park/无 peer）=成功未知——**不重执行**（mgr.handleCommand 按
+  // command_id 幂等重放首回执，客户端同 id 重发拿 duplicate 标记），回执入队待确认，
+  // 设备 hello/ping 恢复链 flush 重投。有界：入队时 TTL(10min) 修剪 + cap 200 条
+  //（防桥长断期间堆积；超限丢最旧——客户端超时重发仍能从幂等重放拿到回执）。
+  private pendingAcks = new Map<string, { dev: string; wan: boolean; ack: CommandAckPayload; queuedAt: number }>();
   private pairBudgetWindowMs = 600_000;
   // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
   private wanDropLoggedAt = 0;
@@ -389,6 +395,38 @@ export class CloudClient {
     return true;
   }
 
+  // S4（relfix-s）：桥连接是否开放——send() 对非 OPEN 是静默 no-op，sendSealed 在
+  // 桥断开时会**假成功**（pushImportTo 注释同款陷阱）；uncertain 判定必须实查状态
+  private bridgeOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /** S4 uncertain 回执入队待确认（写已执行+回执未达=成功未知）：恢复链 flush 重投。 */
+  private queueUncertainAck(dev: string, commandId: string, ack: CommandAckPayload, wan = false): void {
+    const now = Date.now();
+    if (this.pendingAcks.size > 200) {
+      for (const [id, e] of this.pendingAcks) if (now - e.queuedAt > 600_000) this.pendingAcks.delete(id);
+      while (this.pendingAcks.size >= 200) this.pendingAcks.delete(this.pendingAcks.keys().next().value as string);
+    }
+    this.pendingAcks.set(commandId, { dev, wan, ack, queuedAt: now });
+    console.warn(`[cloud] S4 uncertain ack 入队待确认：${commandId}（写已执行，回执未达 dev=${dev}${wan ? "/wan" : ""}，恢复链重投）`);
+  }
+
+  /** S4 恢复链 flush：hello/ping 恢复时重投该设备全部待确认回执——投出即出队；
+   * 桥仍断则留队等下次。与客户端同 id 超时重发并存时由 mgr 幂等重放承接
+   * （duplicate 标记），无双重执行面（MUL-4257 防双 claim 的 cc-deck 形态）。 */
+  private flushUncertainAcks(dev: string): void {
+    if (this.pendingAcks.size === 0) return;
+    for (const [id, e] of this.pendingAcks) {
+      if (e.dev !== dev) continue;
+      const sent = e.wan ? this.sendWan(dev, { type: "COMMAND_ACK", ...e.ack }) : this.sendSealed(dev, { type: "COMMAND_ACK", ...e.ack });
+      if (sent && this.bridgeOpen()) {
+        this.pendingAcks.delete(id);
+        console.log(`[cloud] S4 uncertain ack 重投确认：${id} → dev=${dev}`);
+      }
+    }
+  }
+
   // 未配对设备的帧此前静默丢弃：对端不知道自己已被除名，只能永远卡"连接中"
   // 并按心跳节奏刷帧。回一帧明文 pair_nack（此时不知道对方公钥、无法加密），
   // 浏览器据此显示"未配对"并停止重试。每设备 60s 限一帧，防心跳放大成刷屏。
@@ -470,6 +508,7 @@ export class CloudClient {
   private resumePhone(dev: string, lastSeq: number): void {
     this.phones.set(dev, { lastSeq, active: true });
     this.identity.touchPeer(dev); // 议题①：last_seen 内存态更新（设备清单在线点）
+    this.flushUncertainAcks(dev); // S4（relfix-s）：恢复链先重投待确认回执（成功未知收敛）
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     // 落后太多 = 设备冷启动（内存空但持久化了旧 seq）：增量事件只能更新已知会话、
     // 建不出列表，且上千帧补发挤占桥带宽——超过阈值直接 SNAPSHOT 全量重建
@@ -872,7 +911,14 @@ export class CloudClient {
       return;
     }
     const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `cloud-${f.from}`);
-    this.sendSealed(f.from, { type: "COMMAND_ACK", ...ack });
+    // S4 uncertain 三分（relfix-s 批，MUL-4257 语义）：上面 shape/unsupported 分支=
+    // **明确失败**（客户端换新 command_id 重试安全）；走到这里=写已执行——回执投
+    // 出且桥开放=**成功**；投递失败（parked/无 peer）或桥非开放（sendSealed 假成功
+    // 面实查 bridgeOpen）=**成功未知（uncertain）**：不重执行（handleCommand 按
+    // command_id 幂等重放首回执），回执入队待确认，hello/ping 恢复链重投
+    if (!this.sendSealed(f.from, { type: "COMMAND_ACK", ...ack }) || !this.bridgeOpen()) {
+      this.queueUncertainAck(f.from, cmd.command_id, ack);
+    }
   }
 
   private onEnv(env: Envelope): void {
@@ -898,8 +944,12 @@ export class CloudClient {
   }
 
   // ---------- #373 /wan 手表明文透传 ----------
-  private sendWan(dev: string, obj: unknown): void {
+  // S4（relfix-s）：返回值化——桥断开时 send 是静默 no-op，调用面（命令回执）需要
+  // 知道「未投出」以走 uncertain 入队；既有忽略返回值的调用面行为不变
+  private sendWan(dev: string, obj: unknown): boolean {
+    if (!this.bridgeOpen()) return false;
     this.send({ to: dev, data: { t: "wan", frame: JSON.stringify(obj) } });
+    return true;
   }
 
   // F7 收口：公共桥（token 公开，任意人可注册任意 dev）上 /wan 明文通道等于无鉴权
@@ -952,7 +1002,11 @@ export class CloudClient {
         return;
       }
       const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `wan-${dev}`);
-      this.sendWan(dev, { type: "COMMAND_ACK", ...ack });
+      // S4 uncertain 三分（relfix-s）：同云手机路径——写已执行+回执未达=成功未知，
+      // 不重执行、入队待确认（wan 通道），resumeWan 恢复链 flush 重投
+      if (!this.sendWan(dev, { type: "COMMAND_ACK", ...ack })) {
+        this.queueUncertainAck(dev, cmd.command_id, ack, true);
+      }
       return;
     }
     this.sendWan(dev, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid command shape" });
@@ -963,6 +1017,7 @@ export class CloudClient {
   private resumeWan(dev: string, lastSeq: number): void {
     const known = this.wanWatches.has(dev);
     this.wanWatches.set(dev, { lastSeq, active: true });
+    this.flushUncertainAcks(dev); // S4（relfix-s）：wan 恢复链同样先重投待确认回执
     if (!known) console.log(`[cloud] watch ${dev} online via wan`);
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     if (replay && replay.length <= REPLAY_FAST_MAX) {
