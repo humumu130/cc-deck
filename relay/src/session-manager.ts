@@ -354,7 +354,7 @@ function appendDeletedExt(dataDir: string, id: string): void {
 // 模式），ensureExternal/adopt/setArtifacts 三处回放挂回
 const DELIVERABLES_CAP = 300;
 
-interface DeliverableEntry { sid: string; path: string; ts: number; unverified?: boolean }
+interface DeliverableEntry { sid: string; path: string; ts: number; unverified?: boolean; cli_sid?: string }
 
 // #72A0FIX2：unverified 标记（symlink 分量交付，目标元数据不当文件本体记账）的
 // 账面扩展位。types.ts 的 ArtifactItem 冻结面不动，本文件内结构化交叉类型承载，
@@ -378,6 +378,14 @@ function readDeliverables(dataDir: string): DeliverableEntry[] {
   }
 }
 
+// 账目同文件判定（deliver-chain 附带·1029 公司侧反馈）：sid 精确相等 + 路径大小写
+// 不敏感比对——Windows（大小写不敏感 FS）上 D:\Code\X 与 d:\code\x 两次登记是同一
+// 文件，精确串比会产生重复条目；与 registerDeliverable 内存态合并的 toLowerCase
+// 口径（findIndex 同款）对齐，账面/内存面一个判定
+function sameLedgerEntry(a: DeliverableEntry, sid: string, path: string): boolean {
+  return a.sid === sid && a.path.toLowerCase() === path.toLowerCase();
+}
+
 function appendDeliverable(dataDir: string, e: DeliverableEntry): boolean {
   // #292-B3 批2 范式（deliverables.json→artifact 表追赶；显式 dataDir——cfg.dataDir
   // 可能≠env CCR_DATA_DIR，锁错库=互斥失效，见 withStorageTx 头注）
@@ -386,7 +394,7 @@ function appendDeliverable(dataDir: string, e: DeliverableEntry): boolean {
   // +返回 false（磁盘满/AV 锁文件时调用方当成功=文件库两丢零日志，B-F7）
   let ok = true;
   withStorageTx({ dataDir }, () => {
-    const list = readDeliverables(dataDir).filter((x) => !(x.sid === e.sid && x.path === e.path));
+    const list = readDeliverables(dataDir).filter((x) => !sameLedgerEntry(x, e.sid, e.path));
     list.push(e);
     ok = atomicWriteJson(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
     if (!ok) console.warn(`[deliverable] 交付清单写入失败（文件/库均无此记录，调用方应知悉）：sid=${e.sid} path=${e.path}`);
@@ -2164,7 +2172,7 @@ export class SessionManager {
   // deliverables.json（旧序 appendDeliverable 先于 stat，登记即失败也已写账）；
   // ③unverified 标记随 ArtifactItem + deliverables.json 落账（applyDeclaredDeliverables
   // 重启挂回还原），此前只到 HTTP 响应、重启即丢；重复登记以最新证据为准
-  registerDeliverable(sessionId: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; error?: string } {
+  registerDeliverable(sessionId: string, rawPath: string, snapshot?: DeliverablePathValidation, cliSid?: string): { ok: boolean; error?: string; deduped?: boolean } {
     const s = this.sessions.get(sessionId);
     if (!s) return { ok: false, error: `会话不存在: ${sessionId}` };
     const p = resolve(rawPath.trim());
@@ -2183,7 +2191,20 @@ export class SessionManager {
         exists = false;
       }
     }
-    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now(), ...(unverified ? { unverified: true } : {}) });
+    // deliver-chain Bug1（公司侧 1029 实锤）：账本 sid 是卡 id，CC 会话经
+    // deliverBySession 归因后为 ext-<CLI sid> 或 #230 relay_session_id 反查出的
+    // 任意老卡 id——Stop hook（deliver-stop.mjs）手里只有 CLI 原生 sid，两个
+    // 命名空间永不相交，「登记即豁免」从未生效。修：登记时把 CLI 原生 sid 一并
+    // 落账（cli_sid 扩展位，旧读者按未知字段忽略、readDeliverables 白名单放行），
+    // hook 对账 sid ‖ cli_sid ‖ ext-+sid 三态命中（见 deliver-stop.mjs）。
+    // 附带：同 sid+path（大小写不敏感）复登 = 幂等更新已有条目（appendDeliverable
+    // 换新去重），登记前探一次账面，响应带 deduped 供调用方区分新建/复登
+    const deduped = readDeliverables(this.cfg.dataDir).some((x) => sameLedgerEntry(x, sessionId, p));
+    appendDeliverable(this.cfg.dataDir, {
+      sid: sessionId, path: p, ts: Date.now(),
+      ...(unverified ? { unverified: true } : {}),
+      ...(cliSid && cliSid !== sessionId ? { cli_sid: cliSid } : {}),
+    });
     const list: LedgerArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
     const ts = Date.now();
@@ -2215,7 +2236,7 @@ export class SessionManager {
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
       updated_at: s.state.updated_at, // #271：帧完整性
     });
-    return { ok: true };
+    return { ok: true, ...(deduped ? { deduped: true } : {}) };
   }
 
   // cwd→会话归因核心（deliverByCwd 与 #138 验收单回填通知共用）：会话 cwd 与入参
@@ -2252,11 +2273,11 @@ export class SessionManager {
 
   // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）。#72A0FIX2：可选透传
   // 校验闸快照（签名穿透，登记侧不再二次 stat）
-  deliverByCwd(cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string } {
+  deliverByCwd(cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string; deduped?: boolean } {
     const sid = this.matchSessionByCwd(cwd);
     if (!sid) return { ok: false, error: "无匹配会话（cwd 对不上任何已知会话）" };
     const r = this.registerDeliverable(sid, rawPath, snapshot);
-    return r.ok ? { ok: true, session_id: sid } : r;
+    return r.ok ? { ok: true, session_id: sid, ...(r.deduped ? { deduped: true } : {}) } : r;
   }
 
   // #230 CLI 原生 sid → 卡 id 反查：deliverBySession 第三查取。裸 UUID 老卡（journal
@@ -2275,11 +2296,14 @@ export class SessionManager {
   // CLI sid 两查全 miss，回落 cwd 启发式把产物挂给隔壁卡）。sid 不在册（会话已清理/
   // env 残留）回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的卡 id 供核对
   //（deliverables.json 按 e.sid === 卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
-  deliverBySession(sid: string, cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string } {
+  deliverBySession(sid: string, cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string; deduped?: boolean } {
     const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : this.findByCliSid(sid);
     if (real) {
-      const r = this.registerDeliverable(real, rawPath, snapshot);
-      return r.ok ? { ok: true, session_id: real } : r;
+      // deliver-chain Bug1：CLI 原生 sid（入参）随登记落账 cli_sid——real 是卡 id
+      //（ext- 前缀/老卡任意 id），与 hook 手里的原生 sid 命名空间不同，账面同时
+      // 记两形态，hook 侧三态对账（registerDeliverable 头注）
+      const r = this.registerDeliverable(real, rawPath, snapshot, sid);
+      return r.ok ? { ok: true, session_id: real, ...(r.deduped ? { deduped: true } : {}) } : r;
     }
     return this.deliverByCwd(cwd, rawPath, snapshot);
   }

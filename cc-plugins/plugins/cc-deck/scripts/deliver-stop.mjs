@@ -9,8 +9,14 @@
 //  · 不自动登记、不猜「什么是交付物」——只列出写过的文档类文件，判断留给 AI；
 //  · docs/ 下的写入已被 deliver-guard 自动登记 → 看板有 sid 条目 → 天然豁免，
 //    本提醒只覆盖 docs/ 之外（或自动登记失败）的漏网；
-//  · 看板零登记的判定 = deliverables.json 无 e.sid === 本会话（注册即命中，
-//    与 deliver CLI 的 cwd 前缀匹配无关）。
+//  · 看板零登记的判定 = deliverables.json 无本会话条目（注册即命中，与 deliver
+//    CLI 的 cwd 前缀匹配无关）。条目归属三态对账（deliver-chain Bug1·1029 公司侧
+//    实锤根治）：账本 sid 是卡 id——CC 会话经 relay deliverBySession 归因后为
+//    ext-<CLI sid>（现行外部卡）或 relay_session_id 反查的任意老卡 id（#230），
+//    与本 hook 手里的 CLI 原生 sid 两个命名空间；relay 侧已同步把原生 sid 落账
+//    cli_sid 扩展位，本侧按 e.sid === sid（托管卡）‖ e.cli_sid === sid（relay
+//    记账的原生 id，覆盖老卡反查）‖ e.sid === "ext-"+sid（存量 ext- 账目兼容，
+//    无需迁移）三态命中。
 // 静默放行：非桥接会话 / deliverables 开关关 / deliver 脚本不在（未装 relay）/
 // 账本为空或文件已删光 / 看板已有本会话条目。全程异常静默 exit 0，绝不卡收工。
 // 独立 60s 窗口（不与 guard-stop 共享 guard-pass 文件：两个 Stop hook 并挂时
@@ -65,8 +71,13 @@ try {
       const r = resolve(x || ".");
       try { return realpathSync(r); } catch { return r; }
     };
+    // 三态归属（deliver-chain Bug1，头注详述）：sid ‖ cli_sid ‖ ext-+sid——修复前
+    // 仅 e.sid === sid 精确相等，CC 会话账目（ext- 卡/老卡 id）永不命中，登记即
+    // 豁免从未生效、每次 Stop 必拦一次
+    const owns = (e) =>
+      !!e && (e.sid === sid || e.cli_sid === sid || e.sid === `ext-${sid}`);
     const registered = new Set(
-      list.filter((e) => e && e.sid === sid && typeof e.path === "string").map((e) => norm(e.path)),
+      list.filter((e) => owns(e) && typeof e.path === "string").map((e) => norm(e.path)),
     );
     const remain = files.filter((p) => !registered.has(norm(p)));
     if (!remain.length) {

@@ -274,18 +274,22 @@ export function validateDeliverablePath(rawPath: string): DeliverablePathValidat
   const trimmed = rawPath.trim();
   if (!trimmed) return { ok: false, path: "", error: "path 必须是非空文件路径" };
   const path = resolve(trimmed);
+  // deliver-chain Bug3（公司侧 1029）：错误文案一律原文透传（trimmed——调用方发来
+  // 什么显示什么）。Windows 宿主上 resolve() 会把混反斜杠的垃圾路径（/d/…/C:\…）
+  // 按当前盘符重写成 C:\d\…，报错路径与实际发出的路径对不上，排障误导。resolved
+  // 形态仍随 path 字段返回供程序面消费；成功路径（登记/落账用 path）零变化
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY);
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code === "EISDIR") {
-      return { ok: false, path, error: `交付物必须是普通文件: ${path}` };
+      return { ok: false, path, error: `交付物必须是普通文件: ${trimmed}` };
     }
-    return { ok: false, path, error: `交付物不存在或不可访问: ${path}` };
+    return { ok: false, path, error: `交付物不存在或不可访问: ${trimmed}` };
   }
   try {
     const st = fstatSync(fd);
-    if (!st.isFile()) return { ok: false, path, error: `交付物必须是普通文件: ${path}` };
+    if (!st.isFile()) return { ok: false, path, error: `交付物必须是普通文件: ${trimmed}` };
     // symlink 分量检测：末段本体是 link，或父链某段经 symlink 解析（realpath 与词法
     // 路径不一致，macOS /tmp→/private/tmp 也算）。原地交付物合法不拒绝，但快照留空
     // ——symlink 目标的元数据不得当文件本体记账

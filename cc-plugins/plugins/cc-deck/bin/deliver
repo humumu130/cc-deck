@@ -20,6 +20,46 @@
 # 恒含 session_id/dispatch_id/command_id——HTTP 直投无命令信封，command_id 恒 null），
 # grep '"dispatch_id":"<id>"' 可对账；权威账 $CCR_DATA_DIR/cli-dispatches.ndjson。
 set -uo pipefail
+# 【deliver-chain·公司侧 1029】python 探测器（org CLI e23e6bf4 同款）：python3 →
+# python → py——Windows Git Bash 通常只有 python/py 启动器，裸 python3 直接
+# command not found。探测一次全脚本复用；全缺=人话报错（含尝试顺序+安装指引
+# URL+Windows 勾选 Add to PATH 提示）exit 1。
+PY="$(command -v python3 || command -v python || command -v py || true)"
+if [ -z "$PY" ]; then
+  echo "未找到 python（依次尝试过 python3 / python / py 都不在 PATH）——请安装 Python 3：https://www.python.org/downloads/（Windows 安装时勾选 Add python.exe to PATH）后重开终端重试" >&2
+  exit 1
+fi
+# 【deliver-chain·公司侧 1029】Git Bash/MSYS 环境检测——/d/code 形态的路径需转
+# D:/code 才能被 relay 侧 Node fs 识别（Node 不认 MSYS 虚拟根）。DELIVER_TEST_GITBASH=1
+# 为测试注入口（非 Windows 机器强制开转换分支验证）。
+WIN_GITBASH=0
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN_GITBASH=1 ;; esac
+[ "${DELIVER_TEST_GITBASH:-0}" = "1" ] && WIN_GITBASH=1
+abs() {
+  # 【deliver-chain·公司侧 1029】路径三形态归一化（org CLI abs 同款）：D:\code\x /
+  # D:/code/x 原样过（Node win32 直接可用——修复前 case "$f" in /*) 只认 POSIX
+  # 绝对，D:\code\… 被拼成 $PWD/D:\code\… 双拼，relay 报「交付物不存在」）；
+  # Git Bash 的 /d/code/x → D:/code/x（MSYS 虚拟根 Node 不认，仅 WIN_GITBASH=1
+  # 时转——真 POSIX 机器 /d/... 是合法绝对路径零变化）；相对路径先补 $PWD
+  #（Git Bash 下 PWD 常为 /d/ 形态，补全后过同一转换）。
+  local p="$1" d
+  case "$p" in
+    [A-Za-z]:[\\/]*) printf '%s' "$p"; return 0 ;;
+    /*) : ;;
+    .|"") p="$PWD" ;;
+    *) p="$PWD/$p" ;;
+  esac
+  if [ "$WIN_GITBASH" = "1" ]; then
+    case "$p" in
+      /[A-Za-z]/*)
+        d="$(printf '%s' "${p:1:1}" | tr 'a-z' 'A-Z')"
+        printf '%s:/%s' "$d" "${p:3}"
+        return 0
+        ;;
+    esac
+  fi
+  printf '%s' "$p"
+}
 usage() {
   echo "用法: deliver [--session <id>] <文件路径>" >&2
   exit 1
@@ -41,8 +81,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -z "$f" ] && usage
-# 相对路径 → 绝对
-case "$f" in /*) ;; *) f="$PWD/$f";; esac
+# 相对路径 → 绝对（abs：三形态归一化，Windows 盘符形态原样过，见函数头注）
+f="$(abs "$f")"
 # 会话身份：显式 --session 优先，env 三级链兜底（见头注归因链）
 sid="${sid_arg:-${CC_DECK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-}}}}"
 [ -n "$sid" ] || echo "警告：session_id 全缺（--session 未给且 CC_DECK_SESSION_ID/CLAUDE_CODE_SESSION_ID/CLAUDE_SESSION_ID 均空）——本次登记不携带会话归因，relay 回落 cwd 启发式，同仓库并行会话可能挂错卡" >&2
@@ -52,13 +92,13 @@ sid="${sid_arg:-${CC_DECK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION
 data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
 token="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
 # 端口以 relay 自报为准（bridge.json），缺省回落默认 8787
-port="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
+port="${CCR_PORT:-$("$PY" -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
 : "${port:=8787}"
 # 单请求超时秒数（CCR_TIMEOUT 可调，默认 15；非数字/过小收敛）
 timeout="${CCR_TIMEOUT:-15}"
 case "$timeout" in ""|*[!0-9]*) timeout=15 ;; esac
 [ "$timeout" -ge 1 ] || timeout=15
-body="$(python3 - "$f" "$PWD" "$sid" <<'PY'
+body="$("$PY" - "$f" "$(abs .)" "$sid" <<'PY'
 import json, sys
 sid = sys.argv[3].strip() if len(sys.argv) > 3 else ""
 d = {"path": sys.argv[1], "cwd": sys.argv[2]}
@@ -68,7 +108,7 @@ print(json.dumps(d, ensure_ascii=False))
 PY
 )"
 
-dispatch_id="$(python3 - <<'PY'
+dispatch_id="$("$PY" - <<'PY'
 import uuid
 print(uuid.uuid4())
 PY
@@ -82,7 +122,7 @@ mkdir -p "$data"
 # 字段位保留与 dispatch 日志同构，PM 侧对账 grep 一套键。同行落盘 phase 过程账
 phase_log() { # $1=phase $2=ok(true|false|null) $3=error（须已消毒）
   local line
-  line="$(python3 - "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
+  line="$("$PY" - "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 sid, did, phase, ok, error = sys.argv[1:6]
@@ -101,7 +141,7 @@ PY
     || echo "deliver：phase 过程账写入失败（$phase_log_file），stderr 日志仍可 grep 对账" >&2
 }
 append_log() {
-  python3 - "$log" "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
+  "$PY" - "$log" "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 path, sid, dispatch_id, command_id, ok, error = sys.argv[1:]
@@ -149,7 +189,7 @@ rm -f "${tmp}.status"
 [ "$status" = "200" ] || fail "relay 返回 HTTP $status"
 # ACK ok:true 严判两分：ok:false=relay 明确拒收（error 透传）vs body 无效（非 JSON/
 # 缺 ok）——两类都非零退出，文案可判定不混淆
-ack_class="$(python3 - "$tmp" "$token" <<'PY'
+ack_class="$("$PY" - "$tmp" "$token" <<'PY'
 import json, sys
 token = sys.argv[2]
 try:
