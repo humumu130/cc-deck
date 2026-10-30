@@ -161,8 +161,9 @@ const t1 = await mkTenant();
 const invMore = await srv.tenant!.createInvite(t1.tid, "e2e-boot", 3);
 assert("code" in invMore && !!invMore.code, "桥主直发 budget=3 邀请码（同租户）");
 const invA = t1.invite;
-const invB = invMore.code;
-const invD = invMore.code;
+const invCode = ("code" in invMore && invMore.code) ? invMore.code : "";
+const invB = invCode;
+const invD = invCode;
 
 console.log("== 三机自举（A/B xmsg 开，D 关） ==");
 const A = bootPeer("A", 8871, invA, true);

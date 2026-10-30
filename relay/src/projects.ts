@@ -173,7 +173,7 @@ export type ConfirmKind =
   // X0 件2（PRD §4.7 C+#4，2026-10-29）：本机会话自荐入编申请（org join）——
   // payload 携带 gid/sid/role；approved=member-add 等效入编（seatGate 同口径），
   // rejected=纯留痕。防任意混入的确认卡门。
-  | "member-join";
+  | "member-join"
   // X1 多机编排（PRD v0.3 §4.4 域内-首次确认）：设备级 first-contact 确认卡——新设备
   // 首条密封 xmsg 弹卡一次（消息悬置），✓ = device_trust 确认+悬置放行，✗ = 吊销+弃置；
   // payload 携 dev/pubkey/tenant/first_msg_id，决议副作用在 applyConfirmEffects

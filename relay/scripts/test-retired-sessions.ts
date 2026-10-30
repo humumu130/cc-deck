@@ -15,7 +15,8 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EventBus, type Envelope } from "../src/event-bus.js";
+import { EventBus } from "../src/event-bus.js";
+type Envelope = { type: string; payload?: unknown };
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { createGroup, addMember, removeMember, setGroupStatus, listGroups } from "../src/projects.js";
@@ -52,10 +53,10 @@ const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
 
 // 瞬态帧捕获（RETIRED_SESSIONS_UPDATED）
-const frames: { ids: string[] }[] = [];
+const frames: string[][] = [];
 bus.subscribe((env: Envelope) => {
   if (env.type === "RETIRED_SESSIONS_UPDATED") {
-    frames.push((env.payload as { retired_session_ids?: string[] }).retired_session_ids ?? []);
+    frames.push(((env.payload as { retired_session_ids?: string[] }).retired_session_ids ?? []) as string[]);
   }
 });
 

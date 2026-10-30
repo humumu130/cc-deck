@@ -287,6 +287,8 @@ export const migrations: readonly Migration[] = [
     version: 8,
     name: "dispatch-run-ref",
     up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN run_ref TEXT"),
+  },
+  {
     // X1 多机编排（PRD v0.3 §4.4/§4.5）：设备互信表——pubkey 钉扎 + 首联确认 + 吊销 + 租户域。
     // relay 侧 SQLite 本批唯一新表（PRD 明文「仅 device_trust 一表」，其余 xmsg 账本走文件域）。
     version: 9,
