@@ -23,7 +23,7 @@ import {
 } from "../src/leader-duty.js";
 import { createSqlitePort } from "../src/storage/sqlite.js";
 import { runMigrations } from "../src/storage/migrator.js";
-import { IMPORT_LEDGER_TABLES, migrations, STORAGE_INDEXES, STORAGE_TABLES } from "../src/storage/schema.js";
+import { DEVICE_TRUST_TABLES, IMPORT_LEDGER_TABLES, migrations, PERMISSION_AUDIT_TABLES, STORAGE_INDEXES, STORAGE_TABLES } from "../src/storage/schema.js";
 
 const SRC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "..", "src");
 const FIXTURE = <T>(name: string): T =>
@@ -79,8 +79,12 @@ function runOnce(round: number): void {
     const tables = port.query<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     );
-    assert(tables.length === 17 && tables.every((r) => !/duty/i.test(r.name)),
-      "R1 库内 17 表（15+2）与冻结件一致且零 duty 表");
+    // 表数断言随 schema 演进收口（原 17 计数漏 permission_audit v3 常红；X1 v7 device_trust
+    // 后=15+2+1+1=19——清单锚 STORAGE_TABLES∪IMPORT_LEDGER∪PERMISSION_AUDIT∪DEVICE_TRUST，
+    // 「零 duty 表」的本断言原义不变）
+    const wantN = STORAGE_TABLES.length + IMPORT_LEDGER_TABLES.length + PERMISSION_AUDIT_TABLES.length + DEVICE_TRUST_TABLES.length;
+    assert(tables.length === wantN && tables.every((r) => !/duty/i.test(r.name)),
+      `R1 库内 ${wantN} 表（15 基线+2 台账+1 权限审计+1 设备互信）零 duty 表`);
     port.close();
 
     // 纯函数跑轮期间端口已关——副作用断言只认 dataDir 文件清单（duty 无任何落盘授权，

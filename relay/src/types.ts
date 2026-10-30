@@ -981,6 +981,8 @@ export type CommandType =
   | "COMMAND_EXT_MODE"
   | "COMMAND_EXT_INPUT"
   | "COMMAND_EXT_STOP"
+  // X1 多机编排：密封 xmsg 发送命令面（三口汇流；详见 XmsgCommand 接口注）
+  | "COMMAND_XMSG"
   | "COMMAND_DELETE"
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
@@ -1080,6 +1082,15 @@ export interface ExtModeCommand extends CommandBase {
 export interface ExtInputCommand extends CommandBase {
   type: "COMMAND_EXT_INPUT";
   payload: { session_id: string; text: string; images?: string[]; files?: UploadBlob[] };
+}
+
+// X1 多机编排（PRD v0.3 §4.2）：密封 xmsg 发送命令面——三口（ccops send --dev /
+// org dispatch --remote / 会话卡跨机发送按钮）汇流本命令（A 路裁决：不造第三套命令面）。
+// op=send（dev 目标设备 + session 目标会话缺省=对端值班位 + text ≤32KB）/ status
+//（msg_id 轮询回执态，ccops 阻塞回显）/ peers（对端清单，按钮选单数据源）。
+export interface XmsgCommand extends CommandBase {
+  type: "COMMAND_XMSG";
+  payload: { op?: "send" | "status" | "peers"; dev?: string; session?: string; text?: string; msg_id?: string; source_session?: string };
 }
 
 // 外部会话打断（向终端注入 Esc）
@@ -1313,6 +1324,7 @@ export type Command =
   | ExtModeCommand
   | ExtInputCommand
   | ExtStopCommand
+  | XmsgCommand
   | DeleteCommand
   | RenameCommand
   | AnswerCommand

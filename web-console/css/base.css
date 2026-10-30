@@ -2190,6 +2190,13 @@
        走确认，不可裸删 */
     .row-menu .row-del-tip { max-width: 200px; padding: 6px 10px 4px; color: var(--text); font-size: var(--fs-E); line-height: 1.45; }
     .row-menu .row-del-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 6px 6px; }
+    /* X1 跨机发送浮层（row-menu 同壳）：目标设备 + 可选目标会话 + 正文 + 发送态回显 */
+    .row-menu.xmsg-pop { min-width: 240px; max-width: 300px; padding: 8px; gap: 6px; }
+    .row-menu.xmsg-pop label { display: flex; flex-direction: column; gap: 3px; color: var(--text); font-size: var(--fs-E); }
+    .row-menu.xmsg-pop input, .row-menu.xmsg-pop textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text-strong); font-size: var(--fs-E); padding: 4px 6px; }
+    .row-menu.xmsg-pop textarea { min-height: 56px; resize: vertical; font-family: var(--sans); }
+    .row-menu.xmsg-pop input:focus, .row-menu.xmsg-pop textarea:focus { border-color: var(--brand); outline: none; }
+    .row-menu.xmsg-pop .xmsg-state { padding: 0 2px; color: var(--text); font-size: var(--fs-E); min-height: 16px; }
     /* 行内改名输入（菜单「重命名」→ 标题原位替换，Enter/失焦回写数据重渲） */
     .row-rename-input { flex: 1 1 auto; min-width: 0; height: calc(20px * var(--ui-scale)); padding: 0 6px; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface2); color: var(--text-strong); font: 600 var(--srow-name-size) var(--sans); }
     /* 置顶徽章（右键置顶回写 item.pinned，r3 行内 footnote 级小徽） */

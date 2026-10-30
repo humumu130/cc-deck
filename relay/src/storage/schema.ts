@@ -46,6 +46,10 @@ export const IMPORT_LEDGER_TABLES = ["import_checkpoint", "import_loss"] as cons
 /** v3 权限审计表名清单（permission_audit，P81-5；append-only 审计面，非冻结件 15 表口径，单独列）。 */
 export const PERMISSION_AUDIT_TABLES = ["permission_audit"] as const;
 
+/** v7 设备互信表名清单（device_trust，X1 多机编排 PRD §4.4/§4.5——「relay 侧 SQLite 仅
+ * device_trust 一表」；pubkey 钉扎/租户域/首联确认/吊销四态，与 org 实体表族隔离单独列）。 */
+export const DEVICE_TRUST_TABLES = ["device_trust"] as const;
+
 // v1 基线 DDL——与冻结件 §2 逐字对齐（含引号写法 "group"）。
 const BASELINE_15_TABLES_DDL = `
 CREATE TABLE project (
@@ -152,6 +156,27 @@ CREATE INDEX idx_confirm_pending ON org_confirm(status) WHERE status='pending';
 CREATE INDEX idx_artifact_attr ON artifact(project_id,group_id,session_id,task_id);
 CREATE INDEX idx_notification_action ON notification(level,resolved_at,handled_at);
 CREATE INDEX idx_acceptance_task ON acceptance_sheet(task_id,group_id);
+`;
+
+// v7 设备互信（X1 多机编排，PRD §4.4「域内-首次确认」/§4.5「relay 侧 SQLite 仅 device_trust
+// 一表（+pubkey 钉扎/revoked_at/confirmed_by/tenant 域字段）」）。行=一台对端设备（跨机 rl- 或
+// 未来登录设备），生命周期：first_seen（pending）→ confirmed（确认卡 ✓ 落 confirmed_at/confirmed_by）
+// → revoked（首联 ✗ 或事后吊销，同 dev 同钥重入仍拒——防换卡绕过）。pubkey 钉扎：已确认行换钥
+// =冒名，写口拒绝（device-trust.ts upsertFirstSeen 校验），不覆盖。append 语义 + 少量 UPDATE
+//（确认/吊销两拍），无 DELETE——信任历史可审计。
+const DEVICE_TRUST_DDL = `
+CREATE TABLE device_trust (
+  dev TEXT PRIMARY KEY,
+  pubkey TEXT NOT NULL,
+  tenant TEXT,
+  first_seen_at INTEGER NOT NULL,
+  confirmed_at INTEGER,
+  confirmed_by TEXT,
+  revoked_at INTEGER,
+  first_msg_id TEXT,
+  note TEXT
+);
+CREATE INDEX idx_device_trust_confirmed ON device_trust(confirmed_at);
 `;
 
 // v2 导入台账 DDL（M11-B2）——checkpoint 断点续跑表 + loss 台账表。
@@ -262,5 +287,10 @@ export const migrations: readonly Migration[] = [
     version: 8,
     name: "dispatch-run-ref",
     up: (p) => p.exec("ALTER TABLE dispatch ADD COLUMN run_ref TEXT"),
+    // X1 多机编排（PRD v0.3 §4.4/§4.5）：设备互信表——pubkey 钉扎 + 首联确认 + 吊销 + 租户域。
+    // relay 侧 SQLite 本批唯一新表（PRD 明文「仅 device_trust 一表」，其余 xmsg 账本走文件域）。
+    version: 9,
+    name: "x1-device-trust（设备互信：首联确认卡消费方，pubkey 钉扎防换钥冒名；原 v7 收割合并时因 S3/run_ref 已占 v7/v8 改 v9）",
+    up: (p) => p.exec(DEVICE_TRUST_DDL),
   },
 ];

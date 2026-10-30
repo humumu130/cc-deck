@@ -74,6 +74,7 @@ import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT
 import { createEngineCommands } from "./commands/engine-commands.js"; // W-SPLIT-S3c
 import { createCloudCommands } from "./commands/cloud-commands.js"; // W-SPLIT-S3c
 import { createBoardCommands } from "./commands/board-commands.js"; // W-SPLIT-S3c // W-SPLIT-S3b：小族 mixin（四助手随迁单源，原定义删除防双源）
+import { createXmsgCommands, type XmsgController, type XmsgTransport } from "./commands/xmsg-commands.js"; // X1 多机编排：密封 xmsg 子系统（mixin 范式）
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
@@ -744,6 +745,9 @@ export class SessionManager {
   private cloudCmds = createCloudCommands(this);
   // W-SPLIT-S3c：组织/看板/任务域命令 mixin
   private boardCmds = createBoardCommands(this);
+  // X1 多机编排：密封 xmsg 子系统控制器（策略面；传输面由 index.ts 经 setXmsgTransport
+  // 注入——工厂内账本惰性开，见 commands/xmsg-commands.ts 头注）
+  private xmsgCtl: XmsgController = createXmsgCommands(this);
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string; generation?: number; task_snapshot?: { text?: string; status?: string; updated_at?: number } }[]>(); /* #G5：retry_of 随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板基线比对源 */
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
@@ -1109,7 +1113,7 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: "pm-wake" | "pm-claim" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛；X0 件6：pm-claim */
+  private emitChainAudit(action: "pm-wake" | "pm-claim" | "dispatch-reroute" | "stale-escalate" | "dispatch-close" | "gate-release" | "transition-illegal" | "recon-autoclose" | "xmsg-send" | "xmsg-recv" | "xmsg-reject" | "xmsg-inject" | "xmsg-ack" | "xmsg-first-contact", detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autoclose=对账自动搬卡收敛；X0 件6：pm-claim；X1：xmsg 六词=跨机消息收发/拒/注入/回执/首联（§4.4 域内-审计） */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
@@ -1778,6 +1782,30 @@ export class SessionManager {
 
   setPeerKicker(fn: (dev: string) => void): void {
     this.peerKicker = fn;
+  }
+
+  // X1 多机编排：xmsg 传输面注入（index.ts 云桥装配后调；cloud-client 实现密封/发现）
+  setXmsgTransport(t: XmsgTransport): void {
+    this.xmsgCtl.attachTransport(t);
+  }
+
+  // ---------- X1 xmsg 对外门面（cloud-client / bridge 钩子调；体在 commands/xmsg-commands.ts） ----------
+
+  /** 云桥 rl- 来帧（xmsg/xack）。返回 false=未启用/非 xmsg 帧（cloud-client 回落原路径）。 */
+  xmsgReceive(from: string, inner: unknown, wire: unknown): boolean {
+    return this.xmsgCtl.receive(from, inner as never, wire);
+  }
+  /** 桥（重）连后补发泵触发。 */
+  xmsgFlush(): void {
+    this.xmsgCtl.flushOutbox();
+  }
+  /** ext-input 队列条目真注入成功（bridge flushQueue 钩子）。 */
+  xmsgInjected(msgId: string): void {
+    this.xmsgCtl.injected(msgId);
+  }
+  /** xmsg 审计单点（§4.4 收发双向全入 chain-audit；词表见 emitChainAudit 联合）。 */
+  xmsgAudit(action: "xmsg-send" | "xmsg-recv" | "xmsg-reject" | "xmsg-inject" | "xmsg-ack" | "xmsg-first-contact", detail: string): void {
+    this.emitChainAudit(action, detail);
   }
 
   // #325 扫码登录授权器（index.ts 注入，转发各云桥客户端 grantLogin）
@@ -2731,6 +2759,11 @@ export class SessionManager {
         }
         case "COMMAND_EXT_STOP": {
           return this.miscCmds.COMMAND_EXT_STOP(cmd, by); // W-SPLIT-S3b：mixin 委托（体在 commands/misc-commands.ts；bridge 依赖照搬）
+        }
+        case "COMMAND_XMSG": {
+          // X1 多机编排（PRD §4.2 发送三口汇流）：op=send/status/peers——ccops send --dev /
+          // org dispatch --remote / 会话卡按钮三入口全走本命令（A 路裁决：不造第三套命令面）
+          return this.xmsgCtl.COMMAND_XMSG(cmd, by);
         }
         case "COMMAND_REFRESH_TODOS": {
           return this.miscCmds.COMMAND_REFRESH_TODOS(cmd, by); // W-REVFIX（#186）：真体在 misc-commands——原经 board 双跳（S3c 误抓 S3b 委托行），改直委
@@ -6105,6 +6138,45 @@ export class SessionManager {
             redispatch_of: str("redispatch_of") || undefined, // M12-3 重投锚（段链接续）
           });
         }
+        // X1 多机编排（PRD §4.2-2）：org dispatch --remote <dev>——派单任务书经密封 xmsg
+        // 送对端值班位，**对端权威消化**（对端 PM 按其本机 org 现状分诊；对端无值班位/
+        // 无编制=回 rejected 附人话指引，发送方 CLI 阻塞回显）。深水区（回程/PM 跨机感知/
+        // outbox 水位面）属 X2 批；本批=路由+回执可见。
+        case "dispatch-remote": {
+          const dev = str("dev") || "";
+          if (!/^rl-[0-9a-f]{4,64}$/.test(dev)) return { ok: false, error: `目标设备号不合法（rl- 开头）: ${dev || "空"}` };
+          const anchor = str("anchor");
+          const prompt = typeof p.prompt === "string" ? p.prompt : "";
+          if (!anchor || !prompt.trim()) return { ok: false, error: "anchor/prompt 必填" };
+          const gid = str("gid");
+          const title = str("title");
+          const skills = Array.isArray(p.skills) ? p.skills.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean) : [];
+          const text = [
+            "【跨机派单 · 对端权威消化】",
+            `本消息由另一台机器经密封 xmsg 转发到你的值班位。请在**本机**执行等价派单分诊（org dispatch）：`,
+            `anchor: ${anchor}（发送方机器上的绝对路径——本机可用性由你判断，不可用按本机 org 规则回绝并说明）`,
+            `gid: ${gid || "（无，随手办口径）"}`,
+            `title: ${title || "（缺省）"}`,
+            skills.length ? `skills: ${skills.join(",")}` : "skills: （无）",
+            "—— 任务书 ——",
+            prompt,
+          ].join("\n");
+          const ack = this.handleCommand(
+            { command_id: `xdr-${randomUUID()}`, ts: Date.now(), type: "COMMAND_XMSG", payload: { op: "send", dev, text } },
+            "org-dispatch-remote",
+          );
+          if (!ack.ok) return { ok: false, error: ack.error ?? "xmsg 发送失败" };
+          return { ok: true, data: ack.data };
+        }
+        // X1：xmsg 状态查询的 HTTP 面（org --remote / ccops 轮询共用；只读非决议类）
+        case "xmsg-status": {
+          const ack = this.handleCommand(
+            { command_id: `xs-${randomUUID()}`, ts: Date.now(), type: "COMMAND_XMSG", payload: { op: "status", msg_id: str("msg_id") } },
+            "org-http",
+          );
+          if (!ack.ok) return { ok: false, error: ack.error ?? "查询失败" };
+          return { ok: true, data: ack.data };
+        }
         case "board": {
           const op = str("op");
           const gid = str("gid");
@@ -6775,10 +6847,33 @@ export class SessionManager {
           this.emitRules(); // W-RULES2：确认卡 ✓ 落库后广播（提案出卡时不发——零写入）
           break;
         }
+        case "device-trust": {
+          // X1 多机编排（§4.4 域内-首次确认）：✓ = device_trust 确认 + 悬置消息放行投递；
+          // ✗ = 吊销 + 悬置消息弃置（各回 rejected:first-contact）。副作用体在 xmsg 控制器
+          //（互信表写 + held 清账 + 回执），失败面经 fail 回传（卡已决不回滚，可运维补救）
+          const dev = typeof c.payload.dev === "string" ? c.payload.dev : "";
+          if (!dev) return fail("设备首联决议", { error: "payload.dev 缺失" });
+          try {
+            this.xmsgCtl.onTrustDecision(dev, c.status === "approved", c.decided_by ?? "user");
+          } catch (e) {
+            return fail("设备首联决议", { error: e instanceof Error ? e.message : String(e) });
+          }
+          break;
+        }
       }
     } else if (c.kind === "project-create" && gid) {
       const r = setGroupStatus(gid, "archived", "立项确认被否决"); // pending → archived 留痕
       if (!r.ok) return fail("否决留痕迁移", r);
+    } else if (c.kind === "device-trust") {
+      // X1 首联卡 ✗：device_trust 吊销 + 悬置消息弃置（各回 rejected:first-contact）——
+      // 与 ✓ 同一副作用单点（onTrustDecision），不可只在 approved 分支挂
+      const dev = typeof c.payload.dev === "string" ? c.payload.dev : "";
+      if (!dev) return fail("设备首联否决", { error: "payload.dev 缺失" });
+      try {
+        this.xmsgCtl.onTrustDecision(dev, false, c.decided_by ?? "user");
+      } catch (e) {
+        return fail("设备首联否决", { error: e instanceof Error ? e.message : String(e) });
+      }
     }
     this.emitOrgState();
     if (gid) this.emitBoard(gid);

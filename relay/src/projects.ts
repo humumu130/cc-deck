@@ -174,6 +174,11 @@ export type ConfirmKind =
   // payload 携带 gid/sid/role；approved=member-add 等效入编（seatGate 同口径），
   // rejected=纯留痕。防任意混入的确认卡门。
   | "member-join";
+  // X1 多机编排（PRD v0.3 §4.4 域内-首次确认）：设备级 first-contact 确认卡——新设备
+  // 首条密封 xmsg 弹卡一次（消息悬置），✓ = device_trust 确认+悬置放行，✗ = 吊销+弃置；
+  // payload 携 dev/pubkey/tenant/first_msg_id，决议副作用在 applyConfirmEffects
+  // case "device-trust"（xmsg 控制器 onTrustDecision）
+  | "device-trust";
 
 export interface OrgConfirm {
   id: string;

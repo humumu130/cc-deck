@@ -51,6 +51,8 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_EXT_MODE",
   "COMMAND_EXT_INPUT",
   "COMMAND_EXT_STOP",
+  // X1 多机编排：密封 xmsg 发送命令面（三口汇流；与 ws-server 白名单逐字一致纪律）
+  "COMMAND_XMSG",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -288,6 +290,12 @@ export class CloudClient {
       // 桥侧校验后签发设备 token）；已登录→cloud-peers.json 上报一次每进程
       //（存量迁移数据源，PRD §4.5——桥主确认收编入租户）
       this.tenantHandshake();
+      // X1 密封 xmsg（CCR_XMSG=1 时）：桥（重）连即发现对端 relay 公钥（disc→RELAYS）
+      // + outbox 补发泵（断线补发零重——对端 msg_id seen 幂等承接，PRD §4.8）
+      if (process.env.CCR_XMSG === "1") {
+        this.send({ to: "*", data: { t: "disc" } });
+        try { this.mgr.xmsgFlush?.(); } catch { /* 尽力而为 */ }
+      }
     });
     ws.on("message", (raw) => {
       this.lastRecv = Date.now();
@@ -725,6 +733,39 @@ export class CloudClient {
       this.wbSightings.delete(to);
       return;
     }
+    // X1 密封 xmsg/xack（云桥 rl- 对端来帧；桥定向帧不检内层类型原样透传，解封与
+    // 策略全在 xmsg 控制器）。明文体（v/spk/env）在本层只做形状解封；未启用
+    //（CCR_XMSG off）时控制器返回 false → 回落既有路径（unpaired drop）=纯现状
+    if (f.from && f.from.startsWith("rl-") && f.data && typeof f.data === "object") {
+      const xt = (f.data as { t?: unknown }).t;
+      if (xt === "xmsg" || xt === "xack") {
+        const w = f.data as { spk?: unknown; env?: unknown };
+        let inner: unknown = null;
+        if (typeof w.spk === "string" && w.spk && w.env && typeof w.env === "object"
+          && typeof (w.env as SealedBox).n === "string" && typeof (w.env as SealedBox).c === "string") {
+          inner = unseal(w.env as SealedBox, w.spk, this.identity.keypair.secretKey);
+        }
+        let handled = false;
+        try { handled = this.mgr.xmsgReceive?.(f.from, inner, f.data) === true; } catch { handled = false; }
+        if (handled) return;
+      }
+    }
+    // X1 disc 应答：在线 relay 清单（T1a 触点③租户过滤后下发）——xmsg 发送侧公钥发现源
+    if (f.type === "RELAYS") {
+      const relays = (f as unknown as { relays?: unknown }).relays;
+      if (Array.isArray(relays)) {
+        for (const r of relays) {
+          const e = r as { dev?: unknown; rk?: unknown };
+          if (e && typeof e.dev === "string" && e.dev.startsWith("rl-") && typeof e.rk === "string" && e.rk) {
+            this.relayKeys.set(e.dev, e.rk);
+          }
+        }
+      }
+      const waiters = this.discWaiters;
+      this.discWaiters = [];
+      for (const w of waiters) w();
+      return;
+    }
     // #373 /wan 手表明文透传信封（桥可信通道）：{t:"wan", from, frame:"<relay协议明文JSON文本>"}
     const wanEnv = f.data as { t?: unknown; frame?: unknown } | undefined;
     if (f.from && wanEnv && typeof wanEnv === "object" && wanEnv.t === "wan" && typeof wanEnv.frame === "string") {
@@ -953,6 +994,49 @@ export class CloudClient {
     if (!this.bridgeOpen()) return false;
     this.send({ to: dev, data: { t: "wan", frame: JSON.stringify(obj) } });
     return true;
+  }
+
+  // ---------- X1 密封 xmsg 传输面（策略在 commands/xmsg-commands.ts；本层只做密封/发现/帧收发） ----------
+  // disc/RELAYS 发现的 rl- 公钥缓存（桥 register 时上报 rk；T1a 触点③租户过滤下发）
+  private relayKeys = new Map<string, string>();
+  private discWaiters: (() => void)[] = [];
+
+  /** 密封发送 xmsg（false=本桥未连接；目标离线由桥回 ROUTE_MISS→补发腿承接）。 */
+  xmsgSend(dev: string, inner: Record<string, unknown>, theirPubkey: string): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      const env = seal(inner, theirPubkey, this.identity.keypair.secretKey);
+      this.send({ to: dev, data: { t: "xmsg", v: 1, spk: this.identity.keypair.publicKey, env } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 密封回执 xack（公钥=来帧 spk / 互信表钉扎）。 */
+  xmsgAck(dev: string, theirPubkey: string, inner: Record<string, unknown>): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      const env = seal(inner, theirPubkey, this.identity.keypair.secretKey);
+      this.send({ to: dev, data: { t: "xack", v: 1, spk: this.identity.keypair.publicKey, env } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 目标 relay 公钥发现（缓存→disc→RELAYS→缓存；null=未发现：离线/异租户被桥过滤）。 */
+  async xmsgDiscover(dev: string, timeoutMs = 3_000): Promise<string | null> {
+    const hit = this.relayKeys.get(dev);
+    if (hit) return hit;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return null;
+    this.send({ to: "*", data: { t: "disc" } });
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, timeoutMs);
+      t.unref?.();
+      this.discWaiters.push(resolve);
+    });
+    return this.relayKeys.get(dev) ?? null;
   }
 
   // F7 收口：公共桥（token 公开，任意人可注册任意 dev）上 /wan 明文通道等于无鉴权

@@ -585,6 +585,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡；参数为存储档位词）
 #   org hold <id|-> <reason> [condition]           建议暂缓（id=- 无组暂缓仅台账；点头即挂起）
 #   org dispatch <anchor> <task> [gid] [title] [skills] 派单 worker（无 gid=随手办；有 gid=项目组任务+板联动；skills=逗号分隔技能标签，优先派带标签熟手）
+#   org dispatch --remote <dev> <anchor> <task> …  跨机派单（X1：密封 xmsg 送对端值班位，对端权威消化；CLI 阻塞回显注入/被拒状态，≤25s）
 #   org board upsert <gid> <text> [todo|doing|done]
 #   org board move <gid> <entry_id> <todo|doing|done>
 #   org board del <gid> <entry_id>
@@ -708,14 +709,30 @@ PY
 )"
     ;;
   dispatch)
-    [ $# -ge 2 ] || { echo "用法: org dispatch <anchor> <task> [gid] [title] [skills]" >&2; exit 1; }
+    remote=""
+    if [ "\${1:-}" = "--remote" ]; then
+      [ $# -ge 3 ] || { echo "用法: org dispatch --remote <dev> <anchor> <task> [gid] [title] [skills]" >&2; exit 1; }
+      remote="$2"; shift 2
+    fi
+    [ $# -ge 2 ] || { echo "用法: org dispatch [--remote <dev>] <anchor> <task> [gid] [title] [skills]" >&2; exit 1; }
     anchor="$(abs "$1")"; shift
     task="$1"; shift || true
     gid=""; title=""; skills=""
     if [ $# -ge 1 ]; then gid="$1"; shift || true; fi
     if [ $# -ge 1 ]; then title="$1"; shift || true; fi
     if [ $# -ge 1 ]; then skills="$1"; shift || true; fi
-    body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
+    if [ -n "$remote" ]; then
+      body="$(python3 - "$remote" "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
+import json, sys
+d={"action":"dispatch-remote","dev":sys.argv[1],"anchor":sys.argv[2],"prompt":sys.argv[3]}
+if sys.argv[4]: d["gid"]=sys.argv[4]
+if sys.argv[5]: d["title"]=sys.argv[5]
+if sys.argv[6]: d["skills"]=[t.strip() for t in sys.argv[6].split(",") if t.strip()]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    else
+      body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
 import json, sys
 d={"action":"dispatch","anchor":sys.argv[1],"prompt":sys.argv[2]}
 if sys.argv[3]: d["gid"]=sys.argv[3]
@@ -724,6 +741,7 @@ if sys.argv[5]: d["skills"]=[t.strip() for t in sys.argv[5].split(",") if t.stri
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"
+    fi
     ;;
   board)
     [ $# -ge 3 ] || { echo "用法: org board upsert|move|del <gid> <text|entry_id> [status]" >&2; exit 1; }
@@ -912,6 +930,36 @@ PY
     echo "未知子命令: $action" >&2; exit 1
     ;;
 esac
+
+post() { curl -sS -X POST "http://127.0.0.1:\${port}/api/org?token=\${token}" -H 'content-type: application/json' --data-binary "\$1"; }
+
+# X1 跨机派单：阻塞回显（轮询 msg_id 终态 ≤25s——injected 0 / rejected|failed 3 / 超时 4）
+if [ "\$action" = "dispatch" ] && [ -n "\${remote:-}" ]; then
+  resp="\$(post "\$body")"
+  mid="\$(printf '%s' "\$resp" | python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin)
+  print(d.get("data",{}).get("msg_id","") if d.get("ok") else "")
+except Exception:
+  print("")')"
+  if [ -z "\$mid" ]; then echo "\$resp" >&2; exit 1; fi
+  state=""
+  for _ in \$(seq 1 25); do
+    sleep 1
+    st="\$(post "{\"action\":\"xmsg-status\",\"msg_id\":\"\$mid\"}")"
+    state="\$(printf '%s' "\$st" | python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin)
+  print(d.get("data",{}).get("state","") if d.get("ok") else "")
+except Exception:
+  print("")')"
+    case "\$state" in
+      injected) echo "xmsg injected：对端值班位已接收（msg_id=\$mid）"; exit 0 ;;
+      rejected*|failed*) echo "xmsg \$state（msg_id=\$mid）"; echo "指引：no-duty-target=对端无活跃 PM/值守会话；tenant/revoked/plaintext=安全闸拒——核对目标设备与开关后重试"; exit 3 ;;
+    esac
+  done
+  echo "xmsg 在途（state=\${state:-pending} msg_id=\$mid，25s 窗口未到终态——稍后可再查：org 分诊侧留 msg_id）"; exit 4
+fi
 
 exec curl -sS -X POST "http://127.0.0.1:\${port}/api/org?token=\${token}" -H 'content-type: application/json' --data-binary "$body"
 `;

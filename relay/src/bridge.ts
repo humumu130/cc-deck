@@ -187,7 +187,7 @@ function pidAlive(pid: number): boolean {
 
 // W-INJECT：排队注入条目（与 pending_inputs 同构，落盘/回种两用）。text=客户端回显短文，
 // body=注入 CLI 全文（带图消息双文本口径，对账一律 body 形态）
-type QueuedInput = { text: string; ts: number; body?: string; refs?: string[] };
+type QueuedInput = { text: string; ts: number; body?: string; refs?: string[]; xmsg_id?: string };
 
 
 // ---------- W-STREAMDELTA（#94）：外部会话终端流帧 ----------
@@ -1979,7 +1979,7 @@ export class Bridge {
   // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束。
   // ERROR 也放行（relay 重启重放的误标，自愈 sweeper 未及翻转时先到）：pid 死了注入
   // 自然失败走 onInjectFail 清定位，不会卡死
-  extInput(sessionId: string, text: string, images?: string[], files?: UploadBlob[]): { ok: boolean; error?: string } {
+  extInput(sessionId: string, text: string, images?: string[], files?: UploadBlob[], opts?: { xmsg_id?: string }): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     // F7（2026-10-19）：submit 面到达时刻打点——此前端上发消息到注入完成之间只有
@@ -2062,7 +2062,7 @@ export class Bridge {
     if (q.length === 0 && !(state.pending_inputs ?? []).length) this.stuckWatch.delete(sessionId);
     // W-INJECT：队列条目与 pending 同构（回显 text + 注入全文 body + 图引用），
     // 落盘/回种一份账本两用；此前队列只存 body 字符串，重启即蒸发无法重建回显
-    const item: QueuedInput = { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}), ...(imgRefs.length ? { refs: imgRefs } : {}) };
+    const item: QueuedInput = { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}), ...(imgRefs.length ? { refs: imgRefs } : {}), ...(opts?.xmsg_id ? { xmsg_id: opts.xmsg_id } : {}) };
     q.push(item);
     this.inputQueue.set(sessionId, q);
     this.saveQueueDisk();
@@ -2343,6 +2343,11 @@ export class Bridge {
         this.lastFailPid.delete(sessionId); // #257：通道已证活，失败归因账翻篇
         this.divertTries.delete(sessionId); // #257-P2-1：通道已证活，divert 封顶重置
         this.saveQueueDisk();
+        // X1 xmsg：队列条目真注入成功——通知控制器回执 injected（xack 四态的终态升级；
+        // 落盘队列携带 xmsg_id，重启后补注入同样能回执）
+        if (item.xmsg_id) {
+          try { (this.mgr as any).xmsgInjected?.(item.xmsg_id); } catch { /* 尽力而为 */ }
+        }
         const sentAt = Date.now();
         console.log(`[submit] inject done sid=${sessionId.slice(0, 14)} ms=${sentAt - item.ts} (enqueue→written)`);
         this.armVerify(sessionId, text);

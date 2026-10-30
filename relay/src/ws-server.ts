@@ -255,6 +255,9 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_EXT_MODE",
   "COMMAND_EXT_INPUT",
   "COMMAND_EXT_STOP",
+  // X1 多机编排：密封 xmsg 发送命令面（ccops/org/会话卡按钮三口汇流；与 cloud-client
+  // 白名单逐字一致纪律——#212 漏加=LAN 实机死路同款坑）
+  "COMMAND_XMSG",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -970,7 +973,7 @@ export function startServer(
             // 值守位接管写 duty.json（信任级同 dispatch 写面：token 已鉴权的本机
             // CLI）；log-append=台账补录审计行（exp-append 同级）；agent-teams=
             // 实验特性协助（check 只读，on 写 settings env 段——CLI 由用户亲手运行）
-            "join", "pm-claim", "log-append", "agent-teams",
+            "join", "pm-claim", "log-append", "agent-teams", "dispatch-remote", "xmsg-status",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

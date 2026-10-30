@@ -537,6 +537,31 @@ if (cfg.cloudUrls.length) {
       c.start();
     }
   }
+  // X1 多机编排：xmsg 传输面装配（跨桥聚合——多桥并行时发送/回执逐桥全发，对端
+  // msg_id seen 幂等去重；发现逐桥尝试。策略面在 xmsg 控制器，密钥只在本层）
+  mgr.setXmsgTransport({
+    myDev: () => cloudIdentity!.relayDev,
+    myTenant: () => {
+      try { return cloudIdentity!.loadTenantCred()?.tenant ?? null; } catch { return null; }
+    },
+    send: (dev, inner, theirPubkey) => {
+      let any = false;
+      for (const c of cloudClients) any = c.xmsgSend(dev, inner as unknown as Record<string, unknown>, theirPubkey) || any;
+      return any;
+    },
+    ack: (dev, theirPubkey, inner) => {
+      let any = false;
+      for (const c of cloudClients) any = c.xmsgAck(dev, theirPubkey, inner as unknown as Record<string, unknown>) || any;
+      return any;
+    },
+    discover: async (dev) => {
+      for (const c of cloudClients) {
+        const pk = await c.xmsgDiscover(dev);
+        if (pk) return pk;
+      }
+      return null;
+    },
+  });
 }
 
 // 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）

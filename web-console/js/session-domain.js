@@ -1770,6 +1770,76 @@
                 }
                 async function copySessionId(sid) { return copyWithFallback(sid, "会话 ID 已复制"); }
                 window.__ccDeck005CopyUi = { copyWithFallback }; // 跨 IIFE 共享（手机「更多」复制钮同链，同 __ccDeck005PathUi 口径）
+                // X1 跨机发送浮层（PRD §4.2-3 会话卡远程发送按钮）：目标 dev（op=peers 清单
+                // 预填 datalist，可手输）+ 可选目标会话 + 正文 → COMMAND_XMSG op=send →
+                // 轮询 op=status 到终态回显（injected/被拒可见）。旧 relay/未开 CCR_XMSG：
+                // 命令报错即 toast，浮层不开（能力探测式）。
+                async function openXmsgSend(card, s) {
+                  closeRowMenu();
+                  document.getElementById("xmsg-pop")?.remove();
+                  let peers = [];
+                  try {
+                    const ack = await commandAck("COMMAND_XMSG", { op: "peers" });
+                    if (ack && ack.ok === true && Array.isArray(ack.data?.peers)) peers = ack.data.peers;
+                  } catch { /* 旧 relay：无此命令——靠 send 阶段报错 */ }
+                  const pop = document.createElement("div");
+                  pop.className = "row-menu xmsg-pop";
+                  pop.id = "xmsg-pop";
+                  pop.setAttribute("role", "dialog");
+                  pop.setAttribute("aria-label", "跨机发送");
+                  const dl = document.createElement("datalist");
+                  dl.id = "xmsg-peer-list";
+                  for (const p of peers) {
+                    const o = document.createElement("option");
+                    o.value = p.dev;
+                    o.label = (p.confirmed ? "" : "（首联待确认）") + p.dev;
+                    dl.appendChild(o);
+                  }
+                  pop.appendChild(dl);
+                  const form = document.createElement("form");
+                  form.innerHTML =
+                    '<label>目标设备（rl-）<input name="dev" list="xmsg-peer-list" placeholder="rl-xxxxxxxx" required autocomplete="off" spellcheck="false"></label>'
+                    + '<label>目标会话（可空=对端值班位）<input name="session" placeholder="对端会话 id，留空发值班位" autocomplete="off" spellcheck="false"></label>'
+                    + '<label>正文<textarea name="text" placeholder="要跨机发送的内容…" required></textarea></label>'
+                    + '<div class="xmsg-state" data-xmsg-state></div>'
+                    + '<div class="row-del-actions"><button type="button" data-x-cancel>取消</button><button type="submit">发送</button></div>';
+                  pop.appendChild(form);
+                  document.body.appendChild(pop);
+                  const rect = card.getBoundingClientRect();
+                  const pr = pop.getBoundingClientRect();
+                  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pr.width - 8)) + "px";
+                  pop.style.top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - pr.height - 8)) + "px";
+                  const dismiss = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener("pointerdown", dismiss, true); } };
+                  document.addEventListener("pointerdown", dismiss, true);
+                  form.querySelector("[data-x-cancel]")?.addEventListener("click", () => { pop.remove(); document.removeEventListener("pointerdown", dismiss, true); });
+                  form.querySelector<HTMLInputElement>("[name=dev]")?.focus();
+                  form.addEventListener("submit", async (ev) => {
+                    ev.preventDefault();
+                    const dev = form.querySelector<HTMLInputElement>("[name=dev]")?.value.trim() || "";
+                    const session = form.querySelector<HTMLInputElement>("[name=session]")?.value.trim() || "";
+                    const text = form.querySelector<HTMLTextAreaElement>("[name=text]")?.value || "";
+                    const stateEl = pop.querySelector("[data-xmsg-state]");
+                    if (!/^rl-[0-9a-f]{4,64}$/.test(dev)) { if (stateEl) stateEl.textContent = "目标设备号不合法（rl- 开头）"; return; }
+                    if (!text.trim()) { if (stateEl) stateEl.textContent = "正文必填"; return; }
+                    if (stateEl) stateEl.textContent = "发送中…";
+                    let ack;
+                    try { ack = await commandAck("COMMAND_XMSG", { op: "send", dev, ...(session ? { session } : {}), text, source_session: s.session_id }); }
+                    catch (e) { if (stateEl) stateEl.textContent = "发送失败：" + (e && e.message ? e.message : String(e)); return; }
+                    const v0 = ackVerdict(ack); // null=超时/未连接 三态收口
+                    if (!v0.ok) { if (stateEl) stateEl.textContent = v0.error; return; }
+                    const msgId = ack.data?.msg_id;
+                    // 轮询到终态（≤15s；relay 侧 outbox 继续补发，浮层只做即时回显）
+                    for (let i = 0; i < 15; i++) {
+                      await new Promise((r) => setTimeout(r, 1000));
+                      let st = null;
+                      try { st = await commandAck("COMMAND_XMSG", { op: "status", msg_id }); } catch { continue; }
+                      const state = st && st.ok === true ? st.data?.state : "";
+                      if (state === "injected") { if (stateEl) stateEl.textContent = "✓ 已注入对端"; b2Toast("跨机消息已注入"); setTimeout(() => pop.remove(), 1200); return; }
+                      if (state === "rejected" || state === "failed") { if (stateEl) stateEl.textContent = "✗ " + ((st && st.data?.detail) || state); return; }
+                    }
+                    if (stateEl) stateEl.textContent = "在途（relay 会继续补发，可用 ccops 查 msg_id=" + msgId + "）";
+                  });
+                }
                 // 件五补（2026-10-10 用户补充意见）：置顶 toggle 提取共用——右键菜单 pin 项与
                 // 行尾图钉微钮同链（COMMAND_PIN_SESSION + 乐观归位 + toast），零重复。
                 // 翻转用发送时的意图值而非二次推导：relay 先 emit UPDATED 再回 ACK（:2785→:2792
@@ -1894,6 +1964,7 @@
                       '<button type="button" role="menuitem" data-row-action="pin">' + (session.pinned ? "取消置顶" : "置顶") + "</button>"
                       + '<button type="button" role="menuitem" data-row-action="rename">重命名</button>'
                       + '<button type="button" role="menuitem" data-row-action="copyid">复制 ID</button>'
+                      + '<button type="button" role="menuitem" data-row-action="xmsg">跨机发送…</button>'
                       + '<button type="button" role="menuitem" class="danger" data-row-action="del">删除</button>';
                     rowMenu.addEventListener("click", async (ev) => {
                       const btn = ev.target.closest("button[data-row-action]");
@@ -1910,6 +1981,8 @@
                         if (target) startRowRename(target, s);
                       } else if (action === "copyid") {
                         copySessionId(s.session_id);
+                      } else if (action === "xmsg") {
+                        await openXmsgSend(card, s); // X1 跨机发送浮层（能力探测式：旧 relay/未开 CCR_XMSG 报错 toast）
                       } else if (action === "del") {
                         openDeleteConfirm(card, s); // 件五补：确认浮层统一（不可裸删，与 hover × 同链）
                       }

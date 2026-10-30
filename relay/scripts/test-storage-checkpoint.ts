@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSqlitePort } from "../src/storage/sqlite.js";
 import { runMigrations } from "../src/storage/migrator.js";
-import { migrations, STORAGE_TABLES, IMPORT_LEDGER_TABLES, PERMISSION_AUDIT_TABLES } from "../src/storage/schema.js";
+import { migrations, STORAGE_TABLES, IMPORT_LEDGER_TABLES, PERMISSION_AUDIT_TABLES, DEVICE_TRUST_TABLES } from "../src/storage/schema.js";
 import { writeCheckpoint, readCheckpoint, type CheckpointKey } from "../src/storage/checkpoint.js";
 import { appendLoss, listLoss, EXCERPT_MAX, type LossRecord } from "../src/storage/loss-report.js";
 
@@ -49,11 +49,15 @@ function statSource(file: string): { mtimeMs: number; lineCount: number } {
 // ---------- 1. migrations v1→v3：基线 15 表 + 导入台账 2 表 + 权限审计 1 表（验收 4 选型面） ----------
 console.log("迁移落地:");
 const r1 = runMigrations(port, migrations);
-assert(r1.from === 0 && r1.to === 3 && JSON.stringify(r1.applied) === "[1,2,3]", "fresh 库一次执行 v1→v3（applied=[1,2,3]）");
-assert(versionOf(port) === 1 + 2, "user_version=3");
+// v4 起本断言改版本无关式（v4/v5/v6 增列时漏更新致基线常红——X1 批随 v7 收口；
+// applied=1..N 连续全量，锚 migrations 清单本身）
+const wantApplied = JSON.stringify(migrations.map((m) => m.version));
+assert(r1.from === 0 && r1.to === migrations[migrations.length - 1]!.version && JSON.stringify(r1.applied) === wantApplied, `fresh 库一次执行全量迁移（applied=${wantApplied}）`);
+assert(versionOf(port) === migrations[migrations.length - 1]!.version, `user_version=${migrations[migrations.length - 1]!.version}`);
 const tables = port.query<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map((r) => r.name);
-assert(tables.length === 18, `18 表全数落地（15 基线 + 2 导入台账 + 1 权限审计，实测 ${tables.length}）`);
-assert([...STORAGE_TABLES, ...IMPORT_LEDGER_TABLES, ...PERMISSION_AUDIT_TABLES].sort().join() === [...tables].sort().join(), "表名清单 = 冻结件 15 表 ∪ 导入台账 2 表 ∪ 权限审计 1 表");
+const wantTables = [...STORAGE_TABLES, ...IMPORT_LEDGER_TABLES, ...PERMISSION_AUDIT_TABLES, ...DEVICE_TRUST_TABLES];
+assert(tables.length === wantTables.length, `${wantTables.length} 表全数落地（15 基线 + 2 导入台账 + 1 权限审计 + 1 设备互信，实测 ${tables.length}）`);
+assert(wantTables.slice().sort().join() === [...tables].sort().join(), "表名清单 = 冻结件 15 表 ∪ 导入台账 2 表 ∪ 权限审计 1 表 ∪ 设备互信 1 表");
 assert(
   port.query<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('import_checkpoint','import_loss')")[0]?.n === 2,
   "import_checkpoint + import_loss 两表在",
