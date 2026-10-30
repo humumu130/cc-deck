@@ -124,7 +124,7 @@ try {
   const prevDuty = process.env.CCR_PM_DUTY;
   const prevAcc = process.env.CCR_ACCEPTANCE_DIR;
   process.env.CCR_STORAGE_READ_MODE = "json"; // 主链全程 json 档（现状写路径）；SQLite 面走 ensureStore 直调不经读档位——显式钉档（SQLITE-FLIP 后缺省=sqlite，「delete env=json」旧假设失效）
-  delete process.env.CCR_PM_DUTY;           // 值守 O9 才开
+  process.env.CCR_PM_DUTY = "0";            // 值守 O9 才开（W-DUTY-CHAIN 反转后缺省开——沙盒显式关）
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   // 两端口径一致（acceptance.ts :55 备案：「任一单边设置都会读写分家」）——父进程

@@ -46,7 +46,7 @@ delete ENV.CCR_PARENT_PID;
 delete ENV.CCR_RELAY_CHILD;
 delete ENV.CCR_EMPLOYEE_CONFIG_DIR;
 delete ENV.CCR_NO_LEADER; // 值守面默认开也行——本实证只看卡态
-delete ENV.CCR_PM_DUTY;
+ENV.CCR_PM_DUTY = "0"; // W-DUTY-CHAIN 反转后缺省开——沙盒实证显式关（保持旧隔离语义）
 
 let pass = 0, fail = 0;
 function ok(cond: boolean, name: string, extra = ""): void {

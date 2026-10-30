@@ -596,19 +596,29 @@ try {
       const cont3 = lastR3b.continuation as { delay_ms?: number; once?: boolean } | undefined;
       assert(cont3?.delay_ms === 30 && cont3?.once === true && notifCount3 === 1,
         "C12⑥b 退避 continuation 在案（delay_ms=30 env 测试缝/wake_once）+升级通知 stableKey 防重单行");
-      // C12⑦ 缺省关零波及：关开关→Leader 回合终态零检查零注入零审计
-      if (prevDuty === undefined) delete process.env.CCR_PM_DUTY;
-      else process.env.CCR_PM_DUTY = prevDuty;
+      // C12⑦ 逃生阀与缺省开（W-DUTY-CHAIN 反转后语义）：CCR_PM_DUTY=0 → 零触发零审计
+      //（逃生阀，对齐 CCR_NO_AUTOREVIVE 范式）；未设（缺省）→ 回合终态照写轮（生产
+      // relay 重启 env 丢失自愈——10-28/29 断链根修断言：env 缺席=重启后新进程态）。
+      process.env.CCR_PM_DUTY = "0";
       process.env.CCR_ORG_DIR = ORG2;
       const rounds7 = dutyRounds().length;
       const baseC7 = created.length;
-      leaderCb?.onTurnEnd(true, "关值守后的回合", 1);
+      leaderCb?.onTurnEnd(true, "逃生阀关值守的回合", 1);
       assert(created.length === baseC7 && dutyRounds().length === rounds7,
-        "C12⑦ 缺省关零波及：CCR_PM_DUTY 未设→值守零触发（零注入零审计，既有行为逐字节不变）");
+        "C12⑦a 逃生阀零波及：CCR_PM_DUTY=0→值守零触发（零注入零审计，沙盒/紧急关停隔离面）");
+      delete process.env.CCR_PM_DUTY; // 缺省态=relay 重启后 env 丢失的真实形态
+      const rounds7b = dutyRounds().length;
+      leaderCb?.onTurnEnd(true, "缺省开值守的回合", 1);
+      const grew = dutyRounds().length > rounds7b;
+      assert(grew,
+        "C12⑦b 缺省开（W-DUTY-CHAIN 根修）：CCR_PM_DUTY 未设→值守照跑写轮（launchd 冷启 relay 无 env 也活——断链根修断言）");
+      if (created.length > baseC7) created[created.length - 1]?.cb.onInit("sdk-duty-c12x", "test-model"); // continue 注入流清 init timer
       if (prevStale === undefined) delete process.env.CCR_PM_DUTY_STALE_MS;
       else process.env.CCR_PM_DUTY_STALE_MS = prevStale;
       if (prevCont === undefined) delete process.env.CCR_PM_DUTY_CONTINUATION_MS;
       else process.env.CCR_PM_DUTY_CONTINUATION_MS = prevCont;
+      if (prevDuty === undefined) delete process.env.CCR_PM_DUTY;
+      else process.env.CCR_PM_DUTY = prevDuty;
       if (prevOrgDuty === undefined) delete process.env.CCR_ORG_DIR;
       else process.env.CCR_ORG_DIR = prevOrgDuty;
     } finally {

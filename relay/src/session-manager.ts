@@ -643,14 +643,22 @@ function watchdogDisabled(): boolean {
 
 // ===== M12-6 值守喂活参数（019 §6.1 环境门；env 逐次求值同 watchdogDisabled 范式） =====
 // 有效式（019 §6.1 四级）本件落全：环境门 CCR_NO_LEADER（测试/沙盒铁律总闸）+
-// CCR_PM_DUTY（值守显式开）在此判定；全局总闸 plugin_config.duty 与组级
+// CCR_PM_DUTY 在此判定；全局总闸 plugin_config.duty 与组级
 // duty_policy.enabled 属 #71 产品面（P71 落地）——总闸在 feedPM 产品门（关=disabled
-// 审计不注入），组级在 dutySnapshot（关组不进候选快照）。两级同开才生效（§6.5 拍板）。
-// 环境门缺省关=零注入零审计零开销（既有测试/生产行为零波及）；备案差异维持：环境门
-// 关=值守组件不存在，不写 disabled 行（垃圾账）；产品门关才写 disabled（§6.1「值守
-// 审计仍记录 disabled」）。
+// 审计不注入），组级在 dutySnapshot（关组不进候选快照）。
+// 【W-DUTY-CHAIN 根修 2026-10-29】CCR_PM_DUTY 由 opt-in（=1 才开）反转为 opt-out
+//（=0 才关，缺省开）：原 opt-in 把「生产开 duty」寄存在进程 env 这一易失介质——带
+// =1 的 relay 是「从 export 过该变量的 shell 启动的 Nova 壳」孵化（env 继承链
+// shell→GUI→relay），10-28/29 三次 relay 重启全走 launchd 冷启 Nova 壳（PPID=1 无
+// 用户 shell env）→ dutyEnabled 恒 false → duty-rounds.ndjson 断写 19.5h，且环境门
+// 关=零审计=断链不可观测（对照：auto-revive/watchdog 均 opt-out 缺省开故不断；duty
+// 是全 relay 唯一 opt-in env 组件=结构性异类）。反转后环境门回归「隔离/逃生阀」本职
+//（对齐 CCR_NO_AUTOREVIVE / CCR_PM_KEEPALIVE "0"=逃生阀范式）：生产重启自愈（缺省
+// 开）；测试/沙盒/紧急关停显式 =0；CCR_NO_LEADER 沙盒总闸语义不动。产品门
+// plugin_config.duty（kill-switch，缺省 true 持久化）继续在 feedPM 兜底——用户面关
+// duty 走产品门（有 disabled 审计行）；环境门 =0 维持「组件不存在」零审计语义。
 function dutyEnabled(): boolean {
-  return process.env.CCR_NO_LEADER !== "1" && process.env.CCR_PM_DUTY === "1";
+  return process.env.CCR_NO_LEADER !== "1" && process.env.CCR_PM_DUTY !== "0";
 }
 // stale doing 判定窗：doing 卡挂的 dispatch 不在 open FIFO 且卡龄超窗才判悬挂
 //（019 §5.1 确认 stale 要时间证据，防重启丢 open FIFO 后全量误报）。缺省 90min。
@@ -4802,14 +4810,28 @@ export class SessionManager {
   // #279 org status 的值守视图（与「死席巡检提示」#261 备档同族同口径——无在岗 PM
   // 的提示语单源在此，避免两套文案分叉）。alive 只在 no-leader 模式含 pid 探活
   //（dutyTargetId 内置）；leader 模式=锚卡在位语义，不新增探活（修正④）。
-  pmDutyStatus(): { mode: string; session_id: string; alive: boolean; hint?: string } {
+  // 【W-DUTY-CHAIN】新增 duty_enabled/product_switch 双开关键：10-28/29 断链 19.5h
+  // 无感的放大器就是本视图只报「有没有 PM 目标」不报「值守链开没开」——环境门关时
+  // alive 照样 true（假活）。现把两级开关状态一并暴露（缺省开反转后环境门基本恒开，
+  // 但逃生阀/沙盒态可见性仍要保）：org status / 巡检据此一眼分辨「值守关闭」。
+  pmDutyStatus(): { mode: string; session_id: string; alive: boolean; duty_enabled: boolean; product_switch: boolean; hint?: string } {
     const mode = this.collabMode();
-    const target = this.dutyTargetId();
+    const envOn = dutyEnabled();
+    const productOn = readPluginConfig().duty !== false;
+    const target = envOn ? this.dutyTargetId() : null;
     return {
       mode,
       session_id: target ?? "",
       alive: !!target,
-      ...(target ? {} : { hint: "当前无在岗 PM，分诊暂缓或走接管流程" }),
+      duty_enabled: envOn && productOn,
+      product_switch: productOn,
+      ...(!envOn
+        ? { hint: "值守环境门关闭（CCR_PM_DUTY=0 或 CCR_NO_LEADER=1）——值守链整体停摆，非无 PM 目标" }
+        : !productOn
+          ? { hint: "值守产品总闸关（~/.cc-deck/config.json duty=false）——全组停止值守 feed" }
+          : target
+            ? {}
+            : { hint: "当前无在岗 PM，分诊暂缓或走接管流程" }),
     };
   }
 

@@ -41,7 +41,7 @@ function startRelay(port: string, base: string): ChildProcess {
     CCR_ORG_DIR: join(base, "org"), CCR_DATA_DIR: join(base, "data"), CCR_PROJECTS_ROOT: join(base, "projects"),
     CCR_CLOUD_URL: "", CCR_NO_TITLE_GEN: "1", CCR_NO_BRIDGE_MIRROR: "1", CCR_NO_MDNS: "1",
   } as Record<string, string>;
-  delete env.CC_DECK_PLUGIN; delete env.CCR_PARENT_PID; delete env.CCR_RELAY_CHILD; delete env.CCR_EMPLOYEE_CONFIG_DIR; delete env.CCR_NO_LEADER; delete env.CCR_PM_DUTY;
+  delete env.CC_DECK_PLUGIN; delete env.CCR_PARENT_PID; delete env.CCR_RELAY_CHILD; delete env.CCR_EMPLOYEE_CONFIG_DIR; delete env.CCR_NO_LEADER; env.CCR_PM_DUTY = "0";
   const p = spawn(process.execPath, ["--import", tsxLoader, join(root, "relay", "src", "index.ts")], { env, stdio: ["ignore", "pipe", "ignore"], cwd: root });
   p.stdout!.on("data", () => {});
   return p;
