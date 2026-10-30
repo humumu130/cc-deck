@@ -2408,6 +2408,135 @@
                     el.replaceWith(img);
                   });
                 }
+                // ---------- W-UI-ASKRENDER：AskUserQuestion 结构化问卷渲染（三面共享） ----------
+                // relay 侧 detailToolUse 无 AskUserQuestion 专属分支——questions 以
+                // `questions: <JSON>` 键值行拍扁进 detail（capDetail 2000 字可截断）。这里
+                // 客户端反解析回结构（含 relay parseAskQuestions 会剥掉的 preview 在位信息），
+                // 解析失败返回 null → 走通用 trow 渲染（零回归兜底）。
+                function parseAskDetail(detail) {
+                  if (!detail) return null;
+                  let raw = String(detail).trim().replace(/\n?…\s*\(\+\d+\s*字符\)\s*$/, ""); // 剥 capDetail 截断尾标
+                  const m = /^questions:\s*([\s\S]+)$/.exec(raw);
+                  if (m) raw = m[1];
+                  let data = null;
+                  try { data = JSON.parse(raw); } catch (_) { data = askSalvageJson(raw); }
+                  if (data && !Array.isArray(data) && typeof data === "object" && Array.isArray(data.questions)) data = data.questions;
+                  if (!Array.isArray(data)) return null;
+                  const qs = [];
+                  for (const q of data.slice(0, 4)) { // 与 relay parseAskQuestions 同帽（4 问/6 项）——等待卡题序对齐
+                    if (!q || typeof q !== "object") continue;
+                    const question = typeof q.question === "string" ? q.question.trim() : "";
+                    if (!question) continue;
+                    const options = [];
+                    for (const o of (Array.isArray(q.options) ? q.options : []).slice(0, 6)) {
+                      if (!o || typeof o !== "object") continue;
+                      const label = String(o.label ?? "").trim();
+                      if (!label) continue;
+                      options.push({
+                        label,
+                        desc: typeof o.description === "string" ? o.description.trim() : "",
+                        preview: o.preview != null && o.preview !== "", // 只标记在位，内容不渲染（preview 常为大段代码）
+                      });
+                    }
+                    qs.push({
+                      header: (typeof q.header === "string" && q.header.trim()) || question.slice(0, 24),
+                      question,
+                      multi: q.multiSelect === true || q.multi === true, // 原始 input 用 multiSelect，relay 解析形用 multi
+                      options,
+                    });
+                  }
+                  return qs.length ? qs : null;
+                }
+                // 截断 JSON 抢救：capDetail 从任意位置切断。首选括号/引号平衡器（扫描未闭合
+                // 栈 + 剥尾部残词/尾逗号/悬空键值对后补闭合），败则回退「最后一个 '}' 逐位回退
+                // 补尾」。纯展示层 best-effort，双路径仍败 = null 回落通用渲染
+                function askSalvageJson(raw) {
+                  const tryParse = (s) => { try { const v = JSON.parse(s); return v; } catch (_) { return undefined; } };
+                  // 平衡器
+                  const stack = []; let inStr = false, escNext = false;
+                  for (let i = 0; i < raw.length; i++) {
+                    const c = raw[i];
+                    if (inStr) { if (escNext) escNext = false; else if (c === "\\") escNext = true; else if (c === '"') inStr = false; continue; }
+                    if (c === '"') inStr = true;
+                    else if (c === "[" || c === "{") stack.push(c);
+                    else if (c === "]" || c === "}") stack.pop();
+                  }
+                  let body = raw + (inStr ? '"' : "");
+                  if (!inStr) {
+                    for (let n = 0; n < 8; n++) { // 剥尾部残词/尾逗号/悬空键值对（最多 8 轮防长尾循环）
+                      if (/[\s,]+$/.test(body)) body = body.replace(/[\s,]+$/, "");
+                      else if (/:\s*$/.test(body)) body = body.replace(/,?\s*"[^"]*"\s*:\s*$/, ""); // 悬空键（值被切走）
+                      else if (/(^|[:,\[]\s*)(?:tru|fals|nul|-?\d+(?:\.\d*)?(?:[eE][+-]?\d*)?)$/.test(body)) body = body.replace(/(?:tru|fals|nul|-?\d+(?:\.\d*)?(?:[eE][+-]?\d*)?)$/, ""); // 半个字面量
+                      else break;
+                    }
+                    body = body.replace(/[\s,]+$/, "");
+                  }
+                  const closers = stack.reverse().map((c) => (c === "{" ? "}" : "]")).join("");
+                  const v1 = tryParse(body + closers);
+                  if (v1 !== undefined) return v1;
+                  // 回退：'}' 逐位回退补尾（平衡器败在结构怪异时兜底）
+                  const suffixes = ["]", "\"}]", "}", "\"}", "]}", "\"]}", "}]"];
+                  for (let i = raw.lastIndexOf("}"), n = 0; i > 0 && n < 30; i = raw.lastIndexOf("}", i - 1), n++) {
+                    for (const suf of suffixes) {
+                      const v = tryParse(raw.slice(0, i + 1) + suf);
+                      if (v !== undefined) return v;
+                    }
+                  }
+                  return null;
+                }
+                // 问卷卡主体（三面共享）：mode "static"=纯展示（时间线展开/手机只读/被动等待卡）
+                // "single"=单问选项点击即答（data-wait-answer 沿用原链） "multi"=多问/多选 chips
+                // toggle（data-wait-chip + wc-label 沿用原提交链——handleWaitSubmit 读 .wc-label）
+                function askGroupsHtml(qs, flags, mode) {
+                  return (qs || []).map((q, qi) => {
+                    const fl = flags && flags[qi];
+                    const hasPrev = (o, oi) => o.preview === true || !!(fl && fl[oi]); // 选项自带（时间线反解析）或借源（等待卡 w.questions 无 preview）
+                    const od = (o) => { const d = o.desc || o.description; const t = typeof d === "string" ? d.trim() : ""; return t.length > 160 ? t.slice(0, 159) + "…" : t; }; // 解析形/relay 形双兼容 + 展示帽（label 不截——multi 答案读 wc-label 原文）
+                    let opts = "";
+                    if (mode === "multi") {
+                      opts = '<div class="wq-opts">' + (q.options || []).map((o, oi) =>
+                        '<button type="button" class="wait-chip row" data-wait-chip="' + qi + ":" + oi + '">'
+                        + '<span class="wo-line1"><span class="wc-label">' + esc(o.label) + "</span>"
+                        + (hasPrev(o, oi) ? '<span class="wo-prev">含预览</span>' : "")
+                        + '<span class="wc-check" aria-hidden="true"></span></span>'
+                        + (od(o) ? '<span class="wo-desc">' + esc(od(o)) + "</span>" : "")
+                        + "</button>").join("") + "</div>";
+                    } else {
+                      opts = '<div class="wq-opts">' + (q.options || []).map((o, oi) => {
+                        const tag = mode === "single" ? 'button type="button" class="wq-opt" data-wait-answer="' + oi + '"' : 'div class="wq-opt"';
+                        const close = mode === "single" ? "button" : "div";
+                        return "<" + tag + '><span class="wo-line1"><span class="wc-label">' + esc(o.label) + "</span>"
+                          + (hasPrev(o, oi) ? '<span class="wo-prev">含预览</span>' : "") + "</span>"
+                          + (od(o) ? '<span class="wo-desc">' + esc(od(o)) + "</span>" : "")
+                          + "</" + close + ">";
+                      }).join("") + "</div>";
+                    }
+                    return '<div class="wait-qgroup" data-wait-qgroup="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") + ">"
+                      + '<div class="wq-head">' + esc(q.header || ("问题 " + (qi + 1))) + (q.multi ? '<span class="wq-multi-tag">可多选</span>' : "") + "</div>"
+                      + '<div class="wq-question">' + esc(q.question || "") + "</div>" + opts + "</div>";
+                  }).join("");
+                }
+                // 等待卡 preview 标记借源：relay parseAskQuestions 剥掉 preview，但同会话时间线里
+                // 该次 tool_use 的 detail 保留原始 input——末位 Ask 条目反解析成功且题干对齐时借其
+                // preview 在位信息（失败/不匹配=无标记，纯降级不阻塞）
+                function askPreviewFlagsFor(s, w) {
+                  try {
+                    if (!s || !Array.isArray(w.questions) || !w.questions.length) return null;
+                    const tl = S.timelines.get(s.session_id) || [];
+                    for (let i = tl.length - 1; i >= 0 && i >= tl.length - 40; i--) {
+                      const e = tl[i];
+                      if (e && e.kind === "tool_use" && e.tool === "AskUserQuestion") {
+                        const qs = parseAskDetail(e.detail);
+                        if (qs && qs.length === w.questions.length
+                          && qs.every((q, qi) => q.question.slice(0, 24) === String(w.questions[qi].question || "").slice(0, 24))) {
+                          return qs.map((q) => (q.options || []).map((o) => !!o.preview));
+                        }
+                        return null; // 末位 ask 条目即当前等待请求，不匹配不再回溯（旧条目借源=错配）
+                      }
+                    }
+                  } catch (_) {}
+                  return null;
+                }
                 // #164 单条消息 HTML（桌面/手机同一渲染路径；返回 "" = 该类开关关闭不渲染）
                 function entryHtml(e, s) {
                   const role = msgRoleOf(e.kind);
@@ -2469,6 +2598,20 @@
                   }
                   if (role === "ai-tool") {
                     const t = e.tool || "";
+                    // W-UI-ASKRENDER：AskUserQuestion 专属渲染——折叠态友好摘要（N 个问题 +
+                    // 首问截断 + header 标签行），展开态结构化问卷卡（每问一卡：header 小标 +
+                    // 正文 + 选项列表 label/description 次行/多选标/含预览标）。反解析失败
+                    // （detail 缺失/不可救）回落下方通用 trow，其他工具零触碰
+                    if (t === "AskUserQuestion") {
+                      const qs = parseAskDetail(e.detail);
+                      if (qs) {
+                        const sum = qs.length + " 个问题 · " + oneLine(qs[0].question || "").slice(0, 44);
+                        const tags = '<span class="ask-tags">' + qs.map((q) => '<span class="ask-tag">' + esc(String(q.header || "").slice(0, 12)) + "</span>").join("") + "</span>";
+                        return '<div class="trow" data-role="proc" data-x="' + ke + '"><div class="tline"><span class="tico">?</span><span class="tname">提问</span><span class="tsum">' + esc(sum) + "</span>" + tags +
+                          '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开 ▾") + "</span></div>" +
+                          (open ? '<div class="ask-card">' + askGroupsHtml(qs, null, "static") + "</div>" : "") + "</div>";
+                      }
+                    }
                     const isTaskTool = /^Task/.test(t); // Task* 行：摘要单行省略 + 展开看任务描述（旧壳 #204 口径）
                     const taskLife = isTaskLifeTool(t); // #47 任务生命周期行：data-role=task 不进过程组，proc-off 不影响（常显）
                     return '<div class="trow' + (taskLife ? " task-life" : "") + '" data-role="' + (taskLife ? "task" : "proc") + '" data-x="' + ke + '"><div class="tline"><span class="tico">' + (taskLife ? taskLifeIcon() : toolIcon(t)) + '</span><span class="tname">' + esc(t || "tool") + '</span><span' + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefRow(e.text) + "</span>" +
@@ -2730,10 +2873,12 @@
                   const isAsk = Array.isArray(w.questions) && w.questions.length > 0;
                   const single = isAsk && w.questions.length === 1 && !w.questions[0].multi;
                   const waitStart = w.request_started_at || Date.now();
-                  let title, content = "", actions = "";
+                  let title, content = "", actions = "", askBody = "";
+                  // W-UI-ASKRENDER：ask 等待卡问卷化——题干/选项/描述/多选标/含预览标进结构化
+                  // 问卷卡（askGroupsHtml 与时间线展开态/手机只读同源），不再「／」拼纯文本；
+                  // content 只承载过期/被动等人话附注
                   if (isAsk) {
                     title = "等待你的回答 · " + (w.questions[0].header || w.tool_name || "提问");
-                    content = w.questions.map((q) => q.question || "").join(" ／ ");
                   } else {
                     title = "等待你的确认 · " + (w.tool_name || "工具调用");
                     // 审批态：命令全文走 wait-detail mono 块，input_summary 作补充描述
@@ -2749,32 +2894,28 @@
                     actions = '<div class="wait-actions"><button class="deny" data-wait-deny>✕ 拒绝</button>' +
                       '<button class="allow" data-wait-allow>✓ 允许</button></div>';
                   } else if (passive) {
+                    // 被动 ask：问卷只读呈现（静态模式无作答钮——远程无法决定，按钮仍不出现）
+                    askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), "static") + "</div>";
                     content += "\n（CLI 正在本地等待确认，请在电脑上处理）";
                   } else if (isAsk && (w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 90000) {
                     // W-DESKASK（W-ASKFIX 桌面同步）：ask 卡 90s 应答窗（relay
                     // QUESTION_HOLD_MS）——过期 CLI 已放本地选择器，手机/网页晚答注入
                     // 无门（CLI 已死/终态=死卡）——按钮全撤+置灰标注，对齐 expo
                     // AskBanner「已失效（超时）」口径；审批类 10min 治理（#159 件③）不动
+                    askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), "static") + "</div>";
                     content += "\n（已失效（超时）——CLI 已放行本地选择器，此处作答无法送达）";
                   } else if ((w.received_at || w.request_started_at) && Date.now() - (w.received_at || w.request_started_at) > 600000) {
                     // #159 件③ 过期治理：waiting_request 超 10min 视为已失效（CLI 多已越过，
                     // relay sweepStalePending 同语义）——按钮全撤防「点了没反应」假死
+                    if (isAsk) askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), "static") + "</div>";
                     content += "\n（该请求已超过 10 分钟未处理，已失效——CLI 多已继续）";
                   } else if (isAsk) {
-                    if (single) {
-                      actions = '<div class="wait-actions">' + (w.questions[0].options || []).map((o, i) => '<button data-wait-answer="' + i + '">' + esc(o.label) + "</button>").join("") + '<button class="deny" data-wait-deny>取消提问</button></div>';
-                    } else {
-                      // W-ASKUSER-FIX（B2b 补齐，2026-10-20 用户实锤「多问题只显标题+取消」）：
-                      // 多问题/多选=分组渲染（每题 header+题干+选项 chips），单选组点击即选中、
-                      // 多选组（multi:true）toggle 勾选——「提交回答」统一收齐经 COMMAND_ANSWER
-                      // 上送（answers 按题序，多选拼「、」——expo AskBanner 同交互模型移植）
-                      const groups = w.questions.map((q, qi) => {
-                        const chips = (q.options || []).map((o, oi) =>
-                          '<button type="button" class="wait-chip' + (q.multi ? " toggle" : "") + '" data-wait-chip="' + qi + ":" + oi + '"' + (o.description ? ' title="' + esc(o.description) + '"' : "") + '><span class="wc-label">' + esc(o.label) + "</span>" + (q.multi ? '<span class="wc-check"></span>' : "") + "</button>").join("");
-                        return '<div class="wait-qgroup" data-wait-qgroup="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") + '><div class="wq-head">' + esc(q.header || ("问题 " + (qi + 1))) + (q.multi ? '<span class="wq-multi-tag">可多选</span>' : "") + '</div><div class="wq-question">' + esc(q.question || "") + '</div><div class="wq-chips">' + chips + "</div></div>";
-                      }).join("");
-                      actions = '<div class="wait-multi">' + groups + '</div><div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button><button class="allow" data-wait-submit>提交回答</button></div>';
-                    }
+                    // W-ASKUSER-FIX（B2b 补齐）+ W-UI-ASKRENDER 问卷化：单问=选项行点击即答
+                    // （data-wait-answer 原链），多问/多选=选项行 toggle 勾选（data-wait-chip +
+                    // wc-label 原提交链）；选项行含 description 次行与「含预览」标记
+                    askBody = '<div class="wait-multi">' + askGroupsHtml(w.questions, askPreviewFlagsFor(s, w), single ? "single" : "multi") + "</div>";
+                    actions = '<div class="wait-actions"><button class="deny" data-wait-deny>取消提问</button>'
+                      + (single ? "" : '<button class="allow" data-wait-submit>提交回答</button>') + "</div>";
                   } else {
                     // 三级按钮：允许（主）、拒绝（次）、允许并记住（第三，点击展开范围选择）
                     actions = '<div class="wait-actions"><button class="deny" data-wait-deny>拒绝并说明</button>' +
@@ -2791,10 +2932,10 @@
                   // 标题行：title + 呼吸点 + elapsed
                   const elapsed = Math.floor((Date.now() - waitStart) / 1000);
                   const titleHtml = '<strong class="wait-title">' + esc(title) + '<span class="wait-dot"></span><span class="wait-elapsed" data-wait-elapsed>' + elapsed + 's</span></strong>';
-                  // 内容：审批态用 wait-detail mono 块展示命令全文，提问态用 p
+                  // 内容：审批态用 wait-detail mono 块展示命令全文；提问态=结构化问卷卡（askBody）+ 附注 p
                   let bodyHtml = "";
                   if (isAsk) {
-                    bodyHtml = content ? '<p class="wait-copy">' + esc(content).replace(/\n/g, "<br>") + "</p>" : "";
+                    bodyHtml = askBody + (content ? '<p class="wait-copy">' + esc(content).replace(/\n/g, "<br>") + "</p>" : "");
                   } else {
                     const cmdFull = w.command_text || w.input_summary || "";
                     bodyHtml = (cmdFull ? '<div class="wait-detail">' + esc(cmdFull) + "</div>" : "") +
@@ -4833,6 +4974,7 @@
                   canCmd,
                   // #164 手机渲染路径同源复用：MD/消息 HTML/展开态/开关（桌面与手机同一渲染器）
                   mdHtml, userMsgHtml, taskRefRow, entryHtml, eKey, expanded,
+                  askGroupsHtml, askPreviewFlagsFor, // W-UI-ASKRENDER：ask 问卷卡三面同源（手机只读卡复用）
                   artifactKindFor, // #B3-15 输出物六类分色（手机 mArtifactsHtml 同一判定）
                   artLayoutItems, relDir, artBadgeHtml, // #168 手机行同构复用（分组投影/目录缩略/徽章）
                   convCtl: { proc: () => procShow, think: () => thinkShown, toggle: toggleConv, refresh: updateConvCtrl },

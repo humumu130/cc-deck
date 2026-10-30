@@ -2783,6 +2783,26 @@
 .wait-chip.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
 .wait-chip .wc-check { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
 .wait-chip.on .wc-check { background: var(--brand); }
+
+/* W-UI-ASKRENDER：AskUserQuestion 结构化问卷卡（时间线展开态 + 等待卡 + 手机只读三面同源）。
+   视觉与 wait-qgroup/chips 同族：同 token（--line-soft/--surface2/--fs-C·D）同圆角节奏，
+   选项从胶囊升级为行式（label 主行 + description 次行），不另起一套样式体系 */
+.trow .ask-tags { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.trow .ask-tag { font-size: var(--fs-D); color: var(--dim); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 5px; line-height: 16px; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.ask-card { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 2px; }
+.wq-opts { display: flex; flex-direction: column; gap: 5px; }
+.wq-opt, .wait-chip.row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 1px solid var(--line); background: var(--surface2); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: var(--fs-C); cursor: pointer; font-family: inherit; text-align: left; min-width: 0; max-width: 100%; }
+.wq-opt:hover, .wait-chip.row:hover { border-color: var(--brand); }
+.wq-opt[disabled], .wait-chip.row[disabled] { cursor: default; opacity: .75; }
+div.wq-opt { cursor: default; }
+.wo-line1 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.wq-opt .wc-label, .wait-chip.row .wc-label { font-size: var(--fs-C); color: var(--text); font-weight: 500; word-break: break-word; }
+.wo-desc { font-size: var(--fs-D); color: var(--dim); line-height: 1.45; word-break: break-word; }
+.wo-prev { font-size: var(--fs-D); color: var(--info); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 4px; line-height: 15px; flex: none; }
+.wait-chip.row .wc-check { margin-left: auto; flex: none; width: 7px; height: 7px; border: 1px solid var(--line); background: transparent; }
+.wait-chip.row.on .wc-check { background: var(--brand); border-color: var(--brand); }
+.wq-opt .wo-line1 .wc-label + .wo-prev { margin-left: 2px; }
+/* 选中高亮态沿用 .wait-chip.on（row 变体同享 brand 描边+brand-soft 底，零新造） */
     /* ---- W-CMDIMPL #216 ①：收割检查结果卡（harvest-result/copy 钮）---- */
     #d-team .harvest-result .inspector-block { margin: 8px 0; border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; }
     #d-team .harvest-result .inspector-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

@@ -118,6 +118,7 @@
     "test:alivereclaim": "tsx scripts/test-alivereclaim.ts",
     "test:273-askuser": "tsx scripts/test-273-askuser.ts",
     "test:273-askuser-e2e": "tsx scripts/test-273-askuser-e2e.ts",
+    "test:ui-askrender": "tsx scripts/test-ui-askrender.ts",
     "test:reclaim": "tsx scripts/test-reclaim.ts",
     "test:alive": "tsx scripts/test-alive.ts",
     "test:wildonboard": "tsx scripts/test-wild-onboard.ts",

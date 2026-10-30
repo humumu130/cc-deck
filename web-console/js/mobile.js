@@ -210,9 +210,16 @@
         const pending = open.filter((t) => t.status === "pending");
         return { doneAll, doneList, run, verify, pending };
       }
-      function mWaitCardHtml(w) { // #166 手机端仅浏览模式：按钮禁用态 + 引导文案
+      function mWaitCardHtml(w, s) { // #166 手机端仅浏览模式：按钮禁用态 + 引导文案
+        // W-UI-ASKRENDER：ask 卡问卷化（与桌面等待卡/时间线展开态同源 askGroupsHtml）——
+        // header/题干/选项描述次行/多选标/含预览标结构化呈现，替换「／」拼纯文本；B2 未就绪回落旧形态
+        const api = b2Api();
         const isAsk = Array.isArray(w.questions) && w.questions.length > 0;
         const title = isAsk ? "等待你的回答 · " + (w.questions[0]?.header || w.tool_name || "提问") : "等待你的确认 · " + (w.tool_name || "工具调用");
+        if (isAsk && api && typeof api.askGroupsHtml === "function") {
+          const flags = typeof api.askPreviewFlagsFor === "function" ? api.askPreviewFlagsFor(s, w) : null;
+          return '<div class="wait-card ask" data-wait-card><strong class="wait-title">' + esc(title) + '</strong><div class="wait-multi">' + api.askGroupsHtml(w.questions, flags, "static") + '</div><div class="wait-actions"><button type="button" disabled>取消提问</button></div><div class="wait-readonly-hint">手机端仅浏览 · 请在电脑上处理等待请求</div></div>';
+        }
         const copy = isAsk ? w.questions.map((q) => q.question || "").join(" ／ ") : (w.input_summary || "");
         const actions = isAsk
           ? '<div class="wait-actions"><button type="button" disabled>取消提问</button></div>'
@@ -254,7 +261,7 @@
         try { const tl = api && api.S && api.S.timelines ? api.S.timelines.get(sid) : null; if (Array.isArray(tl)) list = tl; } catch (_) {}
         const cut = sliceTimeline(list, DETAIL_TL_MAX);
         const items = [];
-        if (s && s.waiting_request) items.push(["mw", mWaitCardHtml(s.waiting_request)]);
+        if (s && s.waiting_request) items.push(["mw", mWaitCardHtml(s.waiting_request, s)]);
         const sub = mSubagentNoteHtml(s);
         if (sub) items.push(["msub", sub]);
         if (!cut.items.length) { items.push(["mempty", '<div class="readonly-banner">暂无对话记录</div>']); return items; }
