@@ -244,6 +244,12 @@ export function isSandboxCwd(cwd: string | undefined | null): boolean {
   if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return true;
   const norm = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
   if (/^\/(private\/)?tmp\//.test(norm) || /^\/var\/tmp\//.test(norm)) return true;
+  // [W-RETIRED 补充②]（1030 12 卡实锤）：macOS mkdtemp 段形态匹配——路径含段 T
+  // 且 T 下子目录以 ccr- 开头（mkdtemp(join(TMPDIR, "ccr-…")) 的形态指纹：
+  // ccr-273e2e-answer-* 探针 CLI 家族）。前缀法漏拦真根因=依赖 relay 自身 TMPDIR
+  // env——launchd 精简环境/不同 login 会话的 TMPDIR 失配即放行；段形态与 env 无关
+  // 恒命中。用户业务路径形如 …/T/ccr-* 的概率≈0（PM 拍板方向）
+  if (/\/T\/ccr-[^/]+/i.test(norm)) return true;
   const tmpdir = process.env.TMPDIR;
   if (tmpdir) {
     const t = tmpdir.replace(/\\/g, "/").replace(/\/+$/, "") + "/";

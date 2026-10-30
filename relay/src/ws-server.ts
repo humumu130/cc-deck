@@ -1263,6 +1263,10 @@ export function startServer(
           // #240 W-LEADERHIDE：锚 Leader 会话 id 随快照下发（空串=无锚/旧 relay 缺席）
           // ——端上列表滤 Leader 卡唯一可靠识别（锚不在团队编制 headcount，反查失效）
           leader_session_id: mgr.leaderSessionId(),
+          // [W-RETIRED] 退休成员会话名单（空数组也下发=能力位）——端上会话列表默认
+          // 隐藏/沉「已退休成员」归档组（用户 1029 反馈根治）；sessions 照常全量下发
+          // 不滤（历史可查，编制退休≠会话删除）。增量面走 RETIRED_SESSIONS_UPDATED
+          retired_session_ids: mgr.retiredMemberSids(),
           // W-DESIGNHUB 系统设计图纸清单（设置-关于「系统设计图纸」区 + 项目域总览
           // 「设计图纸」区数据源；空数组/缺键 = 入口隐藏——旧 relay 与缺 docs 部署
           // 自动降级。移动端暂缓，云通道不带）

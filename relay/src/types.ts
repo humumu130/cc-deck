@@ -535,6 +535,11 @@ export interface SnapshotPayload {
   // 端上以字段存在性判断能力，deliverables 同口径）。no-leader 时锚卡已被
   // snapshot() 过滤，端上无需再删
   collab_mode?: "leader" | "no-leader";
+  // [W-RETIRED] 已退休成员会话 id 名单（空数组也下发=能力位；缺席=旧 relay，端上
+  // 零过滤兼容）。SNAPSHOT 双出口（LAN ws-server + 云桥 cloud-client）同源同发；
+  // 增量面走 RETIRED_SESSIONS_UPDATED 瞬态帧。会话数据照常全量下发（sessions 不滤）
+  // ——名单只影响端上渲染分组（默认隐藏沉「已退休成员」归档组），历史可查
+  retired_session_ids?: string[];
   // W-DESIGNHUB 系统设计图纸清单（docs/system-design/ 扫描产物）：空数组/缺键 =
   // 入口隐藏（旧 relay 与缺 docs 部署自动降级）。移动端暂缓，云通道快照不带
   design_docs?: DesignDocItem[];
@@ -673,6 +678,7 @@ export type EventType =
   | "RELAY_NAME_UPDATED" /* #272 源名称改名（瞬态）：relay-name 写盘成功边广播，LAN+cloud 全扇出 */
   | "NOTIFICATIONS_UPDATED"
   | "COLLAB_MODE_UPDATED"
+  | "RETIRED_SESSIONS_UPDATED" /* [W-RETIRED] 退休成员会话名单（瞬态）：编制面写点后 delta 广播——端上会话列表默认隐藏/归档分组 */
   | "AUTH_REQUIRED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
@@ -696,6 +702,11 @@ export type EventPayloadMap = {
   // 就地清卡。session_ids 与 SNAPSHOT.sessions 同源同构（snapshot() 收口，含
   // no-leader 锚卡过滤）；relay_source 同 withRelaySource 口径供聚合视角按源对账
   SESSIONS_RECONCILE: SessionsReconcilePayload;
+  // [W-RETIRED]（瞬态：seq:0 不落 ndjson；LAN 直播 + 云桥 onEnv 转发）——
+  // retired_session_ids 与 SNAPSHOT.retired_session_ids 同源同构（retiredMemberSids()
+  // 现算全量）。编制面写点（member-retire/member-add/trim/组状态迁移）收口在
+  // emitOrgState 尾部 delta 检测：名单不变零帧，变化即广播；断线端重连 SNAPSHOT 兜底
+  RETIRED_SESSIONS_UPDATED: RetiredSessionsPayload;
   SNAPSHOT: SnapshotPayload;
   PAIR_REQUEST: PairRequestPayload;
   PAIR_RESOLVED: PairResolvedPayload;
@@ -783,6 +794,17 @@ export interface SessionDeletedPayload {
 export interface SessionsReconcilePayload {
   session_ids: string[];
   relay_source: string;
+}
+
+// [W-RETIRED] 退休成员会话名单（用户 1029 反馈根治：member-retire 退休的 worker
+// 会话全量出现在会话列表污染列表）。语义=「会话列表默认隐藏已退休成员的会话 +
+// 归档分组可展开查看」，**不是物理删会话数据**——编制退休≠会话删除，会话卡/
+// 路由档案/历史全保留。判定源=org 两本账（projects 编制 + routing 熟手档案）：
+// 非 archived 组路由在册而编制外 = 退休（member-retire 除名痕迹，派单必同步入编）；
+// 在任一非 archived 组编制（active+parked）= 现役不隐藏。纯读持久账，重启可重建
+//（org_parked 式内存态过不了重启关——isRetiredMember 同哲学）
+export interface RetiredSessionsPayload {
+  retired_session_ids: string[];
 }
 
 // #316 手表配对请求：手表经 mDNS 发现 relay 后走 /ws?pair=1 待配对信道，relay 生成

@@ -5685,7 +5685,7 @@ export class SessionManager {
     // case 全在 orgAction switch（:5627 区），org CLI 走 orgCommand 时此前落
     // "unsupported org action"（本单实锤：CLI org member-retire 必挂）。与 rule-*/
     // collab-mode/auth-bypass 同款 #212 坑第 N 犯——编制动作清单直通
-    if (action === "member-retire" || action === "member-add" || action === "member-archive" || action === "member-restore" || action === "nick-set") {
+    if (action === "member-retire" || action === "member-add" || action === "member-archive" || action === "member-restore" || action === "nick-set" || action === "retired-purge") { /* W-RETIRED：一键清退休会话（设置→通用入口）同清单直通 */
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
@@ -6556,6 +6556,20 @@ export class SessionManager {
           this.retireSession(s, gid, "retired");
           return { ok: true, data: { retired: true, halted: true } };
         }
+        // [W-RETIRED] 一键清退休会话（用户 1030 口径：退休卡逐张手工清很麻烦；设置→
+        // 通用入口）。名单单源 retiredMemberSids()（判定零变化），逐卡走既有 deleteSession
+        // 删链（清保活 timer/在途挂单/记住规则/库墓碑/pinned + SESSION_DELETED 广播，
+        // 三端就地清卡）。退休判定档案（routing）不动——复拉通道（member-add）无恙，
+        // 只是会话卡清掉（编制退休≠会话删除的原则不破：删卡是用户显式清理动作）
+        case "retired-purge": {
+          const sids = this.retiredMemberSids();
+          let purged = 0;
+          for (const sid of sids) {
+            if (!this.sessions.has(sid)) continue; // 名单内但无卡（已 evict/已删）——跳过不计
+            if (this.deleteSession(sid)) purged++;
+          }
+          return { ok: true, data: { purged, total: sids.length } };
+        }
         // #26 补章：复拉通道（退休熟手再入编）——编制门之后 pickVeteran 会重新考虑
         // 该熟手（路由档案一直在）；只对在办组开放（挂起组冻结、结项组只读）
         case "member-add": {
@@ -6799,6 +6813,7 @@ export class SessionManager {
         : {}),
     });
     this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
+    this.emitRetiredSessions(); // [W-RETIRED]：编制面写点全收口于此，名单 delta 变化即广播
   }
 
   // M13-2：entries/lessons 条目级差分 + meta 板级元数据（frozen 翻转/时间戳推进也
@@ -8214,6 +8229,54 @@ export class SessionManager {
         !g.headcount.some((h) => h.session_id === sid) &&
         routingFor(g.id).some((e) => e.session_id === sid),
     );
+  }
+
+  /** [W-RETIRED] 退休成员会话名单（用户 1029 反馈根治）——会话列表「默认隐藏 +
+   * 归档分组」的判定单源。判据与 isRetiredMember 同账源（projects 编制 + routing
+   * 熟手档案，纯持久读、重启可重建），口径差异是有意的：isRetiredMember 服务
+   * auto-revive 豁免（挂起组成员不值得拉活——现役只认 active 组编制）；本面服务
+   * **列表可见性**（挂起组编制快照未除名=成员仍挂编制，org_parked 归组展示语义
+   * 保持不隐藏）。批量一次读两本账（快照低频路径 + emitOrgState delta 检测，无热
+   * 路径消费）：
+   *   现役 = 在任一非 archived 组编制（active+parked；archived 组编制是结项快照档案）
+   *   退休 = 非 archived 组路由在册（member-retire 除名痕迹——派单必同步入编，
+   *          生产路径唯一除名通道是 member-retire）且非现役
+   * 已知边界（回执遗留备案）：external 会话（ext-*，含换防旧 PM）不入路由表
+   * （不接派单），判定不到——走编制身份行 member-retire 的 PM 可覆盖，纯 duty
+   * 换防场景需 PM 侧退役机制另立。 */
+  retiredMemberSids(): string[] {
+    const groups = listGroups();
+    const active = new Set<string>();
+    for (const g of groups) {
+      if (g.status === "archived") continue;
+      for (const h of g.headcount) active.add(h.session_id);
+    }
+    const retired = new Set<string>();
+    for (const g of groups) {
+      if (g.status === "archived") continue;
+      for (const e of routingFor(g.id)) {
+        if (!active.has(e.session_id)) retired.add(e.session_id);
+      }
+    }
+    return [...retired].sort();
+  }
+
+  // [W-RETIRED] 名单变化广播（瞬态 delta 检测）：编制面全部写点（member-retire/
+  // member-add/trimHeadcounts/组状态迁移/派单入编）都收口在 emitOrgState 之后，
+  // 尾部挂此单点零遗漏；名单不变零帧（幂等），变化即 RETIRED_SESSIONS_UPDATED
+  // 全量重发。seq:0 瞬态不落 ndjson；断线端重连 SNAPSHOT.retired_session_ids 兜底
+  private lastRetiredBroadcast: string[] | null = null;
+  private emitRetiredSessions(): void {
+    let cur: string[];
+    try {
+      cur = this.retiredMemberSids();
+    } catch {
+      return; // 两本账读失败（坏 JSON 等）不广播——读侧防御已容忍为空态，此处静默让位
+    }
+    const prev = this.lastRetiredBroadcast;
+    if (prev && prev.length === cur.length && prev.every((v, i) => v === cur[i])) return;
+    this.lastRetiredBroadcast = cur;
+    this.bus.emitTransient("RETIRED_SESSIONS_UPDATED", { retired_session_ids: cur });
   }
 
   // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------

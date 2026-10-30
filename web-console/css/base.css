@@ -461,6 +461,13 @@
     .project-unfiled-toggle .unfiled-chev { flex: none; font-size: 9px; line-height: 1; transition: transform .15s ease; }
     .project-unfiled-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
     .project-unfiled-toggle .status-dot { margin-left: auto; }
+    /* [W-RETIRED] 会话列表尾部「已退休成员」折叠归档组头——同 unfiled-toggle 语言（置底
+       折叠+chev 旋转）；归档组内退休卡整组降透明（退休≠删除，可查但退视觉权重） */
+    button.queue-group.retired-toggle { display: flex; align-items: center; gap: 6px; width: calc(100% - 6px); padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
+    button.queue-group.retired-toggle:hover { color: var(--text-strong); }
+    .retired-toggle .unfiled-chev { flex: none; font-size: 9px; line-height: 1; transition: transform .15s ease; }
+    .retired-toggle[aria-expanded="true"] .unfiled-chev { transform: rotate(90deg); }
+    .retired-toggle ~ [data-session-card] { opacity: .55; }
     .status-dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--st-closed); }
     /* #227 三排定稿：竖条退役；r3 双胶囊（源胶囊左+引擎胶囊右）+右上置顶图钉 */
     .queue-card { position: relative; }

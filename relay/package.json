@@ -67,6 +67,8 @@
     "test:rules-broadcast": "tsx scripts/test-rules-broadcast.ts",
     "test:autorevive": "tsx scripts/test-autorevive.ts",
     "test:clidead": "tsx scripts/test-clidead.ts",
+    "test:retired-sessions": "tsx scripts/test-retired-sessions.ts",
+    "test:retired-live": "tsx scripts/test-retired-live.ts",
     "test:settings": "tsx scripts/test-settings.ts",
     "test:settings-ws": "tsx scripts/test-settings-ws.ts",
     "test:codex": "tsx scripts/test-codex.ts",

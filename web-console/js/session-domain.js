@@ -76,6 +76,7 @@
                   leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id（组织锚 Leader 会话 id，空串=无锚/旧 relay）——列表滤 Leader 卡用
                   leaderSessionIds: new Set(), // UI 反馈批 1029 件B：全源 Leader 锚 id 并集（源→id 记账见 S._leaderIdBySource）——单值 leaderSessionId 在聚合视角被双源快照互相覆写（后到者赢），远程源 Leader 卡漏滤=「公司电脑源 leader 会话卡删不掉」的根因；过滤改并集判
                   _leaderIdBySource: {}, // UI 反馈批 1029 件B：{lan:"<sid>", cloud:"<sid>"} 每源最新锚 id 记账（快照到达时按 evSource 换记，缺席字段=清该源——旧 relay）
+                  retiredIds: null, // [W-RETIRED]：SNAPSHOT.retired_session_ids（Set|null；null=旧 relay 零过滤兼容）——退休成员会话默认隐藏沉「已退休成员」归档组（编制退休≠会话删除，历史可查）
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
                   tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
@@ -560,6 +561,12 @@
                       break;
                     }
                     case "PROJECTS_UPDATED": onProjectsUpdated(m.payload); break; // UIPOLISH3 件二：分组数据面与团队域同新鲜度
+                    case "RETIRED_SESSIONS_UPDATED": { // [W-RETIRED]：退休名单增量帧（member-retire/member-add/trim/组迁移后 relay delta 广播）——在线端实时归档/复籍，断线端重连 SNAPSHOT 兜底
+                      const list = m.payload && Array.isArray(m.payload.retired_session_ids) ? m.payload.retired_session_ids.filter((x) => typeof x === "string") : [];
+                      S.retiredIds = new Set(list);
+                      renderMyList();
+                      break;
+                    }
                     case "SESSION_CREATED": onSessionCreated(sid, m.payload, evSource); break; // #110：帧通道随行（建卡打源标的锚）
                     case "SESSION_UPDATED": onSessionUpdated(sid, m.payload); break;
                     case "SESSION_HEARTBEAT": onHeartbeat(sid, m.payload); break;
@@ -647,6 +654,7 @@
                   S.relayName = p.relay_name || location.host;
                   S.collabMode = p.collab_mode === "no-leader" ? "no-leader" : p.collab_mode === "leader" ? "leader" : undefined; // W-MODE：能力位（undefined=旧 relay）
                   S.leaderSessionId = typeof p.leader_session_id === "string" ? p.leader_session_id : ""; // #240：锚 id（缺席重置空串——旧 relay/换源不残留陈旧锚 id 误滤）
+                  S.retiredIds = Array.isArray(p.retired_session_ids) ? new Set(p.retired_session_ids.filter((x) => typeof x === "string")) : null; // [W-RETIRED]：退休名单（缺席=旧 relay 零过滤；快照覆盖=leaderSessionId 同款换源口径）
                   S.homedir = p.homedir || ""; S.platform = p.platform || "";
                   S.models = Array.isArray(p.models) ? p.models : [];
                   S.projects = Array.isArray(p.projects) ? p.projects : []; // 项目组索引：会话列表「其他会话」按项目子分组（⑥a-2）
@@ -1216,6 +1224,10 @@
                   : "";
                   return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
+                // [W-RETIRED] 退休成员会话判定（renderMyList 主列表排除/归档组收集、筛选计数三处共用）——
+                // 名单来自 SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧（relay 判定源=
+                // org 两本账：非 archived 组路由在册而编制外）。null=旧 relay 零过滤兼容
+                const isRetiredSession = (x) => !!(S.retiredIds && x && typeof x.session_id === "string" && S.retiredIds.has(x.session_id));
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
                   const cwd = String(session.cwd || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -1497,7 +1509,7 @@
                   pop.style.position = "fixed";
                   pop.style.zIndex = "96";
                   pop.innerHTML = '<div class="source-menu-head">筛选会话</div>' + SESSION_FILTERS.map((f) => {
-                    const n = f.id === "all" ? S.sessions.size : [...S.sessions.values()].filter(f.test).length;
+                    const n = f.id === "all" ? [...S.sessions.values()].filter((x) => !isRetiredSession(x)).length : [...S.sessions.values()].filter((x) => !isRetiredSession(x) && f.test(x)).length; // W-RETIRED：退休卡不占主列表计数（已沉归档组）
                     return '<button class="source-option' + (f.id === sessionFilterOf().id ? " active" : "") + '" type="button" data-filter-choice="' + esc(f.id) + '"><strong>' + esc(f.label) + '</strong><small>' + n + '</small></button>';
                   }).join("");
                   const rect = anchor.getBoundingClientRect();
@@ -1610,13 +1622,19 @@
                     return !!(m && /^(leader|领队)$/i.test(String(m.role || "")));
                   };
                   const liveSessions = [...S.sessions.values()].filter((x) => !isLeaderSession(x));
+                  // [W-RETIRED] 退休成员会话（用户 1029 反馈）：主列表默认隐藏，沉列表尾部
+                  // 「已退休成员」折叠归档组（可展开=历史可查，编制退休≠会话删除）。退休判定
+                  // 优先于置顶（用户退休=隐藏，pinned 不豁免）；归档组内卡同走搜索过滤（搜
+                  // 退休成员名可找回），不参与筛选档/瘦身收纳（退休卡已出主列表）
+                  const retiredSessions = liveSessions.filter(isRetiredSession);
+                  const liveNonRetired = liveSessions.filter((x) => !isRetiredSession(x));
                   const pinnedKeep = (x) => x.pinned === true;
                   // #271：saved 休眠卡（已保存待恢复）不享受 pinned 置顶浮置——重启后重建的
                   // 休眠锚卡恒 pinned=true（ensureLeader 重建硬编码）+时间戳取锚写入时刻，
                   // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
                   // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
                   const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
-                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                  const sessions = liveNonRetired.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
                     const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
@@ -1626,7 +1644,7 @@
                   const filterHidden = [...S.sessions.values()].filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x))).map((x) => x.session_id);
                   S._filterHiddenIds = filterHidden.length ? new Set(filterHidden) : null;
                   // [t-7e0c6189] 被收起的 sid 记账——同 FB17 口径放行（否则 mo 完整性检查「缺卡」死循环）
-                  const slimHiddenIds = [...liveSessions].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
+                  const slimHiddenIds = [...liveNonRetired].filter((x) => filterDef.test(x) && !slimVisible(x)).map((x) => x.session_id);
                   S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;
                   if (!sessions.length) {
                     const ph = document.createElement("div");
@@ -1673,10 +1691,23 @@
                   // 筛选档（件十三「进行中」档）。活跃与闲置合流平铺（unpinned 本就按置顶+recency
                   // 序，活跃卡自然浮前）。
                   S._collapsedIdleIds = null; // 团队组退役：无折叠缺卡形态（slim 收起走 _slimHiddenIds）
+                  // [W-RETIRED] 尾部「已退休成员」折叠归档组：默认收起、点击组头展开（会话内
+                  // 记忆 S._retiredGroupOpen，mobileProjOpen 同款口径）；组内卡同走搜索过滤。
+                  // 折叠/搜索未命中 → 不在 DOM → 记账 _retiredHiddenIds 供 observer 完整性
+                  // 检查放行（_filterHiddenIds 同口径，防「缺卡→重渲→仍缺」死循环）
+                  const retiredOpen = S._retiredGroupOpen === true;
+                  const retiredShown = retiredOpen ? retiredSessions.filter(sessionSearchTest) : [];
+                  const retiredShownIds = new Set(retiredShown.map((x) => x.session_id));
+                  const retiredHiddenIds = retiredSessions.filter((x) => !retiredShownIds.has(x.session_id)).map((x) => x.session_id);
+                  S._retiredHiddenIds = retiredHiddenIds.length ? new Set(retiredHiddenIds) : null;
+                  const retiredMarkup = retiredSessions.length
+                    ? '<button class="queue-group retired-toggle" type="button" data-retired-toggle aria-expanded="' + retiredOpen + '" title="展开/收起已退休成员的会话"><span class="unfiled-chev">▸</span>已退休成员 · ' + retiredSessions.length + "</button>"
+                      + retiredShown.map((x) => myCardMarkup(myCardItem(x))).join("")
+                    : "";
                   // W-TEAMCHIP2 ②拼装：单段平铺（置顶+活跃+闲置，.list-upper 独占滚动）——
                   // #103 两段式下段 dock 已随本批退役
                   const tpl = document.createElement("template");
-                  tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;
+                  tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup;
                   mountUpper(tpl.content);
                 }
 
@@ -1812,6 +1843,13 @@
                     if (closeBtn) { openDeleteConfirm(card, s); return; }
                     const r = more.getBoundingClientRect();
                     card.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: Math.round(r.left), clientY: Math.round(r.bottom + 2) }));
+                  });
+                  UI.sessionList.addEventListener("click", (e) => { // [W-RETIRED] 归档组头折叠/展开（容器级委托：rk reconcile 子树替换不掉监听；组头在卡外不触发选中链）
+                    const tog = e.target.closest("[data-retired-toggle]");
+                    if (!tog) return;
+                    e.stopImmediatePropagation();
+                    S._retiredGroupOpen = S._retiredGroupOpen !== true;
+                    renderMyList();
                   });
                   // 件五补：标题双击进行内编辑（startRowRename 既有链：Enter 确认/Esc 取消/
                   // COMMAND_RENAME→title-overrides.json 落盘）。relay RENAME 对 historical/ext
@@ -4232,8 +4270,8 @@
                     }
                     if (S.hasSnapshot && S.sessions.size) {
                       const domIds = new Set([...UI.sessionList.querySelectorAll("[data-session-card]")].map((c) => c.dataset.sessionCard));
-                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0) && !(S._slimHiddenIds && S._slimHiddenIds.size > 0); // FB17：筛空态是合法形态（含瘦身收空）
-                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k)) && !(S._slimHiddenIds && S._slimHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失（t-7e0c6189：被收起的同口径）
+                      let miss = domIds.size === 0 && !(S._collapsedIdleIds && S._collapsedIdleIds.size > 0) && !(S._filterHiddenIds && S._filterHiddenIds.size > 0) && !(S._slimHiddenIds && S._slimHiddenIds.size > 0) && !(S._retiredHiddenIds && S._retiredHiddenIds.size > 0); // FB17：筛空态是合法形态（含瘦身收空；W-RETIRED：归档组收起同口径）
+                      for (const k of S.sessions.keys()) if (!domIds.has(k) && !(S._collapsedIdleIds && S._collapsedIdleIds.has(k)) && !(S._filterHiddenIds && S._filterHiddenIds.has(k)) && !(S._slimHiddenIds && S._slimHiddenIds.has(k)) && !(S._retiredHiddenIds && S._retiredHiddenIds.has(k))) { miss = true; break; } // FB17：被筛掉的卡不算缺失（t-7e0c6189：被收起的同口径；W-RETIRED：归档组收起/搜索未命中同放行）
                       if (miss) renderMyList();
                     }
                   });

@@ -578,11 +578,18 @@
         }
         return ids;
       };
+      const mobileRetiredIds = () => { // [W-RETIRED] 退休成员会话（桌面归档组同批同口径）：B2 S.retiredIds 透传（SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧维护；null=旧 relay 零过滤）
+        const api = b2Api();
+        const S = api && api.S;
+        return S && S.retiredIds instanceof Set ? S.retiredIds : new Set();
+      };
+      let mobileRetiredOpen = false; // 归档组展开账（会话内记忆，mobileProjOpen 同款口径）
       function renderInbox() {
         const list = document.querySelector("#m-inbox [data-mobile-session-list]");
         if (!list) return;
         const leaderIds = mobileLeaderIds();
-        const sessions = allSessions().filter((s) => !leaderIds.has(s.session_id)).sort(byPinnedUpdated);
+        const retiredIds = mobileRetiredIds();
+        const sessions = allSessions().filter((s) => !leaderIds.has(s.session_id) && !retiredIds.has(s.session_id)).sort(byPinnedUpdated);
         // B18 活跃优先（手机同口径）：顶部「进行中」收全部活跃；闲置按项目分组
         // FB16：手机补折叠机制——闲置组默认折叠、组头可点展开（与桌面 B11 同语言）
         const pend = sessions.filter((s) => s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR");
@@ -601,6 +608,12 @@
         // #282 MOB keyed：组级身份对齐（a:active / p:<项目名>）——未变组零触碰（FB16 折叠
         // 态/组内滚动/长按菜单瞬态逐帧存活），变化组单点替换；rk 缺席回落旧整串（零删）
         const activeMarkup = pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span><span class="grp-count" data-session-group-count>${grpIc("activity", true)}${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "";
+        // [W-RETIRED] 尾部「已退休成员」折叠归档组（桌面 renderMyList 同批同口径：默认收起、
+        // 组头点开展开、历史可查非删除）；退休卡不进进行中/闲置分组（sessions 已滤）
+        const retiredSessions = allSessions().filter((s) => !leaderIds.has(s.session_id) && retiredIds.has(s.session_id)).sort(byPinnedUpdated);
+        const retiredMarkup = retiredSessions.length
+          ? `<div class="session-group${mobileRetiredOpen ? "" : " collapsed"}" data-session-group="retired"><div class="queue-group" data-retired-toggle role="button" tabindex="0" aria-expanded="${mobileRetiredOpen}" title="展开/收起已退休成员"><span class="grp-caret">${mobileRetiredOpen ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">退</span><span>已退休成员</span><span class="grp-count" data-session-group-count>${grpIc("users")}${retiredSessions.length}</span></div><div class="grp-body">${retiredSessions.map(mobileCard).join("")}</div></div>`
+          : "";
         const rkM = window.__ccDeck005Reconcile;
         if (rkM) {
           const desired = [];
@@ -612,8 +625,9 @@
             const wN = items.filter((s) => s.status === "WORKING" && isRealW(s)).length; /* #291 真计数 */
             desired.push(["p:" + g, `<div class="session-group${open ? "" : " collapsed"}" data-session-group="project"><div class="queue-group" data-mobile-group-toggle="${esc(g)}" role="button" tabindex="0" aria-expanded="${open}" title="展开/收起该组"><span class="grp-caret">${open ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${esc(String(g).trim().slice(0, 1) || "团")}</span><span>${esc(g)}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${items.length}${wN ? ` ${grpIc("activity", true)}${wN}` : ""}</span></div><div class="grp-body">${items.map(mobileCard).join("")}</div></div>`]);
           });
+          if (retiredMarkup) desired.push(["retired", retiredMarkup]);
           rkM(list, desired);
-        } else list.innerHTML = activeMarkup + otherMarkup;
+        } else list.innerHTML = activeMarkup + otherMarkup + retiredMarkup;
         const act = sessions.filter(needAction).length;
         const work = sessions.filter((s) => s.status === "WORKING").length;
         const done = sessions.filter((s) => s.status === "DONE").length;
@@ -653,7 +667,7 @@
       function renderTeam() {
         const screen = screenOf("team");
         if (!screen) return;
-        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id)); // #240：泳道任务卡不吃 Leader 锚卡（同收件箱口径）
+        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id) && !mobileRetiredIds().has(s.session_id)); // #240：泳道任务卡不吃 Leader 锚卡（同收件箱口径）；W-RETIRED：退休卡同滤（归档组只在收件箱呈现）
         const confirms = Array.isArray(bridge.pendingConfirms) ? bridge.pendingConfirms : [];
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         const head = screen.querySelector(".mobile-head h2 small");
@@ -683,7 +697,7 @@
       function renderProject() {
         const screen = screenOf("project");
         if (!screen) return;
-        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id)); // #240：项目聚合 lane/统计不吃 Leader 锚卡（同收件箱口径）
+        const sessions = allSessions().filter((s) => !mobileLeaderIds().has(s.session_id) && !mobileRetiredIds().has(s.session_id)); // #240：项目聚合 lane/统计不吃 Leader 锚卡（同收件箱口径）；W-RETIRED：退休卡同滤
         const projects = Array.isArray(bridge.projects) ? bridge.projects : [];
         const actN = sessions.filter(needAction).length;
         const artifactsN = sessions.reduce((n, s) => n + (Array.isArray(s.artifacts) ? s.artifacts.length : 0), 0);
@@ -789,6 +803,12 @@
         if (mGrp) {
           const gname = mGrp.dataset.mobileGroupToggle;
           if (mobileProjOpen.has(gname)) mobileProjOpen.delete(gname); else mobileProjOpen.add(gname);
+          renderInbox();
+          return;
+        }
+        const rGrp = target.closest("[data-retired-toggle]"); // [W-RETIRED] 手机归档组折叠/展开（桌面同批同口径）
+        if (rGrp) {
+          mobileRetiredOpen = !mobileRetiredOpen;
           renderInbox();
           return;
         }
