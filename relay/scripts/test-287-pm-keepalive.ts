@@ -60,10 +60,10 @@ ok(sm.includes("pmKeepaliveStreak: 0,") && (sm.match(/pmKeepaliveStreak: 0,/g) |
 
 console.log("#287 面板待命态（web-console 源码锚）");
 
-ok(ssd.includes("pmStandby: session.pm_standby === true") && ssd.includes("值守 PM 常驻待命"),
-  "P1 桌面卡：myCardItem 透传 + r2 行「待命」tag（替代 DONE 假死——活跃/待命连续态对齐 #276）");
-ok(mj.includes('s.pm_standby ? ["待命", "waiting"]'),
-  "P2 移动卡：stTag 待命二态（waiting 色系）");
+ok(ssd.includes('pmStandby: session.pm_standby === true && status !== "working"') && ssd.includes("值守 PM 常驻待命"),
+  "P1 桌面卡：myCardItem 透传 + r2 行「待命」tag（替代 DONE 假死——活跃/待命连续态对齐 #276）；件A（1029）：WORKING 干活态 gate——真在跑不误标待命");
+ok(mj.includes('(s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"]'),
+  "P2 移动卡：stTag 待命二态（waiting 色系）；件A：WORKING 干活态 gate 同步");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

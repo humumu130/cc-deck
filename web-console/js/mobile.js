@@ -32,14 +32,14 @@
       const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
       // #291 帧分类判活：WORKING 过真判定（#d-session 域 session-domain 挂的全局；缺=老壳降级原样）——待命不占在跑计数
       const isRealW = (s) => (window.__ccDeck005IsRealWorking ? window.__ccDeck005IsRealWorking(s) : true);
-      const stTag = (s) => s.pm_standby ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死
+      const stTag = (s) => (s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // 件A（1029 用户图①）：真在干活（WORKING）不显「待命」——待命语义保留给真闲置；#287 值守 PM 待命态替代 DONE 假死
       const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
       const allSessions = () => [...bridge.sessions.values()];
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
       const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
-      const sourceBadge = () => `<span class="source-badge">${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || location.host) : (bridge.relayName || location.host))}</span>`; // 件十三：命名映射统一
+      const sourceBadge = () => { const n = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || location.host) : (bridge.relayName || location.host); return `<span class="source-badge" data-src-slug="${esc(window.__ccDeck005SrcSlug ? window.__ccDeck005SrcSlug(n) : "")}">${esc(n)}</span>`; }; // 件十三：命名映射统一；件E：slug 供徽章配色覆写定位
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
       const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
         const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -60,7 +60,7 @@
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
         const bg = mBgCount(s);
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
+        return `<div class="mobile-card" data-st="${esc(String(s.status || "").toLowerCase())}" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
       };
 
       // ---------- 导航栈 ----------

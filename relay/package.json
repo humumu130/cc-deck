@@ -32,6 +32,7 @@
     "test:280-conn-page": "tsx scripts/test-280-conn-page.ts",
     "test:282-targeted-render": "tsx scripts/test-282-targeted-render.ts",
     "test:287-pm-keepalive": "tsx scripts/test-287-pm-keepalive.ts",
+    "test:ui-followup": "tsx scripts/test-ui-followup.ts",
     "test:289-detail-keepalive": "tsx scripts/test-289-detail-keepalive.ts",
     "test:005-servers": "tsx scripts/test-005-servers.ts",
     "test:005-blankset": "node --import tsx/esm scripts/test-005-blankset.ts",

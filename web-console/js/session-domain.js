@@ -118,6 +118,13 @@
                   return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
                 }
                 function fmtHM(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+                // 件G：正常干活态摘要短语化——首分隔符（·—，,/；()（））或 16 字截断 + 省略号；空串透传
+                function shortSummaryOf(t) {
+                  const s = String(t ?? "").trim();
+                  if (!s) return "";
+                  const cut = s.split(/[·—，,；;（(]/)[0];
+                  return cut.length >= s.length ? (s.length > 16 ? s.slice(0, 16) + "…" : s) : cut;
+                }
                 // #B3-8 卡片时间 dayLabel 同族（旧壳 fmtLastActive 口径直搬）：今天 HH:mm / 昨天 /
                 // 今年 M月d日 / 跨年带年份——自然日边界（非 24h 滚动窗）
                 function fmtListTime(ts) {
@@ -177,9 +184,39 @@
                   return out + esc(s.slice(last));
                 }
                 function linkifyEscaped(escaped) {
-                  return escaped.replace(/\bhttps?:\/\/[^\s<>"')\]]+/g, (u) =>
-                    '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + "</a>");
+                  // 件D（1029 用户图④）：URL 锚改 ext-link 路由链——壳内 target=_blank 无 handler 是死链
+                  //（WKWebView 不开窗），点击经 delegated 路由走 open_external（壳）/window.open（浏览器/移动）。
+                  // 尾部修剪：英文尾点/逗号/冒号/分号与 CJK 标点（。，；！？、」』）不属 URL——旧正则把
+                  //「见 https://x.com/a。」整句吞进 href
+                  return escaped.replace(/\bhttps?:\/\/[^\s<>"')\]]+/g, (u) => {
+                    const shown = u.replace(/[.,;:]+$/, "").replace(/[。，；！？、」』）】>]+$/, "");
+                    return '<a class="ext-link" href="' + shown + '" data-ext-url="' + shown + '" rel="noopener noreferrer">' + shown + "</a>";
+                  });
                 }
+                // 件D：ext-link 点击路由（delegated，挂 document 捕获——conv 检查器/思考卡内链接同收）
+                // 语义：桌面壳=Ctrl/Cmd+点击开系统浏览器（防误触，open_external 白名单只放 http/https）；
+                // 浏览器形态=直接 window.open 新 tab；触屏（无修饰键可用）=直接点开。无修饰键+精确指针=不动作（行为不变）
+                document.addEventListener("click", (ev) => {
+                  const a = ev.target && ev.target.closest ? ev.target.closest("a.ext-link,[data-ext-url]") : null;
+                  if (!a) return;
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  const url = String(a.dataset.extUrl || a.getAttribute("href") || "");
+                  if (!/^https?:\/\//i.test(url)) return; // 白名单外协议不路由（壳 IPC 侧再拦一道）
+                  const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+                  if (!coarse && !ev.ctrlKey && !ev.metaKey) return; // 桌面精确指针无修饰键：仅提示不导航
+                  if (window.ccDeck && typeof window.ccDeck.openExternal === "function") { void window.ccDeck.openExternal(url); return; }
+                  window.open(url, "_blank", "noopener");
+                }, true);
+                // 件D：hover 提示一次性补 title（mdHtml 渲染的裸 <a> 不带提示；捕获态补齐）
+                document.addEventListener("mouseover", (ev) => {
+                  const a = ev.target && ev.target.closest ? ev.target.closest("a.ext-link,[data-ext-url]") : null;
+                  if (a && !a.title) {
+                    const mac = /Mac/i.test(navigator.platform || "");
+                    const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+                    a.title = coarse ? "点击在浏览器打开" : (mac ? "⌘点击在浏览器打开" : "Ctrl+点击在浏览器打开");
+                  }
+                }, true);
                 function userMsgHtml(t) {
                   const s = String(t ?? "");
                   if (!/#\d{1,4}(?!\w)/.test(s)) return linkifyEscaped(esc(s));
@@ -248,11 +285,11 @@
                       // [标题](url)：仅 http(s) 可成为链接，防 javascript: 注入（旧壳口径）
                       const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
                       out += mm && HTTP_RE.test(mm[2])
-                        ? '<a href="' + esc(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + esc(mm[1]) + "</a>"
+                        ? '<a class="ext-link" href="' + esc(mm[2]) + '" data-ext-url="' + esc(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + esc(mm[1]) + "</a>"
                         : esc(tok);
                     } else if (tok.startsWith("http")) {
                       const url = tok.replace(URL_TRAIL_PUNCT, "");
-                      out += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + "</a>";
+                      out += '<a class="ext-link" href="' + esc(url) + '" data-ext-url="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + "</a>";
                       if (url.length < tok.length) out += esc(tok.slice(url.length));
                     } else if (FPATH_START_RE.test(tok)) {
                       const p = tok.replace(/[.,;:!?'"）】》]+$/, "");
@@ -736,6 +773,7 @@
                   renderMyList();
                   renderSlimDrawer(); // [t-7e0c6189] 第四列成员卡状态/摘要随更新刷新（隐藏态零开销早退）
                   if (sid === S.selected) renderAll();
+                  else if (UI && S.selected && pmTeamChipOf(S.selected).length) renderHeader(); // 件K1（1029 用户实锤 head 团队 chip 计数滞后列表侧）：chip 活跃数统计整队会话（pmTeamChipOf reduce 全编制），他成员状态翻转时列表已刷而 head 不刷=两处数字不一致——补 head 侧刷新订阅；renderHeader 廉价（identity 小簇 innerHTML）
                 }
                 function onHeartbeat(sid, p) {
                   const s = S.sessions.get(sid);
@@ -823,6 +861,19 @@
                     const i = list.findIndex((x) => x.id === e.id);
                     if (i >= 0) { if (streamMergeDecide(list[i], e) === "skip") return "skip"; list[i] = e; return "replace"; }
                   }
+                  // 件I（1029 用户实锤：同条 458 字用户消息 ×3、时序打穿）：relay 侧重报/回灌链
+                  //（hooks 重触发·scan 回放窗·415 队列重投）给同内容消息发**新 id**——id 去重拦不住，
+                  // 内容幂等兜底：长用户消息（≥80 字规范化后）同会话同内容 → skip。短消息
+                  //（continue/是/好的）合法逐次重复不受影响（长度门槛天然豁免）。
+                  if (msgRoleOf(e.kind) === "user") {
+                    const normI = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
+                    const ti = normI(e.full ?? e.text);
+                    if (ti.length >= 80 && list.some((x) => msgRoleOf(x.kind) === "user" && normI(x.full ?? x.text) === ti)) return "skip";
+                  }
+                  // 件I 时序锚：按 ts 稳定插入（等 ts 保到达序）——回灌旧帧不再垫到新消息下方
+                  let at = list.length;
+                  while (at > 0 && Number(list[at - 1].ts) > Number(e.ts)) at--;
+                  if (at < list.length) { list.splice(at, 0, e); if (list.length > 400) list.splice(0, list.length - 400); return "resort"; }
                   list.push(e);
                   if (list.length > 400) list.splice(0, list.length - 400);
                   return "append";
@@ -883,7 +934,8 @@
                     }
                   }
                   const out = pushLog(sid, entry);
-                  if (UI && sid === S.selected && out !== "skip") applyDomLog(sid, out, entry.id);
+                  if (UI && sid === S.selected && out === "resort") renderConversation(); // 件I：乱序回灌→整pane重排（罕见路径，正确性优先）
+                  else if (UI && sid === S.selected && out !== "skip") applyDomLog(sid, out, entry.id);
                   // [t-7e0c6189] 未读聚合：编制内 worker/QA 有新输出且未在看 → 记 gid/sid 并亮团队入口徽标
                   //（每 sid 只触发一次重渲；进团队域/展第四列/直开即清——slimMarkSeen）
                   if (S.hasSnapshot && UI && sid !== S.selected) {
@@ -1033,6 +1085,7 @@
                     id: esc(session.session_id),
                     title: esc(session.title || session.initial_prompt || session.session_id),
                     summary: esc(session.action_summary || session.last_error || displayPath(session.cwd) || "暂无活动摘要"),
+                    summaryShort: status === "working" ? esc(shortSummaryOf(session.action_summary || session.last_error || "")) : "", // 件G：正常干活态第二行降焦（动作短语=动词+宾语首词，全文走 title）；ERROR/WAITING 等异常态空串=CSS 升格走全文
                     status,
                     // #164 状态文字标签退役（头像角标状态点已表达状态）；tagClass 仅供 CTA 判定保留
                     // W-V8 批2a 状态语义对调：working 绿（v8 进行中=绿系；CTA 判定只认 action/danger 不受影响）
@@ -1055,7 +1108,7 @@
                     time: activityTime ? fmtListTime(activityTime) : "",
                     selected: session.session_id === S.selected,
                     pinned: session.pinned === true,
-                    pmStandby: session.pm_standby === true, // #287 值守 PM 待命态（快照派生）：替代 DONE 假死
+                    pmStandby: session.pm_standby === true && status !== "working", // 件A（1029 用户图①「工作状态下还有个待命标签」）：真在干活（WORKING）时待命胶囊让位；#287 值守待命语义保留给真闲置（DONE/WAITING 等）
                     standby: status === "working" && !isRealWorking(session), // #291 帧分类判活：接单未开工/挂起（灰呼吸点+待开工标，不占在跑计数）
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
                     idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
@@ -1154,7 +1207,9 @@
                 const teamChipMarkup = (t) => {
                   const un = S.slimUnread.get(t.gid);
                   const hasUnread = un ? un.size > 0 : false;
-                  return '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + (hasUnread ? " has-unread" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + (t.running > 0 ? " · " + t.running + " 人在跑" : "") + (hasUnread ? " · 有新输出未在看" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '">' + TEAM_CHIP_ICON + '<span class="tc-name">' + esc(t.name) + "</span>" + (t.running > 0 ? '<span class="tc-run">' + t.running + "</span>" : "") + (hasUnread ? '<i class="tc-dot" aria-hidden="true"></i>' : "") + "</button>";
+                  // 件K2（1029 用户 22:0x）：tc-dot 黄橙小灯移除（与 tc-run 内工作灯语义重复且不可解读）——
+                  // 未读信号保留 has-unread 描边强调 + title 文案（注意力不丢，噪声灯退役）
+                  return '<button type="button" class="team-chip' + (t.idle ? " idle" : "") + (hasUnread ? " has-unread" : "") + '" data-team-chip="' + esc(t.gid) + '" title="所属团队：' + esc(t.name) + (t.idle ? " · 团队空闲（无在跑成员）" : "") + (t.running > 0 ? " · " + t.running + " 人在跑" : "") + (hasUnread ? " · 有新输出未在看" : "") + ' · 点击展开团队抽屉" style="--team-accent:' + t.accent + '" aria-expanded="' + (S.drawerGid === t.gid ? "true" : "false") + '">' + TEAM_CHIP_ICON + '<span class="tc-name">' + esc(t.name) + "</span>" + (t.running > 0 ? '<span class="tc-run">' + t.running + "</span>" : "") + "</button>";
                 };
                 const teamChipsOf = (item) => (Array.isArray(item.teams) ? item.teams : []).map(teamChipMarkup).join("");
                 function myCardMarkup(item) {
@@ -1165,7 +1220,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t">' + item.summary + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + '<span class="srow-r2-t"' + (item.summaryShort ? ' title="' + item.summary + '"' : "") + ">" + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";
                 }
                 function getSessionProject(session) { // ⑥a-2：会话→项目归属（SNAPSHOT projects.anchor_dir 优先，否则取 cwd 尾段目录名）
                   // #158-批4a：前缀匹配归一化（Windows 数据 \ 与拼 / 不匹配会让子目录会话落不进项目组）
@@ -1564,7 +1619,7 @@
                   // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
                   // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
                   const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
-                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                  const sessions = liveSessions.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x) && !remoteHiddenHas(x.session_id)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置；件B：本机隐藏的远程卡不进列表
                     const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
@@ -1704,6 +1759,25 @@
                 }
                 // 件五补：删除确认浮层（row-menu 同壳浮层）——hover × 与右键菜单「删除」同走，
                 // 不可裸删（任务书口径；菜单项曾裸删，一并收进确认）
+                // ---------- 件B（1029 用户实锤：公司源 leader 卡删不掉）：远程投影卡删除兜底 ----------
+                // 命令路由基建已在（RouteWs 按会话源路由：云源会话走云 shim 密封上行到源机执行）。
+                // 删不掉的真实分支有二：①源机 relay 对 leader 常驻锚拒删（「Leader 卡不可删除」——
+                // 源机团队锚点，远端 viewer 无权也不该解散）②源机离线命令未送达（ack=null）。
+                // 两分支的可行解=本机隐藏（viewer 侧投影卡消失，不动源机数据）；设置页可恢复。
+                const REMOTE_HIDDEN_KEY = "cc-deck-005-hidden-remote";
+                function remoteHiddenList() { try { const v = JSON.parse(localStorage.getItem(REMOTE_HIDDEN_KEY) || "[]"); return Array.isArray(v) ? v.filter((x) => x && typeof x.sid === "string") : []; } catch { return []; } }
+                function remoteHiddenHas(sid) { return remoteHiddenList().some((x) => x.sid === sid); }
+                function remoteHiddenAdd(sid, title, relay) {
+                  const list = remoteHiddenList().filter((x) => x.sid !== sid);
+                  list.push({ sid, title: String(title || sid).slice(0, 40), relay: String(relay || "").slice(0, 30), ts: Date.now() });
+                  try { localStorage.setItem(REMOTE_HIDDEN_KEY, JSON.stringify(list)); } catch {}
+                }
+                function remoteHiddenRemove(sid) {
+                  const list = remoteHiddenList().filter((x) => x.sid !== sid);
+                  try { localStorage.setItem(REMOTE_HIDDEN_KEY, JSON.stringify(list)); } catch {}
+                }
+                window.__ccDeck005RemoteHidden = { list: remoteHiddenList, has: remoteHiddenHas, add: remoteHiddenAdd, remove: remoteHiddenRemove }; // 设置页恢复行消费
+                function isRemoteProjection(s) { return !!(s && (s.relay_channel === "cloud" || (typeof s.relay_source === "string" && s.relay_source && s.relay_source !== S.relayName))); }
                 function openDeleteConfirm(card, s) {
                   closeRowMenu();
                   document.getElementById("row-del-confirm")?.remove();
@@ -1714,9 +1788,16 @@
                   pop.setAttribute("role", "alertdialog");
                   pop.setAttribute("aria-label", "确认删除会话");
                   pop.innerHTML = '<div class="row-del-tip">删除会话「' + esc(String(s.title || s.session_id).slice(0, 18)) + '」？</div>'
-                    + '<div class="row-del-actions"><button type="button" data-del-cancel>取消</button><button type="button" class="danger" data-del-ok>删除</button></div>';
+                    + (isRemoteProjection(s) ? '<div class="row-del-sub">远程源会话 · 删除指令将路由到源机执行' + (s.relay_source ? '（' + esc(s.relay_source) + '）' : "") + '</div>' : "")
+                    + '<div class="row-del-actions"><button type="button" data-del-cancel>取消</button>' + (isRemoteProjection(s) ? '<button type="button" class="ghost" data-del-hide>仅本机隐藏</button>' : "") + '<button type="button" class="danger" data-del-ok>删除</button></div>';
                   pop.addEventListener("click", async (ev) => {
                     if (ev.target.closest("[data-del-cancel]")) { pop.remove(); return; }
+                    if (ev.target.closest("[data-del-hide]")) { // 件B：远程卡本机隐藏（不动源机数据——源机离线/常驻锚拒删时的可行解）
+                      remoteHiddenAdd(s.session_id, s.title, s.relay_source || s.relay_channel);
+                      onDeleted(s.session_id); // 本地清理同删除链（投影卡即刻消失）
+                      b2Toast("已在本机隐藏（可在 设置→通用 恢复）");
+                      return;
+                    }
                     if (!ev.target.closest("[data-del-ok]")) return;
                     pop.remove();
                     if (s.status === "WORKING" || s.status === "WAITING") { b2Toast("会话运行中，不能删除"); return; } // 前端预拦，relay 同规则
@@ -1729,6 +1810,14 @@
                     if (v.ok || /会话不存在/.test(v.error)) {
                       onDeleted(s.session_id);
                       b2Toast("会话已删除");
+                    } else if (ack === null || ack === undefined) {
+                      // 件B：命令未送达（源机离线/云链断）——人话提示 + 隐藏兜底指引
+                      b2Toast("源机不在线，删除指令未送达——稍后重试，或改用「仅本机隐藏」", 4200);
+                    } else if (/不可删除/.test(v.error)) {
+                      // 件B：源机常驻锚拒删（leader 逻辑会话是源机团队锚点，远端不该删）——人话解释 + 自动转本机隐藏
+                      remoteHiddenAdd(s.session_id, s.title, s.relay_source || s.relay_channel);
+                      onDeleted(s.session_id);
+                      b2Toast("源机上的常驻会话不能远程删除（团队锚点）——已改为本机隐藏，可在 设置→通用 恢复", 4600);
                     } else b2Toast(v.error);
                   });
                   document.body.appendChild(pop);
@@ -3638,9 +3727,9 @@
                 function defaultEngineId() { const ready = catalogEntries().find((e) => e.state === "ready"); return ready ? ready.id : "claude"; }
                 function engineStateText(e) {
                   if (e.state === "ready") return e.models && e.models.length ? e.models.length + " 个模型" : "已就绪 · 使用引擎默认";
-                  if (e.state === "needs_auth") return "未登录 · " + oneLine(e.auth_hint || "请先完成引擎登录"); // #102 批 A：装了没登录——黄点+指引
-                  if (e.state === "unsupported") return "不支持 · " + ((e.preflight && e.preflight.reason) || "占位");
-                  return "不可用 · " + oneLine((e.preflight && e.preflight.reason) || "未探测到");
+                  if (e.state === "needs_auth") return "未登录 · " + oneLine(e.auth_hint || "扫码登录后即可使用"); // #102 批 A：auth_hint 登录指引透传；件C：fallback 人话化
+                  if (e.state === "unsupported") return "未接入 · 该引擎暂不可用"; // 件C：「枚举占位」开发术语退役（用户完全看不懂）
+                  return "未安装 · 需先安装 " + (e.label || e.id) + " CLI"; // 件C：给动作不给谜语（reason 调试细节不进 UI；不引闭包依赖——engauth 套件 eval 单测此函数）
                 }
                 // #368（旧壳 8781-8794 口径）：cwd 预填「上次创建用的目录」优先，无记忆回落
                 // 活动源用户根目录。005 单源——单键记忆（不与旧壳 ccr_cwd@id 多源键纠缠）
@@ -3833,26 +3922,28 @@
                   const na = catalogEntries().filter((e) => e.state !== "ready" && e.state !== "needs_auth");
                   const needsAuth = catalogEntries().filter((e) => e.state === "needs_auth");
                   let html = "";
-                  html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge claude">自动</span><strong>自动 · 跟随源默认</strong><small>由源端配置决定引擎（不携带 engine 字段）</small></button>'; // W-PORT-A R-7：auto 档置顶恒可选
+                  // 件C（1029 用户图③点名）：下拉徽章接入 engineBadge 品牌体系——底色胶囊+品牌图标
+                  //（ENGINE_BRAND_SVG 与列表卡/详情 head/消息头像同源同表），选项改两行式（徽章+名 ｜ 描述）
+                  const brandIcon = (id) => { const sv = ENGINE_BRAND_SVG[id]; return sv ? '<span class="badge-brand">' + sv + "</span>" : ""; };
+                  const badgeOf = (e) => { const meta = ENGINES[e.id] || [e.label || e.id, ""]; return '<span class="engine-badge ' + meta[1] + '">' + brandIcon(e.id) + esc(meta[0]) + "</span>"; };
+                  html += '<button type="button" class="source-option' + (chosen === "auto" ? " active" : "") + '" data-engine-choice="auto" role="menuitem"><span class="engine-badge">自动</span><strong>跟随源默认</strong><small>不指定引擎 · 由源端配置决定</small></button>'; // 件C：徽章与标题「自动」词冗余去重；badge 不再误挂 claude 品牌底色（自动≠Claude）。W-PORT-A R-7：auto 档置顶恒可选
                   if (ready.length) {
                     html += '<div class="source-menu-head">可用 · ' + ready.length + "</div>";
                     for (const e of ready) {
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "引擎默认") + "</small></button>";
+                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem">' + badgeOf(e) + '<span class="so-copy"><strong>' + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "引擎默认") + "</small></span></button>";
                     }
                   }
                   if (needsAuth.length) {
                     html += '<div class="source-menu-head">未登录 · ' + needsAuth.length + "</div>";
                     for (const e of needsAuth) { // #102 批 B：从灰置升级为可点——点行直接弹登录卡（二维码扫码即登录）
-                      const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(oneLine(e.auth_hint || "点此扫码登录")) + '"><span class="ep-dot"></span><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>点此扫码登录</small></button>";
+                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(oneLine(e.auth_hint || "点此扫码登录")) + '"><span class="ep-dot"></span>' + badgeOf(e) + '<span class="so-copy"><strong>' + esc((ENGINES[e.id] || [e.label || e.id])[0]) + "</strong><small>点此扫码登录</small></span></button>";
                     }
                   }
                   if (na.length) {
                     html += '<div class="source-menu-head">不可用 · ' + na.length + "</div>";
                     for (const e of na) { // 灰置不可点（div 非 button）：原因小字透出，不硬闯
-                      const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<div class="source-option" aria-disabled="true"><span class="engine-badge ' + meta[1] + '">' + esc(meta[0]) + "</span><strong>" + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></div>";
+                      html += '<div class="source-option" aria-disabled="true">' + badgeOf(e) + '<span class="so-copy"><strong>' + esc((ENGINES[e.id] || [e.label || e.id])[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></span></div>";
                     }
                   }
                   menu.innerHTML = html;

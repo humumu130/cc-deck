@@ -858,3 +858,53 @@ window.__ccDeck005Reconcile = function reconcileKeyed(container, desired) {
   for (const el of Array.from(container.children)) if (!(el.getAttribute && el.getAttribute("data-rk"))) { el.remove(); stats.removed++; }
   return stats;
 };
+
+// ======================= follow-up UI 批（1029）bridge 层基建 =======================
+// 件E：徽章底色自定义——引擎/源徽章底色 CSS 变量化消费端。存储=localStorage
+// cc-deck-005-badge-colors = { engines: {<engineId>: "#hex"}, sources: {<源显示名>: "#hex"} }；
+// 应用=生成 #cc-badge-custom-style 逐类 !important 覆写（压 r3/head identity 语境的 color-mix
+// 特异度——ID 选择器打不过，自定义态必须全语境生效）；fg 按底色亮度自动黑/白（双主题同底色
+// 可用）；未自定义=零规则零影响（html[data-badge-custom] 总闸不挂）。
+window.__ccDeck005BadgeColorsKey = "cc-deck-005-badge-colors";
+window.__ccDeck005SrcSlug = (name) => String(name ?? "").trim().toLowerCase().replace(/[^\w一-龥]+/g, "-").replace(/^-+|-+$/g, "") || "src";
+window.__ccDeck005BadgeFgOf = (hex) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return "#FFFFFF";
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.62 ? "#1F2430" : "#FFFFFF"; // 相对亮度>0.62 配深字，否则白字
+};
+window.__ccDeck005ApplyBadgeColors = (map) => {
+  const styleId = "cc-badge-custom-style";
+  let tag = document.getElementById(styleId);
+  const engines = (map && map.engines) || {};
+  const sources = (map && map.sources) || {};
+  const anyCustom = Object.keys(engines).length + Object.keys(sources).length > 0;
+  document.documentElement.toggleAttribute("data-badge-custom", anyCustom);
+  if (!anyCustom) { if (tag) tag.remove(); return; }
+  if (!tag) { tag = document.createElement("style"); tag.id = styleId; document.head.appendChild(tag); }
+  const CSS_ENG = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode", glm: "glm" };
+  const lines = [];
+  for (const [id, hex] of Object.entries(engines)) {
+    const cls = CSS_ENG[id] || id;
+    lines.push(`html[data-badge-custom] .engine-badge.${cls}{background:${hex}!important;border-color:transparent!important;color:${window.__ccDeck005BadgeFgOf(hex)}!important}`);
+  }
+  for (const [name, hex] of Object.entries(sources)) {
+    const slug = window.__ccDeck005SrcSlug(name);
+    lines.push(`html[data-badge-custom] .source-badge[data-src-slug="${slug}"]{background:${hex}!important;border-color:transparent!important;color:${window.__ccDeck005BadgeFgOf(hex)}!important}`);
+  }
+  tag.textContent = lines.join("\n");
+};
+try { window.__ccDeck005ApplyBadgeColors(JSON.parse(localStorage.getItem(window.__ccDeck005BadgeColorsKey) || "null") || {}); } catch (_) { /* 坏存静默 */ }
+
+// 件F：滚动条「滚动才显」——document 捕获单监听（子容器滚动事件全收），滚动目标挂 .scrolling
+// 类 300ms 去抖移除（键盘滚动同样触发 scroll 事件）；显隐交给 base.css @media (pointer:fine) 段。
+try {
+  const scrollTimers = new WeakMap();
+  document.addEventListener("scroll", (ev) => {
+    const t = ev.target;
+    if (!t || !t.classList) return;
+    t.classList.add("scrolling");
+    clearTimeout(scrollTimers.get(t));
+    scrollTimers.set(t, setTimeout(() => { try { t.classList.remove("scrolling"); } catch (_) {} }, 300));
+  }, true);
+} catch (_) { /* 老壳兜底 */ }

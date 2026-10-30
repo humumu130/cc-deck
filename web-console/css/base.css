@@ -2071,7 +2071,9 @@
     #d-session .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: none; } /* #201⑥：选中吃 --selected-bg（微信绿档）——原 var(--brand) 误接 */
     /* #198 件①：选中橙行反白清单补漏——走秒/「处理」浮层钮/源与引擎徽章（此前橙底上原色不可辨） */
     /* #201 三轮：revfix2 反白补漏组退役（选中改灰深字，回落原样式即可辨） */
-    #d-session .queue-card.selected .srow-pin.on svg { color: #FFFFFF; }
+    /* 件J②（1029 用户 21:5x 图）：置顶图钉统一灰——选中卡白描边/品牌色描边退役，
+       钉住/未钉住同灰（--dim 中灰，hover 沿用 .srow-more/.srow-pin:hover 通用 --text-strong） */
+    #d-session .queue-card.selected .srow-pin.on svg { color: var(--dim); }
     /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
     #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
     #d-session .queue-card[data-session-card="mobile"]:hover { background: var(--danger-bg); }
@@ -2102,7 +2104,11 @@
     #d-session .srow-more::before, #d-session .srow-pin::before, #d-session .srow-close::before { content: ""; position: absolute; inset: -5px; }
     #d-session .srow-more:hover, #d-session .srow-pin:hover, #d-session .srow-close:hover { background: var(--hover); color: var(--text-strong); }
     #d-session .srow-pin svg, #d-session .srow-close svg { width: 13px; height: 13px; }
-    #d-session .srow-pin.on { opacity: 1; color: var(--brand); } /* W-FB66C ⑪：已置顶常驻显（hover 不再冒第二枚图钉——常驻/悬浮合一，点按=取消置顶，位置恒 right:28） */
+    #d-session .srow-pin.on { opacity: 1; color: var(--dim); } /* 件J②：常驻显但统一灰（旧品牌色退役）。W-FB66C ⑪：已置顶常驻显（hover 不再冒第二枚图钉——常驻/悬浮合一，点按=取消置顶，位置恒 right:28） */
+    /* 件J①③（1029 用户 21:5x 图）：时间戳与图钉零间距根修——r1 右侧预留按钮区（close 0-22/pin 28-50
+       含 6px 间隙到 56px 处），时间不再钻到钮下；置顶/未置顶图钉同位（恒 right:28）视觉对齐随间距
+       保留一并收敛。:has 不支持的壳降级为旧行为（时间照旧右贴，无布局破坏） */
+    #d-session .queue-card:has(.srow-pin.on) .srow-r1 { padding-right: 56px; }
     #d-session .srow-close:hover { color: var(--error); background: var(--danger-bg); }
     #d-session .queue-card:hover .srow-more, #d-session .queue-card:hover .srow-pin, #d-session .queue-card:hover .srow-close,
     #d-session .queue-card:focus-within .srow-more, #d-session .queue-card:focus-within .srow-pin, #d-session .queue-card:focus-within .srow-close { opacity: 1; }
@@ -2133,14 +2139,18 @@
     #d-session .team-chip .tc-ico circle, #d-session .team-chip .tc-ico path { fill: currentColor; }
     #d-session .team-chip .tc-run { flex: none; margin-left: 4px; display: inline-flex; align-items: center; gap: 3px; color: #5A6B7D; font: 700 10.5px/15.5px var(--mono); font-variant-numeric: tabular-nums; } /* 1026 三版定稿：实底徽章/黑晕黄字均被否——黄点(工作灯同语言)+深灰数字，轻盈可读 */
     #d-session .team-chip .tc-run::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--st-working); flex: none; } /* W-ENGLM2 F：数字位=活跃成员数（WORKING 计数，0 不显；working 色）。1026 用户两轮实锤：黄细字浅底看不清→灯珠式被否（丑）→定稿同色黄字+黑色光晕双勾边（与工作灯同色系，任何底上立起） */
-    #d-session .team-chip .tc-dot { flex: none; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--brand); animation: slimPulseKf 1.6s ease-out infinite; } /* W-ENGLM2 F：未读降级小圆点（保留注意力信号不占数字位；tc-unread 数字角标随语义返工退役） */
+    /* 件K2（1029 用户 22:0x）：tc-dot 黄橙呼吸灯退役——与 tc-run 内工作灯语义重复且不可解读；
+       未读注意力保留 .has-unread 描边强调（下一条规则）+ chip title 文案。slimPulseKf 随唯一
+       使用者退役（若他处引用见 @keyframes 定义处注释） */
     #d-session .team-chip.has-unread { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 55%, transparent); color: var(--text-strong); }
     #d-session .team-chip .tc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     /* W-TEAMSNC ②：chip button 化（button reset+hover 微抬▸+focus 光环+idle 置灰+展开态） */
     #d-session button.team-chip { cursor: pointer; transition: border-color .12s ease, background-color .12s ease, color .12s ease; }
-    #d-session button.team-chip::after { content: "▸"; margin-left: 1px; color: var(--faint); font-size: 8px; opacity: 0; transition: opacity .12s ease; }
+    /* 件K3（1029 用户 22:0x）：▸ 微三角退役——8px/淡色不可感知，放大到可感知又要与数字/灯珠挤
+       同高胶囊（视觉噪声>信息增量）；「可展开」语义已由 hover 态（描边加深+底色）+ title
+       「点击展开团队抽屉」+ aria-expanded 承担 */
     #d-session button.team-chip:hover { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 62%, transparent); background: color-mix(in srgb, var(--team-accent, var(--brand)) 16%, transparent); color: var(--text); }
-    #d-session button.team-chip:hover::after, #d-session button.team-chip[aria-expanded="true"]::after { opacity: 1; }
+    /* 件K3：原 hover/expanded ::after 显影规则随三角一并退役（hover 基础态由 2142 行既有规则承担） */
     #d-session button.team-chip[aria-expanded="true"] { border-color: color-mix(in srgb, var(--team-accent, var(--brand)) 62%, transparent); background: color-mix(in srgb, var(--team-accent, var(--brand)) 15%, transparent); }
     #d-session button.team-chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
     #d-session .team-chip.idle { opacity: .58; } /* E5 全闲团队置灰（title 补「团队空闲」） */
@@ -2766,3 +2776,55 @@
     #d-team .harvest-result .harvest-cmd { display: flex; align-items: center; gap: 8px; min-width: 0; }
     #d-team .harvest-result code { font: var(--fs-C) var(--mono); color: var(--card-sub); word-break: break-all; }
     #d-team .harvest-result .tag[role="button"] { cursor: pointer; user-select: none; flex: none; }
+
+    /* ======================= follow-up UI 批（1029，件C/E/F/G/B CSS 面） ======================= */
+
+    /* ---- 件C：新建会话引擎下拉两行式+选中对比度+间距统一（source-option 旧单行 8px 7px 通用壳不动，
+       本组只调 b2-engine-menu 引擎场景） ---- */
+    #b2-engine-menu .source-option { padding: 8px 10px; gap: 10px; align-items: center; }
+    #b2-engine-menu .source-option .engine-badge { flex: none; }
+    #b2-engine-menu .source-option .so-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    #b2-engine-menu .source-option .so-copy strong { color: var(--text-strong); font-size: var(--fs-B); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #b2-engine-menu .source-option .so-copy small { color: var(--faint); font-size: var(--fs-C); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #b2-engine-menu .source-option.active { background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--brand); } /* 件C：选中态对比度增强（内嵌品牌色条+选中底，旧浅底单薄） */
+    #b2-engine-menu .source-option .engine-badge .badge-brand svg, #b2-engine-menu .source-option .engine-badge .badge-brand img { width: 12px; height: 12px; } /* 下拉菜单档徽章图标略大一档（菜单密度低于列表卡） */
+    #b2-engine-menu .ep-dot { flex: none; }
+    #d-session .engine-picker { gap: 8px; } /* 件C：触发钮内元素间距统一（旧密排） */
+
+    /* ---- 件E：徽章底色自定义消费端——JS 注入 #cc-badge-custom-style 逐引擎/逐源 !important 覆写
+       （!important 压 r3/head identity 语境的 color-mix 特异度；html[data-badge-custom] 总闸，
+       未自定义时零规则零影响） ---- */
+
+    /* ---- 件F：滚动条统一「滚动才显」（1029 用户 21:1x）——默认透明，容器 hover / 滚动中显细条；
+       触屏（coarse）保持系统原生 overlay 不动 ---- */
+    @media (pointer: fine) {
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; transition: background .18s ease; }
+      *:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 24%, transparent); }
+      .scrolling::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 30%, transparent); }
+      .scrolling *::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 30%, transparent); }
+      html.scrolling::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 30%, transparent); }
+    }
+
+    /* ---- 件G：会话卡状态行降焦 + 异常升格 + 可关开关（html[data-statusline="off"]，默认开） ---- */
+    #d-session .queue-card[data-st="working"] .srow-r2-t { color: var(--faint); font-size: calc(var(--srow-sub-size) - 1px); } /* 正常干活态：-1 号字+更淡灰（summaryShort 短语由 JS 层给） */
+    #d-session .queue-card[data-st="error"] .srow-r2, #d-session .queue-card[data-st="waiting"] .srow-r2 { color: var(--text); } /* 异常态升格：恢复主文字色（全文显示，ERROR 描边色见 status-dot 既有链） */
+    #d-session .queue-card[data-st="error"] .srow-r2-t { color: var(--error); font-size: var(--srow-sub-size); }
+    html[data-statusline="off"] #d-session .srow-r2 { display: none; } /* 开关关=两行卡（标题+标签行） */
+    html[data-statusline="off"] #d-session .queue-card { padding-top: 9px; padding-bottom: 9px; transition: padding .18s ease; } /* 高度随之收小（行移除+上下 padding 补偿视觉密度） */
+    html[data-statusline="off"] #d-session .queue-card[data-st="error"] .srow-r2 { display: flex; } /* 异常升格不受开关影响（错误信息必须显） */
+
+    /* ---- 件B：删除确认浮层远程提示行 + 次级钮 ---- */
+    .row-menu .row-del-sub { margin: 2px 0 6px; color: var(--faint); font-size: var(--fs-C); line-height: 1.5; }
+    .row-del-actions .ghost { border: 1px solid var(--line); background: transparent; color: var(--dim); }
+    .row-del-actions .ghost:hover { border-color: var(--line-strong); color: var(--text); }
+
+    /* ---- 件D：消息流外链 ---- */
+    .message-body a.ext-link, .ub a.ext-link, .md-p a.ext-link, .md-li a.ext-link { color: var(--brand); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--brand) 45%, transparent); text-underline-offset: 2px; word-break: break-all; cursor: pointer; }
+    .message-body a.ext-link:hover, .ub a.ext-link:hover, .md-p a.ext-link:hover, .md-li a.ext-link:hover { text-decoration-color: var(--brand); }
+
+    /* ---- 件G 移动视图（stage-mobile）同开关：状态行隐藏 + 正常干活态降焦 ---- */
+    html[data-statusline="off"] #stage-mobile .mobile-card p { display: none; }
+    #stage-mobile .mobile-card[data-st="working"] p { color: var(--faint); font-size: calc(var(--fs-C) - 1px); }
+    #stage-mobile .mobile-card[data-st="error"] p { color: var(--error); }

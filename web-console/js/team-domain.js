@@ -44,7 +44,7 @@
                 // W-UIPOLISH ⑧：源名统一走 sourceDisplayName 映射（localhost→本机）——
                 // 件十三只清了 9 处，团队域整域漏网（用户实锤团队名称旁仍挂 localhost）
                 const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
-                const sourceBadge = () => '<span class="source-badge">' + escape(srcName(state.source)) + "</span>";
+                const sourceBadge = () => '<span class="source-badge" data-src-slug="' + escape(window.__ccDeck005SrcSlug ? window.__ccDeck005SrcSlug(srcName(state.source)) : "") + '">' + escape(srcName(state.source)) + "</span>"; // 件E：slug 供徽章配色覆写定位
                 // #245 A（W-SRCLABEL-MIG）：团队列表卡源胶囊——cardtags2 款（源色 E6 底/白字/
                 // 圆角 4.5/电脑图标转白，会话列表 src-cap 同构）；源=组内成员会话 relay_source
                 // 去重（state.sessions 为桥全量双源持有）；≤2 枚枚举、超出收「N 源」；
