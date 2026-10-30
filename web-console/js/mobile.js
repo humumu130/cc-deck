@@ -749,6 +749,20 @@
         const chip = screen.querySelector(".connection-chip");
         if (chip) { const last = chip.lastChild; if (last && last.nodeType === 3) last.textContent = (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active()) ? " 云桥 " + window.__ccDeck005CloudUI.stateLabel() : " relay " + stateText; }
       }
+      // conn-page-v2 ⑧ 移动端客户端 lane：连接与设备详情的第三模块（已连终端清单，
+      // SNAPSHOT.relay_devices 真实台账与桌面同源；旧 relay 无字段=本页设备单行兼容）
+      function mobileDevicesLane() {
+        const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {};
+        const devices = Array.isArray(snap.relay_devices) ? snap.relay_devices.filter((d) => d && typeof d.id === "string") : null;
+        const relSeen = (ts) => { const m = Math.max(1, Math.round((Date.now() - Number(ts || 0)) / 60000)); return m < 60 ? m + " 分钟前在线" : m < 1440 ? Math.round(m / 60) + " 小时前在线" : Math.round(m / 1440) + " 天前在线"; };
+        const ICO = { phone: "phone", desktop: "desktop", browser: "globe" }; // conn-page-v2 P2-4b：browser 独立 globe（与桌面同口径）
+        const rows = devices && devices.length
+          ? devices.slice(0, 6).map((d) => { const on = d.online === true; const rt = (ts) => { const m = Math.max(1, Math.round((Date.now() - Number(ts || 0)) / 60000)); return m < 60 ? m + " 分钟前" : m < 1440 ? Math.round(m / 60) + " 小时前" : Math.round(m / 1440) + " 天前"; }; const fs0 = Number(d.first_seen || 0); const sub = on ? (fs0 > 0 && Date.now() - fs0 < 3650 * 60000 * 1440 ? "首次连接 " + rt(fs0) : "当前在线") : relSeen(d.last_seen); return `<div class="mobile-task">${svg(ICO[d.kind] || "desktop")} ${esc(String(d.name || "未知设备"))} · ${sub}</div>`; }).join("")
+          : devices
+            ? '<div class="mobile-task"><span class="muted">暂无客户端连接记录 · 桌面端「＋ 配对新设备」可添加</span></div>'
+            : `<div class="mobile-task">${svg("phone")} 本页设备（手机） · 当前在线</div><div class="mobile-task"><span class="muted">当前 relay 版本未下发客户端台账 · 升级后此处显示已连终端</span></div>`;
+        return `<div class="mobile-lane"><div class="mobile-lane-head"><span>客户端 · 连到本机的终端</span></div>${rows}</div>`;
+      }
       function setupMobileSettings() {
         const screen = screenOf("settings");
         const content = screen?.querySelector(".mobile-content");
@@ -769,7 +783,7 @@
             : name === "连接与设备"
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
-                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>云桥</span><span class="tag info">未添加</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div></div>`
+                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>远程源</span></div><div class="mobile-task">未添加远程源 · 顶栏菜单「＋ 添加服务器」可连接其他电脑</div></div>` + mobileDevicesLane()
             : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task"${e.state === "needs_auth" ? ` data-engine-login="${esc(e.id)}" role="button" style="cursor:pointer"` : ""}>${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "needs_auth" ? "未登录 · 点此扫码登录" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')

@@ -1850,6 +1850,40 @@
     .v8-relaystat .row-share { margin-left: auto; flex: none; }
     .v8-swrow { display: flex; align-items: center; gap: 10px; padding: var(--setrow-py, 8px) 2px; border-bottom: 1px dashed var(--line-soft); }
     .v8-setcard .v8-swrow:last-of-type { border-bottom: 0; }
+
+    /* ===== conn-page-v2 连接页重设计（三模块 IA+十点反馈） ===== */
+    /* ① 窄条退役：设置二级页不再走 workspace-head 标题条（与 v8-sethead 双层标题割裂），
+       层级感=sethead 主标+副题+留白（六面板统一）；⑨ 卡内尾行底线保险清零 */
+    #d-settings .workspace-head { display: none; }
+    #d-settings .workspace-body { padding-top: 18px; }
+    .v8-sethead { margin: 4px 4px 16px; }
+    .v8-sethead .t { font-size: 17px; font-weight: 650; letter-spacing: .2px; }
+    .v8-setcard .settings-list > :last-child { border-bottom: none; }
+    /* ② 底部独立按钮区退役（验证收纳本机 relay 卡、帮助收纳远程源卡尾文字链） */
+    #d-settings .workspace-footer { display: none; }
+    .conn-foot-link { margin-top: 2px; }
+    .conn-foot-link a { color: var(--faint); text-decoration: none; font-size: var(--fs-C); }
+    .conn-foot-link a:hover { color: var(--brand-strong, var(--brand)); text-decoration: underline; text-underline-offset: 3px; }
+    /* ⑤ relaystat 一行紧凑：动作钮组右侧归位（分享/编辑/验证同 ghost 规格） */
+    .v8-relaystat { align-items: center; }
+    .v8-relaystat .st { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .v8-relaystat .v8-rdot2 { margin-top: 0; }
+    .relaystat-acts { flex: none; display: flex; gap: 6px; margin-left: auto; }
+    .relaystat-acts .row-share { margin-left: 0; }
+    .v8-relaystat p.relay-diag { margin: 4px 0 0; line-height: 1.45; }
+    .v8-relaystat p.relay-diag[data-diag="err"], .v8-relaystat p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .v8-relaystat p.relay-diag[data-diag="ok"] { color: var(--done); }
+    /* ③ 行内改名轻交互（编辑钮点开单行，保存/取消即收） */
+    .conn-rename-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; flex-wrap: wrap; }
+    .conn-rename-row .composer-input { flex: 0 0 12em; width: 12em; border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; background: var(--surface1); color: var(--text); font-size: var(--fs-B); }
+    .conn-rename-row .rname-count { color: var(--faint); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    /* ⑧ 客户端模块：设备行图标按 kind 语义着色（phone=品牌/desktop·browser=信息蓝） */
+    .dev-ico.phone { color: var(--brand-strong, var(--brand)); }
+    .dev-ico.desktop, .dev-ico.browser { color: var(--info); }
+    .conn-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+    .conn-card-foot .primary-btn { flex: none; }
+    /* ④ ghost 钮规格归一（radius 统一 8px，与 v8-prbtn 同档；描边系全页一个模子） */
+    .settings-row .row-share { border-radius: 8px; }
     .v8-swico { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface1); color: var(--info); font-size: 13px; }
     .v8-swtxt { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-A-item); font-weight: 550; }
     .v8-prbtn { flex: none; padding: 2.5px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--dim); font-size: var(--fs-C); font-weight: 600; }
@@ -1869,9 +1903,12 @@
     .settings-row p.relay-diag[data-diag="err"], .settings-row p.relay-diag[data-diag="node"] { color: var(--error); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
     /* #45 连接行行级分享钮（2026-10-10）：旧壳 srv-share 语义回归——恒渲染、未在线置灰，
        点击开 B1 配对弹窗（QR/8 位码/链接/设备列表四件套）；行内小号描边钮，不挤状态 tag */
-    .settings-row .row-share { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
-    .settings-row .row-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
-    .settings-row .row-share:disabled { opacity: .38; cursor: default; }
+    /* conn-page-v2 ④ ghost 单源：设置域内 row-share 全域同规格（relaystat 动作钮/行内
+       改名钮/远程源行钮——此前 .settings-row 限定打不中 relaystat/改名行=裸默认钮） */
+    #d-settings .row-share { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+    #d-settings .row-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
+    #d-settings .row-share:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: 1px; }
+    #d-settings .row-share:disabled { opacity: .38; cursor: default; }
     /* W-SDEL 服务器条目删除/编辑钮（用户 1013 反馈：删掉失效服务器条目——旧壳 srv-del 语义回归）：
        与 row-share 同语言小描边钮；删除 hover 转 danger（ destructive 动作给视觉预警） */
     .settings-row .row-del, .settings-row .row-edit { flex: none; background: none; border: 1px solid var(--line); color: var(--dim); font-size: var(--fs-E); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
@@ -1952,9 +1989,11 @@
     .mobile-project-summary {display: flex; gap: 10px; overflow: auto; padding: 3px 0 10px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font: var(--fs-B) var(--mono); white-space: nowrap;}
     .mobile-project-summary span { flex: 0 0 auto; }
     .mobile-settings { display: grid; gap: 8px; }
+    .mobile-settings[hidden] { display: none; } /* conn-page-v2 P1-1a：display:grid 压死 UA [hidden]=移动详情开态列表不隐（双页叠染根修） */
     .mobile-settings .settings-row { padding: 12px; }
     #m-settings .mobile-settings::before {content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 var(--fs-B) var(--mono); letter-spacing: .04em;}
-    .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
+    .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px;
+    .mobile-settings-detail .mobile-back { flex: 0 0 auto; width: auto; height: auto; padding: 3px 12px; font-size: 13px; } /* conn-page-v2 P1-1b：详情返回钮载文字需自动宽（图标盒 30px 爆框根修） */ height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
     .mobile-back:hover { background: var(--hover); color: var(--text); }
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }

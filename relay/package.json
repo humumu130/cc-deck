@@ -133,7 +133,8 @@
     "test:m-board": "tsx scripts/test-m-board.ts",
     "test:x0": "tsx scripts/test-x0-onboarding.ts",
     "test:m-graceful": "tsx scripts/test-m-graceful.ts",
-    "test:sqlite-task": "node --import tsx/esm scripts/test-sqlite-task.ts"
+    "test:sqlite-task": "node --import tsx/esm scripts/test-sqlite-task.ts",
+    "test:conn-page-v2": "tsx scripts/test-conn-page-v2.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

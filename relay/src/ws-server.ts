@@ -19,6 +19,7 @@ import {
   type CloudSubmit,
 } from "./acceptance.js";
 import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
+import { listDevices, touchDevice } from "./devices.js"; // conn-page-v2 件③：连接设备台账（relay_devices 数据源）
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
@@ -508,6 +509,11 @@ export function startServer(
   // relay 内存吃到上限（ws 默认 100MB/帧）。合法上行帧远小于此：命令帧 KB 级、
   // 导入回发帧（ccdeck-import-resp 含连接条目列表）实测几十 KB
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
+  // conn-page-v2 件③：连接设备台账——upgrade 面记录 UA（WeakMap 随 ws 回收），
+  // connection 面 touchDevice（UA 族分类+可选 dev_name+last_seen 持久化），
+  // onlineDeviceIds=活连接设备集（SNAPSHOT.online 标注源；close 即离线）
+  const connUa = new WeakMap<WebSocket, string>();
+  const onlineDeviceIds = new Map<WebSocket, string>();
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
@@ -1100,7 +1106,11 @@ export function startServer(
       return;
     }
     console.log(`[ws-upgrade] accepted${pairing ? " (pairing)" : ""}`);
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, url));
+    const connUaStr = String(req.headers["user-agent"] ?? ""); // conn-page-v2 件③：UA 供连接设备台账分类
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      connUa.set(ws, connUaStr);
+      wss.emit("connection", ws, url);
+    });
   });
 
   // ── #316 手表配对池：PAIR_REQUEST/PAIR_RESOLVED 是瞬态帧（seq:0 不进 EventBus，
@@ -1189,6 +1199,13 @@ export function startServer(
       return;
     }
 
+    // conn-page-v2 件③：已鉴权客户端入设备台账（写盘尽力而为不炸连接主链）
+    try {
+      const dev = touchDevice(cfg.dataDir, connUa.get(ws) ?? "", url.searchParams.get("dev_name") ?? undefined);
+      onlineDeviceIds.set(ws, dev.id);
+      ws.on("close", () => onlineDeviceIds.delete(ws));
+    } catch { /* 台账尽力而为 */ }
+
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
     // W-MODE：replay 补发同样滤锚卡 SESSION_CREATED（no-leader 态重连不复活锚卡；
     // 其余帧端上无卡自然无操作）
@@ -1219,6 +1236,9 @@ export function startServer(
           // 客户端打标有 `|| srcTag`/`if (!s.relay_source)` 守卫=自带字段自动优先，
           // 向前兼容零改
           sessions: withRelaySource(mgr.snapshot(), opts.relayName?.()),
+          // conn-page-v2 件③：客户端台账随快照（设置页「客户端」模块渲染源；旧端
+          // 无消费面零影响——端上以字段存在性判能力）
+          relay_devices: listDevices(cfg.dataDir, new Set([...onlineDeviceIds.values()])),
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
