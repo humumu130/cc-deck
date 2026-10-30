@@ -15,7 +15,7 @@ import { statfsSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSyn
 import { join } from "node:path";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
-import { listGroups, loadBoardFile } from "./projects.js";
+import { listGroups, loadBoardFile, upsertBoardEntry } from "./projects.js";
 import { readDispatchLog, orgDir } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import type { SessionManager } from "./session-manager.js";
@@ -28,6 +28,9 @@ const DISK_FREE_MIN_GB = 5;      // 磁盘余量红线
 const RECEIPT_STALE_H_DEFAULT = 24; // 新回执落盘无收口提醒阈值（小时）
 const TODO_STALE_H_DEFAULT = 48;    // 会话任务单 pending 陈旧阈值（小时）
 const CBC_PREFETCH_MAX = 20;        // cbc-update-prefetch 目录数水位（超则自动清+通知）
+// M2a（multica 借②·板卡唤醒）：doing(claimed) 滞留提醒阈值（分钟，env 可调——卷四
+// 裁决「默认 60 为建议值，PM 可调」；不进 plugin-config，阈值全走 env 对齐既有惯例）
+const DOING_STALE_MIN_DEFAULT = 60;
 
 export interface PatrolAlert {
   key: string;
@@ -137,6 +140,9 @@ export class PatrolModule {
       if (drift > 5_000) this.push("loop", `事件循环漂移 ${Math.round(drift / 100) / 10}s（存在同步阻塞/CPU 烧蚀）`);
       else this.resolve("loop");
     }, 500).unref?.();
+    // M2a 板卡域两规则（multica 借②）：wakeup_at 到点触发 + doing 滞留提醒。挂轻探针
+    //（5min 周期——唤醒精度与滞留响应的平衡点；全巡 30min 太钝，板文件读轻量可承受）
+    try { this.boardCardScan(); } catch (e) { console.log(`[patrol] board-card scan error: ${e instanceof Error ? e.message : e}`); }
     for (const a of alerts) {
       if (a.text) this.push(a.key, a.text);
       else this.resolve(a.key);
@@ -285,6 +291,70 @@ export class PatrolModule {
       if (Date.now() - st.mtimeMs > 70 * 60_000) this.push("recon-stalled", `三账对账心跳停跳 ${Math.round((Date.now() - st.mtimeMs) / 60_000)}min（PM turn-report 与 patrol 双触发均未跑）`);
       else this.resolve("recon-stalled");
     } catch { /* 心跳文件未生成前静默 */ }
+  }
+
+  // ---------- M2a 板卡域两规则（multica 借②：wakeup_at 卡级定时 + doing 滞留提醒） ----------
+  /** 规则①：wakeup_at 到点 → 消费制触发（actionable 通知+PM 喂活+字段清空防重触）。
+   * 规则②：claimed(doing) 卡滞留>阈值（默认 60min，CCR_PATROL_DOING_STALE_MIN）且
+   * 执行者会话同样无活动 → 滞留提醒（**不自动重派**——重派决策留人/PM，防误杀长编译；
+   * 执行者活跃=卡旧人在干，不算滞留）。onset-only 去重与既有 patrol 告警同口径。 */
+  private boardCardScan(): void {
+    const now = Date.now();
+    const staleMin = num(process.env.CCR_PATROL_DOING_STALE_MIN, DOING_STALE_MIN_DEFAULT);
+    const staleMs = staleMin * 60_000;
+    const sessionsById = new Map(this.mgr.snapshot().map((s) => [s.session_id, s]));
+    const wakeHits: string[] = [];
+    const stallHits: string[] = [];
+    for (const g of listGroups()) {
+      if (g.status !== "active") continue;
+      const board = loadBoardFile(g.id);
+      if (!board) continue;
+      let touched = false;
+      for (const e of board.entries) {
+        // ① wakeup_at 到点（消费制：触发即置空，防下轮重触；消费失败留字段=下轮重扫，
+        // 通知去重兜底防刷屏）
+        if (e.wakeup_at && Number(e.wakeup_at) <= now) {
+          const face = (e.text || e.id).slice(0, 24);
+          const dueAt = new Date(Number(e.wakeup_at)).toLocaleString("zh-CN", { hour12: false });
+          wakeHits.push(`[${g.name}] ${face}`);
+          const r = upsertBoardEntry(g.id, { id: e.id, text: e.text, status: e.status, wakeup_at: null });
+          if (r.ok) touched = true;
+          try {
+            (this.mgr as any).upsertNotification("system", "board-wakeup", e.id, {
+              title: `板卡唤醒：${(e.text || e.id).slice(0, 30)}`,
+              body: `wakeup_at 到点（${dueAt}）——卡在 [${g.name}]「${face}」当前 ${e.status} 泳道，按认领配置处置（重新派单或人工核卡）`,
+              severity: "waiting", group: "attention", actionable: true, domain: "team", returnPath: "/",
+            });
+          } catch { /* 通知尽力而为 */ }
+          continue;
+        }
+        // ② doing(claimed) 滞留：卡龄超阈值且（无主或主会话活动也超阈值——长编译防误杀）
+        if (e.status === "claimed" && now - (e.updated_at ?? 0) > staleMs) {
+          const owner = e.owner_session ? sessionsById.get(e.owner_session) : undefined;
+          const ownerFresh = owner ? now - (owner.updated_at ?? 0) < staleMs : false;
+          if (!ownerFresh) {
+            stallHits.push(`[${g.name}] ${(e.text || e.id).slice(0, 24)}（${Math.round((now - (e.updated_at ?? 0)) / 60_000)}min 无进展${owner ? `·执行者 ${(owner.title || e.owner_session || "").slice(0, 8)} 同静默` : "·无执行者"}）`);
+          }
+        }
+      }
+      if (touched) { try { (this.mgr as any).emitBoard?.(g.id); } catch { /* 广播尽力而为 */ } }
+    }
+    if (wakeHits.length) {
+      this.push("board-wakeup", `${wakeHits.length} 张板卡 wakeup 到点：${wakeHits.slice(0, 4).join("、")}${wakeHits.length > 4 ? " 等" : ""}`);
+      try { (this.mgr as unknown as { feedPM?: (t: string) => void }).feedPM?.("board-wakeup"); } catch { /* 喂活尽力而为（无值守=纯通知面） */ }
+    } else this.resolve("board-wakeup");
+    if (stallHits.length) {
+      const text = `${stallHits.length} 张 doing 卡滞留>${staleMin}min：${stallHits.slice(0, 5).join("、")}${stallHits.length > 5 ? " 等" : ""}（提醒不自动重派——重派决策留人/PM）`;
+      this.push("board-doing-stale", text);
+      try {
+        (this.mgr as any).upsertNotification("system", "board-doing-stale", String(Math.floor(now / 60_000)), {
+          title: `doing 滞留提醒（${stallHits.length} 张 >${staleMin}min 无进展）`,
+          body: text,
+          severity: "waiting", group: "attention", domain: "team", returnPath: "/",
+        });
+      } catch { /* 通知尽力而为 */ }
+    } else this.resolve("board-doing-stale");
+    this.appendReport(`board-card: wakeup=${wakeHits.length} doing-stale=${stallHits.length}`);
   }
 
   // ---------- 去重推送（onset-only）+ 报告落盘 ----------

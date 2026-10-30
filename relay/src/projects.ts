@@ -130,6 +130,10 @@ export interface BoardEntry {
   /** #G3 父子链：父卡 id 引用——子任务在 web 板面同泳道折叠挂靠（跨泳道/坏引用=
    *  孤儿容错平铺，depends_on 同口径不炸）。单父无环由调用侧保证（upsert 不查环） */
   parent_id?: string;
+  /** M2a 板卡唤醒（multica 借②，wakeup_at 卡级定时）：到点由 patrol 轻探针扫描
+   * 触发（actionable 通知+PM 喂活+字段消费清空防重触）。设置面=upsert 卡级写入
+   *（null/清除同 parent_id 口径）；毫秒时戳。 */
+  wakeup_at?: number;
 }
 
 /** #087 经验回流（009 §4 M2）：board lessons 分区——收口回执写入，任务书按 tag 筛选
@@ -993,6 +997,7 @@ export type UpsertBoardEntryInput = {
   gate?: { reason: string } | null;
   priority?: string | null;
   parent_id?: string | null;
+  wakeup_at?: number | null; // M2a：null=消费/清除（patrol 触发后置空防重触）
 };
 export function upsertBoardEntry(
   gid: string,
@@ -1049,6 +1054,10 @@ function upsertBoardEntryInner(
       if (entry.parent_id === null || entry.parent_id === "") delete e.parent_id;
       else e.parent_id = entry.parent_id;
     }
+    if (entry.wakeup_at !== undefined) { // M2a：null=消费/清除（patrol 触发后置空防重触）
+      if (entry.wakeup_at === null) delete e.wakeup_at;
+      else e.wakeup_at = entry.wakeup_at;
+    }
     e.updated_at = now;
   } else {
     // D18：新卡也过规则内核（建卡即完成候选=done+review_required → R2 落 submitted）
@@ -1069,6 +1078,7 @@ function upsertBoardEntryInner(
       ...(entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}),
       ...(entry.priority ? { priority: entry.priority } : {}), // #G3：缺省不落键（旧行兼容）
       ...(entry.parent_id ? { parent_id: entry.parent_id } : {}),
+      ...(entry.wakeup_at ? { wakeup_at: entry.wakeup_at } : {}), // M2a：缺省不落键
     };
     w.board.entries.push(e);
   }

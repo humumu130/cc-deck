@@ -126,6 +126,7 @@ export const BOARD_ENTRY_SCHEMA: Record<string, { type: "string" | "number" | "b
   gate: { type: "object" },
   priority: { type: "enum", enumTable: BOARD_PRIORITIES }, // #G3：词表分支细查
   parent_id: { type: "string" }, // #G3：父子链（坏引用渲染层孤儿容错，depends_on 同口径不炸）
+  wakeup_at: { type: "number" }, // M2a 板卡唤醒（到点 patrol 触发后消费清空；毫秒时戳）
 };
 
 /** DispatchEntry（org.ts:316；stage/stage_detail 为 T1-STAGE 增量字段——先行入 schema） */

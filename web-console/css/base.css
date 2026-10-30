@@ -1564,6 +1564,9 @@
     /* 审查 B-P2-2：折叠中的运行中子卡信号——钮亮黄点（父卡可见「里面有活跑」） */
     .sub-toggle.sub-running { color: var(--st-working); border-color: color-mix(in srgb, var(--st-working) 45%, var(--line)); }
     .sub-toggle.sub-running::after { content: "●"; margin-left: 3px; font-size: 7px; vertical-align: 1px; }
+    /* M2b 批次齐活（multica 借④）：全部子卡 done → 折叠钮进度 x/y 绿亮 + 卡头 chip（父卡亮） */
+    .sub-toggle.sub-all { color: var(--p-done); border-color: var(--p-done); }
+    .task-title .tchip.sub-all-chip { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 6px; background: var(--bg1); border: 1px solid var(--p-done); color: var(--p-done); font-size: var(--fs-micro); line-height: 14px; vertical-align: 1px; }
     .subtasks { margin: 6px 0 0 10px; padding-left: 9px; border-left: 1.5px dashed var(--line); display: flex; flex-direction: column; gap: 4px; }
     /* 审查 B-P2-1：特异性提升（原 0,2,0 被 #d-team .task-card.compact 1,2,0 压制=死 CSS） */
     #d-team .subtasks .task-card.compact { padding: 6px 9px; margin-bottom: 0; }

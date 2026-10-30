@@ -47,9 +47,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2273,7 +2273,7 @@ var require_nacl_fast = __commonJS({
 
 // src/storage/sqlite.ts
 import { mkdirSync as mkdirSync4 } from "node:fs";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 import { createRequire } from "node:module";
 function loadSqliteDriver() {
   if (driverOverride !== void 0) return driverOverride;
@@ -2310,7 +2310,7 @@ var init_sqlite = __esm({
     SqliteStorage = class {
       constructor(dir, filename) {
         this.dir = dir;
-        this._path = join5(dir, filename);
+        this._path = join6(dir, filename);
       }
       dir;
       db = null;
@@ -2333,6 +2333,7 @@ var init_sqlite = __esm({
         this.db.pragma("journal_mode = WAL");
         this.db.pragma("foreign_keys = ON");
         this.db.pragma("synchronous = NORMAL");
+        this.db.pragma("busy_timeout = 5000");
         this._open = true;
       }
       close() {
@@ -2466,29 +2467,41 @@ var init_checkpoint = __esm({
 
 // src/storage/import-util.ts
 import { createHash } from "node:crypto";
-import { readFileSync as readFileSync6, statSync as statSync2 } from "node:fs";
+import { readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
 function sha12(s) {
   return createHash("sha1").update(s).digest("hex").slice(0, 12);
 }
 function statThenRead(file) {
-  const st2 = statSync2(file);
+  const st2 = statSync3(file);
   const mtimeMs = Math.round(st2.mtimeMs);
-  const mtimeNs = statSync2(file, { bigint: true }).mtimeNs.toString();
+  const mtimeNs = statSync3(file, { bigint: true }).mtimeNs.toString();
   const hit = OBS_MEMO.get(file);
   if (hit !== void 0 && hit.mtimeNs === mtimeNs && hit.size === st2.size) {
     return { mtimeMs, mtimeNs, text: hit.text };
   }
+  if (st2.size > SIZE_MEMO_MAX_BYTES) {
+    const sc2 = LARGE_SHORTCIRC.get(file);
+    if (sc2 !== void 0 && sc2.mtimeNs === mtimeNs && sc2.size === st2.size) {
+      return { mtimeMs, mtimeNs, text: "", unchanged: true, lineCount: sc2.lineCount };
+    }
+    const text2 = readFileSync6(file, "utf8");
+    const lines = text2.split("\n");
+    const lineCount = lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    LARGE_SHORTCIRC.set(file, { mtimeNs, size: st2.size, lineCount });
+    OBS_MEMO.delete(file);
+    return { mtimeMs, mtimeNs, text: text2 };
+  }
   const text = readFileSync6(file, "utf8");
-  if (st2.size <= SIZE_MEMO_MAX_BYTES) OBS_MEMO.set(file, { mtimeNs, size: st2.size, text });
-  else OBS_MEMO.delete(file);
+  OBS_MEMO.set(file, { mtimeNs, size: st2.size, text });
   return { mtimeMs, mtimeNs, text };
 }
-var OBS_MEMO, SIZE_MEMO_MAX_BYTES;
+var OBS_MEMO, SIZE_MEMO_MAX_BYTES, LARGE_SHORTCIRC;
 var init_import_util = __esm({
   "src/storage/import-util.ts"() {
     "use strict";
     OBS_MEMO = /* @__PURE__ */ new Map();
     SIZE_MEMO_MAX_BYTES = 2 * 1024 * 1024;
+    LARGE_SHORTCIRC = /* @__PURE__ */ new Map();
   }
 });
 
@@ -2500,6 +2513,22 @@ function appendLoss(port, record) {
     [record.sourcePath, record.lineNo, record.reason, excerpt, Date.now()]
   );
 }
+function listLoss(port, sourcePath) {
+  const rows = sourcePath === void 0 ? port.query(
+    "SELECT id, source_path, line_no, reason, excerpt, created_at FROM import_loss ORDER BY id"
+  ) : port.query(
+    "SELECT id, source_path, line_no, reason, excerpt, created_at FROM import_loss WHERE source_path = ? ORDER BY id",
+    [sourcePath]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    sourcePath: r.source_path,
+    lineNo: r.line_no,
+    reason: r.reason,
+    excerpt: r.excerpt,
+    createdAt: r.created_at
+  }));
+}
 var EXCERPT_MAX;
 var init_loss_report = __esm({
   "src/storage/loss-report.ts"() {
@@ -2510,10 +2539,10 @@ var init_loss_report = __esm({
 
 // src/storage/import-org.ts
 import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync5 } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync6 } from "node:fs";
+import { join as join7 } from "node:path";
 function observe(file, name) {
-  if (!existsSync5(file)) return { name, file, mtimeMs: 0, mtimeNs: void 0, lineCount: 0, text: null };
+  if (!existsSync6(file)) return { name, file, mtimeMs: 0, mtimeNs: void 0, lineCount: 0, text: null };
   const obs = statThenRead(file);
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
@@ -2532,14 +2561,56 @@ function countAll(port) {
 function importOrg(port, orgDir2, opts) {
   const schemaVersion = opts?.schemaVersion ?? ORG_IMPORT_SCHEMA_VERSION;
   const sources = [
-    observe(join6(orgDir2, "org.json"), "org.json"),
-    observe(join6(orgDir2, "projects.json"), "projects.json"),
-    observe(join6(orgDir2, "confirms.json"), "confirms.json")
+    observe(join7(orgDir2, "org.json"), "org.json"),
+    observe(join7(orgDir2, "projects.json"), "projects.json"),
+    observe(join7(orgDir2, "confirms.json"), "confirms.json")
   ];
   const current = (s) => ({ mtimeMs: s.mtimeMs, mtimeNs: s.mtimeNs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
   if (allValid) {
     return { skipped: true, counts: countAll(port), loss: port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0, rescanned: [] };
+  }
+  const allValidBefore = allValid;
+  void allValidBefore;
+  const sourceCorrupted = [];
+  for (const s of sources) {
+    if (s.text === null) continue;
+    let bad = false;
+    try {
+      JSON.parse(s.text);
+    } catch {
+      bad = true;
+    }
+    if (!bad) continue;
+    const hadCheckpoint = port.query("SELECT COUNT(*) AS n FROM import_checkpoint WHERE path = ?", [s.file])[0]?.n !== 0;
+    if (hadCheckpoint) sourceCorrupted.push(s);
+  }
+  if (sourceCorrupted.length > 0) {
+    const beginOk = (() => {
+      try {
+        port.begin();
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    if (beginOk) {
+      try {
+        for (const s of sourceCorrupted) {
+          appendLoss(port, { sourcePath: s.file, lineNo: 0, reason: "source-corrupted", excerpt: `\u6E90\u66FE\u6210\u529F\u5BFC\u5165\u8FC7\u4F46\u672C\u8F6E bad-json\uFF08\u5D29\u6E83\u534A\u5199\uFF1F\uFF09\u2014\u2014\u8DF3\u8FC7\u672C\u57DF\u5BFC\u5165\u4FDD\u7559\u65E7\u5FEB\u7167\uFF0C\u4E0D\u843D checkpoint\uFF08\u4FEE\u590D\u540E\u81EA\u52A8\u91CD\u626B\uFF09: ${(s.text ?? "").slice(0, 120)}` });
+        }
+        port.commit();
+      } catch {
+        try {
+          port.rollback();
+        } catch {
+        }
+      }
+    }
+    console.warn(`[import-org] \u6E90\u635F\u574F\u9694\u79BB\uFF08${sourceCorrupted.map((s) => s.file.split("/").pop()).join(", ")}\uFF09\uFF1A\u66FE\u6210\u529F\u5BFC\u5165\u7684\u6E90\u672C\u8F6E bad-json\uFF0C\u8DF3\u8FC7\u6E05\u57DF\u4FDD\u7559\u65E7\u5FEB\u7167\u2014\u2014\u68C0\u67E5\u78C1\u76D8/\u5199\u5165\u94FE`);
+    const lossCount = port.query("SELECT COUNT(*) AS n FROM import_loss WHERE source_path IN (?, ?, ?)", sources.map((s) => s.file))[0]?.n ?? 0;
+    void listLoss;
+    return { skipped: false, counts: countAll(port), loss: lossCount, rescanned: [] };
   }
   const losses = [];
   const groups = [];
@@ -2811,10 +2882,10 @@ var init_import_org = __esm({
 });
 
 // src/storage/import-notification.ts
-import { existsSync as existsSync6 } from "node:fs";
-import { join as join7 } from "node:path";
+import { existsSync as existsSync7 } from "node:fs";
+import { join as join8 } from "node:path";
 function observe2(file, name) {
-  if (!existsSync6(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
+  if (!existsSync7(file)) return { name, file, mtimeMs: 0, lineCount: 0, text: null };
   const obs = statThenRead(file);
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
@@ -2833,8 +2904,8 @@ function deriveLevel(actionable, kind, resolvedAt) {
 function importNotifications(port, dataDir3, opts) {
   const schemaVersion = opts?.schemaVersion ?? NOTIFICATION_IMPORT_SCHEMA_VERSION;
   const sources = [
-    observe2(join7(dataDir3, "notifications.json"), "notifications.json"),
-    observe2(join7(dataDir3, "decision-notifications.json"), "decision-notifications.json")
+    observe2(join8(dataDir3, "notifications.json"), "notifications.json"),
+    observe2(join8(dataDir3, "decision-notifications.json"), "decision-notifications.json")
   ];
   const current = (s) => ({ mtimeMs: s.mtimeMs, lineCount: s.lineCount, schemaVersion });
   const allValid = sources.every((s) => readCheckpoint(port, s.file, current(s)) !== null);
@@ -3011,8 +3082,8 @@ var init_import_notification = __esm({
 });
 
 // src/storage/import-session-task.ts
-import { existsSync as existsSync7, readdirSync, readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync8, readdirSync, readFileSync as readFileSync7, statSync as statSync4 } from "node:fs";
+import { join as join9 } from "node:path";
 function appendLossOnce(port, record) {
   const dup = port.query(
     "SELECT COUNT(*) AS n FROM import_loss WHERE source_path = ? AND line_no = ? AND reason = ?",
@@ -3021,18 +3092,21 @@ function appendLossOnce(port, record) {
   if (dup === 0) appendLoss(port, record);
 }
 function observeNdjson(file) {
-  if (!existsSync7(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
+  if (!existsSync8(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
   const obs = statThenRead(file);
+  if (obs.unchanged === true) {
+    return { mtimeMs: obs.mtimeMs, lineCount: obs.lineCount ?? 0, lines: [] };
+  }
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
 }
 function observeTasksDir(dir) {
-  if (!existsSync7(dir)) return { mtimeMs: 0, count: 0, files: [] };
+  if (!existsSync8(dir)) return { mtimeMs: 0, count: 0, files: [] };
   const files = [];
   let maxMtime = 0;
   for (const sid of readdirSync(dir).sort()) {
-    const sub = join8(dir, sid);
+    const sub = join9(dir, sid);
     let tids;
     try {
       tids = readdirSync(sub).sort();
@@ -3041,10 +3115,10 @@ function observeTasksDir(dir) {
     }
     for (const name of tids) {
       if (!name.endsWith(".json")) continue;
-      const file = join8(sub, name);
+      const file = join9(sub, name);
       let st2;
       try {
-        st2 = statSync3(file);
+        st2 = statSync4(file);
       } catch {
         continue;
       }
@@ -3056,15 +3130,15 @@ function observeTasksDir(dir) {
   return { mtimeMs: maxMtime, count: files.length, files };
 }
 function observeAcceptanceDir(dir) {
-  if (!existsSync7(dir)) return { mtimeMs: 0, count: 0, sheets: [] };
+  if (!existsSync8(dir)) return { mtimeMs: 0, count: 0, sheets: [] };
   const sheets = [];
   let maxMtime = 0;
   for (const name of readdirSync(dir).sort()) {
     if (!name.endsWith(".json") || name.endsWith(".results.json")) continue;
-    const file = join8(dir, name);
+    const file = join9(dir, name);
     let st2;
     try {
-      st2 = statSync3(file);
+      st2 = statSync4(file);
     } catch {
       continue;
     }
@@ -3426,14 +3500,14 @@ var init_import_session_task = __esm({
 });
 
 // src/storage/import-acceptance.ts
-import { existsSync as existsSync8, readdirSync as readdirSync2 } from "node:fs";
-import { basename, join as join9 } from "node:path";
+import { existsSync as existsSync9, readdirSync as readdirSync2 } from "node:fs";
+import { basename, join as join10 } from "node:path";
 function observeAcceptanceDir2(dir) {
   const out = { mtimeMs: 0, fileCount: 0, sheets: [], results: [] };
-  if (!existsSync8(dir)) return out;
+  if (!existsSync9(dir)) return out;
   for (const name of readdirSync2(dir).sort()) {
     if (!name.endsWith(".json")) continue;
-    const file = join9(dir, name);
+    const file = join10(dir, name);
     let obs;
     try {
       obs = statThenRead(file);
@@ -3688,10 +3762,10 @@ var init_import_acceptance = __esm({
 
 // src/storage/import-artifact.ts
 import { createHash as createHash3 } from "node:crypto";
-import { existsSync as existsSync9 } from "node:fs";
+import { existsSync as existsSync10 } from "node:fs";
 import { normalize } from "node:path";
 function observeFile(file, key) {
-  if (!existsSync9(file)) return { key, file, mtimeMs: 0, lineCount: 0, records: null, badJson: null };
+  if (!existsSync10(file)) return { key, file, mtimeMs: 0, lineCount: 0, records: null, badJson: null };
   const obs = statThenRead(file);
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
@@ -3899,25 +3973,25 @@ var init_import_artifact = __esm({
 });
 
 // src/storage/import-dispatch-lesson.ts
-import { existsSync as existsSync10, readdirSync as readdirSync3, readFileSync as readFileSync8, statSync as statSync4 } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync11, readdirSync as readdirSync3, readFileSync as readFileSync8, statSync as statSync5 } from "node:fs";
+import { join as join11 } from "node:path";
 function observeNdjson2(file) {
-  if (!existsSync10(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
+  if (!existsSync11(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
   const obs = statThenRead(file);
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
 }
 function observeBoardsDir(dir) {
-  if (!existsSync10(dir)) return { mtimeMs: 0, count: 0, files: [] };
+  if (!existsSync11(dir)) return { mtimeMs: 0, count: 0, files: [] };
   const files = [];
   let maxMtime = 0;
   for (const name of readdirSync3(dir).sort()) {
     if (!name.endsWith(".json")) continue;
-    const file = join10(dir, name);
+    const file = join11(dir, name);
     let st2;
     try {
-      st2 = statSync4(file);
+      st2 = statSync5(file);
     } catch {
       continue;
     }
@@ -4406,9 +4480,9 @@ __export(read_mode_exports, {
   viaReadMode: () => viaReadMode,
   writeShadowDiff: () => writeShadowDiff
 });
-import { existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync9, readdirSync as readdirSync4, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync12, mkdirSync as mkdirSync5, readFileSync as readFileSync9, readdirSync as readdirSync4, writeFileSync as writeFileSync5 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { basename as basename2, join as join11 } from "node:path";
+import { basename as basename2, join as join12 } from "node:path";
 function resolveReadMode(raw) {
   if (raw === void 0 || raw === null || raw.trim() === "") return "sqlite";
   const v = raw.trim();
@@ -4419,11 +4493,11 @@ function currentReadMode() {
   return resolveReadMode(process.env[READ_MODE_ENV]);
 }
 function resolveDirs(override) {
-  const dataDir3 = override?.dataDir ?? process.env.CCR_DATA_DIR ?? join11(process.cwd(), "data");
+  const dataDir3 = override?.dataDir ?? process.env.CCR_DATA_DIR ?? join12(process.cwd(), "data");
   return {
     dataDir: dataDir3,
-    orgDir: override?.orgDir ?? process.env.CCR_ORG_DIR ?? join11(homedir3(), ".cc-deck", "org"),
-    tasksDir: override?.tasksDir ?? join11(dataDir3, "tasks")
+    orgDir: override?.orgDir ?? process.env.CCR_ORG_DIR ?? join12(homedir3(), ".cc-deck", "org"),
+    tasksDir: override?.tasksDir ?? join12(dataDir3, "tasks")
   };
 }
 function warnSqliteDegradedOnce(reason, code, context) {
@@ -4469,12 +4543,12 @@ function ensureStoreQuiet(dirs) {
   return port;
 }
 function orgRescanPending(port, orgDirPath) {
-  const sources = ["org.json", "projects.json", "confirms.json"].map((f) => join11(orgDirPath, f));
+  const sources = ["org.json", "projects.json", "confirms.json"].map((f) => join12(orgDirPath, f));
   for (const file of sources) {
     let mtimeMs = 0;
     let mtimeNs;
     let lineCount = 0;
-    if (existsSync11(file)) {
+    if (existsSync12(file)) {
       const obs = statThenRead(file);
       mtimeMs = obs.mtimeMs;
       mtimeNs = obs.mtimeNs;
@@ -4488,7 +4562,7 @@ function orgRescanPending(port, orgDirPath) {
 }
 function importAllForShadow(port, dirs) {
   const failures = [];
-  const orgSources = ["org.json", "projects.json", "confirms.json"].map((f) => join11(dirs.orgDir, f));
+  const orgSources = ["org.json", "projects.json", "confirms.json"].map((f) => join12(dirs.orgDir, f));
   if (orgRescanPending(port, dirs.orgDir)) {
     port.begin();
     try {
@@ -4510,27 +4584,27 @@ function importAllForShadow(port, dirs) {
     {
       domain: "session-task",
       run: () => importSessionTask(port, {
-        eventsFile: join11(dirs.dataDir, "events.ndjson"),
+        eventsFile: join12(dirs.dataDir, "events.ndjson"),
         tasksDir: dirs.tasksDir,
-        acceptanceDir: join11(dirs.dataDir, "acceptances")
+        acceptanceDir: join12(dirs.dataDir, "acceptances")
       })
     },
     {
       domain: "dispatch-lesson",
       run: () => importDispatchLesson(port, {
-        dispatchLogFile: join11(dirs.orgDir, "dispatch-log.ndjson"),
-        boardsDir: join11(dirs.orgDir, "boards")
+        dispatchLogFile: join12(dirs.orgDir, "dispatch-log.ndjson"),
+        boardsDir: join12(dirs.orgDir, "boards")
       })
     },
-    { domain: "acceptance", run: () => importAcceptance(port, join11(dirs.dataDir, "acceptances")) },
+    { domain: "acceptance", run: () => importAcceptance(port, join12(dirs.dataDir, "acceptances")) },
     { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
     // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
     // 扫描源路径 G2 再接——备案见头注降级条目）。
     {
       domain: "artifact",
       run: () => {
-        const f = join11(dirs.dataDir, "deliverables.json");
-        return importArtifacts(port, existsSync11(f) ? [{ id: "deliverables", file: f }] : []);
+        const f = join12(dirs.dataDir, "deliverables.json");
+        return importArtifacts(port, existsSync12(f) ? [{ id: "deliverables", file: f }] : []);
       }
     }
   ];
@@ -4634,11 +4708,11 @@ function safeParseObject(s) {
 function writeShadowDiff(dataDir3, rows) {
   mkdirSync5(dataDir3, { recursive: true });
   const body = rows.map((r) => JSON.stringify(r)).join("\n");
-  writeFileSync4(join11(dataDir3, SHADOW_DIFF_FILE), body ? body + "\n" : "", "utf-8");
+  writeFileSync5(join12(dataDir3, SHADOW_DIFF_FILE), body ? body + "\n" : "", "utf-8");
 }
 function readShadowDiff(dataDir3) {
-  const p = join11(dataDir3, SHADOW_DIFF_FILE);
-  if (!existsSync11(p)) return [];
+  const p = join12(dataDir3, SHADOW_DIFF_FILE);
+  if (!existsSync12(p)) return [];
   return readFileSync9(p, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
 }
 function keySetDiff(domain, jsonKeys, sqliteKeys, jsonSample, sqliteSample) {
@@ -4692,7 +4766,7 @@ function compareDomain(domain, port, dirs) {
       return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
     }
     case "dispatch": {
-      const jKeys = [...new Set(readNdjsonIds(join11(dirs.orgDir, "dispatch-log.ndjson")))];
+      const jKeys = [...new Set(readNdjsonIds(join12(dirs.orgDir, "dispatch-log.ndjson")))];
       const sKeys = port.query("SELECT id FROM dispatch").map((r) => r.id.replace(/#r\d+$/, ""));
       return keySetDiff(domain, jKeys, [...new Set(sKeys)]);
     }
@@ -4706,12 +4780,12 @@ function compareDomain(domain, port, dirs) {
         }
       };
       try {
-        const pf = JSON.parse(readFileSync9(join11(dirs.dataDir, "notifications.json"), "utf-8"));
+        const pf = JSON.parse(readFileSync9(join12(dirs.dataDir, "notifications.json"), "utf-8"));
         if (Array.isArray(pf.notifications)) addValidKeys(pf.notifications);
       } catch {
       }
       try {
-        const lf = JSON.parse(readFileSync9(join11(dirs.dataDir, "decision-notifications.json"), "utf-8"));
+        const lf = JSON.parse(readFileSync9(join12(dirs.dataDir, "decision-notifications.json"), "utf-8"));
         if (Array.isArray(lf)) addValidKeys(lf);
       } catch {
       }
@@ -4720,14 +4794,14 @@ function compareDomain(domain, port, dirs) {
       return jCount !== sCount ? [{ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount }] : [];
     }
     case "acceptance": {
-      const jKeys = acceptanceKeys(join11(dirs.dataDir, "acceptances"));
+      const jKeys = acceptanceKeys(join12(dirs.dataDir, "acceptances"));
       const sKeys = port.query("SELECT id FROM acceptance_sheet").map((r) => r.id);
       return keySetDiff(domain, jKeys, sKeys);
     }
     case "artifact": {
       const now = Date.now();
       const rows = [];
-      const jCount = countNdjsonLines(join11(dirs.dataDir, "deliverables.json"));
+      const jCount = countNdjsonLines(join12(dirs.dataDir, "deliverables.json"));
       const sCount = port.query("SELECT COUNT(*) AS n FROM artifact")[0]?.n ?? 0;
       if (jCount !== sCount) rows.push({ ts: now, domain, key: "*", category: "count-mismatch", json_value: jCount, sqlite_value: sCount });
       return rows;
@@ -4757,7 +4831,7 @@ function runShadowCompare(port, dirs, domains) {
   return rows;
 }
 function readProjectsJson(orgDirPath) {
-  const p = join11(orgDirPath, "projects.json");
+  const p = join12(orgDirPath, "projects.json");
   try {
     const v = JSON.parse(readFileSync9(p, "utf-8"));
     return { groups: Array.isArray(v.groups) ? v.groups : [] };
@@ -4766,7 +4840,7 @@ function readProjectsJson(orgDirPath) {
   }
 }
 function readConfirmsJson(orgDirPath) {
-  const p = join11(orgDirPath, "confirms.json");
+  const p = join12(orgDirPath, "confirms.json");
   try {
     const v = JSON.parse(readFileSync9(p, "utf-8"));
     return Array.isArray(v.confirms) ? v.confirms : [];
@@ -4775,7 +4849,7 @@ function readConfirmsJson(orgDirPath) {
   }
 }
 function listDirStems(dir) {
-  if (!existsSync11(dir)) return [];
+  if (!existsSync12(dir)) return [];
   try {
     return readdirSync4(dir, { withFileTypes: true }).flatMap((e) => {
       if (!e.isFile() || !e.name.endsWith(".json")) return [];
@@ -4787,7 +4861,7 @@ function listDirStems(dir) {
   }
 }
 function readNdjsonIds(file) {
-  if (!existsSync11(file)) return [];
+  if (!existsSync12(file)) return [];
   const ids = [];
   for (const line of readFileSync9(file, "utf-8").split("\n")) {
     const t = line.trim();
@@ -4801,17 +4875,17 @@ function readNdjsonIds(file) {
   return ids;
 }
 function countNdjsonLines(file) {
-  if (!existsSync11(file)) return 0;
+  if (!existsSync12(file)) return 0;
   return readFileSync9(file, "utf-8").split("\n").filter((l) => l.trim()).length;
 }
 function acceptanceKeys(dir) {
-  if (!existsSync11(dir)) return [];
+  if (!existsSync12(dir)) return [];
   const keys = [];
   for (const f of readdirSync4(dir)) {
     if (!f.endsWith(".json")) continue;
     keys.push(basename2(f, ".json"));
     try {
-      const v = JSON.parse(readFileSync9(join11(dir, f), "utf-8"));
+      const v = JSON.parse(readFileSync9(join12(dir, f), "utf-8"));
       if (typeof v.id === "string" && v.id && v.id !== basename2(f, ".json")) keys.push(v.id);
     } catch {
     }
@@ -4951,7 +5025,8 @@ __export(session_write_exports, {
   resetSessionWriteWarnForTest: () => resetSessionWriteWarnForTest,
   sessionWriteMode: () => sessionWriteMode,
   shadowSessionDiff: () => shadowSessionDiff,
-  shadowWriteSession: () => shadowWriteSession
+  shadowWriteSession: () => shadowWriteSession,
+  tombstoneSession: () => tombstoneSession
 });
 function sessionWriteMode() {
   const raw = process.env.CCR_SESSION_WRITE_MODE;
@@ -4983,6 +5058,27 @@ function rowOf(s, gidSafe) {
     s.updated_at ?? Date.now(),
     null
   ];
+}
+function tombstoneSession(dataDir3, sessionId) {
+  if (sessionWriteMode() === "off" || currentReadMode() === "json") return;
+  let port;
+  try {
+    port = ensureStoreQuiet(resolveDirs({ dataDir: dataDir3 }));
+  } catch (err) {
+    if (!tombstoneWarned) {
+      tombstoneWarned = true;
+      console.warn("[session-write] \u5893\u7891\u964D\u7EA7\uFF08\u5220\u5361\u4E3B\u94FE\u4E0D\u53D7\u5F71\u54CD\uFF0C\u6587\u4EF6\u8D26 SESSION_DELETED \u515C\u5E95\uFF09\uFF1A", err instanceof Error ? err.message : err);
+    }
+    return;
+  }
+  try {
+    port.exec("UPDATE session SET deleted_at = ?, status = 'DONE' WHERE id = ? AND deleted_at IS NULL", [Date.now(), sessionId]);
+  } catch (err) {
+    if (!tombstoneWarned) {
+      tombstoneWarned = true;
+      console.warn("[session-write] \u5893\u7891\u5199\u5165\u5931\u8D25\uFF08\u4E0D\u91CD\u8BD5\u4E0D\u70B8\u5220\u5361\uFF1B\u7FFB db \u524D\u9700\u6536\u655B\uFF09\uFF1A", err instanceof Error ? err.message : err);
+    }
+  }
 }
 function shadowWriteSession(state) {
   const mode = sessionWriteMode();
@@ -5042,19 +5138,26 @@ function bootFromMode() {
   if (raw === "auto" || raw === "db") return raw;
   return "events";
 }
-function bootReconcile(port, replayedIds) {
-  const rows = port.query("SELECT id, status FROM session");
-  const dbIds = new Set(rows.map((r2) => r2.id));
+function bootReconcile(port, replayed2) {
+  const rows = port.query("SELECT id, status FROM session WHERE deleted_at IS NULL");
+  const replayedIds = new Set(replayed2.keys());
+  const dbIds = new Set(rows.map((r) => r.id));
   const dbOnly = [...dbIds].filter((id2) => !replayedIds.has(id2));
   const replayOnly = [...replayedIds].filter((id2) => !dbIds.has(id2));
   const statusMismatch = [];
-  const r = { dbOnly, replayOnly, statusMismatch };
-  if (dbOnly.length === 0 && replayOnly.length === 0) {
+  for (const r of rows) {
+    const card = replayed2.get(r.id);
+    if (!card) continue;
+    const st2 = card.state?.status;
+    if (typeof st2 === "string" && st2 !== r.status) statusMismatch.push(`${r.id}(db=${r.status},events=${st2})`);
+  }
+  const rec = { dbOnly, replayOnly, statusMismatch };
+  if (dbOnly.length === 0 && replayOnly.length === 0 && statusMismatch.length === 0) {
     console.log(`[boot-reconcile] \u5E93\u2194\u56DE\u653E\u96F6\u5DEE\u5F02\uFF08${rows.length} \u4F1A\u8BDD\uFF09\u2014\u2014\u5207\u6E90\uFF08CCR_BOOT_FROM=db\uFF09\u98CE\u9669\u9762\u6E05\u96F6`);
   } else {
-    console.warn(`[boot-reconcile] \u5E93\u591A ${dbOnly.length} \u884C\uFF08events \u5DF2\u538B\u7F29\u6216\u76F4\u5199\u5148\u884C\uFF09/\u56DE\u653E\u591A ${replayOnly.length} \u5361\uFF08\u5E93 lag\uFF1A\u5E27\u8282\u6D41/\u964D\u7EA7\u7A97\uFF09\u2014\u2014\u5207\u6E90\u524D\u9700\u6536\u655B\uFF1B\u6837\u672C\uFF1AdbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")}`);
+    console.warn(`[boot-reconcile] \u5E93\u591A ${dbOnly.length} \u884C\uFF08events \u5DF2\u538B\u7F29\u6216\u76F4\u5199\u5148\u884C\uFF09/\u56DE\u653E\u591A ${replayOnly.length} \u5361\uFF08\u5E93 lag\uFF1A\u5E27\u8282\u6D41/\u964D\u7EA7\u7A97\uFF09/status \u4E0D\u4E00\u81F4 ${statusMismatch.length}\uFF08\u5207\u6E90\u98CE\u9669\u9762\uFF09\u2014\u2014\u5207\u6E90\u524D\u9700\u6536\u655B\uFF1B\u6837\u672C\uFF1AdbOnly=${dbOnly.slice(0, 3).join(",")} replayOnly=${replayOnly.slice(0, 3).join(",")} mismatch=${statusMismatch.slice(0, 3).join(",")}`);
   }
-  return r;
+  return rec;
 }
 function dbRowsToReplayed(port) {
   const rows = port.query("SELECT id, relay_session_id, group_id, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at FROM session WHERE deleted_at IS NULL");
@@ -5092,7 +5195,7 @@ function dbRowsToReplayed(port) {
   }
   return out;
 }
-var SESSION_UPSERT, warned;
+var SESSION_UPSERT, warned, tombstoneWarned;
 var init_session_write = __esm({
   "src/storage/session-write.ts"() {
     "use strict";
@@ -5102,12 +5205,13 @@ var init_session_write = __esm({
   (id, relay_session_id, group_id, member_id, external_sid, engine, provider, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at)
   VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`;
     warned = false;
+    tombstoneWarned = false;
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -5128,9 +5232,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -5203,9 +5307,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -5253,9 +5357,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -5636,9 +5740,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -5837,9 +5941,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -6460,9 +6564,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -6953,9 +7057,9 @@ var require_sender = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -7182,9 +7286,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -7335,9 +7439,9 @@ var require_extension = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -8231,9 +8335,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -8329,9 +8433,9 @@ var require_stream = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -8374,9 +8478,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -8775,9 +8879,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -8787,9 +8891,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -8809,9 +8913,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -8847,9 +8951,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num3, shift) {
       if (num3.length === void 0) {
@@ -8899,9 +9003,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -8915,9 +9019,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -9139,9 +9243,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -9151,9 +9255,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -9400,9 +9504,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -9435,9 +9539,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -9755,9 +9859,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -9845,9 +9949,9 @@ var require_main = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -9863,9 +9967,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -9906,9 +10010,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -9961,9 +10065,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10096,9 +10200,9 @@ var require_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10243,9 +10347,9 @@ var require_registry = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -10439,9 +10543,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -10520,9 +10624,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -10601,9 +10705,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -10638,9 +10742,9 @@ var require_classes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -10732,9 +10836,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -10925,9 +11029,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -12353,9 +12457,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -12402,9 +12506,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -12575,9 +12679,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -12631,9 +12735,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -12742,9 +12846,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -12768,9 +12872,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -12779,9 +12883,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -12801,9 +12905,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13000,9 +13104,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13055,9 +13159,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "../../cc-deck-w-x0-onboarding/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -14107,21 +14211,84 @@ function buildSnapshotLogs(sessions, budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES, p
 // src/session-manager.ts
 import { appendFileSync as appendFileSync5, existsSync as existsSync28, mkdirSync as mkdirSync20, readFileSync as readFileSync34, readdirSync as readdirSync14, realpathSync as realpathSync3, rmSync as rmSync7, statSync as statSync12, writeFileSync as writeFileSync22 } from "node:fs";
 
+// src/fs-safe.ts
+import { appendFileSync, closeSync, existsSync as existsSync5, openSync, readSync, renameSync as renameSync3, statSync as statSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync4 } from "node:fs";
+import { dirname as dirname2, join as join5 } from "node:path";
+function atomicWriteJson(file, data) {
+  const tmp = join5(dirname2(file), `.${String(file.split("/").pop() || "file")}.tmp-${process.pid}`);
+  try {
+    writeFileSync4(tmp, data, "utf-8");
+    renameSync3(tmp, file);
+    return true;
+  } catch (e) {
+    console.error(`[fs-safe] \u539F\u5B50\u5199\u5931\u8D25 ${file}: ${e instanceof Error ? e.message : String(e)}`);
+    try {
+      if (existsSync5(tmp)) unlinkSync2(tmp);
+    } catch {
+    }
+    return false;
+  }
+}
+function appendJournal(journalFile, row) {
+  try {
+    try {
+      const st2 = statSync2(journalFile);
+      if (st2.size > 5 * 1024 * 1024) renameSync3(journalFile, `${journalFile}.${Date.now()}`);
+    } catch {
+    }
+    appendFileSync(journalFile, JSON.stringify(row) + "\n", "utf-8");
+  } catch (e) {
+    console.error(`[fs-safe] journal \u8FFD\u52A0\u5931\u8D25\uFF08\u4E0D\u963B\u65AD\u4E3B\u5199\uFF09${journalFile}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function lastGoodJournalSnapshot(journalFile, maxScan = 200) {
+  if (!existsSync5(journalFile)) return null;
+  let raw = "";
+  try {
+    raw = readTextTail(journalFile, 8 * 1024 * 1024);
+  } catch {
+    return null;
+  }
+  const lines = raw.split("\n").filter((l) => l.trim().length > 0);
+  let scanned = 0;
+  for (let i = lines.length - 1; i >= 0 && scanned < maxScan; i--, scanned++) {
+    try {
+      const row = JSON.parse(lines[i]);
+      if (row && row.snapshot !== void 0) return row.snapshot;
+    } catch {
+    }
+  }
+  return null;
+}
+function readTextTail(file, maxBytes) {
+  const st2 = statSync2(file);
+  const start = Math.max(0, st2.size - maxBytes);
+  const fh2 = openSync(file, "r");
+  try {
+    const len = st2.size - start;
+    const buf = Buffer.alloc(len);
+    readSync(fh2, buf, 0, len, start);
+    return buf.toString("utf-8");
+  } finally {
+    closeSync(fh2);
+  }
+}
+
 // src/storage/org-write-tx.ts
 import { homedir as homedir4 } from "node:os";
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 init_read_mode();
 function dirsForOrgDir(dir) {
   const base = resolveDirs();
   if (dir) return { ...base, orgDir: dir };
   if (process.env.CCR_ORG_DIR) return base;
-  if (isDataDirIsolated()) return { ...base, orgDir: join12(process.env.CCR_DATA_DIR, "org") };
-  return { ...base, orgDir: join12(homedir4(), ".cc-deck", "org") };
+  if (isDataDirIsolated()) return { ...base, orgDir: join13(process.env.CCR_DATA_DIR, "org") };
+  return { ...base, orgDir: join13(homedir4(), ".cc-deck", "org") };
 }
 var txDegraded = false;
 var txDepth = 0;
 function withOrgWriteTx(dir, fn) {
-  return withStorageTx(dir ? { orgDir: dir } : void 0, fn);
+  return withStorageTx(dir ? { orgDir: dir } : void 0, fn, { deferredSync: true });
 }
 function withStorageTx(dirsOverride, fn, opts) {
   if (currentReadMode() === "json") return fn();
@@ -14178,12 +14345,19 @@ function withStorageTx(dirsOverride, fn, opts) {
       ensureStore(dirs);
     } catch (err) {
       console.warn("[org-write-tx] \u5BFC\u5165\u8FFD\u8D76\u964D\u7EA7\uFF08\u6587\u4EF6\u8D26\u5728\uFF0C\u8BFB\u524D\u89E6\u53D1\u515C\u5E95\uFF09\uFF1A", err instanceof Error ? err.message : err);
+    } finally {
+      syncPending.delete(dirs.dataDir);
     }
   };
-  if (opts?.deferredSync) setImmediate(sync);
-  else sync();
+  if (opts?.deferredSync) {
+    if (!syncPending.has(dirs.dataDir)) {
+      syncPending.add(dirs.dataDir);
+      setImmediate(sync);
+    }
+  } else sync();
   return result;
 }
+var syncPending = /* @__PURE__ */ new Set();
 
 // src/session-manager.ts
 init_session_write();
@@ -14191,8 +14365,8 @@ import { homedir as homedir16 } from "node:os";
 import { isAbsolute as isAbsolute6, join as join42, resolve as resolve9, sep as sep6 } from "node:path";
 
 // src/artifacts.ts
-import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync as readdirSync5, readFileSync as readFileSync10, realpathSync } from "node:fs";
-import { dirname as dirname2, extname, join as join13, normalize as normalize2, relative, resolve as resolve2, sep } from "node:path";
+import { closeSync as closeSync2, constants, fstatSync, lstatSync, openSync as openSync2, readdirSync as readdirSync5, readFileSync as readFileSync10, realpathSync } from "node:fs";
+import { dirname as dirname3, extname, join as join14, normalize as normalize2, relative, resolve as resolve2, sep } from "node:path";
 import { homedir as homedir5 } from "node:os";
 var MIME = {
   ".html": "text/html; charset=utf-8",
@@ -14213,7 +14387,7 @@ var MIME = {
 var ARTIFACT_SEGMENT = "[\\w\u4E00-\u9FFF][\\w\u4E00-\u9FFF.-]*";
 var ARTIFACT_NAME_RE = new RegExp(`^${ARTIFACT_SEGMENT}(?:/${ARTIFACT_SEGMENT})?$`);
 function artifactsDir() {
-  return process.env.CCR_ARTIFACTS_DIR || join13(homedir5(), ".cc-deck", "artifacts");
+  return process.env.CCR_ARTIFACTS_DIR || join14(homedir5(), ".cc-deck", "artifacts");
 }
 function listArtifacts() {
   const dir = artifactsDir();
@@ -14235,7 +14409,7 @@ function listArtifacts() {
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
     if (entry.isSymbolicLink()) continue;
-    const path6 = join13(dir, entry.name);
+    const path6 = join14(dir, entry.name);
     if (entry.isDirectory()) {
       let children;
       try {
@@ -14246,7 +14420,7 @@ function listArtifacts() {
       for (const child of children) {
         if (child.name.startsWith(".")) continue;
         if (child.isSymbolicLink()) continue;
-        addFile(`${entry.name}/${child.name}`, join13(path6, child.name));
+        addFile(`${entry.name}/${child.name}`, join14(path6, child.name));
       }
     } else {
       addFile(entry.name, path6);
@@ -14261,7 +14435,7 @@ function validateDeliverablePath(rawPath) {
   const path6 = resolve2(trimmed);
   let fd2;
   try {
-    fd2 = openSync(path6, constants.O_RDONLY);
+    fd2 = openSync2(path6, constants.O_RDONLY);
   } catch (e) {
     if (e?.code === "EISDIR") {
       return { ok: false, path: path6, error: `\u4EA4\u4ED8\u7269\u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6: ${path6}` };
@@ -14273,7 +14447,7 @@ function validateDeliverablePath(rawPath) {
     if (!st2.isFile()) return { ok: false, path: path6, error: `\u4EA4\u4ED8\u7269\u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6: ${path6}` };
     let unverified = false;
     try {
-      unverified = lstatSync(path6).isSymbolicLink() || realpathSync(dirname2(path6)) !== dirname2(path6);
+      unverified = lstatSync(path6).isSymbolicLink() || realpathSync(dirname3(path6)) !== dirname3(path6);
     } catch {
       unverified = true;
     }
@@ -14281,7 +14455,7 @@ function validateDeliverablePath(rawPath) {
     return { ok: true, path: path6, size: st2.size, mtime: st2.mtimeMs, unverified: false };
   } finally {
     try {
-      closeSync(fd2);
+      closeSync2(fd2);
     } catch {
     }
   }
@@ -14295,7 +14469,7 @@ function serveArtifact(name, res) {
   } catch {
     return false;
   }
-  const full = resolve2(join13(dir, name));
+  const full = resolve2(join14(dir, name));
   if (!full.startsWith(dir + sep) || relative(dir, full).split(sep).length > 2) return false;
   let real;
   try {
@@ -14310,7 +14484,7 @@ function serveArtifact(name, res) {
   const scriptCapable = type.startsWith("text/html") || type === "image/svg+xml";
   let fd2;
   try {
-    fd2 = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
+    fd2 = openSync2(real, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch {
     return false;
   }
@@ -14332,7 +14506,7 @@ function serveArtifact(name, res) {
     return false;
   } finally {
     try {
-      closeSync(fd2);
+      closeSync2(fd2);
     } catch {
     }
   }
@@ -14346,74 +14520,26 @@ init_read_mode();
 
 // src/storage/write-dispatch.ts
 init_read_mode();
+var dispatchSyncWarned = false;
 function writeDispatchToDb() {
+  if (currentReadMode() === "json") return;
   try {
-    ensureStore(resolveDirs());
+    const dirs = resolveDirs();
+    setImmediate(() => {
+      try {
+        ensureStore(dirs);
+      } catch (err) {
+        if (!dispatchSyncWarned) {
+          dispatchSyncWarned = true;
+          console.warn("[write-dispatch] \u540C\u6B65\u843D\u5E93\u964D\u7EA7\uFF08\u4E00\u6B21\u6027\u544A\u8B66\uFF0C\u6587\u4EF6\u8D26\u4FDD\u7559\uFF0C\u8BFB\u524D\u89E6\u53D1\u515C\u5E95\uFF09\uFF1A", err instanceof Error ? err.message : err);
+        }
+      }
+    });
   } catch (err) {
-    console.warn("[write-dispatch] \u540C\u6B65\u843D\u5E93\u964D\u7EA7\uFF0C\u6587\u4EF6\u8D26\u4FDD\u7559\uFF1A", err instanceof Error ? err.message : err);
-  }
-}
-
-// src/fs-safe.ts
-import { appendFileSync, closeSync as closeSync2, existsSync as existsSync12, openSync as openSync2, readSync, renameSync as renameSync3, statSync as statSync5, unlinkSync as unlinkSync2, writeFileSync as writeFileSync5 } from "node:fs";
-import { dirname as dirname3, join as join14 } from "node:path";
-function atomicWriteJson(file, data) {
-  const tmp = join14(dirname3(file), `.${String(file.split("/").pop() || "file")}.tmp-${process.pid}`);
-  try {
-    writeFileSync5(tmp, data, "utf-8");
-    renameSync3(tmp, file);
-    return true;
-  } catch (e) {
-    console.error(`[fs-safe] \u539F\u5B50\u5199\u5931\u8D25 ${file}: ${e instanceof Error ? e.message : String(e)}`);
-    try {
-      if (existsSync12(tmp)) unlinkSync2(tmp);
-    } catch {
+    if (!dispatchSyncWarned) {
+      dispatchSyncWarned = true;
+      console.warn("[write-dispatch] \u540C\u6B65\u843D\u5E93\u964D\u7EA7\uFF0C\u6587\u4EF6\u8D26\u4FDD\u7559\uFF1A", err instanceof Error ? err.message : err);
     }
-    return false;
-  }
-}
-function appendJournal(journalFile, row) {
-  try {
-    try {
-      const st2 = statSync5(journalFile);
-      if (st2.size > 5 * 1024 * 1024) renameSync3(journalFile, `${journalFile}.${Date.now()}`);
-    } catch {
-    }
-    appendFileSync(journalFile, JSON.stringify(row) + "\n", "utf-8");
-  } catch (e) {
-    console.error(`[fs-safe] journal \u8FFD\u52A0\u5931\u8D25\uFF08\u4E0D\u963B\u65AD\u4E3B\u5199\uFF09${journalFile}: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-function lastGoodJournalSnapshot(journalFile, maxScan = 200) {
-  if (!existsSync12(journalFile)) return null;
-  let raw = "";
-  try {
-    raw = readTextTail(journalFile, 8 * 1024 * 1024);
-  } catch {
-    return null;
-  }
-  const lines = raw.split("\n").filter((l) => l.trim().length > 0);
-  let scanned = 0;
-  for (let i = lines.length - 1; i >= 0 && scanned < maxScan; i--, scanned++) {
-    try {
-      const row = JSON.parse(lines[i]);
-      if (row && row.snapshot !== void 0) return row.snapshot;
-    } catch {
-    }
-  }
-  return null;
-}
-function readTextTail(file, maxBytes) {
-  const st2 = statSync5(file);
-  const start = Math.max(0, st2.size - maxBytes);
-  const fh2 = openSync2(file, "r");
-  try {
-    const len = st2.size - start;
-    const buf = Buffer.alloc(len);
-    readSync(fh2, buf, 0, len, start);
-    return buf.toString("utf-8");
-  } finally {
-    closeSync2(fh2);
   }
 }
 
@@ -14514,8 +14640,10 @@ var BOARD_ENTRY_SCHEMA = {
   gate: { type: "object" },
   priority: { type: "enum", enumTable: BOARD_PRIORITIES },
   // #G3：词表分支细查
-  parent_id: { type: "string" }
+  parent_id: { type: "string" },
   // #G3：父子链（坏引用渲染层孤儿容错，depends_on 同口径不炸）
+  wakeup_at: { type: "number" }
+  // M2a 板卡唤醒（到点 patrol 触发后消费清空；毫秒时戳）
 };
 var DISPATCH_ENTRY_SCHEMA = {
   ts: { type: "number", required: true },
@@ -14814,25 +14942,26 @@ function appendDispatch(e, dir) {
 }
 function readDispatchLog(dir, max = 500) {
   return viaReadMode("dispatch", {
-    json: () => {
-      const p = dispatchLogPath(dir);
-      if (!existsSync13(p)) return [];
-      const byId = /* @__PURE__ */ new Map();
-      for (const line of readFileSync11(p, "utf-8").split("\n")) {
-        const t = line.trim();
-        if (!t) continue;
-        try {
-          const e = JSON.parse(t);
-          if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
-        } catch {
-        }
-      }
-      const all = [...byId.values()];
-      return all.length <= max ? all : all.slice(all.length - max);
-    },
+    json: () => readDispatchLogFile(dir, max),
     sqlite: (port) => dispatchEntriesFromDb(port, max),
     dirs: { orgDir: dir }
   });
+}
+function readDispatchLogFile(dir, max = 500) {
+  const p = dispatchLogPath(dir);
+  if (!existsSync13(p)) return [];
+  const byId = /* @__PURE__ */ new Map();
+  for (const line of readFileSync11(p, "utf-8").split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const e = JSON.parse(t);
+      if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
+    } catch {
+    }
+  }
+  const all = [...byId.values()];
+  return all.length <= max ? all : all.slice(all.length - max);
 }
 var ORG_CLI_TEMPLATE = `#!/bin/bash
 # \u77E9\u9635\u5F0F\u56E2\u961F\u5206\u8BCA CLI\uFF08#26 M2\uFF0C\u8BBE\u8BA1\u7A3F docs/v8-team-matrix.html v3.1 \xA74\uFF09\uFF1A
@@ -16169,6 +16298,10 @@ function upsertBoardEntryInner(gid, entry, dir) {
       if (entry.parent_id === null || entry.parent_id === "") delete e.parent_id;
       else e.parent_id = entry.parent_id;
     }
+    if (entry.wakeup_at !== void 0) {
+      if (entry.wakeup_at === null) delete e.wakeup_at;
+      else e.wakeup_at = entry.wakeup_at;
+    }
     e.updated_at = now;
   } else {
     const t = resolveStatusTransition({ status: "backlog" }, entry.status ?? "backlog", entry.review_required);
@@ -16189,7 +16322,9 @@ function upsertBoardEntryInner(gid, entry, dir) {
       ...entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {},
       ...entry.priority ? { priority: entry.priority } : {},
       // #G3：缺省不落键（旧行兼容）
-      ...entry.parent_id ? { parent_id: entry.parent_id } : {}
+      ...entry.parent_id ? { parent_id: entry.parent_id } : {},
+      ...entry.wakeup_at ? { wakeup_at: entry.wakeup_at } : {}
+      // M2a：缺省不落键
     };
     w2.board.entries.push(e);
   }
@@ -16323,8 +16458,7 @@ function writeConfirms(list, dir) {
     mkdirSync9(d2, { recursive: true });
     const pending = list.filter((c) => c.status === "pending");
     const decided = list.filter((c) => c.status !== "pending").slice(-200);
-    writeFileSync9(confirmsFilePath(d2), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n", "utf-8");
-    return true;
+    return atomicWriteJson(confirmsFilePath(d2), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n");
   } catch (e) {
     console.warn(`[projects] \u786E\u8BA4\u5355\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
     return false;
@@ -17528,7 +17662,7 @@ import { accessSync as accessSync3, constants as constants5 } from "node:fs";
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -53428,14 +53562,14 @@ function readDeliverables(dataDir3) {
   }
 }
 function appendDeliverable(dataDir3, e) {
+  let ok2 = true;
   withStorageTx({ dataDir: dataDir3 }, () => {
     const list = readDeliverables(dataDir3).filter((x) => !(x.sid === e.sid && x.path === e.path));
     list.push(e);
-    try {
-      writeFileSync22(join42(dataDir3, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
-    } catch {
-    }
+    ok2 = atomicWriteJson(join42(dataDir3, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    if (!ok2) console.warn(`[deliverable] \u4EA4\u4ED8\u6E05\u5355\u5199\u5165\u5931\u8D25\uFF08\u6587\u4EF6/\u5E93\u5747\u65E0\u6B64\u8BB0\u5F55\uFF0C\u8C03\u7528\u65B9\u5E94\u77E5\u6089\uFF09\uFF1Asid=${e.sid} path=${e.path}`);
   });
+  return ok2;
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir3) {
@@ -53866,7 +54000,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     withStorageTx({ dataDir: this.cfg.dataDir }, () => {
       try {
         mkdirSync20(this.cfg.dataDir, { recursive: true });
-        writeFileSync22(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
+        if (!atomicWriteJson(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n")) {
+          console.warn("[notify] \u901A\u77E5\u8D26\u539F\u5B50\u5199\u5931\u8D25\uFF08fs-safe \u5DF2\u544A\u8B66\uFF0C\u6B64\u5904\u8865\u8BED\u4E49\u9762\uFF09");
+        }
       } catch (e) {
         console.warn(`[notify] \u901A\u77E5\u8D26\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -55174,6 +55310,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.sessions.delete(id2);
     this.lastStoreTodos.delete(id2);
     this.allowRules.dropSession(id2);
+    try {
+      tombstoneSession(this.cfg.dataDir, id2);
+    } catch {
+    }
     if (s.state.external) {
       this.deletedExtIds.add(id2);
       appendDeletedExt(this.cfg.dataDir, id2);
@@ -58966,7 +59106,23 @@ provider=${opts.provider ?? "default"}` : void 0,
 ` : "";
     const dispatchEngine = (veteran ? this.sessions.get(veteran)?.state.engine : void 0) ?? planned.engine ?? "claude";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? void 0);
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields });
+    if (veteran) {
+      const clash = withStorageTx(void 0, () => {
+        const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
+        if (!c) {
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields });
+          return null;
+        }
+        return c;
+      });
+      if (clash) {
+        const msg = `\u540C\u5E2D\u6D3B\u5355\u62D2\u6536\uFF08\u6570\u636E\u5C42\u53CC\u6D3B\u9632\uFF09\uFF1A\u719F\u624B ${veteran.slice(0, 8)} \u5DF2\u6709\u6D3B\u5355 #${clash.id.slice(0, 8)}\uFF08${clash.status}\uFF09\u5728\u5236\u2014\u2014\u672C\u5355\u62D2\u6D3E\uFF1B\u7B49\u8BE5\u5355\u7EC8\u6001\u6216\u6539\u6D3E\u4ED6\u5E2D`;
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: msg, session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields });
+        return { ok: false, error: msg, dispatch_id: dispatchId };
+      }
+    } else {
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields });
+    }
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId;
     if (veteran) {
@@ -60508,7 +60664,7 @@ function extractUrls(logFile) {
 // src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
+// ../../cc-deck-w-x0-onboarding/relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -66453,6 +66609,7 @@ var DISK_FREE_MIN_GB = 5;
 var RECEIPT_STALE_H_DEFAULT = 24;
 var TODO_STALE_H_DEFAULT = 48;
 var CBC_PREFETCH_MAX = 20;
+var DOING_STALE_MIN_DEFAULT = 60;
 var num2 = (v, d2) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : d2;
@@ -66558,6 +66715,11 @@ var PatrolModule = class {
       if (drift > 5e3) this.push("loop", `\u4E8B\u4EF6\u5FAA\u73AF\u6F02\u79FB ${Math.round(drift / 100) / 10}s\uFF08\u5B58\u5728\u540C\u6B65\u963B\u585E/CPU \u70E7\u8680\uFF09`);
       else this.resolve("loop");
     }, 500).unref?.();
+    try {
+      this.boardCardScan();
+    } catch (e) {
+      console.log(`[patrol] board-card scan error: ${e instanceof Error ? e.message : e}`);
+    }
     for (const a of alerts) {
       if (a.text) this.push(a.key, a.text);
       else this.resolve(a.key);
@@ -66684,6 +66846,83 @@ var PatrolModule = class {
       else this.resolve("recon-stalled");
     } catch {
     }
+  }
+  // ---------- M2a 板卡域两规则（multica 借②：wakeup_at 卡级定时 + doing 滞留提醒） ----------
+  /** 规则①：wakeup_at 到点 → 消费制触发（actionable 通知+PM 喂活+字段清空防重触）。
+   * 规则②：claimed(doing) 卡滞留>阈值（默认 60min，CCR_PATROL_DOING_STALE_MIN）且
+   * 执行者会话同样无活动 → 滞留提醒（**不自动重派**——重派决策留人/PM，防误杀长编译；
+   * 执行者活跃=卡旧人在干，不算滞留）。onset-only 去重与既有 patrol 告警同口径。 */
+  boardCardScan() {
+    const now = Date.now();
+    const staleMin = num2(process.env.CCR_PATROL_DOING_STALE_MIN, DOING_STALE_MIN_DEFAULT);
+    const staleMs = staleMin * 6e4;
+    const sessionsById = new Map(this.mgr.snapshot().map((s) => [s.session_id, s]));
+    const wakeHits = [];
+    const stallHits = [];
+    for (const g2 of listGroups()) {
+      if (g2.status !== "active") continue;
+      const board = loadBoardFile(g2.id);
+      if (!board) continue;
+      let touched = false;
+      for (const e of board.entries) {
+        if (e.wakeup_at && Number(e.wakeup_at) <= now) {
+          const face = (e.text || e.id).slice(0, 24);
+          const dueAt = new Date(Number(e.wakeup_at)).toLocaleString("zh-CN", { hour12: false });
+          wakeHits.push(`[${g2.name}] ${face}`);
+          const r = upsertBoardEntry(g2.id, { id: e.id, text: e.text, status: e.status, wakeup_at: null });
+          if (r.ok) touched = true;
+          try {
+            this.mgr.upsertNotification("system", "board-wakeup", e.id, {
+              title: `\u677F\u5361\u5524\u9192\uFF1A${(e.text || e.id).slice(0, 30)}`,
+              body: `wakeup_at \u5230\u70B9\uFF08${dueAt}\uFF09\u2014\u2014\u5361\u5728 [${g2.name}]\u300C${face}\u300D\u5F53\u524D ${e.status} \u6CF3\u9053\uFF0C\u6309\u8BA4\u9886\u914D\u7F6E\u5904\u7F6E\uFF08\u91CD\u65B0\u6D3E\u5355\u6216\u4EBA\u5DE5\u6838\u5361\uFF09`,
+              severity: "waiting",
+              group: "attention",
+              actionable: true,
+              domain: "team",
+              returnPath: "/"
+            });
+          } catch {
+          }
+          continue;
+        }
+        if (e.status === "claimed" && now - (e.updated_at ?? 0) > staleMs) {
+          const owner = e.owner_session ? sessionsById.get(e.owner_session) : void 0;
+          const ownerFresh = owner ? now - (owner.updated_at ?? 0) < staleMs : false;
+          if (!ownerFresh) {
+            stallHits.push(`[${g2.name}] ${(e.text || e.id).slice(0, 24)}\uFF08${Math.round((now - (e.updated_at ?? 0)) / 6e4)}min \u65E0\u8FDB\u5C55${owner ? `\xB7\u6267\u884C\u8005 ${(owner.title || e.owner_session || "").slice(0, 8)} \u540C\u9759\u9ED8` : "\xB7\u65E0\u6267\u884C\u8005"}\uFF09`);
+          }
+        }
+      }
+      if (touched) {
+        try {
+          this.mgr.emitBoard?.(g2.id);
+        } catch {
+        }
+      }
+    }
+    if (wakeHits.length) {
+      this.push("board-wakeup", `${wakeHits.length} \u5F20\u677F\u5361 wakeup \u5230\u70B9\uFF1A${wakeHits.slice(0, 4).join("\u3001")}${wakeHits.length > 4 ? " \u7B49" : ""}`);
+      try {
+        this.mgr.feedPM?.("board-wakeup");
+      } catch {
+      }
+    } else this.resolve("board-wakeup");
+    if (stallHits.length) {
+      const text = `${stallHits.length} \u5F20 doing \u5361\u6EDE\u7559>${staleMin}min\uFF1A${stallHits.slice(0, 5).join("\u3001")}${stallHits.length > 5 ? " \u7B49" : ""}\uFF08\u63D0\u9192\u4E0D\u81EA\u52A8\u91CD\u6D3E\u2014\u2014\u91CD\u6D3E\u51B3\u7B56\u7559\u4EBA/PM\uFF09`;
+      this.push("board-doing-stale", text);
+      try {
+        this.mgr.upsertNotification("system", "board-doing-stale", String(Math.floor(now / 6e4)), {
+          title: `doing \u6EDE\u7559\u63D0\u9192\uFF08${stallHits.length} \u5F20 >${staleMin}min \u65E0\u8FDB\u5C55\uFF09`,
+          body: text,
+          severity: "waiting",
+          group: "attention",
+          domain: "team",
+          returnPath: "/"
+        });
+      } catch {
+      }
+    } else this.resolve("board-doing-stale");
+    this.appendReport(`board-card: wakeup=${wakeHits.length} doing-stale=${stallHits.length}`);
   }
   // ---------- 去重推送（onset-only）+ 报告落盘 ----------
   push(key, text) {
@@ -67941,17 +68180,36 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
     const { ensureStoreQuiet: ensureStoreQuiet2, resolveDirs: rd2 } = await Promise.resolve().then(() => (init_read_mode(), read_mode_exports));
     const { bootReconcile: bootReconcile2, dbRowsToReplayed: dbRowsToReplayed2 } = await Promise.resolve().then(() => (init_session_write(), session_write_exports));
     const dbPort = ensureStoreQuiet2(rd2());
-    bootReconcile2(dbPort, new Set(replayed.keys()));
+    bootReconcile2(dbPort, replayed);
     if (process.env.CCR_BOOT_FROM === "db") {
       const fromDb = dbRowsToReplayed2(dbPort);
       let merged = 0;
+      let fieldFallback = 0;
       for (const [id2, rs2] of fromDb) {
         if (!replayed.has(id2)) {
           replayed.set(id2, rs2);
           merged++;
-        } else replayed.set(id2, rs2);
+        } else {
+          const prev = replayed.get(id2);
+          if (prev?.state) {
+            const ns2 = rs2.state;
+            const dbTitle = typeof ns2.title === "string" ? ns2.title : "";
+            const dbSummary = typeof ns2.action_summary === "string" ? ns2.action_summary : "";
+            const dbTitleMissing = !dbTitle || dbTitle === id2.slice(0, 8);
+            const dbSummaryMissing = !dbSummary || dbSummary === "\uFF08\u5E93\u6062\u590D\uFF09";
+            const statsZero = ns2.stats?.files_changed === 0 && ns2.stats?.lines_added === 0;
+            if (dbTitleMissing && typeof prev.state.title === "string" && prev.state.title) {
+              ns2.title = prev.state.title;
+              fieldFallback++;
+            }
+            if (dbSummaryMissing && typeof prev.state.action_summary === "string" && prev.state.action_summary) ns2.action_summary = prev.state.action_summary;
+            if (statsZero && prev.state.stats && typeof prev.state.stats === "object") ns2.stats = prev.state.stats;
+            if (Array.isArray(prev.state.logs) && prev.state.logs.length > 0) rs2.logs = prev.state.logs;
+          }
+          replayed.set(id2, rs2);
+        }
       }
-      console.log(`[boot-from-db] \u5207\u6E90\uFF1A\u5E93 ${fromDb.size} \u884C\uFF08\u65B0\u6536\u517B ${merged}\uFF0C\u8986\u76D6 ${fromDb.size - merged}\uFF09+\u56DE\u653E\u515C\u5E95`);
+      console.log(`[boot-from-db] \u5207\u6E90\uFF1A\u5E93 ${fromDb.size} \u884C\uFF08\u65B0\u6536\u517B ${merged}\uFF0C\u8986\u76D6 ${fromDb.size - merged}\uFF0Cruntime \u57DF\u56DE\u653E\u515C\u5E95 ${fieldFallback}\uFF09`);
     }
   } catch (err) {
     console.warn("[boot-from-db] \u5207\u6E90\u964D\u7EA7\uFF08boot \u4E0D\u53D7\u5F71\u54CD\uFF0C\u56DE\u653E\u515C\u5E95\u5168\u7A0B\u63A5\u7BA1\uFF09\uFF1A", err instanceof Error ? err.message : err);

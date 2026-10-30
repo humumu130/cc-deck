@@ -315,9 +315,13 @@
                   // 同泳道父子挂靠；跨泳道/坏引用=孤儿容错平铺，与 depends_on 同口径）
                   const subCount = task.__subCount || 0;
                   const subOpen = boardExpanded.has(task.id);
+                  // M2b：折叠钮显子卡进度 x/y（done/total），齐活（全部子卡 done）钮加亮
+                  // sub-all + 卡头「批次齐活」chip（父卡亮=批次收口一目了然，A4 增益）
+                  const subDone = task.__subDone || 0;
+                  const subAllDone = !!task.__subAllDone;
                   // #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀；P2=默认档不显——显了反而噪音）+ data-priority 左缘色条（CSS）
                   const prio = /^(P0|P1)$/.test(String(task.priority || "")) ? String(task.priority) : "";
-                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
+                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + (subAllDone ? " sub-all" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + (subAllDone ? "——批次齐活（全部子卡 done）" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subDone + "/" + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + (subAllDone ? '<span class="tchip sub-all-chip" title="批次齐活：全部子任务已完成（M2b 父子联动）">批次齐活</span>' : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
                 }
                 // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -400,6 +404,10 @@
                       t.__subCount = t.__subs.length;
                       // 审查 B-P2-2：子卡有运行中派单→父卡折叠钮亮黄点（折叠不吞「里面有活跑」信号）
                       t.__subRunning = t.__subs.some((sub) => dispatchStatus.get(sub.dispatch_id) === "running");
+                      // M2b 批次齐活（multica 借④补强）：子卡 done 计数 + 全终态标志——父卡
+                      // 折叠钮显 x/y 进度，齐活加亮（父卡自身状态不动，纯呈现层联动）
+                      t.__subDone = t.__subs.filter((sub) => (legacyStatuses.get(sub.status) || sub.status) === "done").length;
+                      t.__subAllDone = t.__subCount > 0 && t.__subDone === t.__subCount;
                       return t;
                     });
                     const flatRender = (list, withOrdinals) => list.map((t, i) => taskMarkup(t, project, withOrdinals && list.length > 1 ? { ordinal: i + 1, running: dispatchStatus.get(t.dispatch_id) === "running" } : withOrdinals ? { running: dispatchStatus.get(t.dispatch_id) === "running" } : undefined)).join("");

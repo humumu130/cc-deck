@@ -408,26 +408,32 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
 // 映射值域变化——已知有损映射面备案 read-mode.ts 头注；session-manager 三处消费全经此原点）。
 export function readDispatchLog(dir?: string, max = 500): DispatchEntry[] {
   return viaReadMode("dispatch", {
-    json: () => {
-      const p = dispatchLogPath(dir);
-      if (!existsSync(p)) return [];
-      const byId = new Map<string, DispatchEntry>();
-      for (const line of readFileSync(p, "utf-8").split("\n")) {
-        const t = line.trim();
-        if (!t) continue;
-        try {
-          const e = JSON.parse(t) as DispatchEntry;
-          if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
-        } catch {
-          // 损坏行跳过
-        }
-      }
-      const all = [...byId.values()];
-      return all.length <= max ? all : all.slice(all.length - max);
-    },
+    json: () => readDispatchLogFile(dir, max),
     sqlite: (port) => dispatchEntriesFromDb(port, max),
     dirs: { orgDir: dir },
   });
+}
+
+/** M5 双活数据层防（multica claim NOT EXISTS 范式，卷一 §Top5-1）：台账**文件直读**
+ * 变体（同 id 末行收敛，与 readDispatchLog json 分支同口径）。守卫在 org 写事务
+ *（BEGIN IMMEDIATE）内执行时必须走本口——事务内读写一律文件直读（org-write-tx
+ * 头注铁律：文件=真相源，库=读穿投影，投影读在事务内既违铁律又可能嵌套导入事务）。 */
+export function readDispatchLogFile(dir?: string, max = 500): DispatchEntry[] {
+  const p = dispatchLogPath(dir);
+  if (!existsSync(p)) return [];
+  const byId = new Map<string, DispatchEntry>();
+  for (const line of readFileSync(p, "utf-8").split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const e = JSON.parse(t) as DispatchEntry;
+      if (typeof e.id === "string" && e.id && typeof e.status === "string") byId.set(e.id, e);
+    } catch {
+      // 损坏行跳过
+    }
+  }
+  const all = [...byId.values()];
+  return all.length <= max ? all : all.slice(all.length - max);
 }
 
 // ---------- #26 M2 分诊 CLI（~/.cc-deck/bin/org，Leader 的指令通道） ----------

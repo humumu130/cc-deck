@@ -12,7 +12,7 @@ import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
 import {
   appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, evaluateCommandPermission,
-  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
@@ -6698,7 +6698,7 @@ export class SessionManager {
   }
 
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string }):
-    { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string } {
+    { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
     // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
@@ -6961,7 +6961,31 @@ export class SessionManager {
     // 闸前已清 null，veteran 非空即其在编引擎可信），新会话用 planned.engine ?? claude。
     const dispatchEngine = (veteran ? this.sessions.get(veteran)?.state.engine : undefined) ?? planned.engine ?? "claude";
     const dispatchPrompt = taskRefHead + wrapDispatchPrompt(tier, input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined);
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记） */
+    // M5 双活数据层防（multica claim NOT EXISTS 内嵌拒范式，卷一 §Top5-1，消 #257
+    // 族 TOCTOU 窗）：veteran 认领的「同席活单检查+dispatched 落账」整段入 org 写锁
+    // 域（BEGIN IMMEDIATE 串行化——同 session 已有异 id 的 dispatched/running 行=
+    // 第二并发任务，数据层拒收；应用层 pickVeteran 忙检查与状态翻 WORKING 之间的
+    // 间隙正是本守卫要堵的窗）。json 档 tx 短路退化为同步段——JS 单线程内检查+落账
+    // 同样原子。检查用文件直读（org-write-tx 头注铁律：事务内禁投影读）；queue_replay
+    // /redispatch 同 id 段链不误伤（id !== dispatchId 排除）。拒收=台账 failed 行
+    // 记因（编制闸同款，logic_error 非瞬态不自动重试）。
+    if (veteran) {
+      const clash = withStorageTx(undefined, () => {
+        const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
+        if (!c) {
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields });
+          return null;
+        }
+        return c;
+      });
+      if (clash) {
+        const msg = `同席活单拒收（数据层双活防）：熟手 ${veteran.slice(0, 8)} 已有活单 #${clash.id.slice(0, 8)}（${clash.status}）在制——本单拒派；等该单终态或改派他席`;
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: msg, session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields });
+        return { ok: false, error: msg, dispatch_id: dispatchId }; /* dispatch_id 随拒收返回：调用方/审计按 id 关联 failed 记因行（编制闸同族但本行含活单语义，对账需要） */
+      }
+    } else {
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记） */
+    }
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
     let sessionId: string;
     if (veteran) {

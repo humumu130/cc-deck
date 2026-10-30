@@ -1549,6 +1549,29 @@
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
     #d-team .task-owner { flex-wrap: wrap; gap: 5px; }
     #d-team .task-owner .tchip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding: 2px 7px; border-radius: 6px; background: var(--bg1); color: var(--card-sub); font-size: var(--fs-C); line-height: 15px; }
+    /* #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀——P2=默认档不显）+卡左缘色条；
+       子任务折叠钮+子卡缩进挂靠容器 */
+    .task-title .tchip.prio-p0, .task-title .tchip.prio-p1 { flex: none; padding: 1px 6px; border-radius: 5px; font-size: var(--fs-micro); font-weight: 700; letter-spacing: .4px; }
+    .task-title .tchip.prio-p0 { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); }
+    .task-title .tchip.prio-p1 { background: color-mix(in srgb, var(--st-working) 18%, transparent); color: var(--st-working); }
+    /* 审查 B-P1-1：优先级条改顶部 2.5px——左缘被 data-stripe ::before（3px 不透明
+       定位伪元素）整段遮挡（原左缘条不可见）；顶部无竞争元素，P1 色与 claimed 泳道
+       条同 token 的撞色面也随位置分离消解 */
+    .task-card[data-priority="P0"] { box-shadow: inset 0 2.5px 0 var(--error); }
+    .task-card[data-priority="P1"] { box-shadow: inset 0 2.5px 0 var(--st-working); }
+    .sub-toggle { flex: none; border: 1px solid var(--line); border-radius: 5px; background: var(--bg1); color: var(--dim); font: 600 var(--fs-micro)/1 var(--mono); padding: 2px 6px; cursor: pointer; }
+    .sub-toggle:hover { color: var(--text-strong); border-color: var(--dim); }
+    /* 审查 B-P2-2：折叠中的运行中子卡信号——钮亮黄点（父卡可见「里面有活跑」） */
+    .sub-toggle.sub-running { color: var(--st-working); border-color: color-mix(in srgb, var(--st-working) 45%, var(--line)); }
+    .sub-toggle.sub-running::after { content: "●"; margin-left: 3px; font-size: 7px; vertical-align: 1px; }
+    /* M2b 批次齐活（multica 借④）：全部子卡 done → 折叠钮进度 x/y 绿亮 + 卡头 chip（父卡亮） */
+    .sub-toggle.sub-all { color: var(--p-done); border-color: var(--p-done); }
+    .task-title .tchip.sub-all-chip { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 6px; background: var(--bg1); border: 1px solid var(--p-done); color: var(--p-done); font-size: var(--fs-micro); line-height: 14px; vertical-align: 1px; }
+    .subtasks { margin: 6px 0 0 10px; padding-left: 9px; border-left: 1.5px dashed var(--line); display: flex; flex-direction: column; gap: 4px; }
+    /* 审查 B-P2-1：特异性提升（原 0,2,0 被 #d-team .task-card.compact 1,2,0 压制=死 CSS） */
+    #d-team .subtasks .task-card.compact { padding: 6px 9px; margin-bottom: 0; }
+    /* #G5 失败分类学：活动行失败分类 chip（网络错误/超时/…+自动重试标识） */
+    .act-freason { display: inline-block; padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error); font-size: var(--fs-micro); white-space: nowrap; }
     #d-team .task-owner .tchip b { min-width: 0; overflow: hidden; font-weight: 500; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .task-owner .tchip i { overflow: hidden; font-style: normal; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .task-owner.unassigned .tchip { color: var(--working); }
