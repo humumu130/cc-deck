@@ -1380,6 +1380,31 @@ export class SessionManager {
     return { ok: true };
   }
 
+  // L-1029-4 云回流拉回健康口：ws-server 拉回器拍级边沿调用（连续失败断流告警/
+  // 恢复自清）。告警 key=stableKey("system", `cloud-reflux:<epoch>`)——epoch 每故障
+  // 期自增=每期一条新账，绕开 upsert「已 resolved 同 key 不复活」防重语义（旧账由
+  // 通知上限收割）；恢复走 transitionNotifications resolved（来源事件驱动收口，与
+  // waiting/org-confirm 同款），matcher 按 sourceContext.entityId 配对同期账。
+  cloudRefluxHealth(info: { epoch: number; kind: string; detail: string; recovered?: boolean }): void {
+    const entityId = `cloud-reflux:${info.epoch}`;
+    if (info.recovered) {
+      this.transitionNotifications(
+        (n) => n.kind === "system" && n.sourceContext.entityId === entityId,
+        "resolved",
+      );
+      return;
+    }
+    this.upsertNotification("system", entityId, undefined, {
+      title: `云回流拉取中断（${info.kind}）`,
+      body: truncate(info.detail, 200),
+      severity: "error",
+      group: "attention",
+      actionable: true,
+      domain: "session",
+      returnPath: "sessions",
+    });
+  }
+
   // R1c 源②同步点：WAITING 在等 → 产生（stableKey=waiting:session:request，同请求
   // 重放天然去重）；不在等（决议翻回/终态）→ 该会话未决 waiting 账全 resolved。
   // onWaiting/onStatusChange/onWaitingResolved/onTurnEnd/onSessionEnd 五路共用，

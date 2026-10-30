@@ -136,9 +136,12 @@ if os.environ.get("CCR_NO_CLOUD") == "1":
 html_path = f"/tmp/acceptance-{aid}.html"
 key_path = f"/tmp/acceptance-{aid}.key"
 cloud_failed = False
-# 上传脚本用 m1 worktree 副本（#28：回读校验改 CF API 直读，不再依赖公网 /dl/——
-# /dl/ 已拒 .key 键；旧 checkout 副本无此改造且该目录属 peer 地盘不动）
-KVPUT = "/Users/xdd/dev/cc-deck-m1/scripts/kv-put-verified.sh"
+# 上传脚本（#28：回读校验改 CF API 直读，不再依赖公网 /dl/——/dl/ 已拒 .key 键）。
+# L-1029-4：原硬编码 m1 worktree 副本（/Users/xdd/dev/cc-deck-m1/…）——m1 线 1010
+# 退役全删后成死路径，KVPUT 必 FileNotFoundError。改 env CCR_KVPUT 覆盖 + 主力仓
+# scripts/kv-put-verified.sh 缺省（该脚本 #28/#154/F4 改造齐全：CF API 回读+md5
+# 比对，即「云链接吐出=上传并回读校验通过」的出单自检内核）；他机/测试注入用 env。
+KVPUT = os.environ.get("CCR_KVPUT") or "/Users/xdd/dev/cc-deck/scripts/kv-put-verified.sh"
 try:
     with open(key_path, "w", encoding="utf-8") as f:
         f.write(skey)
@@ -149,7 +152,9 @@ try:
                             capture_output=True, text=True, errors="replace")
     if kv_key.returncode != 0:
         cloud_failed = True
-        print(f"   ❌ 密钥上传失败，云通道未发布（家庭网链接仍可用，请修复网络后重试）：{(kv_key.stdout + kv_key.stderr).strip()[:200]}")
+        # L-1029-4：失败详情走 stderr（stdout 只留成功产物链接——出单会话的回执
+        # 转录里成功/失败分流，grep stderr 即知云通道健康），非零退出保留
+        print(f"   ❌ 密钥上传失败，云通道未发布（家庭网链接仍可用，请修复网络后重试）：{(kv_key.stdout + kv_key.stderr).strip()[:200]}", file=sys.stderr)
     else:
         try:
             page = subprocess.run(["curl", "-sS", "--max-time", "10", "-o", html_path,
@@ -170,7 +175,7 @@ try:
                 raise RuntimeError(f"ACK ok 非 true：{ack.get('error') or '未知错误'}")
         except Exception as e:
             cloud_failed = True
-            print(f"   ❌ 云端表单页获取失败（{e}，请确认 relay 在线后重试；家庭网链接仍可用）")
+            print(f"   ❌ 云端表单页获取失败（{e}，请确认 relay 在线后重试；家庭网链接仍可用）", file=sys.stderr)
         # errors="replace"：脚本输出偶带非 UTF-8 字节（代理报错混入），text=True 严格解码
         # 会把真实失败原因吞成 UnicodeDecodeError；上传失败只做一次快速重试，最终非零退出
         kv = None
@@ -187,10 +192,10 @@ try:
             else:
                 cloud_failed = True
                 detail = (kv.stdout + kv.stderr).strip()[:200] if kv else "未执行上传"
-                print(f"   ❌ 云端上传失败（家庭网链接仍可用，请修复网络后重试）：{detail}")
+                print(f"   ❌ 云端上传失败（家庭网链接仍可用，请修复网络后重试）：{detail}", file=sys.stderr)
 except Exception as e:
     cloud_failed = True
-    print(f"   ❌ 云端发布失败（家庭网链接仍可用，请确认 relay 在线后重试）：{e}")
+    print(f"   ❌ 云端发布失败（家庭网链接仍可用，请确认 relay 在线后重试）：{e}", file=sys.stderr)
 finally:
     # #29（D-P2）：临时件清理（密钥必删；html 无敏感性一并收走，链接已打进输出）
     for p in (key_path, html_path):

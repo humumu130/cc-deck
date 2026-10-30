@@ -105,7 +105,53 @@ function notifyAcceptanceRefill(acc: Acceptance, rows: unknown, mgr: SessionMana
   } catch { /* 通知失败不影响提交/回流 */ }
 }
 
-// #184 验收单状态推送：acceptances 原本只随 SNAPSHOT 下发，他端提交后在线手机的
+// L-1029-4 拉回失败三分类：401/403=auth（token 两端不一致）；fetch 异常（超时/
+// DNS/连接拒绝）=network；其余非 2xx=http（Worker/KV 侧异常）。分类意义：401 与
+// 网络失败此前同走 catch 静默 continue，断流无人知——分类后才能给出对症建议动作
+export type RefluxFailureKind = "auth" | "network" | "http";
+export function classifyRefluxFailure(err: unknown, status: number | null): RefluxFailureKind {
+  if (status !== null) return status === 401 || status === 403 ? "auth" : "http";
+  return err !== null ? "network" : "http"; // throw 必有 err；status null 且无 err 视为响应异常归 http
+}
+
+// 连续失败追踪（纯逻辑，导出供单测）：同类连击计数，达到阈值（3 次）边沿触发一次
+// 告警；成功清零。alertEpoch 每次「达到阈值」自增——恢复自清（resolve）后同 kind
+// 再故障拿到新 epoch=新通知 key，绕开「已 resolved 的账同 key 重放不复活」的
+// upsert 防重语义（每故障期一条新告警，旧账由通知上限收割）
+export const REFLUX_ALERT_THRESHOLD = 3;
+export class RefluxFailureTracker {
+  private kind: RefluxFailureKind | null = null;
+  private count = 0;
+  epoch = 0;
+  /** 记一次失败；返回 {alert}=本次达到告警阈值（边沿一次），{epoch}=该故障期号 */
+  recordFailure(kind: RefluxFailureKind): { alert: boolean; epoch: number } {
+    if (kind !== this.kind) { this.kind = kind; this.count = 0; }
+    this.count += 1;
+    if (this.count === REFLUX_ALERT_THRESHOLD) this.epoch += 1;
+    return { alert: this.count === REFLUX_ALERT_THRESHOLD, epoch: Math.max(1, this.epoch) };
+  }
+  /** 成功边沿：清计数；返回告警态标记（≥阈值过）+ 清零前故障类，供恢复自清配对
+   * （epoch 已入通知 key，kind 一并回传给 resolve 侧做语义完整性校验） */
+  recordSuccess(): { wasAlarming: boolean; epoch: number; kind: RefluxFailureKind | null } {
+    const wasAlarming = this.count >= REFLUX_ALERT_THRESHOLD;
+    const epoch = this.epoch;
+    const kind = this.kind; // 清零前留影（wasAlarming=true 时必有值：count≥3 必经 recordFailure）
+    this.kind = null; this.count = 0;
+    return { wasAlarming, epoch, kind };
+  }
+  get snapshot(): { kind: RefluxFailureKind | null; count: number } {
+    return { kind: this.kind, count: this.count };
+  }
+}
+
+// 告警正文（类名 + 对症建议动作，面板可见可行动）
+export const REFLUX_KIND_ADVICE: Record<RefluxFailureKind, string> = {
+  auth: "鉴权 401/403：云桥 token 两端不一致。重设：openssl rand -hex 16 生成新值 → wrangler secret put CLOUD_TOKEN → 写入 relay data/cloud-token 文件 → 重启 relay（三级回退 env→文件→默认）",
+  network: "网络失败：本机到 cc.humumu.online 不可达（超时/DNS/代理），恢复后自动清警",
+  http: "非预期 HTTP 状态：查 Worker 部署与 KV 绑定（deployments list / kv key list）",
+};
+
+
 // 待填卡要等重连才消失（用户实测：桌面填完手机卡滞留、点开已收摊的单）。提交/回流/
 // 登记后 emitTransient 全量汇总——LAN 直播（ws-server 总线订阅）+ 云桥 onEnv 转发
 // 两路同达，旧端未知类型自然跳过；seq:0 不落 ndjson，断线端由重连 SNAPSHOT 兜底。
@@ -128,10 +174,20 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
   // #184 tick 签名对账：云回流落盘、新出单登记、删单都会改变 listAcceptances() 汇总，
   // 与上一拍不同即广播——在线端 ≤60s 内收到新态（LAN 提交另有 POST 落盘后的即时广播）
   let lastSig = JSON.stringify(listAcceptances());
+  // L-1029-4 失败分流告警：拍级聚合（一拍内未完成单全失败取最高优先类记一次，
+  // 任一单拉回成功即记成功拍）——results 读面同 token 同端点，一张 401 张张 401；
+  // 连续 3 拍同类失败→告警（面板可见），恢复拍自动清警。auth>http>network 取类：
+  // 401 是最可行动的（重设 token 即愈），同拍并见时优先报它
+  const reflux = new RefluxFailureTracker();
   const tick = async (): Promise<void> => {
+    let failKind: RefluxFailureKind | null = null;
+    let failStatus: number | null = null;
+    let anyOk = false;
     for (const s of listAcceptances()) {
       if (s.done) continue;
       let submits: CloudSubmit[] | null = null;
+      let threw = false;
+      let status: number | null = null;
       try {
         // #28 results 读面收紧：提交数组含全部勾选+备注，不该让任何拿到 id 的互联网
         // 读走——GET 携云桥 token（与 /cloud WS 同源密钥）。旧 Worker 忽略未知 header，
@@ -140,8 +196,18 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
           headers: { authorization: `Bearer ${cfg.cloudToken}` },
           signal: AbortSignal.timeout(10_000),
         });
+        status = r.status;
         if (r.ok) submits = (await r.json()) as CloudSubmit[];
-      } catch { /* 网络失败下次再试 */ }
+      } catch {
+        threw = true; // L-1029-4：网络失败不再静默——分类记账（见拍尾聚合）
+      }
+      // 拍级聚合（auth > http > network 优先级覆盖）：任一单 2xx 且解析出数组=成功拍
+      if (Array.isArray(submits)) {
+        anyOk = true;
+      } else {
+        const kind = threw ? "network" : classifyRefluxFailure(null, status);
+        if (failKind === null || (failKind === "network" && kind !== "network")) { failKind = kind; failStatus = threw ? null : status; }
+      }
       if (!Array.isArray(submits) || submits.length === 0) continue;
       const added = applyCloudSubmits(s.id, submits);
       if (added.length > 0) {
@@ -149,6 +215,21 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
         if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr);
         mgr.settleAcceptanceResult(s.id); // M12-7 收单归因回写（幂等，与 LAN 提交同口径）
       }
+    }
+    // L-1029-4 拍级健康边沿：本拍有未完成单且全失败 → 记失败（连击第 3 拍边沿告警）；
+    // 有成功拍（或无未完成单=无事可失败）→ 记恢复，曾告警过则 resolve 同期通知。
+    // 无未完成单记成功拍是刻意的：全收摊后残留告警也该自动清（健康=默认态）
+    if (failKind !== null && !anyOk) {
+      const { alert, epoch } = reflux.recordFailure(failKind);
+      if (alert) {
+        mgr.cloudRefluxHealth({
+          epoch, kind: failKind,
+          detail: `连续 ${REFLUX_ALERT_THRESHOLD} 拍拉取失败（${failKind}${failStatus != null ? `，HTTP ${failStatus}` : "，请求未达"}）：${REFLUX_KIND_ADVICE[failKind]}`,
+        });
+      }
+    } else {
+      const r = reflux.recordSuccess();
+      if (r.wasAlarming && r.kind) mgr.cloudRefluxHealth({ epoch: r.epoch, kind: r.kind, detail: "", recovered: true });
     }
     try {
       const sig = JSON.stringify(listAcceptances());

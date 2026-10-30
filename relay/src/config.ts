@@ -126,7 +126,21 @@ export function loadConfig(): RelayConfig {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
+  // L-1029-4 云回流 token 三级回退（修法 A，与 defaultCwd 同款三级形态）：
+  // env CCR_CLOUD_TOKEN → 文件 data/cloud-token → 出厂默认值（公共桥公开 token）。
+  // 背景：Worker results 读面验 env.CLOUD_TOKEN（CF secret），relay 侧此前只有
+  // env/默认两档——私有 token 只存 CF secret 时本地 env 没记，两端不匹配 401
+  // 断流且无人知。PM 部署新 token 时两端同设：wrangler secret put + 写本地
+  // cloud-token 文件，本档让文件可承载（env 腾给 daemon 场景）。空串/空文件
+  // 视为未设置回落下一档——防误写空值把云桥 token 打成空串（空 token 发出去
+  // 必 401，且 CloudClient 侧空 token 会拼出 "Bearer " 头）
+  let cloudToken = (process.env.CCR_CLOUD_TOKEN ?? "").trim();
+  if (!cloudToken) {
+    try {
+      cloudToken = readFileSync(join(dataDir, "cloud-token"), "utf-8").trim();
+    } catch { /* 无文件/读失败 → 落默认档 */ }
+  }
+  if (!cloudToken) cloudToken = DEFAULT_CLOUD_TOKEN;
 
   // #17 雇员独立家三态解析（见 RelayConfig.employeeConfigDir 注释；纯函数抽至
   // parseEmployeeConfigDir 供 settings.ts 产品层复用）
