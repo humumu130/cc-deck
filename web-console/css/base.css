@@ -454,6 +454,23 @@
     .project-open-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; margin: -7px 0; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--dim); cursor: pointer; transition: color .15s ease, background .15s ease; }
     .project-open-btn:hover { color: var(--text-strong); background: var(--hover); }
     .project-open-btn .icon-inline { width: 15px; height: 15px; vertical-align: 0; }
+    /* project-cards-v2（用户 1029 十六条重做）：单列三分区——r1 标题/r2 路径/r3 计数徽章行。
+       统一徽章盒（.pc2-badge/.pc2-count 同 padding 同高同圆角=基线对齐）；数字 min-width+居中+
+       tabular-nums=计数永不截断；路径独占 r2 truncate（截断优先级：名称→路径→永不截计数）；
+       间距全 4 的倍数（8/12/4/4/4）；三行恒渲染=卡高天然一致。旧病根：.queue-card p 的
+       138px 右 margin（会话卡微钮遗留）+ :has(.identity-cluster) 双模板不再命中（pc2 无 p/无
+       identity-cluster）；进行中不再复用 source-badge（↗ 外链语义错配退役） */
+    .queue-card.pc2 { gap: 4px; min-height: 72px; padding: 8px 12px; }
+    .pc2-r1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .pc2-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc2-badge, .pc2-count { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; padding: 2px 8px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: var(--fs-C); line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pc2-badge.is-action { border-color: transparent; background: var(--action-bg); color: var(--brand-strong); }
+    .pc2-count.is-working { border-color: color-mix(in srgb, var(--working) 35%, transparent); background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); }
+    .pc2-count.is-dim { opacity: .72; }
+    .pc2-r2 { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    .pc2-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: var(--fs-B); } /* 尾部省略（shortenDir 已做家目录头部缩短；全路径在卡 title 悬停可查） */
+    .pc2-r2 .project-open-btn { flex: none; margin: -4px -4px -4px 0; } /* flex:none 恒不换行——旧 flex-wrap 孤儿图标行根因 */
+    .pc2-r3 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
     /* W-PROJP1 P1-2：「未立项」置底折叠组头——同 queue-group 标签语言 + 折叠箭头（art-chev 同源 ▸），
        hot 点仅在折叠态显示（「抽屉里有要处理的」提示，不强行展开） */
     button.queue-group.project-unfiled-toggle { display: flex; align-items: center; gap: 6px; width: calc(100% - 6px); padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
@@ -1982,10 +1999,12 @@
     .mobile-lane-head {display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: var(--fs-D); font-weight: 700;}
     .mobile-task {padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: var(--fs-A-item);}
     .mobile-task + .mobile-task { margin-top: 6px; }
-    .mobile-project-card { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 11px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
-    .mobile-project-card h3 {margin: 0; color: var(--text-strong); font-size: var(--fs-A-item);}
-    .mobile-project-card p {grid-column: 2; margin: 2px 0 0; color: var(--dim); font-size: var(--fs-B);}
-    .mobile-project-card > .tag { grid-column: 3; grid-row: 1 / span 2; }
+    /* project-cards-v2：手机项目卡改 pc2 同源两行制（r1 名称+非活跃徽章/r2 路径+计数）——
+       旧三列栅格（22px 图标列恒占位错列/tag 跨两行/孤立文件夹图标）退役；徽章盒复用 .pc2-count */
+    .mobile-project-card { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .mobile-project-card .pc2m-r1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .mobile-project-card .pc2m-name { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: var(--fs-A-item); }
+    .mobile-project-card .pc2m-r2 { display: flex; align-items: center; gap: 4px; min-width: 0; }
     .mobile-project-summary {display: flex; gap: 10px; overflow: auto; padding: 3px 0 10px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font: var(--fs-B) var(--mono); white-space: nowrap;}
     .mobile-project-summary span { flex: 0 0 auto; }
     .mobile-settings { display: grid; gap: 8px; }
