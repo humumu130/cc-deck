@@ -480,3 +480,28 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 | L-1026-5 | **双线脚本漂移误诊（PM 侧）**：V2 五面闸爆红初判「bash 3.2 邻接第二案复发」派 W-BASHSWEEP 全仓清扫——worker 核对发现任务书指定的 check-deploy-complete.sh:27/29 **在脚本正典线（feat/1010-audit-fixbatch@1e264975）基点已修**，爆红运行体=船线（feat/test56-integ）scripts/ 的**旧拷贝**（四面同步时只 cp 了 deploy-web/test-deploygate 两件，漏了 checker）；真复发零起，实修仅 check-behavior-parity.sh 另三处会炸面 | 1026 01:17 W-BASHSWEEP 回执「重要核对发现」节实锤（cmp 证据：deploy-web/test-deploygate SAME、check-deploy-complete DIFF） | 船线收编同步 77e483d3（两件换新）+复跑 V2 全绿 rc=0；正典线合并 569b34fd | **多线并行时脚本类收编=全件 cp 不是挑件 cp**：deploy-web.sh 出包/部署流程应把 check-deploy-complete.sh 一并随批同步（或脚本单源从仓根硬链到船线），否则闸本身漂移=闸失真 |
 
 附：本例零产出 DONE **未被任何机器闸捕获**（NOTIFY_CHAIN_AUDIT 当时只报三账缺角），靠用户巡检轮触发 PM 深查才发现——L-1026-1 的零产出闸与 §13（1024）「收工自检扩展」合并为同一根治件候选。
+
+## 13. 1029 凌晨实战断点增补（PM 接任夜）
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1029-1 | **验收单无生命周期终点=值守永久骚扰**：验收单唯一终态是回流（submitted），无过期/关闭/作废口；用户实践=实时反馈不回填单据（1021 memory 口径）→ 出单永挂 pending → 喂活候选滚成 79 项（receipt 为主，最老 test.27 跨 40+ 版），PM 死亡期间值守轮 no_pm_target 每 5-10 分钟空转告警 | 1029 00:30 清账实证：acceptances 28 张全 pending（test.27→test.70 全链无一回流）；relay/src/acceptance.ts 无 expire/archive；listAcceptances(50) 直灌 dutySnapshot.pending_receipts | 28 张死账物理归档 archived-20261029/（含 tar 备份，主目录清空候选归零）+板面 4 张 Codex/经验域陈卡删除 | 验收单加生命周期：出单附 TTL（版本跨 N 版自动过期归档+一次性通知）或「用户实时反馈裁决」回流口（PM 收口头结论后代关）；acceptance.ts 补 archived 状态与目录扫描豁免 |
+| L-1029-2 | **PM 死亡无人知（接任夜发现）**：PM 真身 10-28 21:54 死亡，值守轮 no_pm_target 告警通知发出但无升级链（用户未看到/无人处置），链路裸奔 26 小时直到用户手动拉新 PM | duty-rounds 22:51→23:47 六轮 no_pm_target；chain-audit pm-wake candidates=79 target=ext-94e4540f（旧目标） | 用户手动接任（新 PM=本会话） | no_pm_target 连续 N 轮→升级手机推送（现仅面板通知）；「PM 位空悬>1h」入 patrol light 必报项 |
+| L-1029-3 | **Nova 壳探活被死代理吞（连接断链根因，随修复批根治）**：reqwest 读 macOS 系统代理但不解析 ExceptionsList bypass——Clash 停跑+系统代理残留 7890 时，probe_local 127.0.0.1 探活被塞进死代理恒 null→前端 unconfigured 永不连；curl/浏览器遵守 bypass 故手测全通（排障盲区） | 10-28 23:53/10-29 00:20 两次冷启零 TCP 零 ws-upgrade；worker dev 真机五连「连接失败: error sending request」实锤；`.no_proxy()` 修复后在线 | fb3dcbd0 修复批（fix/relay-single-conn，六件含 .no_proxy() 根修+自愈永久退避），随 test.74 | 已根治在批；衍生经验：**网络类排障必须用与故障进程同栈的客户端复现**（curl 绿≠reqwest 绿）——入经验库 |
+
+## 13. 1029 晨间断点增补（验收回流实测）
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1029-4 | **云回流断流三重烂+静默无告警**：①relay 拉回 results 读面 401（Worker 验私有 CLOUD_TOKEN secret，relay env 未设用公开默认值，两端不匹配）②拉不回静默 skip 无告警（「网络失败下次再试」注释自认，401 与网络失败不分流）③KV 里 acceptance 域键整为 0（页面/key/results 全不在——但云页面 200 可开，页面真实来源存疑=四重疑点） | 1029 09:53 用户云链接提交实测：9 分钟无回流无通知；wrangler kv list acceptance 前缀 0 键；Bearer 默认值 curl 401；CLOUD_TOKEN/PUBLIC_TOKEN 双 secret 在场 | 用户改走 LAN 直提（家庭网在场即时闭环）；私有值本地无记录 | A 正修批（用户拍板）：①新随机 token 两端同设——Worker secret put + relay 侧 config.ts cloudToken 加文件回退（~/.cc-deck/data/cloud-token，env?? 文件?? 默认三级）②拉回失败分流告警：连续 3 次 401/失败→面板通知（401≠网络失败）③考古 KV 0 键与页面 200 的矛盾（页面真实来源+出单工具上传链是否早已断）④验收单出单后自检：KV 回读 key 存在才算云链就绪，否则只吐 LAN 链接 |
+
+## 13. 1029 晚间断点增补（429 集体死亡·队列产品实证）
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1029-5 | **提前开火=429 集体死亡**：PM 误读用户「19:05 刷新到点开」为可提前，16:24 五 worker 并发烧 15 分钟撞墙（429 五小时上限，重置点 19:05:28 一秒不差）全灭+零回执 | a197d2fa 等 5 会话 16:39-42 集体 SESSION_ERROR；台账 16:39-42 四 failed | 19:07 额度刷新后清席重发（编制 16 全假死还需 member-retire 15 席才通——第二堵点） | ①纪律：用户给的时间点=开火点不提前 ②队列产品（dispatch-queue-prd）额度探针的实证价值：release 前探额度余量+撞墙自动 snapshot-all——本损失即 Q3 场景原型 |
+| L-1029-6 | **429 集体死亡后编制全假死堵重发**：dispatch 引擎拒收「16 会话全部无响应」，重发前须手动 member-retire 清席 | leader-dispatch HTTP 422 报错点名 4 假死会话 | 批量 retire 15 席（除 PM）后七单全通 | 引擎侧：假死会话（ERROR 态+超时）自动出编制或 dispatch 自动跳过；队列产品自动刹车场景需内置 |
+
+| L-1029-7 | **并行会话共享 stash 栈撞车**：worktree 共享主仓 .git 的 refs/stash（stash 是 per-repo 非 per-worktree）——两会话 stash 窗口重叠时交叉互弹：A 的暂存弹进 B 工作树、B 的 147 行内容弹进 A 树顶掉 A 全部改动 | 1029 20:1x UI 批与 multica 批实测（UI 侧 fsck 认领 stash 提交恢复+20/20 复验无损；multica 内容 374 行备份 /tmp/w-uifeedback-probe/foreign-multica-content.diff，已通报两 worker 取回） | 通报+取回；经验入库（UI 批 worker 已申报 #pitfall） | 派单纪律硬条：**多会话并行期禁用 git stash**（基线对照用 worktree 内临时 commit）；根治=dispatch 任务书模板加禁令行 |
+
+| L-1029-8 | **派单→板卡状态联动断裂**：今晚 15+ 单派发建卡全停 backlog（进行中甬道空+待认领堆积——用户面板实见）；dispatch 建卡与状态翻态（claimed/doing/done）联动在假死清席/重派循环/queued→drain 路径下脱钩 | 1029 20:4x 面板实见：9 张 backlog 卡含已收割 6 单+在跑 2 单；手工归位（6→done/2→doing/删重复 1/补 2） | 手工归位+本表 | 排查 org dispatch 建卡后的状态翻态链在哪条路径丢失（重派复用既有卡时 move 缺失嫌疑大）——follow-up 查修单 |
