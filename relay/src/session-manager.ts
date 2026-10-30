@@ -15,7 +15,8 @@ import {
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
-import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
+import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
+import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
 import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
