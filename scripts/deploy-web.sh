@@ -19,8 +19,10 @@
 #   --force     跳过「git 工作区干净」前置（应急；正常流程别用）
 #
 # 陷阱备忘：
-#   · CF 部署代理必须小写 https_proxy——wrangler/undici 只读小写，大写 HTTPS_PROXY
-#     不通（2026-10-23 三跑实证）；wrangler 用本机 npx 缓存固定 bin，免网络解析。
+#   · CF 部署网络走 scripts/wrangler-remote.sh 双路（直连优先/代理回落）——
+#     「大写不通必须小写」旧结论已过时（wrangler 4.154.0 大小写都认，2026-10-30
+#     假代理抓 CONNECT 实测）；fetch failed 真根因=直连被墙与 FlClash 7890 时死
+#     的双间歇（fix/wrangler-toolchain 回执）。
 #   · 文件同步 ≠ 进程换新：面②③同步后必须重启对应进程运行面才换新（10-11 P0 的
 #     另一半），脚本收尾会再提醒。
 #   · 对照口径：版本烙印 CONSOLE_VERSION 四面全等 VERSION + js/session-domain.js
@@ -42,7 +44,6 @@ COPY=cc-plugins/plugins/cc-deck/web-console
 COPY_BUNDLE=cc-plugins/plugins/cc-deck/scripts
 NOVA_WC='/Applications/CC Deck Nova.app/Contents/Resources/web-console'
 RS_DIR="$HOME/.cc-deck/relay-service"
-WRANGLER_BIN="$HOME/.npm/_npx/32026684e21afda6/node_modules/.bin/wrangler"
 CF_URL="https://cc.humumu.online"
 PROXY="http://127.0.0.1:7890"
 FAIL=0
@@ -231,15 +232,10 @@ ok "面③ 镜像完成（重启对应 relay 进程后运行面才换新）"
 # ---------- S4 CF 资产面 ----------
 if [ "$SKIP_CF" != "1" ]; then
   echo "—— S4 CF 资产面（cloudflare/ wrangler deploy）——"
-  if [ -x "$WRANGLER_BIN" ]; then
-    WR="\"$WRANGLER_BIN\""
-  else
-    echo "⚠️  固定 wrangler bin 不在（${WRANGLER_BIN}，npx 缓存被清？）——回落 npx 现解析（需网络）"
-    WR="npx --yes wrangler"
-  fi
-  # 代理大小写都设：undici 只读小写（大写单独设不通），别处工具读大写不吃亏
-  ( cd cloudflare && eval "https_proxy=\"$PROXY\" HTTPS_PROXY=\"$PROXY\" $WR deploy" ) \
-    || { echo "❌ wrangler deploy 失败（检查 Clash 7890 在线/CF 登录态）"; exit 1; }
+  # 双路网络（直连优先/代理回落）统一走 wrangler-remote.sh：单设 proxy env 在
+  # FlClash 死窗口必 fetch failed；bin 固定/回落逻辑封装内已管
+  ( cd cloudflare && ../scripts/wrangler-remote.sh deploy ) \
+    || { echo "❌ wrangler deploy 失败（wrangler-remote.sh 双路均败：查 FlClash 7890/CF 登录态）"; exit 1; }
   ok "面④ CF 部署完成"
 else
   echo "⏭️  S4 跳过（--skip-cf）"
