@@ -454,7 +454,10 @@ export function createSessionCommands(mgr: any) {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
           if (!mgr.deleteSession(cmd.payload.session_id)) {
-            return { command_id: cmd.command_id, ok: false, error: "Leader 卡不可删除（逻辑常驻，锚是权威）；解散团队请清 org.json 锚后重启" };
+            // UI 反馈批 1029 件B：文案人话化——旧文案「锚是权威/清 org.json 后重启」是开发
+            // 运维口径直出（远程面板删除时整段砸进 toast），用户无从下手。产品口径：解释
+            // 常驻语义 + 给出 sanctioned 路径（无 Leader 模式即隐藏，可随时切回）
+            return { command_id: cmd.command_id, ok: false, error: "团队 Leader 常驻卡不可删除（组织锚，删除也会在源端重启时自动重建）。不想看到它：该源「设置 → 团队 → 协作模式」切「无 Leader」即隐藏" };
           }
           return { command_id: cmd.command_id, ok: true };
     },

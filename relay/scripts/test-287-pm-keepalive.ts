@@ -60,10 +60,13 @@ ok(sm.includes("pmKeepaliveStreak: 0,") && (sm.match(/pmKeepaliveStreak: 0,/g) |
 
 console.log("#287 面板待命态（web-console 源码锚）");
 
-ok(ssd.includes("pmStandby: session.pm_standby === true") && ssd.includes("值守 PM 常驻待命"),
-  "P1 桌面卡：myCardItem 透传 + r2 行「待命」tag（替代 DONE 假死——活跃/待命连续态对齐 #276）");
-ok(mj.includes('s.pm_standby ? ["待命", "waiting"]'),
-  "P2 移动卡：stTag 待命二态（waiting 色系）");
+// UI 反馈批 1029 件A：双端锚升级为「非干活态才显待命」——pm_standby 只随快照派生，
+// 实时帧不带 → PM 开工翻 working 后陈标残留=「干活中显待命」矛盾（用户实锤）。
+// 桌面=myCardItem 闸口（status!=="working"），移动=stTag 闸口（!=="WORKING"）
+ok(ssd.includes("pmStandby: session.pm_standby === true && status !== \"working\"") && ssd.includes("值守 PM 常驻待命"),
+  "P1 桌面卡：myCardItem 透传 + r2 行「待命」tag + 非 working 闸（替代 DONE 假死——活跃/待命连续态对齐 #276；干活期不误标）");
+ok(mj.includes('(s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"]'),
+  "P2 移动卡：stTag 待命二态 + 非 WORKING 闸（waiting 色系；干活期不误标）");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

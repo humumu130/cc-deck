@@ -78,7 +78,8 @@ console.log("-- A. renderMyList 双口径 + 记账 --");
 // ---- C. onCollabMode leader 分支退役 ----
 console.log("-- C. onCollabMode upsert 退役 --");
 {
-  const fn = blockFrom("function onCollabMode(p) {", sessionDomain);
+  // UI 反馈批 1029 件B：签名带 evSource（切态帧同快照口径维护每源锚 id 记账）
+  const fn = blockFrom("function onCollabMode(p, evSource) {", sessionDomain);
   ok(fn.length > 0, "C1 onCollabMode 在场");
   ok(fn.includes("onDeleted(lid)"), "C2 no-leader 锚卡回收分支保留");
   ok(!fn.includes("S.sessions.set(p.leader_session"), "C3 leader 分支锚卡 upsert 退役（用户口径：列表不放 Leader 卡）");

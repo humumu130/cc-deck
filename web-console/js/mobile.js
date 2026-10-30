@@ -32,7 +32,7 @@
       const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
       // #291 帧分类判活：WORKING 过真判定（#d-session 域 session-domain 挂的全局；缺=老壳降级原样）——待命不占在跑计数
       const isRealW = (s) => (window.__ccDeck005IsRealWorking ? window.__ccDeck005IsRealWorking(s) : true);
-      const stTag = (s) => s.pm_standby ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死
+      const stTag = (s) => (s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死；UI 反馈批 1029 件A：桥缓存 pm_standby 只随快照派生，PM 开工翻 WORKING 后陈标残留=干活中显「待命」矛盾——非 WORKING 态才标（干活期走 STATUS_TAG 正常显示）
       const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
       const allSessions = () => [...bridge.sessions.values()];
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
@@ -567,6 +567,7 @@
         const ids = new Set();
         const api = b2Api();
         const S = api && api.S;
+        if (S && S.leaderSessionIds && typeof S.leaderSessionIds.forEach === "function") S.leaderSessionIds.forEach((id) => ids.add(id)); // UI 反馈批 1029 件B：全源锚 id 并集（聚合远程源 Leader 卡同滤）
         if (S && typeof S.leaderSessionId === "string" && S.leaderSessionId) ids.add(S.leaderSessionId);
         const projects = S && Array.isArray(S.projects) ? S.projects : [];
         for (const p of projects) {
