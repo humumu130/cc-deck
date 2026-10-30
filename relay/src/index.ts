@@ -13,6 +13,7 @@ import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
 import { PatrolModule } from "./patrol.js";
+import { readDispatchLog } from "./org.js"; // M4：SIGTERM 退出诊断（活派单留档，graceful-restart 屏障的 relay 侧对称面）
 import { readPluginConfig } from "./plugin-config.js";
 import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
@@ -84,8 +85,24 @@ process.on("unhandledRejection", (reason) => {
     } catch {}
   };
   process.on("exit", wipe);
-  process.on("SIGINT", () => { wipe(); process.exit(0); });
-  process.on("SIGTERM", () => { wipe(); process.exit(0); });
+  // M4 claim barrier（multica T3「未确认是显式状态而非沉默」）：SIGTERM/SIGINT 退出前
+  // 打印在跑派单清单——graceful-restart.ts 的等待窗保证正常路径下此刻无活单；若此处
+  // 仍见活单=竞速窗漏网（等待判定与 kickstart 间隙新单进入）或人肉强杀，日志留档供
+  // 重启后 reloadDispatchQueue 对账。纯诊断打印，不 gate 不等待（launchd SIGTERM→
+  // SIGKILL 间隔秒级，长排空无意义——屏障在脚本层，职责见 scripts/graceful-restart.ts）。
+  const shutdownDiag = (sig: string) => {
+    try {
+      const active = readDispatchLog().filter((r) => r.status === "dispatched" || r.status === "running");
+      if (active.length > 0) {
+        console.warn(`[graceful] ${sig} 退出时仍有 ${active.length} 个活派单（重启后 reloadDispatchQueue 恢复排队）：`);
+        for (const a of active) console.warn(`  · ${a.id} [${a.status}] ${a.title ?? ""}`);
+      }
+    } catch { /* 诊断尽力而为 */ }
+    wipe();
+    process.exit(0);
+  };
+  process.on("SIGINT", () => shutdownDiag("SIGINT"));
+  process.on("SIGTERM", () => shutdownDiag("SIGTERM"));
 }
 
 // #324 选装生命周期：被桌面壳拉起（CCR_PARENT_PID 注入）时随壳退出——壳被强杀

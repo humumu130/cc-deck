@@ -37,14 +37,21 @@
 
 ## 热部署交互（日常发版）
 
-替换 bundle 内 relay.mjs 后：
+替换 bundle 内 relay.mjs 后——**优先走优雅热部署**（M4 claim barrier，multica T3 跟随替换）：
 
 ```sh
-launchctl kickstart -k gui/$(id -u)/online.humumu.ccdeck.relay
+./graceful-restart.sh <新bundle路径>        # 等在跑派单归零再换新（默认 5min 窗，不硬杀）
+CCR_GRACEFUL_WINDOW=0 ./graceful-restart.sh <新bundle路径>   # 跳过等待（确认无活单时）
 ```
 
-比旧的「kill 壳子进程等 supervisor 重拉」更干净（无父进程竞态）；日志独立在
-`~/.cc-deck/data/relay-service.log`（与壳孵化模式的 embedded-relay.log 区分）。
+- 有活派单（dispatched/running）→ 等待窗内归零自动换新；窗满仍不硬杀，打印活单清单等人工决策（退出码 3）
+- 新 bundle 探活不过 → **自动回滚旧 bundle 续服务**（退出码 4）；`node --check` 预检失败或回滚后仍不通=需人工（退出码 5——预检失败时原进程全程未动）
+- 旧版备份留在 `relay.mjs.pre-graceful.<ts>`；relay 侧 SIGTERM 会打印活单诊断（漏网竞速留档）
+
+裸 `launchctl kickstart -k gui/$(id -u)/online.humumu.ccdeck.relay` 仍可用（立即强杀重启，
+**会杀在跑派单**——只在确认无活单或愿意承担损失时用）；比旧的「kill 壳子进程等 supervisor
+重拉」干净（无父进程竞态）；日志独立在 `~/.cc-deck/data/relay-service.log`（与壳孵化模式的
+embedded-relay.log 区分）。
 
 ## 已知边界
 
