@@ -1125,15 +1125,17 @@ export class CloudClient {
     let snapPayload: Record<string, unknown> | null = null;
     const payloadSize = (p: Record<string, unknown>): number => Buffer.byteLength(JSON.stringify(p));
     {
+      // W-SRC2 #134（本批②③）：wan resume 面补 per-session relay_source——与 phone 密封面
+      //（:542 起）同源同键；探测与实发同形（size probe 不包会低估注入后的真实体积）
       const probe: Record<string, unknown> = {
-        sessions: this.mgr.snapshot(),
+        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2: Record<string, unknown> = {
-          sessions: this.mgr.snapshot(),
+          sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         };
@@ -1148,12 +1150,17 @@ export class CloudClient {
       ts: Date.now(),
       type: "SNAPSHOT",
       payload: {
-        sessions: this.mgr.snapshot(),
+        // W-SRC2 #134（本批②③）：wan resume 快照与 phone 密封面同键——per-session
+        // relay_source + relay_name/lan_hint（#117 两键此前只挂密封面，wan 直连端
+        // 收不到=源标链在此面全断）；旧客户端忽略未知键，向前兼容
+        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         models: listModels(this.mgr.cfg.model),
+        ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),
+        ...(this.extra?.relayName?.() ? { relay_name: this.extra.relayName() } : {}),
       },
     };
     this.sendWan(dev, snapshot);

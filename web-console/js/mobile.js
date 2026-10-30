@@ -39,7 +39,10 @@
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
       const engineBadge = (s) => s && s.engine ? `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>` : "";
-      const sourceBadge = () => `<span class="source-badge">${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || location.host) : (bridge.relayName || location.host))}</span>`; // 件十三：命名映射统一
+      // W-SRC2 #134（本批①三端一致）：源徽章 per-session 化——relay SNAPSHOT 现随每卡下发
+      // relay_source（wan resume 面本批补齐后三通道全覆盖），聚合双源下逐卡显真实归属名；
+      // 无标卡回落本源名（单源观感不变）。无会话上下文的调用点（组织确认卡/引擎分组）不传参走回落。
+      const sourceBadge = (s) => { const raw = (s && typeof s.relay_source === "string" && s.relay_source) || bridge.relayName || location.host; const n = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(raw) : raw; return `<span class="source-badge">${esc(n)}</span>`; }; // 件十三：命名映射统一
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
       const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
         const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -60,7 +63,7 @@
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
         const bg = mBgCount(s);
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
       };
 
       // ---------- 导航栈 ----------
@@ -96,7 +99,7 @@
         const sub = document.querySelector("#mobile-detail-sub");
         if (sub) sub.textContent = s ? (displayPath(s.cwd) || "目录未记录") : "";
         const idn = document.querySelector("#mobile-detail-identity");
-        if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge();
+        if (idn) idn.innerHTML = engineBadge(s || {}) + sourceBadge(s);
         const tag = target.querySelector(".mobile-head .tag.action");
         if (tag) { const [w] = s ? stTag(s) : ["详情", "info"]; tag.textContent = s && needAction(s) ? "待处理" : w; }
         setSingleActive(target);
@@ -686,7 +689,7 @@
           if (confirms.length) { slot.hidden = false; mSigWrite(slot, "cf:" + confirms.length, `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`); }
           else { slot.hidden = true; slot.textContent = ""; slot.dataset.mSig = ""; }
         }
-        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge()}</div><br><span class="tag ${cls}">${w}</span></div>`; };
+        const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}</div><br><span class="tag ${cls}">${w}</span></div>`; };
         const lane = (label, items, mapper) => `<div class="mobile-lane"><div class="mobile-lane-head"><span>${label}</span><span>${items.length}</span></div>${items.map(mapper).join("") || '<div class="mobile-task"><span class="muted">暂无</span></div>'}</div>`;
         const todo = screen.querySelector('[data-team-pane="todo"]');
         // #282 MOB sig 跳帧：三 pane 内容未变零重建（泳道滚动位/成员列表滚动逐帧存活）
