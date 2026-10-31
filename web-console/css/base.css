@@ -3181,4 +3181,34 @@ button.settings-row:hover, .art-row:hover { border-color: var(--border-strong); 
   .desktop-screen.active, .mobile-screen.active, .settings-panel.active, .mo-stagger > * { animation: none !important; }
   .queue-card:active, .mobile-card:active, .member-card:active,
   .primary-btn:active, .secondary-btn:active, .icon-btn:active, .kbd-chip:active, .row-share:active, .project-open-btn:active, .windowbar-refresh:active { transform: none; }
+
+/* =============== W-SCROLLBAR（1101 用户重提）：会话/项目列表滚动条微信式显隐 ===============
+   背景：原生滚动条常驻，暗色主题下泛白扎眼（通知面板审查视角三第 9 条同病）。
+   方案：两列表容器隐藏原生条（scrollbar-width:none + ::-webkit-scrollbar 宽 0 双写——
+   Tauri WKWebView＝Safari<18.2 不认 scrollbar-width，WebKit 伪元素兜底），自绘 overlay
+   thumb：hover 显 / 离开隐 / 滚动中恒显（停 800ms 再判）/ 可拖拽。编排逻辑在
+   js/session-scrollbar.js（监听挂常驻宿主，.list-upper 重建零感知）。
+   本段纯追加零改既有行：.list-upper 既有 scrollbar-width:thin 由 #id 高特异度盖过；
+   与 notify-overhaul 的通知段/token 段不同段，无同段冲突。 */
+/* 项目域先滚动化（本批探针实锤：.queue overflow:hidden 长内容直接裁切不能滚，
+   sh>ch 且 scrollTop 恒 0）——先有滚动才配滚动条；仅限 #d-project，其他域不动 */
+#d-project .queue { position: relative; display: flex; flex-direction: column; }
+#d-project .queue-head { flex: 0 0 auto; }
+#d-project [data-project-queue] { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 原生条隐藏（两域限定） */
+#d-session .session-list .list-upper { scrollbar-width: none; }
+#d-session .session-list .list-upper::-webkit-scrollbar { width: 0; height: 0; }
+#d-project [data-project-queue] { scrollbar-width: none; }
+#d-project [data-project-queue]::-webkit-scrollbar { width: 0; height: 0; }
+/* overlay thumb：宿主相对定位（track 的 absolute 落点=常驻宿主，非滚动元素） */
+#d-session .session-list { position: relative; }
+.wx-sb-track { --wx-sb-thumb: rgba(255,255,255,.14); --wx-sb-thumb-hover: rgba(255,255,255,.24); position: absolute; top: 0; right: 2px; bottom: 0; z-index: 6; width: 6px; pointer-events: none; opacity: 0; transition: opacity .15s ease-out; }
+.wx-sb-track.is-on { opacity: 1; } /* 显隐唯一开关（JS：hover/scrolling/dragging 三态编排） */
+.wx-sb-thumb { position: absolute; left: 0; width: 6px; border-radius: 3px; background: var(--wx-sb-thumb); pointer-events: auto; cursor: default; transition: background .15s ease; }
+.wx-sb-track:not(.is-on) .wx-sb-thumb { pointer-events: none; } /* 隐态断指针：不可见的 6px 条不得拦截右缘点击（像素兜底探针实锤） */
+.wx-sb-thumb:hover, .wx-sb-thumb.is-drag { background: var(--wx-sb-thumb-hover); }
+html[data-theme="light"] .wx-sb-track { --wx-sb-thumb: rgba(0,0,0,.18); --wx-sb-thumb-hover: rgba(0,0,0,.28); } /* 浅色同款 token 映射（任务书拍板值） */
+@media (prefers-reduced-motion: reduce) { /* 动效降级 ≤80ms（任务书口径） */
+  .wx-sb-track { transition: opacity 80ms ease-out; }
+  .wx-sb-thumb { transition: background 80ms ease; }
 }
