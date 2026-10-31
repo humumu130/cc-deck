@@ -1162,7 +1162,7 @@
                   document.querySelectorAll(".engine-badge").forEach((el) => {
                     if (el.querySelector(".badge-brand")) return;
                     const cls = [...el.classList].find((c) => c !== "engine-badge") || "";
-                    if (!cls || (!ENGINE_BRAND_SVG[cls] && cls !== "zcode" && cls !== "glm")) return;
+                    if (!cls || !ENGINE_BRAND_SVG[cls]) return; // P2修：删冗余 zcode/glm 白名单（两键已在表内恒命中——review-duo P2-3）
                     el.insertAdjacentHTML("afterbegin", window.__ccDeck005EngineMarkHtml(cls, el.textContent.trim() || cls));
                   });
                 };

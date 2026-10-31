@@ -33,11 +33,26 @@
                 // 图标全部复用既有 sprite（accept 方框勾=验收单、users=团队、send=派单、
                 // bell=待处理、info=系统），零新增 symbol
                 const KIND_META = {
-                  acceptance: { icon: "accept", label: "验收单" },
-                  "org-confirm": { icon: "users", label: "团队确认" },
-                  dispatch: { icon: "send", label: "派单" },
-                  waiting: { icon: "bell", label: "待处理" },
-                  system: { icon: "info", label: "系统" },
+                  acceptance: { icon: "accept", label: "验收", badge: "acceptance" },
+                  "org-confirm": { icon: "users", label: "确认", badge: "confirm" },
+                  dispatch: { icon: "send", label: "派单", badge: "dispatch" },
+                  waiting: { icon: "bell", label: "待办", badge: "waiting" },
+                  system: { icon: "info", label: "系统", badge: "system" },
+                };
+                // 1101 A2 时间单轨：统一 11px 相对时间（≤60min 分钟 / <24h 小时 / 更早 M月D日）
+                // ——正文内联时间退役（旧 sub 拼 relTime 双轨）
+                const notifyRelTime = window.__ccDeck005NotifyRelTime = (ts) => {
+                  const n = Number(ts) || 0;
+                  if (!n) return "";
+                  const diff = Date.now() - n;
+                  if (diff < 0) return "";
+                  const min = Math.floor(diff / 60000);
+                  if (min < 1) return "刚刚";
+                  if (min <= 60) return min + " 分钟前";
+                  const h = Math.floor(min / 60);
+                  if (h < 24) return h + " 小时前";
+                  const d = new Date(n);
+                  return (d.getMonth() + 1) + "月" + d.getDate() + "日";
                 };
                 const kindMetaOf = (kind) => KIND_META[kind] || KIND_META.system;
                 const sessionOf = (item) => {
@@ -106,21 +121,23 @@
                   const km = kindMetaOf(row.kind);
                   const cls = row.active ? "alert" : row.unresolved ? "warn" : "read";
                   const canAck = !row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported;
-                  const sub = [String(row.body || "").split("\n")[0], relTime(row.ts)].filter(Boolean).join(" · ");
+                  const sub = String(row.body || "").split("\n")[0]; // A2 时间单轨：正文只留摘要，时间归 L1 右贴
+                  // A6 操作钮降权=文字链（12px/500 强调色 hover 下划线）
                   const act = jump
                     ? (jump.acceptance
-                      ? '<button class="act" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + ' ↗</button>'
-                      : '<button class="act" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + ' ↗</button>')
+                      ? '<button class="act" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + '</button>'
+                      : '<button class="act" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + "</button>")
                     : canAck ? '<button class="act" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
-                  const x = '<button class="x' + (row.active ? "" : " ghost") + '" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">×</button>';
-                  // UI 精修二批：会话系通知行补引擎品牌迷你标（数据源 row.engine 此前
-                  // 从未可视化；synth 行无引擎零渲染——badge-brand 全局 10.8px 档）
+                  const x = '<button class="x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">×</button>';
                   const engMark = row.engine && window.__ccDeck005EngineMarkHtml
                     ? '<span class="nrow-eng" title="会话引擎">' + window.__ccDeck005EngineMarkHtml(row.engine) + "</span>"
                     : "";
+                  // A6 行栅格 12px：[icon 16+gap10]+内容列（L1 badge+时间右贴 / L2 标题
+                  // clamp2+tooltip / L3 摘要+内联操作）+右侧 act/× 列；» 引导符退役
                   return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="t">' + engMark + '<b>' + escapeHtml(row.title) + '</b><div class="s">' + escapeHtml(sub) + "</div></div>"
+                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
+                    + '<b title="' + escapeHtml(row.title) + '">' + escapeHtml(row.title) + '</b><div class="s">' + escapeHtml(sub) + "</div></div>"
                     + act + x + "</div>";
                 }
 
@@ -130,14 +147,26 @@
                   return template.content;
                 }
 
+                let lastCount = -1;
                 function syncCounts(count) {
-                  if (headSub) headSub.textContent = count + " 项需行动"; // 专属属性（data-notify-panel-sub）——与手机端 [data-notify-action-count] 断耦（W-NQA F11 防复发）
+                  // A1 计数单源：头部 badge 与 rail badge 同源（Σ需你行动组）；变化时 pop
+                  // （B4 计数 crossfade 220ms spring）。A1 内容 bug 修复：waiting/降级分支
+                  // 恒走 syncCounts(0)——头部与组头不再打脸（旧头部 0/组头 5 并存）
+                  if (headSub) {
+                    const next = count + " 项需行动";
+                    if (headSub.textContent !== next) {
+                      headSub.textContent = next;
+                      if (lastCount >= 0) { headSub.classList.remove("notify-badge-pop"); void headSub.offsetWidth; headSub.classList.add("notify-badge-pop"); }
+                    }
+                  }
                   if (railBadge) {
                     railBadge.textContent = String(count);
                     railBadge.hidden = count === 0;
                     railBadge.setAttribute("aria-label", "通知有 " + count + " 项需行动");
                     railBadge.setAttribute("title", "通知 · " + count + " 项需行动");
+                    if (lastCount >= 0 && count !== lastCount) { railBadge.classList.remove("notify-badge-pop"); void railBadge.offsetWidth; railBadge.classList.add("notify-badge-pop"); }
                   }
+                  lastCount = count;
                 }
 
                 // ⑥a-4 来源会话水位块随三列检查器退役（V3 弹窗无检查器位；水位仍在会话域详情可见）
@@ -177,20 +206,30 @@
                       if (window.__ccDeck005NotifyFx.soundOn()) window.__ccDeck005NotifyFx.ding();
                       window.__ccDeck005NotifyFx.desktop(fresh[0].title, fresh[0].body);
                     }
+                    // B5 铃铛摆动（一次性 420ms；仅面板关时——开着时由 stagger/pop 承担）
+                    if (fresh.length && !isOpen()) {
+                      const bell = document.querySelector('.rail-btn[data-domain="notify"]');
+                      if (bell) { bell.classList.remove("bell-swing"); void bell.offsetWidth; bell.classList.add("bell-swing"); }
+                    }
                   }
                   const actionRows = rows.filter((r) => r.active);
                   const attentionRows = rows.filter((r) => !r.active && r.unresolved);
                   const dynamicRows = rows.filter((r) => !r.unresolved);
                   // V3 三级分组：ndot r/y/n = 需你行动/注意/动态（组头带计数）
-                  const group = (label, dot, items) => items.length
-                    ? '<div class="ngrp"><i class="ndot ' + dot + '"></i>' + escapeHtml(label) + '<span class="cnt">' + items.length + "</span></div>" + items.map(rowMarkup).join("")
+                  // A7 组头 v2：11px/600/.05em+语义点+计数 badge+组级清空（hover 显）；
+                  // 需你行动组红点带脉冲（B5 唯一脉冲位——面板开时 CSS 停）
+                  const group = (label, dot, items, grpClear) => items.length
+                    ? '<div class="ngrp"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
+                      + '<span class="cnt">' + items.length + "</span>"
+                      + (grpClear ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
+                      + "</div>" + items.map(rowMarkup).join("")
                     : "";
                   if (rows.length) {
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
-                    const flatHtml = group("需你行动", "r", actionRows)
-                      + group("注意", "y", attentionRows)
-                      + group("动态", "n", dynamicRows);
+                    const flatHtml = group("需你行动", "r", actionRows, "")
+                      + group("注意", "y", attentionRows, "soft")
+                      + group("动态", "n", dynamicRows, "soft");
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
@@ -202,6 +241,12 @@
                         desired.push([nk ? "row:" + nk : "grp:" + (gN++), n.outerHTML]);
                       }
                       rkN(panelBody, desired);
+                      // A1 计数单源根修（1101 审查「头部 0 与组头 5 打脸」真根因）：
+                      // reconcile 快路径曾在此 return——跳过尾部 syncCounts/seen 维护，
+                      // 头部计数恒停旧值。收口两分支共用尾部（counts/seen/首见标记）
+                      for (const r of rows) seenNotifyKeys.add(r.key);
+                      notifySeenInit = true;
+                      syncCounts(actionRows.length);
                       return;
                     }
                     panelBody.replaceChildren(nodesFrom(flatHtml));
@@ -243,7 +288,13 @@
                   const row = lastRows.find((r) => r.key === key);
                   if (!row || dismissedNotifyKeys.has(key)) return;
                   dismissRow(row);
-                  render();
+                  // B5 单卡关闭塌缩：160ms ease-in 高度收束（FLIP 补位由 reconcile 下一帧
+                  // 自然完成）——退场可视后再重渲（旧式瞬消=生硬主诉之一）
+                  const el = panelBody.querySelector('[data-notify-key="' + CSS.escape(key) + '"]');
+                  if (el && el.animate) {
+                    el.classList.add("leaving");
+                    setTimeout(render, 170);
+                  } else render();
                 }
                 function clearAllNotifications() {
                   const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key));
@@ -283,27 +334,73 @@
                 // 铃铛 toggle 走地基点击链的 window.__ccDeck005NotifyPanel；Esc/切域/切形态由
                 // closeTransientOverlays 统一收口；遮罩/× 在下方 section 点击代理处理。
                 let lastFocus = null;
-                function setOpen(open) {
+                // B4 行入场 stagger：面板开（或首帧渲染）后 +50ms 起每卡 +30ms；>6 张
+                // data-stagger-cap=1 整体 60ms 淡入（长列表不拖沓）；reduced-motion 由
+                // token 降级段统一清零。面板已开时的后续 render 不重放（签名跳帧+此处幂等）
+                function playStagger() {
+                  if (!isOpen()) return;
+                  const body = panelBody;
+                  const rows = [...body.querySelectorAll(".nrow")];
+                  body.classList.remove("np-stagger");
+                  body.removeAttribute("data-stagger-cap");
+                  void body.offsetWidth;
+                  if (!rows.length) return;
+                  body.classList.add("np-stagger");
+                  if (rows.length > 6) body.setAttribute("data-stagger-cap", "1");
+                  rows.forEach((r, i) => r.style.setProperty("--st-i", String(Math.min(i, 12))));
+                }
+                // B3 三关闭路径共享退场：遮罩/×/ESC → closePanel()（.closing 播 130ms
+                // ease-in 退场，animationend 真隐藏；退场期 pointer-events:none 由 CSS）
+                function closePanel() {
+                  if (!section.classList.contains("on") || section.classList.contains("closing")) return;
+                  section.classList.add("closing");
+                  const done = () => {
+                    section.classList.remove("on", "closing");
+                    section.removeEventListener("animationend", done);
+                  };
+                  panel.addEventListener("animationend", done, { once: true });
+                  setTimeout(done, 260); // 兜底（reduced-motion 档 animation 可能 0 时长不触发 end）
+                  setOpen(false, true);
+                }
+                function setOpen(open, keepVisual) {
                   const on = !!open;
-                  section.classList.toggle("on", on);
+                  if (!keepVisual) {
+                    if (on) section.classList.add("on");
+                    else if (!section.classList.contains("closing")) section.classList.remove("on");
+                  }
                   section.setAttribute("aria-hidden", on ? "false" : "true");
                   const bell = document.querySelector('.rail-btn[data-domain="notify"]');
                   if (bell) bell.classList.toggle("active", on); // 弹窗开着=铃铛高亮（V3 bell.on 同语言）
                   if (on) {
                     lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
                     panel.focus({ preventScroll: true });
+                    setTimeout(playStagger, 30); // 面板 frame 起手后编排行入场
                   } else if (lastFocus && lastFocus.isConnected) {
                     try { lastFocus.focus({ preventScroll: true }); } catch (_) {}
                     lastFocus = null;
                   }
                 }
                 const isOpen = () => section.classList.contains("on");
-                window.__ccDeck005NotifyPanel = { open: () => setOpen(true), close: () => setOpen(false), toggle: () => setOpen(!isOpen()), isOpen };
+                window.__ccDeck005NotifyPanel = { open: () => setOpen(true), close: () => closePanel(), toggle: () => (isOpen() ? closePanel() : setOpen(true)), isOpen };
+                // B3 ESC + 焦点 Tab 锁（面板=模态 dialog：Tab 循环面板内；Esc 三关闭路径之三）
+                document.addEventListener("keydown", (ev) => {
+                  if (!isOpen() || section.classList.contains("closing")) return;
+                  if (ev.key === "Escape") { ev.preventDefault(); closePanel(); return; }
+                  if (ev.key === "Tab") {
+                    const focusables = panel.querySelectorAll("button, [href], [tabindex]:not([tabindex=\"-1\"])");
+                    if (!focusables.length) return;
+                    const first = focusables[0], lastEl = focusables[focusables.length - 1];
+                    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); lastEl.focus(); }
+                    else if (!ev.shiftKey && document.activeElement === lastEl) { ev.preventDefault(); first.focus(); }
+                  }
+                }, true);
 
                 section.addEventListener("click", (event) => {
                   const target = event.target;
-                  if (target.closest("[data-notify-mask]")) { setOpen(false); return; } // 点外关闭（遮罩即外）
-                  if (target.closest("[data-notify-close]")) { setOpen(false); return; } // 头部 ×
+                  if (target.closest("[data-notify-mask]")) { closePanel(); return; } // B2 点外收起（遮罩命中层；面板内 mousedown 不达遮罩=不穿透）
+                  if (target.closest("[data-notify-close]")) { closePanel(); return; } // 头部 ×（三路径共享退场）
+                  const grpClear = target.closest("[data-notify-grp-clear]");
+                  if (grpClear) { clearSoftNotifications(); return; } // A7 组级清空（注意/动态组头；需行动组无此钮）
                   const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
                   if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");
@@ -316,6 +413,13 @@
                   if (jump) { focusSource(jump); return; }
                   const card = target.closest("[data-notify-card]");
                   if (card && !target.closest("button") && card.dataset.notifyActive !== "true") toast("历史动态 · 已归档，无需处理");
+                });
+                // A8 底栏「查看全部通知」：面板过短时展开（70%↔90vh 一档 toggle，再点回落）
+                section.addEventListener("click", (event) => {
+                  if (!event.target.closest("[data-notify-expand]")) return;
+                  const full = panel.classList.toggle("np-full");
+                  panel.style.maxHeight = full ? "min(90vh, calc(100% - 72px))" : "";
+                  event.target.textContent = full ? "收起面板" : "查看全部通知";
                 });
 
                 bridge.subscribe(() => render());

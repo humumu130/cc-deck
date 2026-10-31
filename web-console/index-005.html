@@ -82,8 +82,9 @@
           <section id="d-notify" aria-hidden="true">
             <div class="notifmask" data-notify-mask></div>
             <div class="notifpanel" data-notify-panel role="dialog" aria-modal="true" aria-labelledby="notifpanel-title" tabindex="-1">
-              <h5 id="notifpanel-title">通知<span class="nsub" data-notify-panel-sub>0 项需行动</span><button class="clr" type="button" data-notify-clear-soft title="清空注意与动态（保留需你行动项）">清空注意/动态</button><button class="icon-btn n-x" type="button" data-notify-close title="关闭通知" aria-label="关闭通知">×</button></h5>
-              <div data-notify-panel-body><div class="readonly-banner" role="status">等待 relay SNAPSHOT…</div></div>
+              <div class="np-head" id="notifpanel-title">通知<span class="nsub" data-notify-panel-sub>0 项需行动</span><button class="icon-btn n-x" type="button" data-notify-close title="关闭通知（Esc）" aria-label="关闭通知">×</button></div>
+              <div class="np-body" data-notify-panel-body><div class="readonly-banner" role="status">等待 relay SNAPSHOT…</div></div>
+              <button class="np-foot" type="button" data-notify-expand title="面板过短时展开查看全部">查看全部通知</button>
             </div>
           </section>
             <script src="js/notify.js"></script>

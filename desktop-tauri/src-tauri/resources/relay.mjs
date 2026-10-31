@@ -58675,7 +58675,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // #92 W-NOTIFY2 E：worker 连败升级（closeOpenDispatches failed 收口边挂点）——路由表
   // failed 计数是唯一跨单事实源（recordRoutingResult 单写口），此处收口后现读。连败判据
   // = failed≥阈值 且 failed>count（失败多于成功的计数近似；严格逐单序列不入账，不新建
-  // 状态）。阈值 env CCR_DISPATCH_FAIL_ESCALATE（缺省 3；0/非数=关）。触发面双通道：
+  // 状态）。阈值 env CCR_DISPATCH_FAIL_ESCALATE（缺省 3；未设/非数=回落 3；≤0=显式关）。触发面双通道：
   // ①emitChainAudit("failure-escalate") 落 events.ndjson+chain-audit.jsonl（可检索归因）
   // ②upsertNotification action 桶可操作（title 直说建议处置）——路由黑名单（failed≥2 且
   // failed>count 即 pickVeteranEligible 剔除）只挡新派单，用户不知情=静默除名；本通知把

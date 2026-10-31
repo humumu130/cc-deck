@@ -135,7 +135,8 @@
     "test:m-graceful": "tsx scripts/test-m-graceful.ts",
     "test:sqlite-task": "node --import tsx/esm scripts/test-sqlite-task.ts",
     "test:conn-page-v2": "tsx scripts/test-conn-page-v2.ts",
-    "test:console-guardrails": "tsx scripts/test-console-guardrails.ts"
+    "test:console-guardrails": "tsx scripts/test-console-guardrails.ts",
+    "test:notify-overhaul": "tsx scripts/test-notify-overhaul.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

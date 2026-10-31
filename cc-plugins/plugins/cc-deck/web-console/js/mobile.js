@@ -38,7 +38,7 @@
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
-      const engineBadge = (s) => s && s.engine ? (window.__ccDeck005EngineBadgeHtml ? window.__ccDeck005EngineBadgeHtml(s.engine, esc(ENGINE_SHORT[s.engine] || s.engine)) : `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>`) : ""; // UI 精修二批：品牌单表借道（PM 收割织合：engine 取 round2 借道版）
+      const engineBadge = (s) => s && s.engine ? (window.__ccDeck005EngineBadgeHtml ? window.__ccDeck005EngineBadgeHtml(ENGINE_BADGE[s.engine] || s.engine, esc(ENGINE_SHORT[s.engine] || s.engine)) : `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>`) : ""; // UI 精修二批：品牌单表借道（PM 收割织合：engine 取 round2 借道版）
       // W-SRC2 #134（本批①三端一致）：源徽章 per-session 化——relay SNAPSHOT 现随每卡下发
       // relay_source（wan resume 面本批补齐后三通道全覆盖），聚合双源下逐卡显真实归属名；
       // 无标卡回落本源名（单源观感不变）。无会话上下文的调用点（组织确认卡/引擎分组）不传参走回落。
@@ -661,14 +661,20 @@
         if (!list) return;
         // #282 MOB keyed：通知行按 n.key 身份对齐（标记已读/清除后行级增删定点，列表滚动
         // 位逐帧存活）；rk 缺席回落旧整串（零删）
+        // 1101 通知面板大修同语言（三端口径一致）：kind badge 六色+时间单轨右贴
+        //（桌面 notifyRelTime 同源经 window 共享，缺席回落桌面无关的简版）+操作轻钮
+        // 统一（primary-btn 大钮退役=移动同「文字链降权」语义）
+        const relT = window.__ccDeck005NotifyRelTime || ((ts) => { const d = Date.now() - (Number(ts) || 0); const m = Math.floor(d / 60000); return m < 60 ? (m < 1 ? "刚刚" : m + " 分钟前") : m < 1440 ? Math.floor(m / 60) + " 小时前" : ""; });
+        const MB = { acceptance: ["验收单", "acceptance"], "org-confirm": ["确认", "confirm"], dispatch: ["派单", "dispatch"], waiting: ["待办", "waiting"], system: ["系统", "system"] };
         const rowOf = (n) => {
           const act = !isDone(n);
           const sid = n.sourceContext && n.sourceContext.sessionId;
           const domain = n.sourceContext && n.sourceContext.domain;
+          const km = MB[n.kind] || MB.system;
           const mainBtn = !act ? "" : sid
-            ? `<button class="primary-btn" type="button" data-notify-mobile-jump="${esc(sid)}">回会话处理</button>`
-            : domain ? `<button class="primary-btn" type="button" data-notify-jump-domain="${esc(domain)}">回${domain === "team" ? "团队" : domain === "project" ? "项目" : "会话"}域处理</button>` : "";
-          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="tag ${act ? "action" : ""}">${act ? (n.group === "action" ? "需行动" : "注意") : "历史"}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}<button class="notify-light-action" type="button" data-mobile-notify-dismiss="${esc(n.key)}" title="清除这条通知" aria-label="清除通知">✕</button></div></article>`;
+            ? `<button class="notify-light-action" type="button" data-notify-mobile-jump="${esc(sid)}">回会话处理</button>`
+            : domain ? `<button class="notify-light-action" type="button" data-notify-jump-domain="${esc(domain)}">回${domain === "team" ? "团队" : domain === "project" ? "项目" : "会话"}域处理</button>` : "";
+          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="nbadge nbadge-${km[1]}">${km[0]}</span><span class="nrow-time">${esc(relT(n.created_at && n.created_at < 1e11 ? n.created_at * 1000 : n.created_at))}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}<button class="notify-light-action" type="button" data-mobile-notify-dismiss="${esc(n.key)}" title="清除这条通知" aria-label="清除通知">✕</button></div></article>`;
         };
         const rkN = window.__ccDeck005Reconcile;
         if (rkN) rkN(list, items.length ? items.map((n) => ["n:" + n.key, rowOf(n)]) : [["n:empty", '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>']]);
