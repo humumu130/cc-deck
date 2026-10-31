@@ -574,9 +574,11 @@
                     : "";
                   const markup = group("活跃项目", activeList) + group("待确认新建项目", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
                   const qSig = "q:" + bSigOf(markup); // #282 三批 N2：未变帧零重建（折叠态/hover 存活）
+                  const moFirstQueue = els.queue.dataset.b2qSig === undefined; // W-UI-MOTION-BATCH：首装沿判（仅首帧 stagger，后续整队重建不重排）
                   if (els.queue.dataset.b2qSig !== qSig || !els.queue.childElementCount) {
                     els.queue.dataset.b2qSig = qSig;
                     els.queue.replaceChildren(nodesFrom(markup));
+                    if (moFirstQueue && els.queue.querySelector("[data-project-key]")) window.__ccDeck005MoStagger?.(els.queue); // W-UI-MOTION-BATCH：项目队列首装 stagger（session 域单口复用）
                   }
                 }
 
