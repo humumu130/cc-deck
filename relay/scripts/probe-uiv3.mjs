@@ -4,12 +4,12 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const WebSocket = require("/Users/xdd/dev/cc-deck/relay/node_modules/ws/index.js");
+const require = createRequire(new URL("../../node_modules/ws/package.json", import.meta.url)); // P2修：相对解析 relay/node_modules（原主 checkout 绝对路径不可移植）
+const WebSocket = require("ws");
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9341 + Math.floor(Math.random() * 400), TAG = process.argv[2] || "after"; // 动态端口：crash 残留的孤儿 Chrome 会占死旧端口（本探针 crash 掉 kill 段的实锤）——新跑连上幽灵实例=陈旧行为假象
 const OUT = `/tmp/w-uiv3-probe/${TAG}`;
-const URL0 = "file:///private/tmp/cc-deck-w-ui-v3-visual/web-console/index-005.html";
+const URL0 = process.argv[3] || "file://" + decodeURIComponent(new URL("../../web-console/index-005.html", import.meta.url).pathname); // P2修：缺省指主仓 web-console（原指向已删 worktree），可用 argv[3] 覆盖
 mkdirSync(OUT, { recursive: true });
 globalThis.__p = spawn(CHROME, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT}`, "--user-data-dir=/tmp/uiv3-cdp-" + TAG + "-" + Date.now(), `--window-size=1440,940`, URL0], { stdio: "ignore" });
 const wait = (ms) => new Promise(r => setTimeout(r, ms));

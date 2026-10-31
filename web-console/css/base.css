@@ -476,7 +476,10 @@
     .pc2-count.is-dim { opacity: .72; }
     .pc2-r2 { display: flex; align-items: center; gap: 4px; min-width: 0; }
     .pc2-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: var(--fs-B); } /* 尾部省略（shortenDir 已做家目录头部缩短；全路径在卡 title 悬停可查） */
-    .pc2-r2 .project-open-btn { flex: none; margin: -4px -4px -4px 0; } /* flex:none 恒不换行——旧 flex-wrap 孤儿图标行根因 */
+    /* P1修（用户1101实锤：图标与需行动徽章重叠）：按钮改卡内绝对定位——右列垂直居中，
+   三行让出 padding-right 34px，徽章/路径任何宽度下结构性不可能与图标同列相撞 */
+#d-project .queue-card.pc2 { padding-right: 34px; }
+.pc2-r2 .project-open-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); flex: none; margin: 0; width: 26px; height: 26px; }
     .pc2-r3 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
     /* W-PROJP1 P1-2：「未立项」置底折叠组头——同 queue-group 标签语言 + 折叠箭头（art-chev 同源 ▸），
        hot 点仅在折叠态显示（「抽屉里有要处理的」提示，不强行展开） */
@@ -2959,8 +2962,7 @@ html[data-theme="light"] .cc-badge.is-alert { background: #FDE8E8; border-color:
 #d-project .vrow.v3 .t { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; } /* C2 两行制：标题行+元信息行（团队卡不再同行） */
 #d-project .vrow.v3 .t b { font-weight: 500; font-size: 13px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; } /* C1 两行 line-clamp 消灭硬切断括号；C4 标题 500（粗体只留状态词与数字） */
 #d-project .vrow.v3 .t b.v3-id { font-family: var(--mono); font-size: 12px; letter-spacing: .03em; } /* C3 裸 UUID 前 8 位等宽（title 悬停全量） */
-#d-project .vrow.v3 .t .s { margin-left: 0; display: flex; align-items: center; gap: 6px; color: #6b7280; font-size: 11px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* B4 状态/元信息文字降权 11/400/#6b7280 */
-html[data-theme="light"] #d-project .vrow.v3 .t .s { color: #6b7280; }
+#d-project .vrow.v3 .t .s { margin-left: 0; display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* B4 状态/元信息文字降权 11/400（P2修：走 token，删冗余 light 覆写） */
 #d-project .vrow.v3 .k { width: 72px; margin-left: auto; align-self: center; } /* C5 右侧固定 72px 徽章列对齐 */
 .v3-prog { flex: none; width: 56px; height: 4px; border-radius: 2px; background: var(--line-soft); overflow: hidden; } /* C8 验收单迷你进度条 */
 .v3-prog i { display: block; height: 100%; border-radius: 2px; background: var(--done); }

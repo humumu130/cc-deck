@@ -38,7 +38,7 @@
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
-      const engineBadge = (s) => s && s.engine ? (window.__ccDeck005EngineBadgeHtml ? window.__ccDeck005EngineBadgeHtml(s.engine, esc(ENGINE_SHORT[s.engine] || s.engine)) : `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>`) : ""; // UI 精修二批：品牌单表借道（PM 收割织合：engine 取 round2 借道版）
+      const engineBadge = (s) => s && s.engine ? (window.__ccDeck005EngineBadgeHtml ? window.__ccDeck005EngineBadgeHtml(ENGINE_BADGE[s.engine] || s.engine, esc(ENGINE_SHORT[s.engine] || s.engine)) : `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>`) : ""; // UI 精修二批：品牌单表借道（PM 收割织合：engine 取 round2 借道版）
       // W-SRC2 #134（本批①三端一致）：源徽章 per-session 化——relay SNAPSHOT 现随每卡下发
       // relay_source（wan resume 面本批补齐后三通道全覆盖），聚合双源下逐卡显真实归属名；
       // 无标卡回落本源名（单源观感不变）。无会话上下文的调用点（组织确认卡/引擎分组）不传参走回落。
