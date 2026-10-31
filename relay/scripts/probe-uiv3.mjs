@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-const require = createRequire(new URL("../../node_modules/ws/package.json", import.meta.url)); // P2修：相对解析 relay/node_modules（原主 checkout 绝对路径不可移植）
+const require = createRequire(new URL("../node_modules/ws/package.json", import.meta.url)); // P2修：相对解析 relay/node_modules（原主 checkout 绝对路径不可移植）
 const WebSocket = require("ws");
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9341 + Math.floor(Math.random() * 400), TAG = process.argv[2] || "after"; // 动态端口：crash 残留的孤儿 Chrome 会占死旧端口（本探针 crash 掉 kill 段的实锤）——新跑连上幽灵实例=陈旧行为假象

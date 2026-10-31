@@ -59,7 +59,7 @@ const targets = [
     // 天然兼容，不用动）
     get: (s) => /^[ \t]*const CONSOLE_VERSION = "(.+?)";/m.exec(s)?.[1],
     set: (s) =>
-      s.replace(/^([ \t]*)const CONSOLE_VERSION = "(?:.+?)";/m, `$1const CONSOLE_VERSION = "${canonical}"`),
+      s.replace(/^([ \t]*)const CONSOLE_VERSION = "(?:.+?)";/m, `$1const CONSOLE_VERSION = "${canonical}";`), // 复审P1①：set 消费尾分号必须补回（index.html 落点），否则下次 --write no-op/--check 恒红卡发版闸
   },
   {
     // 新旧壳共存（用户拍板，2026-10-07）：/app2 的 005 新壳也是在线服务面（relay /app2、

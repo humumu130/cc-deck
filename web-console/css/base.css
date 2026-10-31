@@ -479,7 +479,6 @@
     /* P1修（用户1101实锤：图标与需行动徽章重叠）：按钮改卡内绝对定位——右列垂直居中，
    三行让出 padding-right 34px，徽章/路径任何宽度下结构性不可能与图标同列相撞 */
 #d-project .queue-card.pc2 { padding-right: 34px; }
-.pc2-r2 .project-open-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); flex: none; margin: 0; width: 26px; height: 26px; }
     .pc2-r3 { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
     /* W-PROJP1 P1-2：「未立项」置底折叠组头——同 queue-group 标签语言 + 折叠箭头（art-chev 同源 ▸），
        hot 点仅在折叠态显示（「抽屉里有要处理的」提示，不强行展开） */
@@ -2948,7 +2947,7 @@ html[data-theme="light"] .cc-badge.is-alert { background: #FDE8E8; border-color:
 #d-project .queue-card.pc3 .pc3-meta { color: var(--dim); font-size: 12px; font-weight: 400; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* A1 统计去胶囊：纯文本元信息行（12px 次级 · 分隔，用户点名项） */
 #d-project .queue-card.pc3 .pc2-r1 .cc-badge.is-alert { margin-left: auto; } /* 唯一胶囊位右贴（标题行） */
 #d-project .queue-card.pc3 .pc2-r2 { position: static; }
-#d-project .queue-card.pc3 .pc2-r2 .project-open-btn { position: absolute; top: 10px; right: 10px; margin: 0; } /* A8 文件夹图标绝对定位右上（不再挤路径行） */
+#d-project .queue-card.pc3 .pc2-r2 .project-open-btn { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); margin: 0; width: 26px; height: 26px; } /* A8 文件夹图标绝对定位（复审P1③改版：右列垂直居中，治与需行动徽章残 2px 重叠；原 top:10px 被 translateY 顶出卡顶） */
 /* A7 分组标题：12px/500 + 计数右对齐（项目列表容器内收口，不波及会话/通知的 queue-group） */
 #d-project [data-project-queue] .queue-group { display: flex; align-items: baseline; gap: 6px; margin: 14px 2px 6px; color: var(--dim); font-size: 12px; font-weight: 500; letter-spacing: .02em; }
 #d-project [data-project-queue] .queue-group::after { content: attr(data-count); margin-left: auto; color: var(--faint); font-weight: 500; font-variant-numeric: tabular-nums; }
