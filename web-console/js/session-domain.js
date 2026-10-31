@@ -42,6 +42,28 @@
                 const displayPath = window.__ccDeck005PathUi.displayPath;
                 const baseName = window.__ccDeck005PathUi.baseName;
 
+                // W-UI-MOTION-BATCH 列表首装 stagger 单口（本 IIFE 文档序最早，team/bridge 两域
+                // 经 window 复用；np-stagger 同模式）：宿主挂 .mo-stagger + 逐子 --st-i，
+                // >cap 张走 data-stagger-cap 整体淡入；620ms 撤类（=一次性编排，后续重建不重排）。
+                // 幂等挂 window（各域 IIFE 解析期取用，与 PathUi 同范式）。
+                if (typeof window.__ccDeck005MoStagger !== "function") {
+                  window.__ccDeck005MoStagger = (host, opts) => {
+                    try {
+                      if (!host || !host.childElementCount) return;
+                      const kids = [...host.children];
+                      if (!kids.length) return;
+                      const cap = (opts && opts.cap) || 6;
+                      if (kids.length > cap) host.dataset.staggerCap = "1";
+                      kids.forEach((el, i) => { if (el && el.style) el.style.setProperty("--st-i", String(Math.min(i, cap))); });
+                      host.classList.add("mo-stagger");
+                      setTimeout(() => {
+                        host.classList.remove("mo-stagger");
+                        try { delete host.dataset.staggerCap; } catch (_) {}
+                      }, 620);
+                    } catch (_) { /* 动效编排失败静默——列表功能不受影响 */ }
+                  };
+                }
+
                 const ENGINES = { claude: ["Claude", "claude"], codex: ["Codex", "codex"], trae: ["Trae", "trae"], "qwen-code": ["Qwen Code", "qwen"], codebuddy: ["Codebuddy", "codebuddy"], zcode: ["ZCode", "zcode"], glm: ["GLM", "glm"] };
                 // W-ENGLM（#253）：model→engine 推断词表+共享解析——head/列表卡/消息流头像/
                 // inspector/详情 kv 五链同源（原 MODEL_HINTS 只在 renderHeader 内联，列表卡与
@@ -1606,7 +1628,11 @@
                     const isEmpty = upperContent instanceof Element && upperContent.dataset.sessionEmpty === "true";
                     upper.classList.toggle("is-empty", !!isEmpty); // #103-B3 空态：上段不撑满随内容收缩
                     const rk = window.__ccDeck005Reconcile;
-                    if (!rk) { upper.replaceChildren(upperContent); if (keepScroll > 0) upper.scrollTop = keepScroll; return; } // 工具未载兜底
+                    // W-UI-MOTION-BATCH 首装 stagger（np-stagger 同模式）：仅「无卡→有卡」沿触发
+                    //（首装/空态→首单会话到达），后续逐卡替换不重排；620ms 撤类=一次性编排
+                    const moHadCards = !!upper.querySelector("[data-session-card]");
+                    const moMaybeStagger = () => { if (!moHadCards && upper.querySelector("[data-session-card]")) window.__ccDeck005MoStagger?.(upper); };
+                    if (!rk) { upper.replaceChildren(upperContent); moMaybeStagger(); if (keepScroll > 0) upper.scrollTop = keepScroll; return; } // 工具未载兜底
                     if (isEmpty) { rk(upper, [["empty", upperContent.outerHTML ? upperContent.outerHTML : ""]]); return; }
                     const desired = [];
                     upperContent.childNodes && upperContent.childNodes.forEach && upperContent.childNodes.forEach((n) => {
@@ -1614,6 +1640,7 @@
                     });
                     if (!desired.length) desired.push(["empty", '<div class="readonly-banner"></div>']);
                     rk(upper, desired);
+                    moMaybeStagger();
                     if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 兜底写回（节点复用时通常 no-op）
                   };
                   if (!S.sessions.size) {

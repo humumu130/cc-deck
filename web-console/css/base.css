@@ -3127,3 +3127,58 @@ html[data-theme="light"] .mobile-project-card .pc2m-r1 .cc-badge.is-neutral { ba
     /* 1101 三端一致：mobile 通知卡同语言（nrow-time 类在桌面限 .nrow .t .l1——移动卡直用需独立位） */
     .mobile-notify-card .nrow-time { flex: none; margin-left: auto; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .mobile-notify-card .row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+/* ===== #22 动效全域推广（W-UI-MOTION-BATCH，1101 用户令）：四域+手机端——追加段，
+       不动上方 token 基建 :root 段；本段自有增量 token + 全部动效走 token（禁散落硬编码 ms/曲线）。
+       编排依据 ~/.claude/skills/motion-design patterns：state-feedback（按压/hover <150ms）/
+       entrance-exit（入场 ease-out 位移+透明度）/multi-element（stagger ≤6 卡 30ms 步进封顶）。
+       架构适配（回执缺口表同源）：列表/卡片为 innerHTML/reconcile 重建型——「变化即换新节点」，
+       故换色类 transition 仅对同节点类名翻转路径生效（selected/开关/检查器持久元素），
+       重建型变化过渡（成员灯/统计数字 crossfade）需 keyed 化改造，本批记录不实施 ===== */
+:root { --dur-press: 80ms; --dur-state: 150ms; --stagger-step: 30ms; } /* 增量 token：按压反馈/状态换色/列表 stagger 步进（--dur-* 家族语义同源） */
+
+/* ---------- 一、state-feedback（P1：全站可点元素反馈补齐） ---------- */
+/* 按压反馈（skill corporate 档：scale .97 快落快起，无过冲）：卡片类 */
+.queue-card:active, .mobile-card:active, .member-card:active { transform: translateY(0) scale(.97); }
+/* 按压反馈：按钮类（transform 追加进 transition——append 覆盖原 transition 列表含既有属性，避免只动 transform 一项丢其余） */
+.primary-btn:active, .secondary-btn:active, .icon-btn:active, .kbd-chip:active, .row-share:active, .project-open-btn:active, .windowbar-refresh:active { transform: scale(.97); }
+.primary-btn { transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.secondary-btn, .icon-btn, .kbd-chip, .row-share, .windowbar-refresh { transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out); }
+.queue-card { transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.mobile-card, #d-team .workspace-pane .member-card { transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+/* 设置行/输出物行 hover 反馈（原缺）：提亮走 --dur-fast */
+button.settings-row:hover, .art-row:hover { border-color: var(--border-strong); background: var(--hover); }
+.art-row:active { background: var(--q-row-sel, var(--hover)); }
+/* 行选中态过渡：.queue-card.selected 背景/边框过渡已由上方 transition 覆盖（类名同节点翻转路径，transition 生效） */
+
+/* ---------- 二、entrance-exit（域切换/面板/首装 stagger） ---------- */
+/* 域切换（rail 五屏）：display 翻转即重放（setDesktopDomain 不改 JS）；入场减速曲线+中位移 */
+@keyframes mo-dom-in { from { opacity: 0; transform: translateY(var(--dist-m)); } to { opacity: 1; transform: none; } }
+.desktop-screen.active { animation: mo-dom-in var(--dur-enter) var(--ease-out) both; }
+/* 手机端四屏切换（openMobileRoot 同款 display 翻转，零 JS） */
+.mobile-screen.active { animation: mo-dom-in var(--dur-enter) var(--ease-out) both; }
+/* 设置子页进出（activateSettings 面板 .active 翻转）：小位移+稍短于域切换（层级低一档） */
+@keyframes mo-pane-in { from { opacity: 0; transform: translateY(var(--dist-s)); } to { opacity: 1; transform: none; } }
+.settings-panel.active { animation: mo-pane-in var(--dur-move) var(--ease-out) both; }
+/* 列表首装 stagger（np-stagger 同模式：首装一次性编排，620ms 后撤类——后续逐卡替换不重排）：
+   宿主 .mo-stagger 由 JS 挂（session mountUpper / team projects / project queue 三处首装）；
+   >6 卡 data-stagger-cap="1" 整体 60ms 淡入（微级 cascade 封顶，skill「Micro cascade <200ms」） */
+@keyframes mo-row-in { from { opacity: 0; transform: translateY(var(--dist-m)); } to { opacity: 1; transform: none; } }
+@keyframes mo-cap-fade { from { opacity: 0; } to { opacity: 1; } }
+.mo-stagger > * { animation: mo-row-in var(--dur-move) var(--ease-out) both; animation-delay: calc(var(--st-i, 0) * var(--stagger-step)); }
+.mo-stagger[data-stagger-cap="1"] > * { animation: mo-cap-fade calc(var(--dur-fast) / 2) var(--ease-out) both; animation-delay: 0ms; }
+
+/* ---------- 三、multi-element（状态换色过渡——同节点类名翻转路径） ---------- */
+.status-dot { transition: background var(--dur-state) var(--ease-out), box-shadow var(--dur-state) var(--ease-out); }
+.pc3-dot { transition: background var(--dur-state) var(--ease-out), border-color var(--dur-state) var(--ease-out); }
+.team-state-pill i, #d-team .watchdog-signal i { transition: background var(--dur-state) var(--ease-out), box-shadow var(--dur-state) var(--ease-out); }
+.team-state-pill { transition: color var(--dur-state) var(--ease-out); }
+
+/* ---------- 无障碍降级（本段增量面；上方 :root token 段的降级不动）：位移/stagger 全停，
+       仅留 token 清零后的即时态（≤80ms opacity 由 --dur-enter 80ms 档承载） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-press: 0ms; --dur-state: 0ms; --stagger-step: 0ms; }
+  .desktop-screen.active, .mobile-screen.active, .settings-panel.active, .mo-stagger > * { animation: none !important; }
+  .queue-card:active, .mobile-card:active, .member-card:active,
+  .primary-btn:active, .secondary-btn:active, .icon-btn:active, .kbd-chip:active, .row-share:active, .project-open-btn:active, .windowbar-refresh:active { transform: none; }
+}

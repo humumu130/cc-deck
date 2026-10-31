@@ -953,6 +953,7 @@
                     return html;
                   })() : banner(projectsEmpty());
                   const rkTeam = window.__ccDeck005Reconcile;
+                  const moHadTeamCards = !!projectsEl.querySelector("[data-team-project]"); // W-UI-MOTION-BATCH：首装 stagger 沿判（下方挂点消费）
                   if (rkTeam && state.projects?.length) {
                     const t = document.createElement("template");
                     t.innerHTML = projectsHtml;
@@ -963,7 +964,13 @@
                       desired.push([tid ? "t:" + tid : "grp:" + gN++, n.outerHTML]);
                     }
                     rkTeam(projectsEl, desired);
-                  } else projectsEl.innerHTML = projectsHtml;
+                    // W-UI-MOTION-BATCH 首装 stagger（window.__ccDeck005MoStagger=session 域单口）：
+                    // 仅「无团队卡→有」沿触发一次（keyed reconcile 后续逐卡替换不重排）
+                    if (!moHadTeamCards && projectsEl.querySelector("[data-team-project]")) window.__ccDeck005MoStagger?.(projectsEl);
+                  } else {
+                    projectsEl.innerHTML = projectsHtml;
+                    if (!moHadTeamCards && projectsEl.querySelector("[data-team-project]")) window.__ccDeck005MoStagger?.(projectsEl); // W-UI-MOTION-BATCH：无 reconcile 兜底路径同款首装 stagger
+                  }
                   query("[data-team-title]").textContent = project?.name || "团队";
                   // V8R head 第二行 meta（原型 dhead.row2 语言）：编制/任务卡/待确认/开团时间——
                   // 无团队选中（空态）整行隐藏；数据缺项跳过不占位
