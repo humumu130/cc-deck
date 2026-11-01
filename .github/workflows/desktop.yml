@@ -171,7 +171,7 @@ jobs:
           # 链路：NSIS 内层文件压缩 → 7z 解出 {app}/*.exe（nova 变体改名 cc-deck-nova，
           # 通配兜双名）→ PE 的 .rsrc 段 manifest 为未压缩明文 → grep -a 直证。
           EXE=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)
-          7z x -o"$RUNNER_TEMP/nsis-extract" "$EXE" '{app}\*.exe' >/dev/null 2>&1 || true
+          7z x -o"$RUNNER_TEMP/nsis-extract" "$EXE" >/dev/null 2>&1 || true # CI 修：滤 '{app}\*.exe' 通配在 runner 7z 上对 nova 变体提不出（78 实锤）——全解后 find 兜双名
           BIN=$(find "$RUNNER_TEMP/nsis-extract" -iname '*.exe' ! -iname 'uninst*' | head -1)
           if [ -n "$BIN" ] && grep -a -q 'PerMonitorV2' "$BIN"; then
             echo "✅ DPI manifest 实证：主 exe 含 PerMonitorV2（tao V2 烙印在位）"
