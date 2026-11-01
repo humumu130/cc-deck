@@ -75,12 +75,20 @@
 
       // ---------- 导航栈 ----------
       let mobileReturn = "inbox";
+      let pagerApi = null; // W-MOBILE-SWIPE：setupMobilePager 装载后置（{indexOfRoot, go}）；null=未就绪走原路径
       const screenOf = (root) => document.querySelector(`#m-${root}`);
       const setSingleActive = (el) => document.querySelectorAll(".mobile-screen").forEach((sc) => sc.classList.toggle("active", sc === el));
-      function openMobileRoot(root) {
+      function openMobileRoot(root, opts) {
         const target = screenOf(root);
         if (!target) return;
         mobileReturn = root;
+        // W-MOBILE-SWIPE：四 root 屏走 pager（strip 位移动画，nav 点击与手势同一咽喉）；
+        // pager 未就绪/非 root 屏回落原 display 翻转路径（语义零变）
+        const pagerIdx = pagerApi ? pagerApi.indexOfRoot(root) : -1;
+        if (pagerIdx >= 0) {
+          pagerApi.go(pagerIdx, !(opts && opts.instant));
+          return;
+        }
         setSingleActive(target);
         document.querySelectorAll(".mobile-nav [data-mobile-root]").forEach((b) => b.classList.toggle("active", b.dataset.mobileRoot === root));
         if (root === "inbox") { const list = target.querySelector(".mobile-content"); if (list) list.scrollTop = 0; }
@@ -1000,10 +1008,116 @@
         const detail = screenOf("detail"); // ⑥c-3：详情屏活跃时随桥事件刷新五 tab + 状态坞（保持滚动位）
         if (detail && detail.classList.contains("active") && detailSid) renderMobileDetail(detailSid);
       }
+      // ---------- W-MOBILE-SWIPE（1101 用户 P0）：四屏跟手 pager ----------
+      // strip 化（CSS #stage-mobile.pager-on 段）：四 root 屏 absolute+translateX 百分比
+      // 定位，拖拽实时跟手（无过渡类）；松手吸附=位移>1/3 屏或速度>0.3px/ms（任务书阈值），
+      // --dur-pager/--ease-out 过渡（独立 260ms 档，CSS 段 token）；首末屏阻尼 0.35；方向锁
+      // （首 8px 判主轴，竖向放行原生滚动）；横滚子容器/[data-pager-yield] 让位。nav 点击与
+      // 手势同一咽喉（openMobileRoot→pagerApi.go）；.active/nav 徽标/inbox 滚顶语义与原路径
+      // 逐条对齐。
+      function setupMobilePager() {
+        const stage = document.getElementById("stage-mobile");
+        if (!stage) return;
+        const ROOTS = ["inbox", "team", "project", "settings"];
+        const els = ROOTS.map(screenOf);
+        if (els.some((el) => !el)) return;
+        let cur = 0; // 当前吸附索引
+        let drag = null; // 活动手势
+        let snapT = 0; // 吸附收尾定时器（撤过渡类）
+        const apply = (offsetIdx, extraPx) => { // offsetIdx 可为小数；extraPx=跟手像素
+          for (let i = 0; i < els.length; i++) {
+            const el = els[i];
+            el.style.transform = `translateX(calc(${(i - offsetIdx) * 100}% + ${extraPx || 0}px))`;
+            el.style.visibility = Math.abs(i - offsetIdx) <= 1.05 ? "" : "hidden"; // 只保当前±1 在档
+          }
+        };
+        const syncMarkers = (root) => { // .active/nav 徽标/inbox 滚顶（对齐原 openMobileRoot）
+          const target = screenOf(root);
+          document.querySelectorAll(".mobile-screen").forEach((sc) => sc.classList.toggle("active", sc === target));
+          document.querySelectorAll(".mobile-nav [data-mobile-root]").forEach((b) => b.classList.toggle("active", b.dataset.mobileRoot === root));
+          if (root === "inbox") { const list = target.querySelector(".mobile-content"); if (list) list.scrollTop = 0; }
+        };
+        const go = (idx, animate) => {
+          idx = Math.max(0, Math.min(ROOTS.length - 1, idx));
+          clearTimeout(snapT);
+          els.forEach((el) => el.classList.toggle("pager-anim", !!animate));
+          apply(idx, 0);
+          cur = idx;
+          stage.dataset.pagerState = animate ? "snap" : "";
+          if (animate) snapT = setTimeout(() => { els.forEach((el) => el.classList.remove("pager-anim")); stage.dataset.pagerState = ""; }, 320); /* 320=--dur-pager 260ms + 60ms 收尾宽限（transition 完成后撤类） */
+          syncMarkers(ROOTS[idx]);
+        };
+        const currentIdx = () => { // 以 .active root 屏为准（外路改 .active 后自愈）
+          const act = document.querySelector(".mobile-screen.active");
+          const i = act && act.dataset.mobileRoot ? ROOTS.indexOf(act.dataset.mobileRoot) : -1;
+          return i >= 0 ? i : cur;
+        };
+        const yieldTarget = (t) => { // 横滚子容器/显式让位：手势不归 pager
+          for (let el = t; el && el !== stage; el = el.parentElement) {
+            if (el.hasAttribute && el.hasAttribute("data-pager-yield")) return true;
+            const cs = getComputedStyle(el);
+            if ((cs.overflowX === "auto" || cs.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 2) return true;
+          }
+          return false;
+        };
+        stage.addEventListener("touchstart", (e) => {
+          if (drag || e.touches.length !== 1) return;
+          const act = document.querySelector(".mobile-screen.active");
+          if (!act || !act.dataset.mobileRoot) return; // overlay（详情/通知）在岗不响应
+          if (yieldTarget(e.target)) return;
+          const t = e.touches[0];
+          drag = { x0: t.clientX, y0: t.clientY, lastX: t.clientX, lastT: performance.now(), vx: 0, hist: [], axis: null, base: currentIdx(), w: stage.getBoundingClientRect().width || window.innerWidth };
+        }, { passive: true });
+        stage.addEventListener("touchmove", (e) => {
+          if (!drag) return;
+          const t = e.touches[0];
+          const dx = t.clientX - drag.x0, dy = t.clientY - drag.y0;
+          if (drag.axis === null) {
+            if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; // 未过判轴阈值：等下一拍
+            drag.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
+            if (drag.axis !== "x") { drag = null; return; } // 竖向：放行原生滚动
+          }
+          e.preventDefault(); // 横向接管（断原生拖链/点击合成）
+          const now = performance.now();
+          if (now > drag.lastT) { drag.vx = (t.clientX - drag.lastX) / (now - drag.lastT); drag.lastX = t.clientX; drag.lastT = now; }
+          // 重派②：速度采样改 120ms 窗口（末两点采样在真机丢帧/事件合并下易把 fling 误读为慢——
+          // 窗口均值与 Android VelocityTracker 同思路；窗口内无位移差=慢手势，位移规则主导）
+          drag.hist.push({ x: t.clientX, t: now });
+          while (drag.hist.length > 2 && now - drag.hist[0].t > 120) drag.hist.shift();
+          let applied = dx;
+          if ((dx > 0 && drag.base === 0) || (dx < 0 && drag.base === ROOTS.length - 1)) applied = dx * 0.35; // 边界阻尼
+          els.forEach((el) => el.classList.remove("pager-anim")); // 跟手零过渡
+          stage.dataset.pagerState = "drag";
+          apply(drag.base, applied);
+        }, { passive: false });
+        const end = () => {
+          if (!drag) return;
+          const d = drag;
+          drag = null;
+          if (d.axis !== "x") { stage.dataset.pagerState = ""; return; } // 判轴未成/竖向：零动作
+          const dx = d.lastX - d.x0;
+          // 窗口速度（120ms 均值；样本不足回落末两点采样，再不足=0）
+          let vx = d.vx;
+          if (d.hist.length >= 2) { const a = d.hist[0], b = d.hist[d.hist.length - 1]; if (b.t > a.t) vx = (b.x - a.x) / (b.t - a.t); }
+          let target = d.base;
+          if (Math.abs(dx) > d.w / 3) target = d.base + (dx < 0 ? 1 : -1); // 过 1/3 屏
+          else if (Math.abs(vx) > 0.3) target = d.base - Math.sign(vx); // 速度甩（px/ms）
+          go(target, true);
+        };
+        stage.addEventListener("touchend", end, { passive: true });
+        stage.addEventListener("touchcancel", end, { passive: true });
+        // 装载：初始位以 .active root 屏为准（HTML 静态 m-inbox.active）
+        cur = currentIdx();
+        stage.classList.add("pager-on");
+        apply(cur, 0);
+        pagerApi = { indexOfRoot: (r) => ROOTS.indexOf(r), go: go };
+      }
+
       // W-BLANKSET P0：初始化链逐段兜底——单点炸不断全链（此前 setupMobileDetail 内任何
       // 异常都会让 refreshMobile+订阅全断，手机四屏动态内容全空；1016 实锤）。safe 包裹
       // 后：炸段 console.warn 留痕，其余段照常起。
       const safeInit = (name, fn) => { try { fn(); } catch (err) { console.warn("[005-mobile] " + name + " 初始化失败", err); } };
+      safeInit("setupMobilePager", () => setupMobilePager()); // W-MOBILE-SWIPE：炸则 pagerApi 恒 null，openMobileRoot 自落原路径
       safeInit("setupMobileSettings", () => setupMobileSettings());
       safeInit("setupMobileDetail", () => setupMobileDetail()); // ⑥c-3：收编五 pane + composer 发送接线
       safeInit("refreshMobile", () => refreshMobile());
