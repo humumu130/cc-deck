@@ -2900,10 +2900,11 @@
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
       font-weight: 600; color: var(--text-strong); font-size: 13px; line-height: 19px; overflow-wrap: anywhere;
     }
-    .nrow .t .s { color: var(--faint); font-size: var(--fs-C); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nrow .t .s { color: var(--faint); font-size: var(--fs-C); margin-top: 2px; display: flex; align-items: baseline; min-width: 0; } /* 复审P1-2：flex 容器，裁剪下沉 s-txt */
+    .nrow .t .s .s-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     /* p2-batch2 修（notify 审 P2-4 act/× 同列纵叠让位）：act 挪 L3 摘要行内联（第三列只留 ×），
        行动链与摘要同读线=视觉让位；nid=A9 等宽（hex/版本号/单号 mono+浅底） */
-    .nrow .t .s .act-slot { margin-left: 8px; white-space: nowrap; }
+    .nrow .t .s .act-slot { margin-left: 8px; white-space: nowrap; flex: none; } /* 复审P1-2：恒可见 */
     .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: var(--fs-C); }
     .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); }
     /* A6 操作钮降权=文字链（12px/500 强调色 hover 下划线） */
