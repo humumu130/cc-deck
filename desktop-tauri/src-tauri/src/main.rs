@@ -1601,7 +1601,7 @@ fn main() {
                             *EMBEDDED_RELAY_ERR.lock().unwrap() = Some(
                                 format!("内置 relay 启动后即退出（#36 修：以下为日志尾——真实死因以本段为准，旧「Node 过旧」提示仅作历史参考）：\n{}", {
                         use std::fs;
-                        fs::read_to_string(dirs::home_dir().map(|h| h.join(".cc-deck").join("data").join("embedded-relay.log")).unwrap_or_default()).unwrap_or_default().chars().rev().take(300).collect::<String>().chars().rev().collect::<String>()
+                        fs::read_to_string(std::path::Path::new(&std::env::var("USERPROFILE").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_default())).join(".cc-deck").join("data").join("embedded-relay.log")).unwrap_or_default().chars().rev().take(300).collect::<String>().chars().rev().collect::<String>()
                     }).into(),
                             );
                         }
