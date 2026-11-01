@@ -3209,6 +3209,7 @@ button.settings-row { transition: border-color var(--dur-fast) var(--ease-out), 
   .desktop-screen.active, .mobile-screen.active, .settings-panel.active, .mo-stagger > * { animation: none !important; }
   .queue-card:active, .mobile-card:active, .member-card:active,
   .primary-btn:active, .secondary-btn:active, .icon-btn:active, .kbd-chip:active, .row-share:active, .project-open-btn:active, .windowbar-refresh:active { transform: none; }
+} /* P0 热修（uifollowup 审查实锤）：动画批 RM 块漏此闭合括号——W-SCROLLBAR/席位批/后续追加段全被吞成死规则（CSSOM 51 条被吞；正常模式滚动条/离席徽章/按压降级全失） */
 
 /* =============== W-SCROLLBAR（1101 用户重提）：会话/项目列表滚动条微信式显隐 ===============
    背景：原生滚动条常驻，暗色主题下泛白扎眼（通知面板审查视角三第 9 条同病）。
