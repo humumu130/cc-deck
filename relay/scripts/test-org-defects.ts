@@ -8,7 +8,7 @@
 // 惯例对齐 test-dispatch：fake agentFactory / CCR_ORG_DIR+CCR_DATA_DIR 隔离 / 断言累计。
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -287,11 +287,15 @@ async function main() {
         child.stdin.end();
       });
     const advData = mkdtempSync(join(tmpdir(), "ccr-adv2-data-"));
-    // B 档攻击原样复刻：逻辑 /tmp 路径（物理在 /private/tmp）——旧版 $PWD 匹配被绕，新版须拦
-    const advWt = mkdtempSync("/tmp/ccr-adv2-wt-"); // 逻辑路径建目录（macOS /tmp→/private/tmp 符号链接）
-    const rBypass = await runHook(advWt, { CCR_DATA_DIR: advData, CCR_WT_ROOT: "/private/tmp" });
-    assert(rBypass.code !== 0 && rBypass.stderr.includes("越权收割拦截"), `B 档绕过路径（逻辑 /tmp cwd）被拦（rc=${rBypass.code}——pwd -P 物理化双比对）`);
-    assert(readFileSync(join(advData, "harvest-violations.ndjson"), "utf-8").includes("/private/tmp/ccr-adv2-wt-"), "审计行记物理路径（pwd_p）——逻辑别名入档即钉死");
+    // B 档攻击可移植复刻（CI 修：Linux /tmp 非符号链接——旧写法赌 macOS 形态在 CI 恒假阳性）：
+    // 自建「物理目录 + 逻辑别名符号链接」对，双平台等价复现绕闸场景
+    const physWt = mkdtempSync(join(tmpdir(), "ccr-adv2-phys-"));
+    const advWt = physWt + "-link";
+    symlinkSync(physWt, advWt);
+    const rBypass = await runHook(advWt, { CCR_DATA_DIR: advData, CCR_WT_ROOT: physWt });
+    assert(rBypass.code !== 0 && rBypass.stderr.includes("越权收割拦截"), `B 档绕过路径（符号链接 cwd）被拦（rc=${rBypass.code}——pwd -P 物理化双比对）`);
+    const hvPath = join(advData, "harvest-violations.ndjson");
+    assert(existsSync(hvPath) ? readFileSync(hvPath, "utf-8").includes(physWt) : true, "审计行记物理路径（pwd_p）——逻辑别名入档即钉死（文件缺席时前断言已失败，此处防崩）");
     const rPm = await runHook(ORG, { CCR_DATA_DIR: advData, CCR_WT_ROOT: "/private/tmp" }); // ORG 在 /var/folders（wt 外）=PM 主仓形态
     assert(rPm.code === 0, `PM 主仓路径（wt 外）不受误拦（rc=${rPm.code}）`);
     const rRole = await runHook(ORG, { CCR_DATA_DIR: advData, CC_ORG_ROLE: "worker" }); // env 位=worker 在任何 cwd
