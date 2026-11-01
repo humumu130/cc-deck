@@ -43,8 +43,8 @@ console.log("== #102 批 A web：needs_auth 状态点 + 指引链 ==");
   ok(fn({ state: "needs_auth", auth_hint: "终端运行 codebuddy-code，输入 /login 完成登录" }) === "未登录 · 终端运行 codebuddy-code，输入 /login 完成登录", "A2 needs_auth → 「未登录 · <hint>」（auth_hint 透传）");
   ok(fn({ state: "needs_auth" }).startsWith("未登录 · "), "A3 needs_auth 无 hint → 兜底文案仍「未登录 ·」前缀");
   ok(fn({ state: "ready", models: ["a", "b"] }) === "2 个模型" && fn({ state: "ready" }).includes("已就绪"), "A4 ready 语义零改动（回归锚）");
-  ok(fn({ state: "unsupported", preflight: { reason: "占位" } }).includes("不支持"), "A5 unsupported 语义零改动（回归锚）");
-  ok(fn({ state: "unavailable", preflight: { reason: "CLI 未装" } }).includes("不可用"), "A6 unavailable 语义零改动（回归锚）");
+  ok(fn({ state: "unsupported", preflight: { reason: "占位" } }).includes("即将支持") && !fn({ state: "unsupported", preflight: { reason: "占位" } }).includes("不支持"), "A5 unsupported 分层文案版（rebase 合并裁决：HEAD「即将支持 · 当前版本暂不可用」保留——比分支「未接入」多一层可期语义；开发术语「不支持·占位」退役锚不变）");
+  ok(fn({ state: "unavailable", id: "codex", label: "Codex" }).includes("未安装 · 需先安装 Codex CLI"), "A6 unavailable=「未安装 · 需先安装 X CLI」给动作（件C 升级锚）");
 }
 
 // ---- B. 引擎菜单分组（openEngineMenu：needs_auth 单列组+灰置+黄点） ----
@@ -77,7 +77,7 @@ console.log("== #102 批 A web：needs_auth 状态点 + 指引链 ==");
 
 // ---- E. 会话运行时兜底显示链（MERGE_KEYS/SESSION_ERROR/详情指引行） ----
 {
-  ok(/MERGE_KEYS = \[[^\]]*"auth_hint"\]/.test(html), "E1 MERGE_KEYS 收容 auth_hint（UPDATE 增量合并白名单——null 清除语义）");
+  ok(/MERGE_KEYS = \[[^\]]*"auth_hint"/.test(html), "E1 MERGE_KEYS 收容 auth_hint（UPDATE 增量合并白名单——null 清除语义；rebase 注记：W-SRC2 #134 在其后追加 relay_source，正则去掉尾邻 \] 约束）");
   const onErr = blockFrom("function onErrorEvt(sid, p) {");
   ok(onErr.includes("p.auth_hint"), "E2 onErrorEvt 存 SESSION_ERROR 帧 auth_hint");
   ok(html.includes('s.status === "ERROR" && s.auth_hint') && html.includes("🔑"), "E3 详情面板 ERROR 态附登录指引行（🔑 前缀区别 ⚠ 错误行）");

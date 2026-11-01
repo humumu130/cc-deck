@@ -38,11 +38,11 @@
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";
       const byPinnedUpdated = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updated_at || 0) - (a.updated_at || 0);
       const sessionTitle = (s) => oneLine(s.title || s.initial_prompt || s.session_id);
-      const engineBadge = (s) => s && s.engine ? (window.__ccDeck005EngineBadgeHtml ? window.__ccDeck005EngineBadgeHtml(ENGINE_BADGE[s.engine] || s.engine, esc(ENGINE_SHORT[s.engine] || s.engine)) : `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>`) : ""; // UI 精修二批：品牌单表借道（PM 收割织合：engine 取 round2 借道版）
+      const engineBadge = (s) => s && s.engine ? (window.__ccDeck005EngineBadgeHtml ? window.__ccDeck005EngineBadgeHtml(ENGINE_BADGE[s.engine] || s.engine, esc(ENGINE_SHORT[s.engine] || s.engine)) : `<span class="engine-badge ${ENGINE_BADGE[s.engine] || ""}">${esc(ENGINE_SHORT[s.engine] || s.engine)}</span>`) : ""; // UI 精修二批：品牌单表借道（PM 收割织合：engine 取 round2 借道版）；followup 件C/H1 对齐：品牌图标统一 __ccDeck005EngineBadgeHtml 单口（rebase 合并裁决）
       // W-SRC2 #134（本批①三端一致）：源徽章 per-session 化——relay SNAPSHOT 现随每卡下发
       // relay_source（wan resume 面本批补齐后三通道全覆盖），聚合双源下逐卡显真实归属名；
       // 无标卡回落本源名（单源观感不变）。无会话上下文的调用点（组织确认卡/引擎分组）不传参走回落。
-      const sourceBadge = (s) => { const raw = (s && typeof s.relay_source === "string" && s.relay_source) || bridge.relayName || location.host; const n = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(raw) : raw; return `<span class="source-badge">${esc(n)}</span>`; }; // 件十三：命名映射统一（PM 收割织合：source 保 W-SRC2 per-session 版）
+      const sourceBadge = (s) => { const raw = (s && typeof s.relay_source === "string" && s.relay_source) || bridge.relayName || location.host; const n = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(raw) : raw; return `<span class="source-badge" data-src-slug="${esc(window.__ccDeck005SrcSlug ? window.__ccDeck005SrcSlug(n) : "")}">${esc(n)}</span>`; }; // 件十三：命名映射统一（PM 收割织合：source 保 W-SRC2 per-session 版）+ followup 件E：data-src-slug 供徽章配色覆写定位（rebase 合并）
       const catalog = () => { const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {}; const caps = snap.source_capabilities || {}; return Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; };
       const getSessionProject = (s) => { // #158-批4a：前缀匹配归一化（与 B2 getSessionProject 同口径）
         const cwd = String((s && s.cwd) || "").replace(/[\\/]/g, "/").replace(/\/+$/, "");
@@ -71,8 +71,7 @@
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
         const bg = mBgCount(s);
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${mobileRetiredTag(s.session_id)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
-      };
+        return `<div class="mobile-card" data-st="${esc(String(s.status || '').toLowerCase())}" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${mobileRetiredTag(s.session_id)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;      };
 
       // ---------- 导航栈 ----------
       let mobileReturn = "inbox";

@@ -47,9 +47,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
+// node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -5666,9 +5666,9 @@ var init_session_write = __esm({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
+// node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
+  "node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -5689,9 +5689,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
+// node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -5764,9 +5764,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
+// node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
+  "node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -5814,9 +5814,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
+// node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -6197,9 +6197,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
+// node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
+  "node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -6398,9 +6398,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
+// node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
+  "node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -7021,9 +7021,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
+// node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
+  "node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -7514,9 +7514,9 @@ var require_sender = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
+// node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
+  "node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -7743,9 +7743,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
+// node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
+  "node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -7896,9 +7896,9 @@ var require_extension = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
+// node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
+  "node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -8792,9 +8792,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
+// node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
+  "node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -8890,9 +8890,9 @@ var require_stream = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
+// node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -8935,9 +8935,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
+// node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -9336,9 +9336,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -9348,9 +9348,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -9370,9 +9370,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -9408,9 +9408,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num3, shift) {
       if (num3.length === void 0) {
@@ -9460,9 +9460,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -9476,9 +9476,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -9700,9 +9700,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -9712,9 +9712,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -9961,9 +9961,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -9996,9 +9996,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
+// node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -10316,9 +10316,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
+// node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -10406,9 +10406,9 @@ var require_main = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -10424,9 +10424,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
+// node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -10467,9 +10467,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
+// node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -10522,9 +10522,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
+// node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10657,9 +10657,9 @@ var require_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
+// node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10804,9 +10804,9 @@ var require_registry = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
+// node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
+  "node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -11000,9 +11000,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
+// node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
+  "node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -11081,9 +11081,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
+// node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
+  "node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -11162,9 +11162,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
+// node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
+  "node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -11199,9 +11199,9 @@ var require_classes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
+// node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
+  "node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -11293,9 +11293,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
+// node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -11486,9 +11486,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
+// node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
+  "node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -12914,9 +12914,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
+// node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
+  "node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -12963,9 +12963,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
+// node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
+  "node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -13136,9 +13136,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
+// node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -13192,9 +13192,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
+// node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13303,9 +13303,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -13329,9 +13329,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -13340,9 +13340,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -13362,9 +13362,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
+// node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13561,9 +13561,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
+// node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13616,9 +13616,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
+// node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -17367,6 +17367,35 @@ function findStaleGroups(now, staleDays, dir, memberActivity) {
   }
   return out;
 }
+var RETIRED_LEDGER = "retired-entries.jsonl";
+function appendRetiredEvent(ev2, dir) {
+  const d2 = dir ?? orgDir();
+  try {
+    mkdirSync10(d2, { recursive: true });
+    appendJournal(join21(d2, RETIRED_LEDGER), { ...ev2 });
+  } catch {
+  }
+}
+function listRetiredEvents(dir) {
+  const d2 = dir ?? orgDir();
+  const out = [];
+  try {
+    const raw = readFileSync17(join21(d2, RETIRED_LEDGER), "utf-8");
+    for (const line of raw.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const ev2 = JSON.parse(t);
+        if (ev2 && typeof ev2.session_id === "string" && typeof ev2.gid === "string" && (ev2.cause === "manual" || ev2.cause === "idle-trim" || ev2.cause === "group-disband")) {
+          out.push({ ts: Number(ev2.ts) || 0, gid: ev2.gid, session_id: ev2.session_id, cause: ev2.cause, ...ev2.detail ? { detail: String(ev2.detail) } : {} });
+        }
+      } catch {
+      }
+    }
+  } catch {
+  }
+  return out;
+}
 
 // src/permission-policy.ts
 var WIRE_TO_NORMALIZED = {
@@ -18439,7 +18468,7 @@ import { accessSync as accessSync3, constants as constants5 } from "node:fs";
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -54393,6 +54422,9 @@ function kindLabel(kind) {
     // X0 件2：org join 自荐入编确认卡通知标签
     case "device-trust":
       return "\u8DE8\u673A\u9996\u8054";
+    // X1 多机编排：设备级 first-contact 确认卡通知标签
+    case "headcount-trim-first":
+      return "\u9996\u6B21\u7F16\u5236\u6E05\u7406";
   }
 }
 function compact(text, max = 160) {
@@ -60448,6 +60480,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             this.closeOpenDispatches(sidFull, "failed", reason ? truncate(`\u6210\u5458\u9000\u4F11\uFF1A${reason}`, 200) : "\u6210\u5458\u9000\u4F11\uFF0C\u56DE\u5408\u4E2D\u65AD", false, false, gid);
           }
           removeMember(gid, sidFull);
+          appendRetiredEvent({ ts: Date.now(), gid, session_id: sidFull, cause: "manual", ...reason ? { detail: reason } : {} });
           this.emitOrgState();
           this.emitBoard(gid);
           try {
@@ -60626,6 +60659,16 @@ provider=${opts.provider ?? "default"}` : void 0,
             this.emitBoard(gid);
           }
           break;
+        case "headcount-trim-first": {
+          if (gid && findGroup(gid)?.status === "active") {
+            const keepMs = typeof c.payload.keep_idle_ms === "number" && c.payload.keep_idle_ms >= 0 ? c.payload.keep_idle_ms : 72 * 36e5;
+            const r = this.trimHeadcounts({ onlyGid: gid, viaConfirm: true, keepIdleMs: keepMs });
+            if (r.ok && r.data.totalTrimmed === 0) {
+            }
+            this.emitOrgState();
+          }
+          break;
+        }
         case "revive":
           if (gid) {
             const r = setGroupStatus(gid, "active");
@@ -61668,10 +61711,66 @@ ${msg2}`);
   // 防骚扰）。dryRun 只出报告不动盘（orgAction headcount-trim 预览面）。
   // onlyGid：只清本组（派单触顶路径用——「开新 worker 前先清过期旧席」轻量触发，
   // 不全组扫描）。
+  // [W-SEAT-SEMANTICS]（用户 1101 拍板 C 模式批次一）trim 三策略化：
+  //   ① keepIdleMs 缺省 24h→72h（72h 无活动才算闲置；CCR_ORG_TRIM_HOURS 仍是节拍旋钮）
+  //   ② auto 轮（boot/定时）每 gid **首次**裁编不直接裁——出 headcount-trim-first 确认卡
+  //     （名单+闲置时长+理由），✓ 后 viaConfirm 重入真裁，此后该 gid 永直裁；✗ 本轮不裁
+  //     24h 冷却后再提（防 6h 轮轰炸）。首次判定=轮次账（headcount-trim-journal）无该 gid
+  //     既往轮。手动面（orgAction headcount-trim/确认卡副作用/派单触顶 onlyGid）不设闸——
+  //     显式意图或容量必需，直接执行并照常落账（落账即转「已裁过」态）
+  //   ③ 报告改 append 轮次制：org/headcount-trim-journal.ndjson 每轮一行（5MB 滚动）；
+  //     旧 headcount-trim-report.json 保留最新一份覆盖写（boot 日志/既有消费兼容，双写
+  //     同源同构无漂移）
   trimHeadcounts(opts) {
     const now = Date.now();
-    const keepIdleMs = opts?.keepIdleMs ?? 24 * 36e5;
+    const keepIdleMs = opts?.keepIdleMs ?? 72 * 36e5;
     const groups = [];
+    const gated = [];
+    let priorRoundGids = null;
+    let trimConfirms = null;
+    const gateBlocks = (gid, name, list) => {
+      if (priorRoundGids === null) {
+        priorRoundGids = /* @__PURE__ */ new Set();
+        try {
+          const raw = readFileSync37(join46(orgDir(), "headcount-trim-journal.ndjson"), "utf-8");
+          for (const line of raw.split("\n")) {
+            const t = line.trim();
+            if (!t) continue;
+            try {
+              const row = JSON.parse(t);
+              if (typeof row.gid === "string") priorRoundGids.add(row.gid);
+            } catch {
+            }
+          }
+        } catch {
+        }
+      }
+      if (trimConfirms === null) {
+        trimConfirms = listConfirms().filter((c) => c.kind === "headcount-trim-first" && typeof c.payload?.gid === "string").map((c) => ({ gid: String(c.payload.gid), status: c.status, decided_at: c.decided_at ?? 0 }));
+      }
+      if (priorRoundGids.has(gid)) return false;
+      if (trimConfirms.some((c) => c.gid === gid && c.status === "pending")) {
+        gated.push({ gid, name, note: "\u9996\u88C1\u786E\u8BA4\u5361\u5F85\u51B3\uFF0C\u672C\u8F6E\u8DF3\u8FC7" });
+        return true;
+      }
+      const COOLDOWN = 24 * 36e5;
+      if (trimConfirms.some((c) => c.gid === gid && c.status === "rejected" && c.decided_at && now - c.decided_at < COOLDOWN)) {
+        gated.push({ gid, name, note: "\u9996\u88C1\u63D0\u8BAE 24h \u5185\u88AB\u5426\uFF0C\u51B7\u5374\u4E2D" });
+        return true;
+      }
+      const hours = Math.round(keepIdleMs / 36e5);
+      const confirm = addConfirm({
+        kind: "headcount-trim-first",
+        title: `\u9996\u6B21\u7F16\u5236\u6E05\u7406\uFF1A${name}\uFF08\u62DF\u88C1 ${list.length} \u5E2D\uFF09`,
+        reason: `${hours}h \u65E0\u6D3B\u52A8\u7684\u6CDB worker \u5C06\u51FA\u7F16\u5236\uFF08\u4F1A\u8BDD\u4E0E\u8DEF\u7531\u6863\u6848\u4FDD\u7559\uFF0C\u590D\u62C9\u8D70\u6210\u5458\u7BA1\u7406\uFF09\uFF1B\u6B64\u540E\u81EA\u52A8\u6E05\u7406\u4E0D\u518D\u8BE2\u95EE`,
+        payload: { gid, keep_idle_hours: hours, keep_idle_ms: keepIdleMs, list }
+        // keep_idle_ms=决议重入同窗重算依据（防提案/决议两窗不一致裁零）
+      });
+      this.emitOrgState();
+      gated.push({ gid, name, confirm_id: confirm.id, note: "\u9996\u88C1\u5DF2\u51FA\u786E\u8BA4\u5361\uFF0C\u5F85\u7528\u6237\u51B3\u8BAE" });
+      console.log(`[headcount-trim] ${name}: \u9996\u88C1\u51FA\u786E\u8BA4\u5361\uFF08${list.length} \u5E2D\u5F85\u88C1\uFF0C\u7B49\u5F85\u51B3\u8BAE\uFF09`);
+      return true;
+    };
     for (const g2 of listGroups()) {
       if (g2.status !== "active") continue;
       if (opts?.onlyGid && g2.id !== opts.onlyGid) continue;
@@ -61690,6 +61789,7 @@ ${msg2}`);
         last_active: this.lastActiveOfSid(t.entry.session_id),
         reason: t.reason
       }));
+      if (opts?.auto && !opts.dryRun && !opts.viaConfirm && gateBlocks(g2.id, g2.name, trimReport)) continue;
       groups.push({ gid: g2.id, name: g2.name, before: g2.headcount.length, after: plan.keep.length, trimmed: trimReport });
       if (!opts?.dryRun) {
         const r = setGroupHeadcount(g2.id, plan.keep);
@@ -61697,6 +61797,9 @@ ${msg2}`);
           console.warn(`[headcount-trim] ${g2.name} \u88C1\u526A\u5199\u76D8\u5931\u8D25: ${r.error}\uFF08\u672C\u7EC4\u8DF3\u8FC7\uFF0C\u4E0B\u8F6E\u91CD\u8BD5\uFF09`);
           groups.pop();
           continue;
+        }
+        for (const t of trimReport) {
+          appendRetiredEvent({ ts: now, gid: g2.id, session_id: t.session_id, cause: "idle-trim", detail: `\u95F2\u7F6E ${Math.max(1, Math.round((now - t.last_active) / 36e5))}h \xB7 ${t.reason}` });
         }
         for (const t of plan.trimmed) {
           const s = this.sessions.get(t.entry.session_id);
@@ -61716,11 +61819,12 @@ ${msg2}`);
       } catch {
       }
       for (const x of groups) {
+        appendJournal(join46(orgDir(), "headcount-trim-journal.ndjson"), { ts: now, gid: x.gid, name: x.name, before: x.before, after: x.after, trimmed: x.trimmed, via: opts?.viaConfirm ? "confirm" : opts?.auto ? "auto" : "manual", ...opts?.keepIdleMs ? { keep_idle_ms: opts.keepIdleMs } : {} });
         console.log(`[headcount-trim] ${x.name}: ${x.before} \u2192 ${x.after} \u5E2D\uFF08\u88C1 ${x.trimmed.length}\uFF09`);
       }
       this.upsertNotification("system", `headcount-trim-${now}`, String(now), {
         title: `\u7F16\u5236\u6E05\u7406\uFF1A\u88C1\u51CF ${totalTrimmed} \u5E2D`,
-        body: truncate(groups.map((x) => `${x.name} ${x.before}\u2192${x.after} \u5E2D`).join("\uFF1B") + "\u3002\u88AB\u88C1\u6210\u5458\u51FA\u7F16\u5236\u4E0D\u5220\u4F1A\u8BDD\uFF0C\u6E05\u5355\u89C1 headcount-trim-report.json", 160),
+        body: truncate(groups.map((x) => `${x.name} ${x.before}\u2192${x.after} \u5E2D`).join("\uFF1B") + "\u3002\u88AB\u88C1\u6210\u5458\u51FA\u7F16\u5236\u4E0D\u5220\u4F1A\u8BDD\uFF0C\u8F6E\u6B21\u8D26\u89C1 headcount-trim-journal.ndjson", 160),
         severity: "info",
         group: "activity",
         actionable: false,
@@ -61729,7 +61833,7 @@ ${msg2}`);
       });
       this.emitOrgState();
     }
-    return { ok: true, data: { groups, totalTrimmed } };
+    return { ok: true, data: { groups, totalTrimmed, ...gated.length ? { gated } : {} } };
   }
   // 裁剪节拍：boot 首轮（index.ts 显式调）+ 定时（CCR_ORG_TRIM_HOURS 缺省 6，0=关
   // 定时；CCR_NO_HEADCOUNT_TRIM=1 全停——测试/沙盒缝，与 CCR_NO_AUTOREVIVE 同范式）。
@@ -61741,7 +61845,7 @@ ${msg2}`);
       if (ms > 0) {
         this.trimTimer = setInterval(() => {
           try {
-            this.trimHeadcounts();
+            this.trimHeadcounts({ auto: true });
           } catch {
           }
         }, ms);
@@ -61772,12 +61876,17 @@ ${msg2}`);
     if (!g2) return;
     for (const h of g2.headcount) {
       const s = this.sessions.get(h.session_id);
-      if (!s || s.state.external || this.isLeaderSession(h.session_id)) continue;
+      if (!s) {
+        appendRetiredEvent({ ts: Date.now(), gid, session_id: h.session_id, cause: "group-disband", detail: reasonText });
+        continue;
+      }
+      if (s.state.external || this.isLeaderSession(h.session_id)) continue;
       if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) {
         this.closeOpenDispatches(h.session_id, "failed", reasonText, false, false, gid);
       }
       if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) continue;
       this.retireSession(s, gid, mode);
+      appendRetiredEvent({ ts: Date.now(), gid, session_id: h.session_id, cause: "group-disband", detail: reasonText });
     }
   }
   // 停流收口（挂起/结项共用）：gen 递增让旧流回调全让位（身份守卫）——停流后的
@@ -61921,6 +62030,25 @@ ${msg2}`);
     }
     return [...retired].sort();
   }
+  /** [W-SEAT-SEMANTICS] 离席富化名单（用户 1101 拍板 C 模式批次一）——retiredMemberSids()
+   * 的成因增强版，SNAPSHOT.retired_entries / RETIRED_SESSIONS_UPDATED.retired_entries 同源。
+   * 口径纪律：状态=推导（同上两本账现算），成因=入库（org/retired-entries.jsonl 三动作点
+   * 记账：member-retire=manual / trim=idle-trim / 组挂起结项=group-disband）。同 sid 多次
+   * 入席/离席取**末笔**（复拉后再裁=新 idle-trim 覆盖旧成因——「现状成因」语义）；无账
+   * 条目（历史退休/记账前事件）cause 缺席，端上回落「离席」泛词（零数据迁移）。 */
+  retiredMemberEntries() {
+    const sids = this.retiredMemberSids();
+    if (!sids.length) return [];
+    const lastEv = /* @__PURE__ */ new Map();
+    for (const ev2 of listRetiredEvents()) {
+      const prev = lastEv.get(ev2.session_id);
+      if (!prev || ev2.ts >= prev.ts) lastEv.set(ev2.session_id, { cause: ev2.cause, ts: ev2.ts, ...ev2.detail ? { detail: ev2.detail } : {} });
+    }
+    return sids.map((sid) => {
+      const ev2 = lastEv.get(sid);
+      return { session_id: sid, ...ev2 ? { cause: ev2.cause, since: ev2.ts, ...ev2.detail ? { detail: ev2.detail } : {} } : {} };
+    });
+  }
   // [W-RETIRED] 名单变化广播（瞬态 delta 检测）：编制面全部写点（member-retire/
   // member-add/trimHeadcounts/组状态迁移/派单入编）都收口在 emitOrgState 之后，
   // 尾部挂此单点零遗漏；名单不变零帧（幂等），变化即 RETIRED_SESSIONS_UPDATED
@@ -61936,7 +62064,13 @@ ${msg2}`);
     const prev = this.lastRetiredBroadcast;
     if (prev && prev.length === cur.length && prev.every((v, i) => v === cur[i])) return;
     this.lastRetiredBroadcast = cur;
-    this.bus.emitTransient("RETIRED_SESSIONS_UPDATED", { retired_session_ids: cur });
+    let entries;
+    try {
+      entries = this.retiredMemberEntries();
+    } catch {
+      entries = void 0;
+    }
+    this.bus.emitTransient("RETIRED_SESSIONS_UPDATED", { retired_session_ids: cur, ...entries ? { retired_entries: entries } : {} });
   }
   // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------
   // 触发器：boot + 每小时扫描；窗口天数 CCR_ORG_STALE_DAYS 覆盖（默认 14，0=关）。
@@ -62827,7 +62961,7 @@ function extractUrls(logFile) {
 // src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
+// node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -68579,6 +68713,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // 隐藏/沉「已退休成员」归档组（用户 1029 反馈根治）；sessions 照常全量下发
           // 不滤（历史可查，编制退休≠会话删除）。增量面走 RETIRED_SESSIONS_UPDATED
           retired_session_ids: mgr2.retiredMemberSids(),
+          retired_entries: mgr2.retiredMemberEntries(),
+          // [W-SEAT-SEMANTICS] 富化双载（旧端读 ids 零破坏）
           // W-DESIGNHUB 系统设计图纸清单（设置-关于「系统设计图纸」区 + 项目域总览
           // 「设计图纸」区数据源；空数组/缺键 = 入口隐藏——旧 relay 与缺 docs 部署
           // 自动降级。移动端暂缓，云通道不带）
@@ -69850,6 +69986,8 @@ var CloudClient = class {
         // [W-RETIRED] 退休成员会话名单（与 ws-server 直连快照同源同步，#117 教训）
         // ——端上会话列表默认隐藏/归档分组；sessions 照常全量下发不滤（历史可查）
         retired_session_ids: this.mgr.retiredMemberSids(),
+        retired_entries: this.mgr.retiredMemberEntries(),
+        // [W-SEAT-SEMANTICS] 富化双载（云通道同步带成因）
         // M13-2 v2 投影协议能力位（与 ws-server 直连快照同源同步，#117 教训——云桥
         // 手机与 LAN 端同判五态渲染/delta merge 分支；WAN 极简集不带）
         // P81-9 kill-switch off：permission 摘要停发（与 ws-server 直连快照同源同步，
@@ -70723,7 +70861,7 @@ decisionNotify.start();
 var parkedRehydrated = mgr.rehydrateParkedMembers();
 mgr.startStaleScan();
 try {
-  const trim = mgr.trimHeadcounts();
+  const trim = mgr.trimHeadcounts({ auto: true });
   if (trim.data.totalTrimmed > 0) {
     console.log(`[headcount-trim] boot \u9996\u8F6E\uFF1A\u88C1\u51CF ${trim.data.totalTrimmed} \u5E2D\uFF08${trim.data.groups.map((g2) => `${g2.name} ${g2.before}\u2192${g2.after}`).join("\uFF1B")}\uFF09\uFF0C\u6E05\u5355\u89C1 org/headcount-trim-report.json`);
   }

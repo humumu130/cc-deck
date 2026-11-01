@@ -5,7 +5,7 @@
                 const boardExpanded = new Set(); // 1014 用户定版词表：待认领/进行中/待审查/待收单/完成（批4b 改向作废）
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
-                const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"]]);
+                const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"], ["headcount-trim-first", "编制清理"]]); // [W-SEAT-SEMANTICS] 首裁确认卡标签（缺席时卡面裸显 kind 串）
                 // 件十（2026-10-11 用户实锤）：tier 措辞口语化——显示层映射「正经立项→正式项目 /
                 // 轻立项→轻量项目」；存储值保持旧词（创建载荷 option value/relay 校验/org CLI 参数
                 // 全不动，旧数据零迁移）。新增显示点一律走 tierDisplay()
@@ -17,7 +17,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all" }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -46,7 +46,7 @@
                 // W-UIPOLISH ⑧：源名统一走 sourceDisplayName 映射（localhost→本机）——
                 // 件十三只清了 9 处，团队域整域漏网（用户实锤团队名称旁仍挂 localhost）
                 const srcName = (n) => (window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : String(n || ""));
-                const sourceBadge = () => '<span class="source-badge">' + escape(srcName(state.source)) + "</span>";
+                const sourceBadge = () => '<span class="source-badge" data-src-slug="' + escape(window.__ccDeck005SrcSlug ? window.__ccDeck005SrcSlug(srcName(state.source)) : "") + '">' + escape(srcName(state.source)) + "</span>"; // 件E：slug 供徽章配色覆写定位
                 // #245 A（W-SRCLABEL-MIG）：团队列表卡源胶囊——cardtags2 款（源色 E6 底/白字/
                 // 圆角 4.5/电脑图标转白，会话列表 src-cap 同构）；源=组内成员会话 relay_source
                 // 去重（state.sessions 为桥全量双源持有）；≤2 枚枚举、超出收「N 源」；
@@ -276,6 +276,16 @@
                     ownerBits.push('<span class="tchip disp-pend" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 等待处理</span>');
                   }
                   ownerBits.push('<span class="tchip owner">' + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>");
+                  // [W-SEAT-SEMANTICS]（用户 1101 拍板）done 卡时间维度：owner 已离席 → 小灰徽章
+                  // 「已离席」（title 带成因三拆详情）；在席不显示（降噪）；旧 relay 无
+                  // retired_entries（undefined）同样不显示=等价在席降噪，零破坏
+                  if (isDone && task.owner_session && state.retiredEntries) {
+                    const oret = state.retiredEntries.get(task.owner_session);
+                    if (oret) {
+                      const causeTxt = oret.cause === "manual" ? "手动除名" : oret.cause === "group-disband" ? "随组归档（组挂起/结项）" : oret.cause === "idle-trim" ? "闲置超时出编" : "离席（成因无记录）";
+                      ownerBits.push('<span class="tchip retired-badge" title="承接者已离席 · ' + escape(causeTxt + (oret.detail ? " · " + oret.detail : "")) + '">已离席</span>');
+                    }
+                  }
                   const fullText = String(task.text || task.id);
                   // 1013 件6：卡面标题渲染层 cap60 归一（relay 建卡已 cap，存量卡/owner 前缀回填
                   // 路径漏网在此兜底；title 属性与悬浮详情仍全文）
@@ -424,11 +434,24 @@
                   };
                   const columns = lanes.map(([status, label]) => {
                     const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
-                    const laneRes = laneBody(status, items);
-                    const body = laneRes.html;
+                    let laneRes = laneBody(status, items);
+                    let body = laneRes.html;
+                    let visibleN = laneRes.visibleN;
+                    // [W-SEAT-SEMANTICS] 板卡时间维度：done 泳道 >7 天陈卡折叠「已完成（早期）」
+                    // 组（<details> 默认收起——卡面降噪；时间基线=updated_at 回落 ts，0 值不折）。
+                    // 计数改近期可见数（折叠数在 summary 行自显）；未拆分路径零变化
+                    if (status === "done" && items.length > 1) {
+                      const cut = Date.now() - 7 * 86_400_000;
+                      const stale = items.filter((t) => { const last = Number(t.updated_at || t.ts || 0); return last > 0 && last < cut; });
+                      const recent = items.filter((t) => !stale.includes(t));
+                      if (stale.length && recent.length) {
+                        body = laneBody(status, recent).html + '<details class="lane-stale"><summary>已完成（早期） · ' + stale.length + '</summary><div class="lane-stale-body">' + laneBody(status, stale).html + "</div></details>";
+                        visibleN = recent.length;
+                      }
+                    }
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + laneRes.visibleN + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数） */
+                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数） */
                     // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
                     // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
                     // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
@@ -1175,6 +1198,9 @@
                   state.boards.clear(); state.receipts.clear(); state.loads.clear(); state.flights.clear(); state.accepted.clear();
                   state.source = context?.relayName || payload.relay_name || "当前来源";
                   state.sessions = new Map((Array.isArray(payload.sessions) ? payload.sessions : []).filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
+                  // [W-SEAT-SEMANTICS] 离席富化面锚定（能力位=Map 在场；缺席=旧 relay——板卡
+                  // done 徽章不渲染=在席降噪语义，等价于「present 时不显示」）
+                  state.retiredEntries = Array.isArray(payload.retired_entries) ? new Map(payload.retired_entries.filter((e) => e && typeof e.session_id === "string").map((e) => [e.session_id, e])) : undefined;
                   // W-DESIGNHUB：图纸清单锚定（能力位=数组存在；缺=旧 relay 不挂区）
                   state.designDocs = Array.isArray(payload.design_docs) ? payload.design_docs.filter((d) => d && typeof d.path === "string" && typeof d.title === "string") : undefined;
                   updateProjects(payload.projects);
@@ -1219,6 +1245,14 @@
                   if (message?.type === "EXPERIENCE_UPDATED" && Array.isArray(payload?.entries)) { updateExperiences(payload.entries); render(); return true; }
                   // W-RULES2 铁律域帧（EXPERIENCE_UPDATED 同构）：覆盖式消费；rulesArm/rulesForm 保持
                   if (message?.type === "RULES_UPDATED" && Array.isArray(payload?.entries)) { updateRules(payload.entries); render(); return true; }
+                  // [W-SEAT-SEMANTICS] 离席名单/成因增量帧（settings wrapper 透传）——板卡 done
+                  // 徽章与组名三拆的实时刷新面；帧缺 entries 保旧值（relay 读账降级）
+                  if (message?.type === "RETIRED_SESSIONS_UPDATED") {
+                    if (Array.isArray(payload?.retired_entries)) state.retiredEntries = new Map(payload.retired_entries.filter((e) => e && typeof e.session_id === "string").map((e) => [e.session_id, e]));
+                    else if (Array.isArray(payload?.retired_session_ids) && state.retiredEntries) { const live = new Set(payload.retired_session_ids.filter((x) => typeof x === "string")); for (const k of [...state.retiredEntries.keys()]) if (!live.has(k)) state.retiredEntries.delete(k); }
+                    render();
+                    return true;
+                  }
                   return false;
                 }
                 function bind({ command = null, online = false } = {}) {
