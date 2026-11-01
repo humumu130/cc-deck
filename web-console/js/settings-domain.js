@@ -3810,7 +3810,7 @@ function connectLan(ctx) {
             const api = this.api(); if (api) { try { api.snapshot(p, { relayName: agg ? "聚合 · 全部源" : this.ctxName(context) }); } catch {} }
             return;
           }
-          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED" && message.type !== "RULES_UPDATED") return; // W-EXPP2/W-RULES2：经验域+规则域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
+          if (message.type !== "PROJECTS_UPDATED" && message.type !== "BOARD_UPDATED" && message.type !== "ORG_CONFIRM_UPDATED" && message.type !== "EXPERIENCE_UPDATED" && message.type !== "RULES_UPDATED" && message.type !== "RETIRED_SESSIONS_UPDATED") return; // 补审P1：离席帧放行（原漏致 team-domain 离席徽章 handler 死码+板卡离席态仅快照更新） // W-EXPP2/W-RULES2：经验域+规则域帧放行（帧双载恒带 entries 全量，走下方覆盖式透传，B3 吃全量）
           const api = this.api(); if (!api) return;
           const p = message.payload || {};
           const teamContext = { relayName: this.ctxName(context) };
