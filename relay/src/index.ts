@@ -3,6 +3,7 @@ import { seal, unseal } from "./e2e.js";
 import { networkInterfaces, homedir, hostname, tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { attachAgentActivator } from "./agent-activator.js";
@@ -61,13 +62,21 @@ process.on("unhandledRejection", (reason) => {
   try {
     const prev = Number(readFileSync(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
-      process.kill(prev, 0); // 活着会抛？不——活着不抛，死了抛 ESRCH
-      // 走到这 = 旧进程还活着：让位退出（exe 内嵌场景另一进程正服务 8787）。
-      // 压 5s 再退：supervisor bat 循环重启，立即退出会热旋（每秒拉起即退烧 CPU）。
-      // 顶层 await 永挂阻断后续初始化，5s 后由 timer 收走进程
-      console.log(`[relay] 数据目录已被 pid=${prev} 的 relay 占用（单实例锁），5s 后让位退出`);
-      setTimeout(() => process.exit(0), 5_000);
-      await new Promise<never>(() => {});
+      // #37（1101 用户公司机实锤：断电重启后僵尸锁永久堵门）——Windows 下 kill(pid,0)
+      // 对已死 pid 常回 EPERM（权限位）而非 ESRCH：EPERM 误判「活着」→ 永久让位死循环。
+      // 平台分支真验活：win32 用 tasklist 权威查询；posix 维持信号探测。
+      const alive = process.platform === "win32"
+        ? (() => { try { const out = execSync(`tasklist /FI "PID eq ${prev}" /FO CSV /NH`, { stdio: ["ignore", "pipe", "ignore"] }).toString(); return new RegExp(`(^|,)"?${prev}"?,`).test(out) || out.includes(String(prev)); } catch { return false; } })()
+        : (() => { try { process.kill(prev, 0); return true; } catch { return false; } })();
+      if (!alive) {
+        console.log(`[relay] 单实例锁 pid=${prev} 已死（${process.platform === "win32" ? "tasklist 验证" : "信号验证"}，陈旧锁——#37 断电场景），接管继续`);
+      } else {
+        // 旧进程真活着：让位退出（exe 内嵌场景另一进程正服务 8787）。
+        // 压 5s 再退：supervisor bat 循环重启，立即退出会热旋（每秒拉起即退烧 CPU）。
+        console.log(`[relay] 数据目录已被 pid=${prev} 的 relay 占用（单实例锁），5s 后让位退出`);
+        setTimeout(() => process.exit(0), 5_000);
+        await new Promise<never>(() => {});
+      }
     }
   } catch (e) {
     // ESRCH=旧进程已死（陈旧锁）/ ENOENT=无锁：正常继续，下方接管
