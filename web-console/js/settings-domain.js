@@ -657,9 +657,14 @@ function connectLan(ctx) {
         const overrides = sourceNameOverrides();
         return (Object.prototype.hasOwnProperty.call(overrides, n) && overrides[n]) || n;
       }
-      // W-UIFB ①：连接图标（旧版 connChip 线条电脑图标同形移植）注入全部 trigger 壳
+      // W-UIFB ①：连接图标（旧版 connChip 线条电脑图标同形移植）注入 trigger 壳。
+      // W-STATUSBAR-OVERHAUL：桌面 windowbar 壳改纯状态点（CSS 渲染 7px 圆点，绿/琥珀/灰），
+      // 电脑形 SVG 只注入移动 sourcebar 壳（移动端形态本批不动）
       const SOURCE_CONN_SVG = '<svg viewBox="0 0 16 13" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.2" y="1.5" width="13.6" height="9" rx="1.6"/><path d="M5.5 12.5h5" stroke-linecap="round"/></svg>';
-      document.querySelectorAll("[data-source-conn]").forEach((el) => { el.innerHTML = SOURCE_CONN_SVG; });
+      document.querySelectorAll("[data-source-conn]").forEach((el) => {
+        if (el.closest(".windowbar")) { el.innerHTML = ""; return; }
+        el.innerHTML = SOURCE_CONN_SVG;
+      });
       function refreshSourceSwitchers() {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
@@ -680,9 +685,34 @@ function connectLan(ctx) {
         const count = bridge && bridge.sessions ? bridge.sessions.size : 0;
         const summary = !bridge || state === "unconfigured" ? "点开菜单连接其他电脑" : online ? String(count) + " 会话" : state === "connecting" ? "连接中…" : "已断开 · 自动重连中"; /* W-PILL4 ③：去「· 在线」状态词 */
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
+          // W-STATUSBAR-OVERHAUL：桌面 windowbar 壳=状态胶囊（未连接后缀「· 未连接」+
+          // 多源下拉箭头）；移动 sourcebar 壳保持旧形态（纯源名）
+          const isBar = !!switcher.closest(".windowbar");
+          const multiSource = !!(cloudLinked || pairedCloud.length);
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
           switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
-          switcher.querySelectorAll("[data-current-source]").forEach((el) => { el.textContent = name; });
+          switcher.querySelectorAll("[data-current-source]").forEach((el) => {
+            if (isBar && bridge && state !== "unconfigured" && !online) {
+              el.innerHTML = "";
+              el.append(document.createTextNode(name));
+              const note = document.createElement("span");
+              note.className = "src-conn-note";
+              note.textContent = " · 未连接";
+              el.append(note);
+            } else { el.textContent = name; }
+          });
+          if (isBar) switcher.querySelectorAll("[data-source-trigger]").forEach((tr) => {
+            let chev = tr.querySelector(".src-chev");
+            if (multiSource && !chev) {
+              chev = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+              chev.setAttribute("class", "icon-inline src-chev");
+              chev.setAttribute("aria-hidden", "true");
+              const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+              use.setAttribute("href", "#icon-chev-down");
+              chev.append(use);
+              tr.append(chev);
+            } else if (!multiSource && chev) { chev.remove(); }
+          });
           // W-WINPAIR：云桥源行——云链激活或共享库有已配对云源时注入（与静态本机行并列，点击真切换）
           const menu = switcher.querySelector("[data-source-menu]");
           if (menu) {
@@ -4075,7 +4105,15 @@ function connectLan(ctx) {
         } catch { clearTimeout(timer); done(false); }
       }
       document.addEventListener("click", (event) => {
-        if (event.target.closest("[data-refresh-all]")) refreshAllData();
+        // W-STATUSBAR-OVERHAUL B4：点击 300ms 单圈反馈（reflow 重启连点；busy 态长转不受影响）
+        const refreshBtn = event.target.closest("[data-refresh-all]");
+        if (refreshBtn) {
+          const ico = refreshBtn.querySelector(".icon-inline");
+          if (ico && !refreshBtn.classList.contains("busy")) {
+            ico.classList.remove("spin-once"); void ico.offsetWidth; ico.classList.add("spin-once");
+          }
+          refreshAllData();
+        }
       });
 
       document.addEventListener("click", (event) => {

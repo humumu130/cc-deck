@@ -16,29 +16,61 @@
        --chrome→--rail；rail 自身 border-right 保留（第二列分界，不是割裂源）。
        W-UIFB ②（合并裁决）：test.9 验收 i=2 浅色残留=border 之外的浅色投影所致，
        投影规则已撤（:1545 区）；背景维持 --rail 融合形态 */
-    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--rail); }
+    /* ===== W-STATUSBAR-OVERHAUL（1101 用户令·三路审查合并）：bar 分层+状态语义+克制规范 =====
+       三路收敛诊断「没状态/没层次/没规范」落地：bar 底色提亮一档+hairline 收口（禁阴影）；
+       高度 34→40px 8pt 栅格；全 bar 唯一彩色=胶囊状态点（绿 #3FB950/琥珀 #F59E0B）；
+       图标同族 16px/stroke1.5/round；「CC Deck」标题退役（app 名在 Dock/关于页，第三次出现零信息）。
+       注意：本段新增规则只写在雷前区（文件尾部 @media reduce 未闭合地雷 3207 仍在，append=被吞）。 */
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; background: var(--windowbar-bg); border-bottom: 1px solid var(--windowbar-line); }
+    .windowbar { --windowbar-bg: #1A1E24; --windowbar-line: rgba(255, 255, 255, 0.08); --windowbar-ink: rgba(255, 255, 255, 0.55); --windowbar-trigger-line: rgba(255, 255, 255, 0.12); --windowbar-hover: rgba(255, 255, 255, 0.06); --windowbar-active: rgba(255, 255, 255, 0.10); --windowbar-dot-ok: #3FB950; --windowbar-dot-warn: #F59E0B; --windowbar-dot-idle: rgba(255, 255, 255, 0.28); }
+    html[data-theme="light"] .windowbar { --windowbar-bg: #FAFAFA; --windowbar-line: rgba(0, 0, 0, 0.08); --windowbar-ink: #71717A; --windowbar-trigger-line: rgba(0, 0, 0, 0.12); --windowbar-hover: rgba(0, 0, 0, 0.05); --windowbar-active: rgba(0, 0, 0, 0.09); --windowbar-dot-idle: rgba(0, 0, 0, 0.25); } /* 浅色 zinc-50/zinc-500 档 */
     /* W-UIFIX A（2026-10-11 test.11 真机反馈「比其他软件小多了」）：9px→12px 对齐 macOS
-       系统灯标准直径，间距 6→8px；色值本就是 mac 标准三色（下方 nova 覆盖段） */
-    .window-dots { display: flex; gap: 8px; }
+       系统灯标准直径，间距 6→8px；色值本就是 mac 标准三色（下方 nova 覆盖段）。
+       W-STATUSBAR 标题退役后交通灯区让位：首内容距灯 ≥28px */
+    .window-dots { display: flex; gap: 8px; margin-right: 28px; }
     .window-dots i { width: 12px; height: 12px; border-radius: 50%; background: var(--window-dot); }
-    /* W-TOPBAR ②：源胶囊固定左位（紧跟应用名，不随右侧内容变化）——标题退 flex，
-       弹性占位 .windowbar-spring 吸收自由宽（自身也是拖拽区）；⌘K 教学提示退役 */
-    .window-title {flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--fs-B); white-space: nowrap; text-overflow: ellipsis;}
     .windowbar-spring { flex: 1 1 0; min-width: 0; }
     /* FB2 遗产：域提示文字仍在顶栏右簇的只剩 team/project/notify/settings 四域静态摘要；
-       会话域（工作目录/最近活动）已迁第三列 head（.head-meta），顶栏不再随会话抖动 */
-    .windowbar-hint {flex: 0 1 auto; min-width: 0; max-width: 340px; overflow: hidden; color: var(--dim); font: var(--fs-B) var(--mono); text-overflow: ellipsis; white-space: nowrap;}
+       会话域（工作目录/最近活动）已迁第三列 head（.head-meta），顶栏不再随会话抖动。
+       W-STATUSBAR：次级字阶 12px/500（mono 计数不变），色压到 --windowbar-ink 档 */
+    .windowbar-hint {flex: 0 1 auto; min-width: 0; max-width: 340px; overflow: hidden; color: var(--windowbar-ink); font: var(--fs-B) var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap;}
     .windowbar-hint:empty { display: none; }
-    /* 1013 件9：顶栏页内刷新钮——重拉全量 SNAPSHOT（保 tab/滚动），主连接零扰动 */
-    .windowbar-refresh { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
-    .windowbar-refresh:hover { color: var(--text); background: var(--hover); }
-    .windowbar-refresh .icon-inline { width: 14px; height: 14px; }
-    .windowbar-refresh.busy { pointer-events: none; color: var(--faint); }
+    /* 1013 件9：顶栏页内刷新钮——重拉全量 SNAPSHOT（保 tab/滚动），主连接零扰动。
+       W-STATUSBAR B4（独立 ghost 路线）：28×28/hover 6% 白/active 10%/图标 16px stroke1.5
+       同族；点击 300ms 单圈反馈（spin-once，busy 态沿用 .8s 长转） */
+    .windowbar-refresh { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--windowbar-ink); cursor: pointer; }
+    .windowbar-refresh:hover { color: var(--text); background: var(--windowbar-hover); }
+    .windowbar-refresh:active { background: var(--windowbar-active); }
+    .windowbar .icon-inline { width: 16px; height: 16px; stroke-width: 1.5; } /* C6 图标同族统一（bar 内全部图标 16/1.5/round——.icon-inline 基样式已 round） */
+    .windowbar-refresh.busy { pointer-events: none; color: var(--windowbar-ink); }
     .windowbar-refresh.busy .icon-inline { animation: wrefSpinKf .8s linear infinite; }
+    .windowbar-refresh .icon-inline.spin-once { animation: wrefSpinOnceKf 300ms cubic-bezier(.4, 0, .2, 1); }
     @keyframes wrefSpinKf { to { transform: rotate(360deg); } }
+    @keyframes wrefSpinOnceKf { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    /* W-STATUSBAR B3：胶囊规范——28px 高/radius 6/描边 12% 白；状态点=全 bar 唯一彩色
+       （绿=连接/琥珀=未连接含连不上/灰=未配置）；多源时右 12px 下拉箭头；文字 12px/500 */
+    .windowbar .source-trigger { min-height: 28px; gap: 8px; padding: 0 10px; border: 1px solid var(--windowbar-trigger-line); border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; }
+    .windowbar .source-trigger:hover { border-color: rgba(255, 255, 255, 0.24); background: var(--windowbar-hover); }
+    html[data-theme="light"] .windowbar .source-trigger:hover { border-color: rgba(0, 0, 0, 0.24); }
+    .windowbar .source-trigger strong { word-spacing: 2px; } /* D8 中英混排 2px 呼吸（「本机 Relay」产品词） */
+    .windowbar .source-trigger .src-conn-note { color: var(--windowbar-ink); font-weight: 500; }
+    .windowbar .source-trigger .src-chev { width: 12px; height: 12px; color: var(--windowbar-ink); }
+    .windowbar .source-conn { width: 7px; height: 7px; border-radius: 50%; margin-left: 1px; background: var(--windowbar-dot-idle); }
+    .windowbar .source-conn.conn-on { background: var(--windowbar-dot-ok); box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.14); }
+    .windowbar .source-conn.conn-wait { background: var(--windowbar-dot-warn); animation: windowbarDotBlink 1.1s ease-in-out infinite; }
+    .windowbar .source-conn.conn-fail { background: var(--windowbar-dot-warn); }
+    .windowbar .source-conn.conn-idle { background: var(--windowbar-dot-idle); }
+    @keyframes windowbarDotBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    /* W-STATUSBAR C5 唯一彩色落底：Windows 三钮同样压到 ink 档（关闭钮 hover 红保留=破坏性动作惯例） */
+    .windowbar-winbtns button { color: var(--windowbar-ink); }
+    .windowbar-winbtns button:hover { background: var(--windowbar-hover); color: var(--text); }
+    /* D11 就地 reduce 降级（自闭合块，勿入尾段——3207 未闭合地雷）：旋转/呼吸动画全停 */
+    @media (prefers-reduced-motion: reduce) {
+      .windowbar-refresh.busy .icon-inline, .windowbar-refresh .icon-inline.spin-once, .windowbar .source-conn.conn-wait { animation: none !important; }
+    }
     /* #158-②③ windowbar 桌面化：Tauri 壳内真拖拽区+Windows 三钮（浏览器保持原型装饰零变化） */
     .windowbar { user-select: none; -webkit-user-select: none; }
-    .windowbar-winbtns { display: none; align-items: stretch; flex: none; margin: 0 -13px 0 6px; }
+    .windowbar-winbtns { display: none; align-items: stretch; flex: none; margin: 0 -12px 0 6px; } /* 审查P2-①：win-nova 1px 溢出批致回归 -13→-12 */
     .windowbar-winbtns button {
       display: grid; place-items: center; width: 44px; height: 34px; border: 0; border-radius: 0;
       background: transparent; color: var(--dim); cursor: default; font-size: 11px; line-height: 1;
