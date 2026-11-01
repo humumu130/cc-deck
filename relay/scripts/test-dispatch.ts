@@ -159,7 +159,12 @@ async function main() {
     const did1 = d1.ok ? (d1 as { dispatch_id: string }).dispatch_id : "";
     const rec1 = created.find((c) => c !== created[0] && c.prompt?.startsWith("[随手办 派单]"));
     assert(!!rec1 && rec1.cwd === anchor, "spawn 携纪律模板 + cwd 锚项目");
-    assert(!!rec1 && rec1.prompt === wrapDispatchPrompt("随手办", "把 README 的错别字改掉"), "模板全文一致（wrapDispatchPrompt）");
+    // C-MODE-B2 模块8 后置重排：稳定段前缀以 [随手办 派单] 起头逐字节一致；同锚有历史
+    // done 单时模块7 差异块（Since your last run）按单注入=尾部动态段——「全文一致」
+    // 收敛为「稳定段前缀一致」（动态段断言在 test-cmode-batch2）
+    // 返工③ P0-2：.prompt 可选成员窄化（rp1 提取——三次成员调用不再 TS18048）
+    const rp1 = rec1?.prompt ?? "";
+    assert(!!rec1 && rp1.startsWith("[随手办 派单]") && rp1.includes("把 README 的错别字改掉") && rp1.includes("—— 派单纪律"), "模板结构一致（稳定段前缀+任务在尾+纪律段在——wrapDispatchPrompt 后置重排）");
     assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === wid1)?.permission_mode === "bypassPermissions"), "权限 bypassPermissions（冲刺 F-10：无人值守派单，CLI 层审批=派单黑洞，纪律约束在 prompt/台账侧）");
     const w1 = mgr.snapshot().find((s) => s.session_id === wid1);
     assert(w1?.dispatch_tier === "随手办", "会话态档位=随手办");

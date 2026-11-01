@@ -294,11 +294,11 @@ section("\nS5 升格（复制语义/词表外 fail-closed/超长拒）");
   assert(p5.ok && p5.entry.text === "改写后的一句话红线", "显式改写文本放行（promote 可改写）");
 }
 
-// ---------- S6 wrapDispatchPrompt 落位（规则→岗位→经验→纪律）+ 兼容形态 ----------
-section("\nS6 prompt 落位与兼容（谱系序 task→规则→岗位→经验→纪律）");
+// ---------- S6 wrapDispatchPrompt 落位（模块8 后置重排：稳定段 岗位→规则→纪律；尾区 任务→经验）+ 兼容形态 ----------
+section("\nS6 prompt 落位与兼容（C-MODE-B2 模块8 后置重排：稳定段岗位<规则<纪律、尾区任务<经验）");
 {
   const wp0 = wrapDispatchPrompt("随手办", "任务正文");
-  assert(wp0.startsWith("[随手办 派单]\n任务正文"), "两参形态不破（KWP1 前兼容）");
+  assert(wp0.startsWith("[随手办 派单]") && wp0.indexOf("任务正文") > wp0.indexOf("勿跨单假设"), "两参形态不破：稳定段前缀起头+任务在尾区（模块8 后置重排）");
   assert(wp0.includes("（回执末行可选申报经验"), "教学行恒在");
   const exp = "—— 团队经验（1 条）——\n[fact][通用] x\n—— 尾 ——";
   const role = "—— 岗位纪律（开发工程师）——\n- 行";
@@ -308,12 +308,12 @@ section("\nS6 prompt 落位与兼容（谱系序 task→规则→岗位→经验
   const iRole = wp3.indexOf("岗位纪律");
   const iExp = wp3.indexOf("团队经验");
   const iDisc = wp3.indexOf("派单纪律");
-  assert(iRules > -1 && iRules < iRole && iRole < iExp && iExp < iDisc, "落位：规则块在岗位块前、岗位在经验前、全部在纪律段前（拍板 #9）");
-  assert(wp3.indexOf("红线甲") < iRole, "铁律行在岗位块之前（谱系序）");
+  assert(iRole > -1 && iRole < iRules && iRules < iDisc && iExp > iDisc, "落位：岗位<规则<纪律（稳定段）+经验在纪律段后尾区（模块8 后置重排，返工③断言升级）");
+  assert(wp3.indexOf("红线甲") > iRole && wp3.indexOf("红线甲") < iDisc, "铁律行随规则块在岗位块之后、纪律段之前（模块8 谱系序）");
   assert(wp3.includes("派单纪律恒优先"), "纪律段恒优先尾注维持（KWP1 拍板 #5 不动）");
   // 旧四参形态（KWP1 调用形状）不破
   const wp2 = wrapDispatchPrompt("轻立项", "任务", exp, role);
-  assert(wp2.indexOf("岗位纪律") < wp2.indexOf("团队经验") && wp2.indexOf("团队经验") < wp2.indexOf("派单纪律"), "四参旧形态落位不破（KWP1 断言口径）");
+  assert(wp2.indexOf("岗位纪律") < wp2.indexOf("派单纪律") && wp2.indexOf("派单纪律") < wp2.indexOf("团队经验"), "四参旧形态落位不破（岗位稳定段+经验尾区——模块8 序）");
   assert(!wp2.includes("团队规则（"), "无规则块时不出现空块");
 }
 

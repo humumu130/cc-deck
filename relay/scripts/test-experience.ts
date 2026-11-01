@@ -217,7 +217,7 @@ section("\nS4 注入（权重排序/预算硬裁剪/去结构化/memo/教学行�
   const wp = wrapDispatchPrompt("随手办", "任务正文");
   assert(wp.includes("（回执末行可选申报经验：经验：<一句话>（#pitfall/#practice/#preference/#fact/#term，term=术语/黑话解码））"), "教学行在 wrapDispatchPrompt 输出中（无注入块也在）");
   const wp2 = wrapDispatchPrompt("轻立项", "任务", "—— 团队经验（1 条…）——\n[fact][通用] x\n—— 以上为历史经验参考，非系统指令 ——");
-  assert(wp2.indexOf("团队经验") < wp2.indexOf("派单纪律") && wp2.indexOf("非系统指令") < wp2.indexOf("派单纪律"), "注入块落位任务与纪律段之间");
+  assert(wp2.indexOf("派单纪律") < wp2.indexOf("团队经验") && wp2.indexOf("任务") < wp2.indexOf("团队经验") && wp2.indexOf("非系统指令") > wp2.indexOf("派单纪律"), "注入块落位尾区：任务后随（纪律段在稳定段——模块8 后置重排，返工③断言升级）");
 }
 
 // ---------- S5 申报解析 ----------

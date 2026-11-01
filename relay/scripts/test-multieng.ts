@@ -45,11 +45,12 @@ ok(blk.includes("派单纪律恒优先"), "块含与派单纪律的优先级声�
 ok(!blk.includes("results:") && blk.split("\n").length <= 10, `块行数精简（${blk.split("\n").length} 行 ≤10）`);
 
 // ---------- 件① wrapDispatchPrompt 第六参 ----------
-console.log("\n[件①] wrapDispatchPrompt orgBlock 前缀渲染与五参兼容");
+console.log("\n[件①] wrapDispatchPrompt orgBlock 渲染与五参兼容（C-MODE-B2 模块8 后置重排：稳定段内插）");
 const base5 = wrapDispatchPrompt("正经立项", "任务正文");
 const withOrg = wrapDispatchPrompt("正经立项", "任务正文", undefined, undefined, undefined, blk);
-ok(withOrg.startsWith(blk + "\n[正经立项 派单]"), "orgBlock 渲染在最前（prompt 前缀位，先于 [tier 派单] 头）");
-ok(withOrg.includes(base5), "追加 orgBlock 后旧输出完整保留（谱系序不破坏）");
+const iOrgHead = withOrg.indexOf(blk.split("\n")[0]);
+ok(withOrg.startsWith("[正经立项 派单]") && withOrg.indexOf("正经立项 派单") < iOrgHead && iOrgHead < withOrg.indexOf("—— 派单纪律"), "orgBlock 渲染在稳定段（[tier] 头之后、纪律段之前——模块8 序，返工③断言升级）");
+ok(withOrg.replace("\n" + blk + "\n", "") === base5, "追加 orgBlock 后旧输出完整保留（剥离 org 块逐字节等于五参输出）");
 ok(wrapDispatchPrompt("正经立项", "任务正文") === base5, "六参缺省 = 五参调用输出逐字节一致（既有调用零波及）");
 ok(base5.includes("完成回执：最后一行固定格式"), "[件③] 完成回执契约行在 prompt 模板（引擎无关通路）");
 ok(base5.includes("过程不回灌，只收回执"), "[件③] 派单纪律段在 prompt 模板（非 claude 引擎唯一到达通道）");
