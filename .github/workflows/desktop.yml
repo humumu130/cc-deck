@@ -160,6 +160,31 @@ jobs:
         shell: bash
         run: echo "REF_SLUG=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
 
+      - name: Verify DPI manifest（win-font-aa ①：出包 exe 实证 PerMonitorV2 烙印）
+        working-directory: desktop-tauri
+        shell: bash
+        run: |
+          # 背景（1101 用户 2K 屏字体锯齿批）：排查期实证 shipped exe manifest 已含
+          # <dpiAwareness>PerMonitorV2, PerMonitor</dpiAwareness>（tao 运行时 V2 焊死），
+          # 但该烙印来自 tauri-build 内嵌模板——tauri/tao 升级若丢声明=位图拉伸模糊回归
+          # 且无人知晓（「安装包版本说谎 22 天」同族）。本闸=出包实物抽查，闸口制非提醒制。
+          # 链路：NSIS 内层文件压缩 → 7z 解出 {app}/*.exe（nova 变体改名 cc-deck-nova，
+          # 通配兜双名）→ PE 的 .rsrc 段 manifest 为未压缩明文 → grep -a 直证。
+          EXE=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)
+          7z x -o"$RUNNER_TEMP/nsis-extract" "$EXE" '{app}\*.exe' >/dev/null 2>&1 || true
+          BIN=$(find "$RUNNER_TEMP/nsis-extract" -iname '*.exe' ! -iname 'uninst*' | head -1)
+          if [ -n "$BIN" ] && grep -a -q 'PerMonitorV2' "$BIN"; then
+            echo "✅ DPI manifest 实证：主 exe 含 PerMonitorV2（tao V2 烙印在位）"
+            grep -a -o '<dpiAwareness>[^<]*<' "$BIN" | head -1 || true
+          elif [ -n "$BIN" ]; then
+            echo "::error::主 exe 无 PerMonitorV2 字样——DPI 烙印失败（tauri-build 升级丢声明=2K 屏位图拉伸回归，2K/4K 外接屏全糊）"
+            exit 1
+          else
+            echo "::error::NSIS 内层 exe 提取失败（7z 未出 {app}/*.exe）——闸无法实证按失败处理（防静默漏检，排障先看 7z 路径形态）"
+            ls -R "$RUNNER_TEMP/nsis-extract" || true
+            exit 1
+          fi
+
       - name: Deploy reminder（console-guardrails ③ 出包≠部署——1030 黄底事故防再犯）
         shell: bash
         run: |

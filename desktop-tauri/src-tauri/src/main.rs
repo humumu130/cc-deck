@@ -42,6 +42,30 @@ const DEFAULT_TOGGLE_KEY: &str = "alt+d";
 /// 页面启动前注入的桥（等价 desktop/preload.js）：probeLocal 优先走 window.ccDeck；
 /// 外链兜底：捕获阶段拦 target=_blank 与 window.open，转交壳侧系统浏览器打开
 const INIT_SCRIPT: &str = r##"
+// win-font-aa（1101 用户 2K 屏锯齿实锤·真凶再定位①）：禁 Ctrl+滚轮网页缩放。
+// WebView2/Chromium 默认开 Ctrl+滚轮 zoom——用户无意缩放（触控板捏合/滚轮误触）后
+// 停在 110%/90% 等分数档=光栅化与物理像素错位，观感「字体边缘锯齿/发毛」（DPI
+// 感知 PerMonitorV2 已烙 manifest 的前提下，分数 zoom 是剩余主嫌疑）。preventDefault
+// 在捕获层拦截浏览器手势；应用内字号仍有 设置→外观→界面字号 三档（产品面不受损）。
+// DPI 感知缩放（Windows 显示缩放 125%/150%）是另一条链——PerMonitorV2 下 WebView2
+// 按物理像素光栅化，不走此路径。
+try {
+  let zoomHintAt = 0;
+  document.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    // 拦截给可感知反馈（2.5s 节流）：告知为何拦+字号正道，避免「滚轮坏了」错觉
+    const now = Date.now();
+    if (now - zoomHintAt > 2500) {
+      zoomHintAt = now;
+      try { window.__ccDeck005B4 && window.__ccDeck005B4.toast && window.__ccDeck005B4.toast("窗口缩放已停用（分数缩放是 2K 屏发糊源之一）· 字号请走 设置 → 通用 → 界面字号"); } catch (_) {}
+    }
+  }, { passive: false, capture: true });
+  document.addEventListener("keydown", (e) => {
+    // Ctrl+ +/-/0 缩放键同拦（键盘路径同源分数 zoom）
+    if ((e.ctrlKey) && (e.key === "+" || e.key === "-" || e.key === "=" || e.key === "0")) e.preventDefault();
+  }, true);
+} catch (e) { /* 壳面尽力而为 */ }
 // W-MIG 种子恢复（置顶）：localStorage 为空（换壳/换 origin/新容器后的首启）且壳侧有
 // 影子备份（setup 读 ~/.cc-deck/desktop-storage-shadow.json 注入 __CCDECK_SHADOW）时
 // 同步恢复——initialization_script 先于页面任何脚本执行，页面初始化读到的即迁移后设置。

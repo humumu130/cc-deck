@@ -100,6 +100,29 @@
         if (tag && shellV) tag.textContent = "壳 v" + shellV + " · 界面 v" + (window.__ccDeck005Version || "?") + "（" + ((parseChannelVer(window.__ccDeck005Version) || {}).channel || "—") + " 通道）"; // 关于页双版本并显（错配恒可见；通道动态取，审查P2-2）
       }
       if (window.__shellVer) checkConsoleShellVersion(); // shellVer 已在（重载/热启动）即查
+      // win-font-aa（1101 用户 2K 屏锯齿）：渲染环境探针——关于页一行显示 DPR+平台。
+      // 真凶定位链：DPI 感知已 PerMonitorV2（exe manifest 实证）排除位图拉伸；剩主嫌=
+      // 分数 DPR（125%/150% 缩放）下 Chromium 禁用 ClearType 子像素 AA（LCD text 仅
+      // DSF=1 启用）→ 低对比小字灰度 AA 发毛。用户回报此行即完成归因（1.25/1.5=分数
+      // 档坐实；1 或 2=整数档另有因）。
+      let probeMq = null;
+      function fillRenderProbe() { // 具名非 IIFE：设置抽屉 DOM 建成后才有效元素（setupSettingsDomain 调用点在 :4389 附近）——init 期跑=querySelector 落空
+        const el = document.querySelector("[data-settings-render-probe]");
+        if (!el) return;
+        try {
+          const dpr = Number(window.devicePixelRatio) || 1;
+          const frac = Math.abs(dpr - Math.round(dpr)) > 0.01;
+          const plat = /Windows/.test(navigator.userAgent) ? "Windows" : /Mac/.test(navigator.userAgent) ? "macOS" : "Linux";
+          el.textContent = "渲染环境：" + plat + " · 缩放 " + Math.round(dpr * 100) + "%（DPR " + dpr.toFixed(2) + (frac ? " · 分数档=文字子像素 AA 关闭（Windows 显示缩放 125%/150% 的已知观感，调 100%/200% 整数档可恢复锐利——见 docs/windows-cleartype.md）" : " · 整数档") + "）";
+          // 跨屏拖动/系统缩放改档时 DPR 变——重臂监听自刷新（2K+1080p 混搭场景行内容随屏走）
+          try {
+            if (probeMq && probeMq.removeEventListener) probeMq.removeEventListener("change", fillRenderProbe);
+            probeMq = matchMedia("(resolution: " + dpr + "dppx)");
+            if (probeMq.addEventListener) probeMq.addEventListener("change", fillRenderProbe);
+          } catch (_) { /* matchMedia 不可用静默 */ }
+        } catch (_) { el.textContent = ""; }
+      }
+      window.__ccDeck005FillRenderProbe = fillRenderProbe; // 诊断口暴露（CDP/远程排障可再调）
       window.addEventListener("ccdeck:shellver", checkConsoleShellVersion);
       // #158-⌘文案 Windows 显示 Ctrl+：启动时全树替换静态 ⌘ 文案（设置卡 ⌘K 搜索 · ⌘N 新建会话；
       // W-TOPBAR ②：windowbar ⌘K 教学提示已退役，walker 全树扫不受影响）；
@@ -1137,7 +1160,7 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">本机服务 · 远程数据源 · 已连客户端</div></div><div class="v8-setcard"><h5>本机 relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard" data-conn-remote-card><h5>远程源</h5><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard"><h5>客户端 · 连到本机的终端</h5><div class="settings-list" data-settings-live="devices"></div><div class="conn-card-foot"><span class="v8-escape">踢出后需重新配对</span><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，添加手机或另一台电脑为本机客户端">＋ 配对新设备</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">建团时的角色缺省引擎</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">模板只是初始值 · 开团可逐成员覆盖。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">随软件发行的内建能力</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载 · 停用开关待注册表就绪后生效。</div></div><details class="v8-setcard" style="padding:12px 14px"><summary style="cursor:pointer;font-weight:650;font-size:12.5px">权限声明（只读）</summary><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div></div></div></div></details>
-<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 开源</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录</div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页</div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App</div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置</div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">覆盖现有设置</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
+<div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 开源</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div><div class="v8-swd" style="margin-top:4px" data-settings-render-probe title="字体渲染环境探针（win-font-aa 批）：分数 DPR=Chromium 禁用 ClearType 子像素抗锯齿（Windows 125%/150% 缩放典型态）——发毛报告请连此行一起回报"></div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录</div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页</div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App</div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置</div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">覆盖现有设置</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><div class="v8-setcard"><h5>系统设计图纸</h5><div class="settings-list" data-settings-live="design" hidden></div></div></div>`;
         });
 
 
@@ -4372,6 +4395,7 @@ function connectLan(ctx) {
       } catch (_) {}
       ensureThemeSymbols();
       setupSettingsDomain(); // ⑥c-1：先建六面板（含连接三子 tab），setupStubTabs 对 settings 域让位
+      fillRenderProbe(); // win-font-aa：探针行填充（DOM 建成后——init 期元素未生，早跑落空）
       // W-NOVAUI ④：rail 项目入口恒显（FB20 显隐链全退役，无首帧即位调用）
       setupStubTabs();
       wireCardDensityControls();

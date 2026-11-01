@@ -136,7 +136,8 @@
     "test:sqlite-task": "node --import tsx/esm scripts/test-sqlite-task.ts",
     "test:conn-page-v2": "tsx scripts/test-conn-page-v2.ts",
     "test:console-guardrails": "tsx scripts/test-console-guardrails.ts",
-    "test:notify-overhaul": "tsx scripts/test-notify-overhaul.ts"
+    "test:notify-overhaul": "tsx scripts/test-notify-overhaul.ts",
+    "test:win-font-aa": "tsx scripts/test-win-font-aa.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
