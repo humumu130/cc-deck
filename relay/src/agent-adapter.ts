@@ -51,7 +51,7 @@ import { AskUserHold, askHoldMs } from "./ask-user-hold.js";
 // PATH 仅 /usr/bin:/bin:/usr/sbin:/sbin——会话里 hook 报 node: command not found、
 // gradle 报 Cannot run program "node"（当日实证），每个会话被迫手动补 PATH。spawn 时
 // 统一补常见安装目录（不存在的目录在 PATH 里无害），CCR_EXTRA_PATH 可追加自定义位。
-export function childEnv(opts?: { configHome?: string }): NodeJS.ProcessEnv {
+export function childEnv(opts?: { configHome?: string; orgRole?: string }): NodeJS.ProcessEnv {
   const extra = [
     join(homedir(), "node/bin"),       // 用户级 node（本机实证位置）
     "/usr/local/bin",                  // macOS Intel / 惯装位
@@ -70,6 +70,10 @@ export function childEnv(opts?: { configHome?: string }): NodeJS.ProcessEnv {
     // 全部落到该目录，与用户默认家（~/.claude）物理隔离。undefined = 不设此键，
     // CLI 沿用默认家（用户自建会话/未启用开关的部署，行为与从前一致）
     ...(opts?.configHome ? { CLAUDE_CONFIG_DIR: opts.configHome } : {}),
+    // W-ORG-DEFECTS A-P2-2：编排 worker 会话注入身份位——pre-push 收割闸的第二判据
+    //（cwd 在 worktree 判据之外，env 位全域生效：worker 在任意 cwd push dev/main 均拦；
+    // leader/PM 不注入=误拦零面）
+    ...(opts?.orgRole ? { CC_ORG_ROLE: opts.orgRole } : {}),
   };
 }
 
@@ -442,6 +446,7 @@ export class AgentSession {
       images?: string[];
       rules?: AllowRuleStore; // #212 允许并记住：缺省 = 无规则（标题生成等非会话级用法）
       configHome?: string;    // #17 雇员独立家：传入则 CLI 子进程带 CLAUDE_CONFIG_DIR
+      orgRole?: string;       // W-ORG-DEFECTS A-P2-2：编排 worker 身份位（CC_ORG_ROLE，pre-push 收割闸 env 判据）
       // W-KWP2 件一：雇员会话插件通路（plugin-config.listWorkerPluginPaths() 产物，
       // session-manager newAgent 按 state.employee 守卫后传入）。undefined/空 = 不传
       // plugins（维持现状零波及）；非空 = 显式 local 插件注入（toSdkPlugins 映射）。
@@ -476,7 +481,7 @@ export class AgentSession {
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
         // PATH 补全：见 childEnv()（M0）；#17 雇员独立家：configHome 时注入
         // CLAUDE_CONFIG_DIR（transcript/任务清单落独立家）
-        env: childEnv({ configHome: opts?.configHome }),
+        env: childEnv({ configHome: opts?.configHome, orgRole: opts?.orgRole }),
         permissionMode: opts?.permissionMode ?? "default",
         // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
         // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过

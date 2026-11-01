@@ -124,6 +124,26 @@ export interface ReplayedSession {
   logs: LogEntry[];
 }
 
+// #36 重启自愈（用户 1101 实锤「会话已中断，发送消息即可继续」需人工续——人在外
+// 干等）：托管会话（带 relay_session_id）被重启中断时的分类标记——中断前 WORKING
+// 打 pre_reboot_status（boot 自愈链 resumeInterruptedByReboot 消费后即清，纯 boot
+// 瞬态不持久化）；WAITING/其余维持旧文案旧行为（半截权限流 resume 后无法自答，
+// 人工触发续）。独立导出=测试直吃（scripts/test-resume-reboot.ts）。
+export function markManagedRebootInterrupted(
+  rs: { state: { status: string; done_reason?: string; historical?: boolean; pre_reboot_status?: string }; logs: { ts: number; kind: string; text: string }[] },
+  interruptedStatus: string,
+): void {
+  rs.state.status = "DONE";
+  rs.state.done_reason = "服务更新重启，会话已中断";
+  rs.state.historical = true;
+  if (interruptedStatus === "WORKING") rs.state.pre_reboot_status = "WORKING"; // #36：boot 自愈链的选人凭据
+  rs.logs.push({
+    ts: Date.now(),
+    kind: "system",
+    text: interruptedStatus === "WORKING" ? "服务更新重启，会话已中断 · 检测到进行中任务，将自动续跑" : "服务更新重启，会话已中断 · 发送消息即可继续",
+  });
+}
+
 export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> {
   const out = new Map<string, ReplayedSession>();
   for (const e of events) {
@@ -319,11 +339,12 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         }
       } else if (rs.state.relay_session_id) {
         // #52 批：托管会话带 SDK 会话号即可靠 resume 恢复——归 DONE 中性态而非
-        // ERROR 红条（DONE 不发包、只在启动重标，不会触发"任务完成"通知卡）
-        rs.state.status = "DONE";
-        rs.state.done_reason = "服务更新重启，会话已中断";
-        rs.state.historical = true;
-        rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启，会话已中断 · 发送消息即可继续" });
+        // ERROR 红条（DONE 不发包、只在启动重标，不会触发"任务完成"通知卡）。
+        // #36（用户 1101 实锤）：中断前 WORKING 的托管会话打 pre_reboot_status 标——
+        // boot 自愈链（resumeInterruptedByReboot）据此自动续跑，不再「发送消息即可
+        // 继续」干等人；WAITING（权限等待中）不打标——半截权限流 resume 后无法自答，
+        // 维持人工触发。提取为 markManagedRebootInterrupted 供测试直吃。
+        markManagedRebootInterrupted(rs, rs.state.status);
       } else {
         rs.state.status = "ERROR";
         rs.state.last_error = "服务更新重启，会话已中断";

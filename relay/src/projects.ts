@@ -446,6 +446,12 @@ export interface HeadcountTrimPlan {
   trimmed: { entry: ProjectHeadcountEntry; reason: string }[];
 }
 
+/** [W-SEAT-SEMANTICS P2-1 修正（审查 review-w-seatsem-posthoc）] 闲置判定缺省窗。
+ * 曾是散落字面量 24h——与编排侧 trimHeadcounts 的 72h（session-manager.ts）静默分叉，
+ * 新调用者不传参即拿旧窗（现网唯一调用方恒显式传参故行为无误，纯陷阱）。
+ * 收敛：显式命名常量 72h（与编排侧同值单源引用），调用方不传=72h 闲置才裁。 */
+export const DEFAULT_TRIM_KEEP_IDLE_MS = 72 * 3_600_000;
+
 export function planHeadcountTrim(input: {
   headcount: ProjectHeadcountEntry[];
   isLiveSession: (sid: string) => boolean;
@@ -453,7 +459,7 @@ export function planHeadcountTrim(input: {
   now: number;
   keepIdleMs?: number;
 }): HeadcountTrimPlan {
-  const keepMs = input.keepIdleMs ?? 24 * 3_600_000;
+  const keepMs = input.keepIdleMs ?? DEFAULT_TRIM_KEEP_IDLE_MS;
   const keep: ProjectHeadcountEntry[] = [];
   const trimmed: { entry: ProjectHeadcountEntry; reason: string }[] = [];
   for (const entry of input.headcount) {

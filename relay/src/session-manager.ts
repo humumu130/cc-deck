@@ -27,7 +27,7 @@ import {
   convergeBoardsWithDispatchLog,
   findGroup, findGroupByAnchor, findStaleGroups, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, listRetiredEvents, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
-  moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
+  moveBoardEntry, moveEntryByDispatch, planHeadcountTrim, DEFAULT_TRIM_KEEP_IDLE_MS,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
   PM_ROLE_RE, seatGate, anchorPathError,
@@ -813,7 +813,7 @@ export class SessionManager {
     model: string,
     cb: AgentCallbacks,
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean },
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; orgWorker?: boolean; orgRole?: string },
   ): AgentLike {
     // #27 引擎分叉（V2 Agent 无关编排的工厂缝）：codex = CodexAgentSession
     //（一回合一进程，resume 锚 = codex thread_id；允许规则/雇员家是 Claude 概念，
@@ -859,6 +859,10 @@ export class SessionManager {
     // fresh/revive 同样注入（plugins 是每次 spawn 的 options，缺了 resume 后插件消失）。
     // employee 键自身不透传 AgentSession（非其消费形状，解构摘除）。
     const { employee: _employeeFlag, ...restOpts } = opts ?? {};
+    // W-ORG-DEFECTS A-P2-2：编排 worker 身份位映射（spawn 点按 state.project_gid &&
+    // 非 leader 守卫后传 orgWorker；adapter 侧翻成 CC_ORG_ROLE env——pre-push 收割闸）
+    if (restOpts.orgWorker) { restOpts.orgRole = "worker"; }
+    delete restOpts.orgWorker;
     const withRules = {
       ...restOpts,
       rules: this.allowRules,
@@ -1710,6 +1714,13 @@ export class SessionManager {
   // 等人来发消息）。CCR_NO_AUTOREVIVE=1 逃生阀（测试/紧急关闭）。
   autoReviveManaged(limit = 3): number {
     return reviveMod.autoReviveManaged(this, limit); // W-SPLIT-S5②：体在 lifecycle/revive.ts（上方机制注释同迁该件头）
+  }
+
+  // #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话 boot 自动续跑——体在
+  // lifecycle/revive.ts resumeInterruptedByReboot（选人凭据=history.ts pre_reboot_status
+  // 状态信号，与 autoRevive 的待办驱动互补；CCR_RESUME_ON_REBOOT=0 逃生阀）。
+  resumeInterruptedByReboot(limit = 3): number {
+    return reviveMod.resumeInterruptedByReboot(this, limit);
   }
 
   // W-SPLIT-S5②：引擎登录恢复三面体+机制注释迁 lifecycle/revive.ts（构造区 :825/:830
@@ -3652,6 +3663,7 @@ export class SessionManager {
         role: s.state.engine_role,
         configHome: this.employeeHome(s.state),
         ...(s.state.employee ? { employee: true } : {}), // W-KWP2 件一：插件通路守卫
+        orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
       });
       s.agent = agent;
       this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */
@@ -3740,6 +3752,7 @@ export class SessionManager {
           permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口
           images,
           configHome: this.employeeHome(s.state),
+          orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
           // W-KWP2 件一：resume 同注入雇员标记（插件通路 resume 后不丢）
           ...(s.state.employee ? { employee: true } : {}),
           // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
@@ -3838,6 +3851,7 @@ export class SessionManager {
             permissionMode: this.resumePermMode(s), // P81-6 旧值规范化统一入口（fresh 回退同收敛）
             images: replayImages.length ? replayImages : undefined,
             configHome: this.employeeHome(s.state),
+            orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
             // W-KWP2 件一：fresh 回退同注入雇员标记（重放会话插件不丢）
             ...(s.state.employee ? { employee: true } : {}),
             // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
@@ -4000,6 +4014,7 @@ export class SessionManager {
         configHome: this.employeeHome(s.state),
         // W-KWP2 件一：parked revive 同注入雇员标记
         ...(s.state.employee ? { employee: true } : {}),
+        orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
         // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
         ...(s.state.engine ? { engine: s.state.engine } : {}),
       });
@@ -6345,6 +6360,10 @@ export class SessionManager {
             const st = str("status");
             if (!BOARD_ENTRY_STATUSES.includes(st as BoardEntryStatus)) return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str("entry_id"), st as BoardEntryStatus);
+            // W-ORG-DEFECTS A-P2-3：手工 move 搬卡到待收割态同喂 board-change（与
+            // upsert 边同判——worker_done 收口自动搬卡有收口链兜着，本边补 PM/用户
+            // 手工 move 面的唤醒缺口）
+            if (m.ok && (st === "submitted" || st === "ready_to_install")) this.feedPM("board-change");
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op === "del") {
             const d = removeBoardEntry(gid, str("entry_id"));
@@ -8516,14 +8535,16 @@ export class SessionManager {
   //   ② auto 轮（boot/定时）每 gid **首次**裁编不直接裁——出 headcount-trim-first 确认卡
   //     （名单+闲置时长+理由），✓ 后 viaConfirm 重入真裁，此后该 gid 永直裁；✗ 本轮不裁
   //     24h 冷却后再提（防 6h 轮轰炸）。首次判定=轮次账（headcount-trim-journal）无该 gid
-  //     既往轮。手动面（orgAction headcount-trim/确认卡副作用/派单触顶 onlyGid）不设闸——
-  //     显式意图或容量必需，直接执行并照常落账（落账即转「已裁过」态）
+  //     既往轮。手动面（orgAction headcount-trim/确认卡副作用）不设闸——显式意图直接
+  //     执行并落账（落账即转「已裁过」态）。派单触顶 onlyGid=P2-2 修正（review-w-
+  //     seatsem-posthoc）：容量必需照裁不设闸（防死锁），但记 via=capacity 且**不进**
+  //     首裁「已裁过」集+通知面标「触顶直裁」——首裁知情权不因容量应急永闭
   //   ③ 报告改 append 轮次制：org/headcount-trim-journal.ndjson 每轮一行（5MB 滚动）；
   //     旧 headcount-trim-report.json 保留最新一份覆盖写（boot 日志/既有消费兼容，双写
   //     同源同构无漂移）
   trimHeadcounts(opts?: { dryRun?: boolean; keepIdleMs?: number; onlyGid?: string; auto?: boolean; viaConfirm?: boolean }): { ok: true; data: { groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[]; totalTrimmed: number; gated?: { gid: string; name: string; confirm_id?: string; note: string }[] } } {
     const now = Date.now();
-    const keepIdleMs = opts?.keepIdleMs ?? 72 * 3_600_000;
+    const keepIdleMs = opts?.keepIdleMs ?? DEFAULT_TRIM_KEEP_IDLE_MS; // P2-1：与纯函数同源常量（曾 24h/72h 双缺省分叉）
     const groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[] = [];
     const gated: { gid: string; name: string; confirm_id?: string; note: string }[] = [];
     // 首裁闸预读（auto 轮才需要）：既往轮次 gid 集 + 既有 trim 确认卡（待决/已决时刻）
@@ -8537,7 +8558,9 @@ export class SessionManager {
           for (const line of raw.split("\n")) {
             const t = line.trim();
             if (!t) continue;
-            try { const row = JSON.parse(t) as { gid?: unknown }; if (typeof row.gid === "string") priorRoundGids.add(row.gid); } catch { /* 坏行跳过 */ }
+            // P2-2：via=capacity（派单触顶直裁）不进「已裁过」集——容量应急不该替用户
+            // 决断「此后永直裁」；首裁确认卡承诺对该 gid 仍有效（下轮 auto 有得裁再提）
+            try { const row = JSON.parse(t) as { gid?: unknown; via?: unknown }; if (typeof row.gid === "string" && row.via !== "capacity") priorRoundGids.add(row.gid); } catch { /* 坏行跳过 */ }
           }
         } catch { /* 无账=首次 */ }
       }
@@ -8617,12 +8640,14 @@ export class SessionManager {
       // [W-SEAT-SEMANTICS] 轮次账 append 制（audit 主源）：每轮每 gid 一行；旧 report 保留
       // 最新一份（boot 日志引用/既有消费兼容），双写同源无漂移
       for (const x of groups) {
-        appendJournal(join(orgDir(), "headcount-trim-journal.ndjson"), { ts: now, gid: x.gid, name: x.name, before: x.before, after: x.after, trimmed: x.trimmed, via: opts?.viaConfirm ? "confirm" : opts?.auto ? "auto" : "manual", ...(opts?.keepIdleMs ? { keep_idle_ms: opts.keepIdleMs } : {}) });
+        // P2-2（review-w-seatsem-posthoc）：onlyGid 触顶直裁记 via=capacity——首裁闸的
+        // 「已裁过」集不认 capacity 轮（见 gateBlocks），用户首裁知情权不因容量应急永闭
+        appendJournal(join(orgDir(), "headcount-trim-journal.ndjson"), { ts: now, gid: x.gid, name: x.name, before: x.before, after: x.after, trimmed: x.trimmed, via: opts?.viaConfirm ? "confirm" : opts?.auto ? "auto" : opts?.onlyGid ? "capacity" : "manual", ...(opts?.keepIdleMs ? { keep_idle_ms: opts.keepIdleMs } : {}) });
         console.log(`[headcount-trim] ${x.name}: ${x.before} → ${x.after} 席（裁 ${x.trimmed.length}）`);
       }
       this.upsertNotification("system", `headcount-trim-${now}`, String(now), {
         title: `编制清理：裁减 ${totalTrimmed} 席`,
-        body: truncate(groups.map((x) => `${x.name} ${x.before}→${x.after} 席`).join("；") + "。被裁成员出编制不删会话，轮次账见 headcount-trim-journal.ndjson", 160),
+        body: truncate((opts?.onlyGid ? "【派单触顶直裁 · 容量必需未经首裁确认】" : "") + groups.map((x) => `${x.name} ${x.before}→${x.after} 席`).join("；") + "。被裁成员出编制不删会话，轮次账见 headcount-trim-journal.ndjson", 160),
         severity: "info", group: "activity", actionable: false, domain: "org", returnPath: "org",
       });
       this.emitOrgState();

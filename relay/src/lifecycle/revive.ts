@@ -64,6 +64,51 @@ export function autoReviveManaged(mgr: any, limit = 3): number {
   return revived;
 }
 
+// ---------- #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话 boot 自动续跑 ----------
+// 与 autoReviveManaged（#75 待办驱动）互补：待办闸会把「回合在跑但任务清单无开放项」
+// 的中断会话（长构建/纯执行回合）漏成「发送消息即可继续」人工干等——本通道以
+// history.ts 打的 pre_reboot_status 状态信号选人（对齐 W-CDXREV codex 面的「WORKING=
+// 回放僵尸=活工作」语义），复用 reviveEligible 全闸（retired/互斥/冷却/pinned/48h
+// 新鲜度等）仅放行待办两判（no-open-todos/stale-todos——中断前在跑本身即活工作凭据）。
+// 约束：单次上限 3（与 autoRevive 同档，按 updated_at 近者先）；消费即清标（防
+// boot 后续轮次重放）；CCR_RESUME_ON_REBOOT=0 逃生阀（紧急关停）+ CCR_NO_AUTOREVIVE=1
+// 沙盒铁闸（测试隔离，与 autoRevive 同源）。失败不重试（resumeAgent 熔断账自然接管）。
+export function resumeInterruptedByReboot(mgr: any, limit = 3): number {
+  if (process.env.CCR_RESUME_ON_REBOOT === "0") return 0; // #36 逃生阀
+  if (process.env.CCR_NO_AUTOREVIVE === "1") return 0; // 沙盒/测试铁闸（autoRevive 同款）
+  const candidates: { s: any; updated: number }[] = [];
+  for (const s of mgr.sessions.values()) {
+    if (s.state.pre_reboot_status !== "WORKING") continue; // 只有 history 分类打过标的中断会话
+    const why = reviveEligible(mgr, s);
+    // 放行待办两判（本通道的存在理由）；其余闸全数尊重（retired/互斥窗/冷却/pinned/
+    // 外部/无锚/48h 陈——中断凭据不豁免编制与新鲜度纪律）
+    if (why && why !== "no-open-todos" && why !== "stale-todos") continue;
+    candidates.push({ s, updated: s.state.updated_at });
+  }
+  candidates.sort((a, b) => b.updated - a.updated);
+  let resumed = 0;
+  for (const c of candidates) {
+    if (resumed >= limit) break;
+    const s = c.s;
+    s.state.pre_reboot_status = undefined; // 消费即清（本轮失败也不重试——熔断账接管）
+    try {
+      mgr.resumeAgent(s, "[relay 重启自愈] relay 重启完成，检测到本会话重启前有进行中的任务，已自动续跑。" + reviveInstruction(s));
+      resumed++;
+      try {
+        mgr.upsertNotification("system", "reboot-resume", s.state.session_id, {
+          title: "中断会话已自动续跑",
+          body: `${s.state.title || s.state.session_id.slice(0, 8)}：重启前在跑的回合已自动恢复（#36 重启自愈）`,
+          severity: "info", group: "activity", actionable: false, sessionId: s.state.session_id, domain: "session", returnPath: "sessions",
+        });
+      } catch { /* 通知面尽力而为 */ }
+    } catch (e) {
+      console.log(`[reboot-resume] ${s.state.session_id.slice(0, 8)} 续跑失败: ${e instanceof Error ? e.message : String(e)}（人工发送消息可恢复）`);
+    }
+  }
+  if (resumed > 0) console.log(`[reboot-resume] 重启自愈：${resumed} 个中断 WORKING 会话已自动续跑（#36）`);
+  return resumed;
+}
+
 // ---------- #102 批 C：引擎登录就绪恢复三面（探/登/通之「通」） ----------
 // ready 三源（watch 兜底循环 / 批 B pane 轮验 / verify 手动验证）都收敛到本入口；
 // 10s 幂等窗去重——同一就绪事件多源重复触发只跑一轮。

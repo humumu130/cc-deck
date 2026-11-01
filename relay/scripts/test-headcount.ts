@@ -19,7 +19,7 @@ import { readDispatchLog } from "../src/org.js";
 import { routingFor } from "../src/routing.js";
 import {
   addMember, createGroup, findGroup, genericWorkerCount, headcountCapOf, listGroups,
-  maxHeadcountWorkers, planHeadcountTrim, setGroupStatus,
+  maxHeadcountWorkers, planHeadcountTrim, DEFAULT_TRIM_KEEP_IDLE_MS, setGroupStatus,
 } from "../src/projects.js";
 import { loadDispatchQueue } from "../src/dispatch-queue.js";
 type QueuedDispatchLike = { dispatch_id: string; enqueued_at: number; input: Record<string, unknown> };
@@ -200,19 +200,21 @@ async function main() {
       { session_id: "a-stale", role: "worker" },
       { session_id: "a-ghost", role: "worker" },
     ];
+    // P2-1（review-w-seatsem-posthoc）：缺省 24h→72h（DEFAULT_TRIM_KEEP_IDLE_MS 同源）——
+    // 夹具随缺省同步：a-recent 1h（窗内保）/a-stale 96h（窗外裁，原 72h 恰在新窗界上会误保）
     const plan = planHeadcountTrim({
       headcount: hc,
       isLiveSession: (sid) => sid === "a-live",
-      lastActiveOf: (sid) => (sid === "a-recent" ? now - HOUR : sid === "a-stale" ? now - 72 * HOUR : 0),
+      lastActiveOf: (sid) => (sid === "a-recent" ? now - HOUR : sid === "a-stale" ? now - 96 * HOUR : 0),
       now,
     });
-    assert(plan.keep.map((x) => x.session_id).join(",") === "a-named,a-live,a-recent", "保留：命名/存活/24h 内活动");
+    assert(plan.keep.map((x) => x.session_id).join(",") === "a-named,a-live,a-recent", "保留：命名/存活/缺省 72h 内活动");
     assert(plan.trimmed.map((x) => x.entry.session_id).join(",") === "a-stale,a-ghost", "裁剪：过期/无记录");
-    assert(plan.trimmed[0]?.reason.includes("3 天"), `过期原因带天数（实际「${plan.trimmed[0]?.reason}」）`);
+    assert(plan.trimmed[0]?.reason.includes("4 天"), `过期原因带天数（实际「${plan.trimmed[0]?.reason}」）`);
     assert(plan.trimmed[1]?.reason.includes("无派单收口记录"), `无记录原因（实际「${plan.trimmed[1]?.reason}」）`);
-    const b1 = planHeadcountTrim({ headcount: [{ session_id: "x", role: "worker" }], isLiveSession: () => false, lastActiveOf: () => now - 24 * HOUR + 60_000, now });
-    const b2 = planHeadcountTrim({ headcount: [{ session_id: "x", role: "worker" }], isLiveSession: () => false, lastActiveOf: () => now - 24 * HOUR - 60_000, now });
-    assert(b1.trimmed.length === 0 && b2.trimmed.length === 1, "24h 边界（线上保/线下裁）");
+    const b1 = planHeadcountTrim({ headcount: [{ session_id: "x", role: "worker" }], isLiveSession: () => false, lastActiveOf: () => now - DEFAULT_TRIM_KEEP_IDLE_MS + 60_000, now });
+    const b2 = planHeadcountTrim({ headcount: [{ session_id: "x", role: "worker" }], isLiveSession: () => false, lastActiveOf: () => now - DEFAULT_TRIM_KEEP_IDLE_MS - 60_000, now });
+    assert(b1.trimmed.length === 0 && b2.trimmed.length === 1, "缺省窗边界（72h 线上保/线下裁——引用源常量自同步）");
 
     // ---- H7 trimHeadcounts 编排（裁剪准确 + 报告落盘 + projects.json 收敛） ----
     console.log("H7 trimHeadcounts 编排");

@@ -245,6 +245,9 @@ export interface SessionState {
   duration_ms?: number;
   pm_standby?: boolean;       // #287 PM 常驻化：快照派生（dutyTarget 且 DONE）——值守 PM 待命态，端上替代 DONE 假死
   historical?: boolean;       // true = Relay 重启前遗留的历史会话，不可操作
+  /** #36 重启自愈：重启中断前 WORKING 的托管会话标记（history.ts 分类时装、
+   * resumeInterruptedByReboot 消费后即清——boot 瞬态，不持久化不入 SNAPSHOT） */
+  pre_reboot_status?: "WORKING";
   // W-INJECT：historical 的来源标记。#50 idle 归档（12h 无活动刻意沉底降权）置位——
   // 存活自愈（reviveAliveExternals）见到它不翻案（旧终端挂着是用户已知状态），hook 回归
   // （ensureExternal）或手动恢复才清。缺省 = 重启收养/误标来源，活 pid 即可翻案

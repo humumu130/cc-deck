@@ -484,6 +484,11 @@ setTimeout(() => {
   try {
     mgr.autoReviveManaged();
   } catch {}
+  // #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话自动续跑（与 autoRevive
+  // 待办驱动互补——状态信号选人；CCR_RESUME_ON_REBOOT=0 逃生阀）
+  try {
+    mgr.resumeInterruptedByReboot();
+  } catch {}
   // #102 批 C：重启后为 needs_auth 态会话挂登录兜底重探（pane 早没了——登录就绪
   // 后自动恢复三面；探测≠拉活不受 CCR_NO_AUTOREVIVE 阀控）
   try {
