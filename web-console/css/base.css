@@ -3240,3 +3240,17 @@ html[data-theme="light"] .wx-sb-track { --wx-sb-thumb: rgba(0,0,0,.18); --wx-sb-
   .wx-sb-track { transition: opacity 80ms ease-out; }
   .wx-sb-thumb { transition: background 80ms ease; }
 }
+
+/* ===== [W-SEAT-SEMANTICS] 席位语义手术追加段（C 模式批次一，1101 用户拍板）：离席
+       三拆副标签（.tag.retired-tag 会话卡 r2 行）+ done 卡离席徽章（.tchip.retired-badge
+       小灰降噪档）+ 完成泳道「已完成（早期）」折叠组（.lane-stale）——只追加，不动既有段 ===== */
+.tag.retired-tag { flex: none; padding: 1px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--faint); font-size: var(--fs-E); font-variant-numeric: tabular-nums; white-space: nowrap; }
+html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
+.tchip.retired-badge { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--faint); font-size: 10px; line-height: 16px; font-weight: 500; }
+.lane-stale { margin-top: 6px; border: 1px dashed var(--line); border-radius: 8px; }
+.lane-stale > summary { padding: 5px 10px; color: var(--faint); font-size: var(--fs-D); cursor: pointer; list-style: none; user-select: none; }
+.lane-stale > summary::-webkit-details-marker { display: none; }
+.lane-stale > summary::before { content: "▸ "; }
+.lane-stale[open] > summary::before { content: "▾ "; }
+.lane-stale .lane-stale-body { padding: 2px 4px 6px; display: flex; flex-direction: column; gap: 6px; }
+.lane-stale .task-card { opacity: .82; }

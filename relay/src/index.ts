@@ -425,7 +425,7 @@ mgr.startStaleScan();
 // CCR_NO_HEADCOUNT_TRIM=1 全停）；③派单排队队列重启回灌（触顶全忙排队不扩编，
 // 有空闲即接续）。首轮裁剪在收养广播之后跑，报告落 org/headcount-trim-report.json
 try {
-  const trim = mgr.trimHeadcounts();
+  const trim = mgr.trimHeadcounts({ auto: true }); // [W-SEAT-SEMANTICS] boot 轮=auto（每 gid 首裁走确认卡闸）
   if (trim.data.totalTrimmed > 0) {
     console.log(`[headcount-trim] boot 首轮：裁减 ${trim.data.totalTrimmed} 席（${trim.data.groups.map((g) => `${g.name} ${g.before}→${g.after}`).join("；")}），清单见 org/headcount-trim-report.json`);
   }

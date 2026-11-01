@@ -3,7 +3,7 @@ import { notificationsListOf } from "./decision-ledger-projection.js";
 import { readTitleOverrides } from "./title-derive.js";
 import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { atomicWriteJson } from "./fs-safe.js"; // #292-cutover-P1（B-F3）：notifications/deliverables 原子写
+import { appendJournal, atomicWriteJson } from "./fs-safe.js"; // #292-cutover-P1（B-F3）：notifications/deliverables 原子写；[W-SEAT-SEMANTICS] appendJournal=trim 轮次账
 import { withStorageTx } from "./storage/org-write-tx.js";
 import { shadowWriteSession, tombstoneSession } from "./storage/session-write.js";
 import { homedir } from "node:os";
@@ -22,10 +22,10 @@ import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
-  adaptOrgAction, addConfirm, addLesson, addMember, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
+  adaptOrgAction, addConfirm, addLesson, addMember, appendRetiredEvent, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
   convergeBoardsWithDispatchLog,
   findGroup, findGroupByAnchor, findStaleGroups, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
-  listPendingConfirms, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
+  listPendingConfirms, listRetiredEvents, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch, planHeadcountTrim,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
@@ -84,7 +84,8 @@ import { deriveTitle } from "./history.js";
 import { readCodexThreadName } from "./title-codex.js";
 import { generateTitle } from "./title-gen.js";
 import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, effectiveRelayName, sanitizeRelayName, writeRelayName, readEngineProfiles, type CollabMode } from "./settings.js";
-import type { EmployeeHomeSettingsPayload } from "./types.js";
+import type { EmployeeHomeSettingsPayload
+  , RetiredEntry } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
 // W-TASKFLOW（2026-10-12 唯一事实源强制）：看板→PM 会话清单单向镜像 + 对账看门 v2
@@ -6722,6 +6723,7 @@ export class SessionManager {
             this.closeOpenDispatches(sidFull, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
           }
           removeMember(gid, sidFull); /* #204②：全等 sid 解析后的真身 */
+          appendRetiredEvent({ ts: Date.now(), gid, session_id: sidFull, cause: "manual", ...(reason ? { detail: reason } : {}) }); // [W-SEAT-SEMANTICS] 成因入库：手动除名=manual（此后 emitOrgState 尾部 emitRetiredSessions 带 entries）
           this.emitOrgState();
           this.emitBoard(gid);
           // P0 编制排队排水：除名即腾出泛 worker 名额（closeOpenDispatches 内的排水
@@ -6917,6 +6919,21 @@ export class SessionManager {
             this.emitBoard(gid);
           }
           break;
+        case "headcount-trim-first": {
+          // [W-SEAT-SEMANTICS] 首裁确认卡决议：✓ = viaConfirm 重入真裁（绕首裁闸——本轮
+          // 落账后该 gid 永直裁）；✗ = 本轮不裁，24h 冷却后 auto 轮再提（冷却判定读
+          // confirms 历史的 rejected+decided_at，gateBlocks 同源）。陈旧卡复核（suggest-hold
+          // 同款）：出卡后组已非 active（结项/挂起）→ 跳过属正常语义不报失败
+          if (gid && findGroup(gid)?.status === "active") {
+            const keepMs = typeof c.payload.keep_idle_ms === "number" && c.payload.keep_idle_ms >= 0 ? c.payload.keep_idle_ms : 72 * 3_600_000; // 提案窗透传（0=测试确定性窗合法；缺席兜底 72h 缺省）
+            const r = this.trimHeadcounts({ onlyGid: gid, viaConfirm: true, keepIdleMs: keepMs });
+            if (r.ok && r.data.totalTrimmed === 0) {
+              // 裁零=名单已变（期间复活/复拉），无副作用属陈旧卡正常语义
+            }
+            this.emitOrgState();
+          }
+          break;
+        }
         case "revive":
           // 复活边直达通常走 project-status；此类型位保留同款联动（清标记，原班走路由表）
           if (gid) {
@@ -8182,10 +8199,57 @@ export class SessionManager {
   // 防骚扰）。dryRun 只出报告不动盘（orgAction headcount-trim 预览面）。
   // onlyGid：只清本组（派单触顶路径用——「开新 worker 前先清过期旧席」轻量触发，
   // 不全组扫描）。
-  trimHeadcounts(opts?: { dryRun?: boolean; keepIdleMs?: number; onlyGid?: string }): { ok: true; data: { groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[]; totalTrimmed: number } } {
+  // [W-SEAT-SEMANTICS]（用户 1101 拍板 C 模式批次一）trim 三策略化：
+  //   ① keepIdleMs 缺省 24h→72h（72h 无活动才算闲置；CCR_ORG_TRIM_HOURS 仍是节拍旋钮）
+  //   ② auto 轮（boot/定时）每 gid **首次**裁编不直接裁——出 headcount-trim-first 确认卡
+  //     （名单+闲置时长+理由），✓ 后 viaConfirm 重入真裁，此后该 gid 永直裁；✗ 本轮不裁
+  //     24h 冷却后再提（防 6h 轮轰炸）。首次判定=轮次账（headcount-trim-journal）无该 gid
+  //     既往轮。手动面（orgAction headcount-trim/确认卡副作用/派单触顶 onlyGid）不设闸——
+  //     显式意图或容量必需，直接执行并照常落账（落账即转「已裁过」态）
+  //   ③ 报告改 append 轮次制：org/headcount-trim-journal.ndjson 每轮一行（5MB 滚动）；
+  //     旧 headcount-trim-report.json 保留最新一份覆盖写（boot 日志/既有消费兼容，双写
+  //     同源同构无漂移）
+  trimHeadcounts(opts?: { dryRun?: boolean; keepIdleMs?: number; onlyGid?: string; auto?: boolean; viaConfirm?: boolean }): { ok: true; data: { groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[]; totalTrimmed: number; gated?: { gid: string; name: string; confirm_id?: string; note: string }[] } } {
     const now = Date.now();
-    const keepIdleMs = opts?.keepIdleMs ?? 24 * 3_600_000;
+    const keepIdleMs = opts?.keepIdleMs ?? 72 * 3_600_000;
     const groups: { gid: string; name: string; before: number; after: number; trimmed: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[] }[] = [];
+    const gated: { gid: string; name: string; confirm_id?: string; note: string }[] = [];
+    // 首裁闸预读（auto 轮才需要）：既往轮次 gid 集 + 既有 trim 确认卡（待决/已决时刻）
+    let priorRoundGids: Set<string> | null = null;
+    let trimConfirms: { gid: string; status: string; decided_at: number }[] | null = null;
+    const gateBlocks = (gid: string, name: string, list: { session_id: string; role: string; nick?: string; last_active: number; reason: string }[]): boolean => {
+      if (priorRoundGids === null) {
+        priorRoundGids = new Set<string>();
+        try {
+          const raw = readFileSync(join(orgDir(), "headcount-trim-journal.ndjson"), "utf-8");
+          for (const line of raw.split("\n")) {
+            const t = line.trim();
+            if (!t) continue;
+            try { const row = JSON.parse(t) as { gid?: unknown }; if (typeof row.gid === "string") priorRoundGids.add(row.gid); } catch { /* 坏行跳过 */ }
+          }
+        } catch { /* 无账=首次 */ }
+      }
+      if (trimConfirms === null) {
+        trimConfirms = listConfirms()
+          .filter((c) => c.kind === "headcount-trim-first" && typeof c.payload?.gid === "string")
+          .map((c) => ({ gid: String(c.payload.gid), status: c.status, decided_at: c.decided_at ?? 0 }));
+      }
+      if (priorRoundGids.has(gid)) return false; // 已裁过：直裁（永续）
+      if (trimConfirms.some((c) => c.gid === gid && c.status === "pending")) { gated.push({ gid, name, note: "首裁确认卡待决，本轮跳过" }); return true; }
+      const COOLDOWN = 24 * 3_600_000;
+      if (trimConfirms.some((c) => c.gid === gid && c.status === "rejected" && c.decided_at && now - c.decided_at < COOLDOWN)) { gated.push({ gid, name, note: "首裁提议 24h 内被否，冷却中" }); return true; }
+      const hours = Math.round(keepIdleMs / 3_600_000);
+      const confirm = addConfirm({
+        kind: "headcount-trim-first",
+        title: `首次编制清理：${name}（拟裁 ${list.length} 席）`,
+        reason: `${hours}h 无活动的泛 worker 将出编制（会话与路由档案保留，复拉走成员管理）；此后自动清理不再询问`,
+        payload: { gid, keep_idle_hours: hours, keep_idle_ms: keepIdleMs, list }, // keep_idle_ms=决议重入同窗重算依据（防提案/决议两窗不一致裁零）
+      });
+      this.emitOrgState(); // 确认卡入列可见
+      gated.push({ gid, name, confirm_id: confirm.id, note: "首裁已出确认卡，待用户决议" });
+      console.log(`[headcount-trim] ${name}: 首裁出确认卡（${list.length} 席待裁，等待决议）`);
+      return true;
+    };
     for (const g of listGroups()) {
       if (g.status !== "active") continue; // 挂起/结项组编制是快照档案，不动
       if (opts?.onlyGid && g.id !== opts.onlyGid) continue;
@@ -8204,6 +8268,9 @@ export class SessionManager {
         last_active: this.lastActiveOfSid(t.entry.session_id),
         reason: t.reason,
       }));
+      // [W-SEAT-SEMANTICS] 首裁闸：auto 轮+非 dryRun+非确认重入才检查（手动/触顶/确认
+      // 重入路径直接执行——显式意图不经闸，执行后落账即转直裁态）
+      if (opts?.auto && !opts.dryRun && !opts.viaConfirm && gateBlocks(g.id, g.name, trimReport)) continue;
       groups.push({ gid: g.id, name: g.name, before: g.headcount.length, after: plan.keep.length, trimmed: trimReport });
       if (!opts?.dryRun) {
         const r = setGroupHeadcount(g.id, plan.keep);
@@ -8211,6 +8278,11 @@ export class SessionManager {
           console.warn(`[headcount-trim] ${g.name} 裁剪写盘失败: ${r.error}（本组跳过，下轮重试）`);
           groups.pop();
           continue;
+        }
+        // [W-SEAT-SEMANTICS] 成因入库：自动/手动裁=idle-trim（detail 带闲置时长，端上
+        // 「离席（闲置超时 N h）」副标签消费）
+        for (const t of trimReport) {
+          appendRetiredEvent({ ts: now, gid: g.id, session_id: t.session_id, cause: "idle-trim", detail: `闲置 ${Math.max(1, Math.round((now - t.last_active) / 3_600_000))}h · ${t.reason}` });
         }
         // 被裁成员若静止在本组归属态，清归属标记（与 member-retire 口径一致：
         // 列表归组/徽标随散；会话卡不删，路由档案不删）
@@ -8230,17 +8302,20 @@ export class SessionManager {
         mkdirSync(d, { recursive: true });
         writeFileSync(join(d, "headcount-trim-report.json"), JSON.stringify({ ts: now, groups }, null, 2) + "\n", "utf-8");
       } catch { /* 报告落盘失败不阻断主路径（清单在通知+日志双备） */ }
+      // [W-SEAT-SEMANTICS] 轮次账 append 制（audit 主源）：每轮每 gid 一行；旧 report 保留
+      // 最新一份（boot 日志引用/既有消费兼容），双写同源无漂移
       for (const x of groups) {
+        appendJournal(join(orgDir(), "headcount-trim-journal.ndjson"), { ts: now, gid: x.gid, name: x.name, before: x.before, after: x.after, trimmed: x.trimmed, via: opts?.viaConfirm ? "confirm" : opts?.auto ? "auto" : "manual", ...(opts?.keepIdleMs ? { keep_idle_ms: opts.keepIdleMs } : {}) });
         console.log(`[headcount-trim] ${x.name}: ${x.before} → ${x.after} 席（裁 ${x.trimmed.length}）`);
       }
       this.upsertNotification("system", `headcount-trim-${now}`, String(now), {
         title: `编制清理：裁减 ${totalTrimmed} 席`,
-        body: truncate(groups.map((x) => `${x.name} ${x.before}→${x.after} 席`).join("；") + "。被裁成员出编制不删会话，清单见 headcount-trim-report.json", 160),
+        body: truncate(groups.map((x) => `${x.name} ${x.before}→${x.after} 席`).join("；") + "。被裁成员出编制不删会话，轮次账见 headcount-trim-journal.ndjson", 160),
         severity: "info", group: "activity", actionable: false, domain: "org", returnPath: "org",
       });
       this.emitOrgState();
     }
-    return { ok: true, data: { groups, totalTrimmed } };
+    return { ok: true, data: { groups, totalTrimmed, ...(gated.length ? { gated } : {}) } };
   }
 
   // 裁剪节拍：boot 首轮（index.ts 显式调）+ 定时（CCR_ORG_TRIM_HOURS 缺省 6，0=关
@@ -8252,7 +8327,7 @@ export class SessionManager {
       const ms = Number.isFinite(hours) && hours > 0 ? hours * 3_600_000 : 6 * 3_600_000;
       if (ms > 0) {
         this.trimTimer = setInterval(() => {
-          try { this.trimHeadcounts(); } catch { /* 定时轮失败不炸，下轮再来 */ }
+          try { this.trimHeadcounts({ auto: true }); } catch { /* 定时轮失败不炸，下轮再来 */ } // [W-SEAT-SEMANTICS] auto 轮走首裁确认闸
         }, ms);
         this.trimTimer.unref?.();
       }
@@ -8285,13 +8360,20 @@ export class SessionManager {
     if (!g) return;
     for (const h of g.headcount) {
       const s = this.sessions.get(h.session_id);
-      if (!s || s.state.external || this.isLeaderSession(h.session_id)) continue;
+      if (!s) {
+        // [W-SEAT-SEMANTICS] 无卡档案位（evict/重启回收后的 headcount 残条）同样随组离席
+        // ——成因入账（member-retire 无卡清扫同款语义）；无会话可停流，纯记账 continue
+        appendRetiredEvent({ ts: Date.now(), gid, session_id: h.session_id, cause: "group-disband", detail: reasonText });
+        continue;
+      }
+      if (s.state.external || this.isLeaderSession(h.session_id)) continue;
       if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) {
         this.closeOpenDispatches(h.session_id, "failed", reasonText, false, false, gid);
       }
       // 他组在跑派单残留 → 会话仍在干活，不退休不杀流（挂起标记也不打：它没随本组休眠）
       if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) continue;
       this.retireSession(s, gid, mode);
+      appendRetiredEvent({ ts: Date.now(), gid, session_id: h.session_id, cause: "group-disband", detail: reasonText }); // [W-SEAT-SEMANTICS] 成因入库：组生命周期（挂起/结项）=group-disband（「随组归档」）
     }
   }
 
@@ -8461,6 +8543,26 @@ export class SessionManager {
     return [...retired].sort();
   }
 
+  /** [W-SEAT-SEMANTICS] 离席富化名单（用户 1101 拍板 C 模式批次一）——retiredMemberSids()
+   * 的成因增强版，SNAPSHOT.retired_entries / RETIRED_SESSIONS_UPDATED.retired_entries 同源。
+   * 口径纪律：状态=推导（同上两本账现算），成因=入库（org/retired-entries.jsonl 三动作点
+   * 记账：member-retire=manual / trim=idle-trim / 组挂起结项=group-disband）。同 sid 多次
+   * 入席/离席取**末笔**（复拉后再裁=新 idle-trim 覆盖旧成因——「现状成因」语义）；无账
+   * 条目（历史退休/记账前事件）cause 缺席，端上回落「离席」泛词（零数据迁移）。 */
+  retiredMemberEntries(): RetiredEntry[] {
+    const sids = this.retiredMemberSids();
+    if (!sids.length) return [];
+    const lastEv = new Map<string, { cause: "manual" | "idle-trim" | "group-disband"; ts: number; detail?: string }>();
+    for (const ev of listRetiredEvents()) {
+      const prev = lastEv.get(ev.session_id);
+      if (!prev || ev.ts >= prev.ts) lastEv.set(ev.session_id, { cause: ev.cause, ts: ev.ts, ...(ev.detail ? { detail: ev.detail } : {}) });
+    }
+    return sids.map((sid) => {
+      const ev = lastEv.get(sid);
+      return { session_id: sid, ...(ev ? { cause: ev.cause, since: ev.ts, ...(ev.detail ? { detail: ev.detail } : {}) } : {}) };
+    });
+  }
+
   // [W-RETIRED] 名单变化广播（瞬态 delta 检测）：编制面全部写点（member-retire/
   // member-add/trimHeadcounts/组状态迁移/派单入编）都收口在 emitOrgState 之后，
   // 尾部挂此单点零遗漏；名单不变零帧（幂等），变化即 RETIRED_SESSIONS_UPDATED
@@ -8476,7 +8578,11 @@ export class SessionManager {
     const prev = this.lastRetiredBroadcast;
     if (prev && prev.length === cur.length && prev.every((v, i) => v === cur[i])) return;
     this.lastRetiredBroadcast = cur;
-    this.bus.emitTransient("RETIRED_SESSIONS_UPDATED", { retired_session_ids: cur });
+    // [W-SEAT-SEMANTICS] 帧双载：retired_session_ids 旧端零破坏；retired_entries 富化
+    //（成因三拆消费面）——读账失败降级为仅 id 数组（成因面缺席=端上回落泛词）
+    let entries: RetiredEntry[] | undefined;
+    try { entries = this.retiredMemberEntries(); } catch { entries = undefined; }
+    this.bus.emitTransient("RETIRED_SESSIONS_UPDATED", { retired_session_ids: cur, ...(entries ? { retired_entries: entries } : {}) });
   }
 
   // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------

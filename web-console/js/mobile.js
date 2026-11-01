@@ -58,12 +58,20 @@
         return cwd ? (cwd.split("/").filter(Boolean).pop() || cwd) : "未归属目录";
       };
       const mBgCount = (s) => (s.subagents ?? []).filter((a) => !a.ended_at).length; // #164 ⑂N 徽标数据
+      const mobileRetiredTag = (sid) => { // [W-SEAT-SEMANTICS] 审B P1 修：卡面成因副标签（桌面 retiredCauseBits 同口径；仅离席组卡会命中——主列表已滤退休）
+        const S2 = (b2Api() || {}).S;
+        if (!S2 || !S2.retiredEntries) return "";
+        const e = S2.retiredEntries.get(sid);
+        if (!e) return "";
+        const lab = e.cause === "manual" ? "已除名" : e.cause === "group-disband" ? "随组归档" : e.cause === "idle-trim" ? "离席 · 闲置超时" : "离席";
+        return `<span class="tag retired-tag" title="${esc(lab)}">${esc(lab)}</span>`;
+      };
       const mobileCard = (s) => {
         const [w] = stTag(s); // w 仅作摘要兜底文案；状态文字标签退役（头像图标/角色已表达状态）
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
         const bg = mBgCount(s);
-        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
+        return `<div class="mobile-card" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${mobileRetiredTag(s.session_id)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;
       };
 
       // ---------- 导航栈 ----------
@@ -623,9 +631,24 @@
         const activeMarkup = pend.length ? `<div class="session-group" data-session-group="active"><div class="queue-group"><span>进行中</span><span class="grp-count" data-session-group-count>${grpIc("activity", true)}${pend.length}</span></div>${pend.map(mobileCard).join("")}</div>` : "";
         // [W-RETIRED] 尾部「已退休成员」折叠归档组（桌面 renderMyList 同批同口径：默认收起、
         // 组头点开展开、历史可查非删除）；退休卡不进进行中/闲置分组（sessions 已滤）
+        // [W-SEAT-SEMANTICS] 三端同步：能力在场（B2 S.retiredEntries）组名改「离席成员」+
+        // 头行成因计数（同桌面 retiredCap 口径）；缺席=旧 relay 维持旧词零破坏
         const retiredSessions = allSessions().filter((s) => !leaderIds.has(s.session_id) && retiredIds.has(s.session_id)).sort(byPinnedUpdated);
+        const Sret = (b2Api() || {}).S; // [W-SEAT-SEMANTICS] B2 S 活取（mobileRetiredIds 同款——本作用域无裸 S 绑定）
+        const retiredCapM = Sret && Sret.retiredEntries
+          ? (() => {
+              const c = { manual: 0, "idle-trim": 0, "group-disband": 0 };
+              for (const x of retiredSessions) { const e = Sret.retiredEntries.get(x.session_id); if (e && e.cause && c[e.cause] !== undefined) c[e.cause]++; }
+              const bits = [];
+              if (c.manual) bits.push("已除名 " + c.manual);
+              if (c["idle-trim"]) bits.push("闲置 " + c["idle-trim"]);
+              if (c["group-disband"]) bits.push("归档 " + c["group-disband"]);
+              return bits.length ? "（" + bits.join(" · ") + "）" : "";
+            })()
+          : "";
+        const retiredLabelM = Sret && Sret.retiredEntries ? "离席成员" : "已退休成员";
         const retiredMarkup = retiredSessions.length
-          ? `<div class="session-group${mobileRetiredOpen ? "" : " collapsed"}" data-session-group="retired"><div class="queue-group" data-retired-toggle role="button" tabindex="0" aria-expanded="${mobileRetiredOpen}" title="展开/收起已退休成员"><span class="grp-caret">${mobileRetiredOpen ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">退</span><span>已退休成员</span><span class="grp-count" data-session-group-count>${grpIc("users")}${retiredSessions.length}</span></div><div class="grp-body">${retiredSessions.map(mobileCard).join("")}</div></div>`
+          ? `<div class="session-group${mobileRetiredOpen ? "" : " collapsed"}" data-session-group="retired"><div class="queue-group" data-retired-toggle role="button" tabindex="0" aria-expanded="${mobileRetiredOpen}" title="展开/收起${retiredLabelM}"><span class="grp-caret">${mobileRetiredOpen ? "▾" : "▸"}</span><span class="grp-ava" aria-hidden="true">${Sret && Sret.retiredEntries ? "席" : "退"}</span><span>${retiredLabelM}${retiredCapM}</span><span class="grp-count" data-session-group-count>${grpIc("users")}${retiredSessions.length}</span></div><div class="grp-body">${retiredSessions.map(mobileCard).join("")}</div></div>`
           : "";
         const rkM = window.__ccDeck005Reconcile;
         if (rkM) {

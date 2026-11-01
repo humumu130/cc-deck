@@ -362,6 +362,7 @@ function kindLabel(kind: OrgConfirm["kind"]): string {
     case "rule-append": return "规则提案"; // W-RULES1：团队规则确认卡通知标签
     case "member-join": return "入队申请"; // X0 件2：org join 自荐入编确认卡通知标签
     case "device-trust": return "跨机首联"; // X1 多机编排：设备级 first-contact 确认卡通知标签
+    case "headcount-trim-first": return "首次编制清理"; // [W-SEAT-SEMANTICS] 首裁确认卡通知标签
   }
 }
 

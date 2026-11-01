@@ -540,6 +540,11 @@ export interface SnapshotPayload {
   // 增量面走 RETIRED_SESSIONS_UPDATED 瞬态帧。会话数据照常全量下发（sessions 不滤）
   // ——名单只影响端上渲染分组（默认隐藏沉「已退休成员」归档组），历史可查
   retired_session_ids?: string[];
+  // [W-SEAT-SEMANTICS] 离席成员富化名单（retired_session_ids 的成因增强版；空数组
+  // 也下发=能力位；缺席=旧 relay 回落 retired_session_ids 泛词）。cause 三源见
+  // RetiredEntry；since=成因事件时刻（ledger 记账时刻）。与瞬态帧 RETIRED_SESSIONS_
+  // UPDATED.retired_entries 同源同构
+  retired_entries?: RetiredEntry[];
   // W-DESIGNHUB 系统设计图纸清单（docs/system-design/ 扫描产物）：空数组/缺键 =
   // 入口隐藏（旧 relay 与缺 docs 部署自动降级）。移动端暂缓，云通道快照不带
   design_docs?: DesignDocItem[];
@@ -805,6 +810,20 @@ export interface SessionsReconcilePayload {
 //（org_parked 式内存态过不了重启关——isRetiredMember 同哲学）
 export interface RetiredSessionsPayload {
   retired_session_ids: string[];
+  // [W-SEAT-SEMANTICS] 富化双载（与 SNAPSHOT.retired_entries 同源同构）——旧端只读
+  // retired_session_ids 零破坏；新端优先消费本字段做成因三拆
+  retired_entries?: RetiredEntry[];
+}
+
+// [W-SEAT-SEMANTICS] 离席成员条目（成因入库，方案第三节口径纪律「状态=推导、
+// 成因=入库」）：cause 记账三源——member-retire 动作=manual / trimHeadcounts 裁=
+// idle-trim / 组挂起·结项 retireMembers=group-disband。detail 人读补充（闲置时长/
+// 组名/模式）。无账条目（历史退休/记账前事件）cause 缺席=端上回落「离席」泛词
+export interface RetiredEntry {
+  session_id: string;
+  cause?: "manual" | "idle-trim" | "group-disband";
+  since?: number;
+  detail?: string;
 }
 
 // #316 手表配对请求：手表经 mDNS 发现 relay 后走 /ws?pair=1 待配对信道，relay 生成

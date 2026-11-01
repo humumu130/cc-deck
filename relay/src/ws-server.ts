@@ -1291,6 +1291,7 @@ export function startServer(
           // 隐藏/沉「已退休成员」归档组（用户 1029 反馈根治）；sessions 照常全量下发
           // 不滤（历史可查，编制退休≠会话删除）。增量面走 RETIRED_SESSIONS_UPDATED
           retired_session_ids: mgr.retiredMemberSids(),
+          retired_entries: mgr.retiredMemberEntries(), // [W-SEAT-SEMANTICS] 富化双载（旧端读 ids 零破坏）
           // W-DESIGNHUB 系统设计图纸清单（设置-关于「系统设计图纸」区 + 项目域总览
           // 「设计图纸」区数据源；空数组/缺键 = 入口隐藏——旧 relay 与缺 docs 部署
           // 自动降级。移动端暂缓，云通道不带）

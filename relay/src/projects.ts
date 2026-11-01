@@ -178,7 +178,12 @@ export type ConfirmKind =
   // 首条密封 xmsg 弹卡一次（消息悬置），✓ = device_trust 确认+悬置放行，✗ = 吊销+弃置；
   // payload 携 dev/pubkey/tenant/first_msg_id，决议副作用在 applyConfirmEffects
   // case "device-trust"（xmsg 控制器 onTrustDecision）
-  | "device-trust";
+  | "device-trust"
+  // [W-SEAT-SEMANTICS] 首次自动裁编确认（用户 1101 拍板 C 模式批次一）：每 gid 首次
+  // 自动 trim 不直接裁——出卡告知名单+理由（idle 时长），✓ 后真裁（applyConfirmEffects
+  // case "headcount-trim-first" 带 viaConfirm 重入）且此后该 gid 永直裁；✗=本轮不裁，
+  // 24h 冷却后再提（防 6h 轮询轰炸）。payload 携 gid/名单/keep_idle_hours
+  | "headcount-trim-first";
 
 export interface OrgConfirm {
   id: string;
@@ -1544,5 +1549,50 @@ export function findStaleGroups(
     if (ma > last) last = ma;
     if (last < cutoff) out.push({ gid: g.id, name: g.name, idleDays: Math.max(1, Math.floor((now - last) / DAY)) });
   }
+  return out;
+}
+
+// ---------- [W-SEAT-SEMANTICS] 离席成因账（org/retired-entries.jsonl，append-only） ----------
+// 口径纪律（方案第三节）：「离席状态」=推导（retiredMemberEntries 由 projects+routing
+// 两本账现算），「离席成因」=入库（三动作点各记一笔：member-retire=manual /
+// trimHeadcounts=idle-trim / retireMembers=group-disband）。历史事件零迁移——记账
+// 前的退休条目无 cause，端上回落「离席」泛词。同 sid 多次入席/离席：末笔为准
+//（复拉再裁=新 idle-trim 笔覆盖旧 manual 笔——「现状成因」语义）。
+// 读侧容忍坏行（ndjson 逐行 try），写侧 appendJournal（5MB 滚动，fs-safe 单口）。
+export interface RetiredLedgerEvent {
+  ts: number;
+  gid: string;
+  session_id: string;
+  cause: "manual" | "idle-trim" | "group-disband";
+  detail?: string;
+}
+
+const RETIRED_LEDGER = "retired-entries.jsonl";
+
+export function appendRetiredEvent(ev: RetiredLedgerEvent, dir?: string): void {
+  const d = dir ?? orgDir();
+  try {
+    mkdirSync(d, { recursive: true });
+    appendJournal(join(d, RETIRED_LEDGER), { ...ev });
+  } catch { /* 记账失败不阻断主路径：推导面仍有 sid 名单，仅缺成因 */ }
+}
+
+export function listRetiredEvents(dir?: string): RetiredLedgerEvent[] {
+  const d = dir ?? orgDir();
+  const out: RetiredLedgerEvent[] = [];
+  try {
+    const raw = readFileSync(join(d, RETIRED_LEDGER), "utf-8");
+    for (const line of raw.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const ev = JSON.parse(t) as RetiredLedgerEvent;
+        if (ev && typeof ev.session_id === "string" && typeof ev.gid === "string" &&
+            (ev.cause === "manual" || ev.cause === "idle-trim" || ev.cause === "group-disband")) {
+          out.push({ ts: Number(ev.ts) || 0, gid: ev.gid, session_id: ev.session_id, cause: ev.cause, ...(ev.detail ? { detail: String(ev.detail) } : {}) });
+        }
+      } catch { /* 坏行跳过 */ }
+    }
+  } catch { /* 无文件=空账 */ }
   return out;
 }
