@@ -134,6 +134,9 @@ export interface SourceConn {
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
+  // conn-stability（1101 P0）：断连事件台账（环形 cap 20）——kind 分类+复通记
+  // 断→通持续时长。设置关于页「最近断连」消费；用户「易断/重连慢」从此有数字可归因
+  connEvents: Array<{ ts: number; kind: "net-drop" | "hb-timeout" | "server-close" | "protocol" | "resume-broken"; detail: string; durMs?: number }>;
   // 自动重试倒计时（③）：reconnecting 期间每秒刷新 stateText（"重试中…下次 Ns"）
   countdownTimer: ReturnType<typeof setInterval> | null;
   retryAt: number; // 下次自动重试时刻（倒计时基准）
@@ -402,9 +405,13 @@ const emptySnapshot: Snapshot = {
 
 const LAN_PROBE_MS = 4000;
 
-// 自动重试退避（连接状态机 ③）：失败后 3s 起步、指数 ×2、30s 封顶；连上即归零。
+// 自动重试退避（连接状态机 ③）：失败后起步、指数 ×2、上限封顶；连上即归零。
 // 覆盖杀网/断桥/电脑端断电的长故障窗口，低频重试也避免与桥侧限流互相放大成风暴
-const RECONNECT_BASE_MS = 3000;
+// conn-stability（1101 晚 P0「重连特别慢」）：3s→1s——回前台体检已清退避（#114）+
+// 前台看门狗 5s 拉立即（双兜底在前），BASE 只是**首断到首试**的空窗；3s 起步叠加
+// LAN 探测 4s/桥握手时延=用户体感「连很久」。1s 首试不放大风暴（指数 ×2 很快回
+// 上限档；上限 60s 保持——W-CLOUD② 整夜挂死死线论证仍立，后台省电语义不变）
+const RECONNECT_BASE_MS = 1000;
 // #33（2026-09-10 用户反馈重连太频）：上限 30s→300s——云通道断的是「桥 ws」，
 // relay 长时间关机（下班/合盖）时 30s 一轮纯属空转；300s 对齐 relay 云客户端口径
 // #110（务实版）：云源退避上限 300s→900s——#34 唤醒广播已保证 relay 上线秒级
@@ -1065,6 +1072,7 @@ class RelayStore {
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
+        connEvents: [],
         reconnectTimer: null,
         countdownTimer: null,
         retryAt: 0,
@@ -1409,6 +1417,7 @@ class RelayStore {
     conn.channel = "lan";
     conn.reconnectDelay = RECONNECT_BASE_MS;
     conn.fastRetry = true;
+    this.noteConnUp(conn); // conn-stability：复通记断→通时长
     conn.state = "online";
     conn.stateText = null;
     conn.failNote = null;
@@ -1418,6 +1427,7 @@ class RelayStore {
       if (conn.ws !== ws) return;
       this.stopHb(conn);
       this.clearPendingCmds(conn);
+      this.recordConnEvent(conn, "net-drop", "LAN 直连断开（onclose 无 code——网络切换/后台冻结/电脑端断电）"); // conn-stability 打点
       conn.state = "offline";
       conn.stateText = null;
       conn.channel = null;
@@ -1522,6 +1532,8 @@ class RelayStore {
       const ccode = Number((ev as { code?: number }).code) || 0;
       const creason = String((ev as { reason?: unknown }).reason ?? "");
       if (opened) {
+        // conn-stability 打点：close code 四分类（复用 #149 判定面——net-drop/server-close/protocol）
+        this.recordConnEvent(conn, ccode === 1006 || !ccode ? "net-drop" : ccode >= 4000 ? "server-close" : "protocol", `云桥断开 code=${ccode}${creason ? " reason=" + creason.slice(0, 60) : ""}`);
         // #conn-ux-P0-2 段2 人话：close=桥已连但断开——最常见因是电脑端 relay 离线
         //（上线自动恢复），文案直说；顶替/限流等特例保留原语义
         conn.failNote = ccode === 4000 ? "云桥连接被顶替（同设备另开了连接）"
@@ -1713,12 +1725,42 @@ class RelayStore {
   // 陈旧使看门狗原条件不满足）= 用户实测「回前台偶现卡死、冷启动却秒连」的无界
   // 等待路径——冷启动无僵尸 socket 可赌，故秒连。收尾与 onclose 处理器等价
   //（offline + scheduleReconnect），fastRetry 语义保留（最近开过门的连接 800ms 快发）
-  private connDead(conn: SourceConn, ws: WebSocket) {
+  // conn-stability：断连事件入账（环形 cap 20）。kind 分类口径——net-drop=异常断
+  // （1006/无 code，网络切换/后台冻结/断电）；server-close=服务端主动（4xxx 顶替/限流
+  // 或 relay 重启）；hb-timeout=前台 55s 无下行判死（半开黑洞）；protocol=其他 close
+  // code（握手/协议层）；resume-broken=resume 校验失败。durMs 由复通点补写（断→通时长）
+  private recordConnEvent(conn: SourceConn, kind: "net-drop" | "hb-timeout" | "server-close" | "protocol" | "resume-broken", detail: string) {
+    try {
+      conn.connEvents.push({ ts: Date.now(), kind, detail: detail.slice(0, 120) });
+      if (conn.connEvents.length > 20) conn.connEvents.splice(0, conn.connEvents.length - 20);
+    } catch { /* 台账尽力而为 */ }
+  }
+  // conn-stability：关于页只读口——聚合/单源各自取 connEvents 尾 N 条（跨 conns 按时刻排）
+  recentConnEvents(n = 3): Array<{ ts: number; kind: string; detail: string; durMs?: number }> {
+    try {
+      const all = (this as unknown as { aggregate: boolean; conns: Map<string, { connEvents?: Array<{ ts: number; kind: string; detail: string; durMs?: number }> }>; activeId: string });
+      const src = all.aggregate
+        ? [...all.conns.values()].flatMap((x) => x.connEvents ?? [])
+        : (all.conns.get(all.activeId)?.connEvents ?? []);
+      return [...src].sort((a, b) => b.ts - a.ts).slice(0, n);
+    } catch { return []; }
+  }
+
+  // conn-stability：复通记账——末条断连补 durMs（「重连慢」的实测数字来源）
+  private noteConnUp(conn: SourceConn) {
+    try {
+      const last = conn.connEvents[conn.connEvents.length - 1];
+      if (last && last.durMs === undefined) last.durMs = Date.now() - last.ts;
+    } catch { /* 同上 */ }
+  }
+
+  private connDead(conn: SourceConn, ws: WebSocket, evtKind: "hb-timeout" | "resume-broken" = "hb-timeout") {
     killWs(ws); // 摘 handlers + close + 晚开门补刀——不依赖任何事件回来
     if (conn.ws !== ws) return; // 已被更新的连接取代：只收尸体，不动现行连接状态
     conn.ws = null;
     this.stopHb(conn);
     this.clearPendingCmds(conn);
+    this.recordConnEvent(conn, evtKind, evtKind === "hb-timeout" ? "前台 55s 无下行判死（半开黑洞——网络切换/NAT 回收）" : "回前台 resume 校验失败（服务已重启/会话换代）"); // conn-stability 打点
     conn.awaitWake = false;
     conn.resumeCheck = false;
     conn.state = "offline";
@@ -1850,6 +1892,7 @@ class RelayStore {
     if (conn.resumeCheck) {
       conn.resumeCheck = false;
       if (conn.state !== "online") {
+        this.noteConnUp(conn); // conn-stability：resume 复通记时长
         conn.state = "online";
         conn.stateText = null;
         conn.failNote = null;
@@ -1859,6 +1902,7 @@ class RelayStore {
     // #33：relay 首帧 = 真在线（云通道开门只标 connecting）。LAN adoptLan 无此问题
     // （ws 直连 relay，开门即在线），只在云通道补位
     if (conn.channel === "cloud" && conn.state !== "online") {
+      this.noteConnUp(conn); // conn-stability：云首帧复通记时长
       conn.state = "online";
       conn.stateText = null;
       // #34 P1：relay 首帧也是"已恢复在线"的证明（旧桥无广播时靠 ping-pong 自愈

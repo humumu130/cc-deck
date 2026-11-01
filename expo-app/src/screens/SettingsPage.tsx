@@ -405,9 +405,29 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
             </View>
             {msg ? <Text style={m.abMsgT} numberOfLines={1}>{msg}</Text> : null}
           </Pressable>
+          <RecentConnEvents />
         </View>
       </Pressable>
     </Modal>
+  );
+}
+
+// conn-stability（1101 P0）：关于弹窗「最近断连」段——断连台账（connEvents 环形
+// 20 条）尾 3 条直出：时刻·分类·持续时长（durMs 未定=仍在断）。为「易断/重连慢」
+// 的用户报障与归因提供第一手数字（配合 BASE 1s 收敛，后续装机观察实际时长分布）
+function RecentConnEvents() {
+  const events = store.recentConnEvents(3);
+  if (!events.length) return null;
+  const kindLabel: Record<string, string> = { "net-drop": "网络断", "hb-timeout": "心跳超时", "server-close": "服务端断", protocol: "协议层", "resume-broken": "恢复失败" };
+  return (
+    <View style={{ marginTop: 10, paddingHorizontal: 16, paddingBottom: 6 }}>
+      <Text style={{ fontSize: 12, color: "#8a93a6", marginBottom: 2 }}>最近断连（排障参考）</Text>
+      {events.map((e, i) => (
+        <Text key={i} style={{ fontSize: 11, color: "#8a93a6", marginTop: 3 }} numberOfLines={1}>
+          {new Date(e.ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} · {kindLabel[e.kind] ?? e.kind} · {e.durMs !== undefined ? `${(e.durMs / 1000).toFixed(1)}s 恢复` : "未恢复"}
+        </Text>
+      ))}
+    </View>
   );
 }
 
