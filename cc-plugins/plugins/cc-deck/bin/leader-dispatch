@@ -233,10 +233,39 @@ if [ "$no_wt" = 0 ] && [ "$dry" = 0 ]; then
   fi
 fi
 
+# ---------- W-ORG-DEFECTS 件2：worktree 互斥锁（.cc-deck-lock，2026-11-01 用户 1101 定性 P0） ----------
+# 事故回链：1101 工作树撞车×2（外部会话与 worker 同 worktree 并发 rebase，靠 mtime 取证
+# +90s 停手观察土法互斥——w-uifollowup-rebase.md「rebase 过程」节）。语义与 relay/src/
+# dispatch-lock.ts 同源（JSON 形态/2h 窗/惰性过期）：reuse 时他人活锁在→拒派；预建成功即
+# 写锁；relay dispatch 收口边（scanClearWorktreeLocks）/leader-harvest 收尾清锁，2h 过期自愈。
+wt_lock="$wt/.cc-deck-lock"
+if [ "$no_wt" = 0 ]; then
+  # 返工② P0-②（B 档攻防）：预检→写锁改原子——预检读（wt-lock.py verdict）只做 UX 早死，
+  # 写锁唯一走 wt-lock.py acquire（O_EXCL+陈锁接管回读校验，双实例同刻恰一胜）；
+  # 同 slug 活锁=幂等续派口径保留（不重写哨兵锁，归属判定归 relay 认领边原子 claim——
+  # 他 id 已认领时 relay fail-closed 拒派，撞车面双层封死）。
+  lock_bin="$(dirname "$0")/wt-lock.py"
+  lock_verdict="$(python3 "$lock_bin" wt verdict "$wt_lock" 2>/dev/null)" || lock_verdict="stale"
+  case "$lock_verdict" in
+    held\ $slug\ *) echo "leader-dispatch：同 slug 活锁在（幂等续派/认领重派，slug=$slug）——放行，归属判定归 relay 认领边原子 claim" ;;
+    held\ *) die 2 "worktree 被他人活锁占用（$lock_verdict）——同树并发=撞车事故源（1101 定性 P0）。等 relay 收口/harvest 清锁或过期（见 $wt_lock），或换 --slug 重派" ;;
+  esac
+  if [ "$dry" = 0 ]; then
+    # 原子获取：WIN 才放行；LOSE（含同刻竞态输锁/fs 异常 fail-closed）即拒派
+    if python3 "$lock_bin" wt acquire "$wt_lock" --slug "$slug"; then
+      echo "leader-dispatch：worktree 互斥锁已落（原子 O_EXCL，slug=$slug）：$wt_lock"
+    else
+      die 2 "worktree 锁原子获取判负（竞态输锁/他人活锁/fs 异常）: $wt_lock——换 --slug 或稍后重试（1101 定性 P0：双实例同刻恰一胜）"
+    fi
+  else
+    echo "[锁] dry-run：预检过（$lock_verdict），真派时将原子写 $wt_lock"
+  fi
+fi
+
 # ---------- org dispatch 请求体（gid 派单锚取组 F-03；板卡联动 relay 内建） ----------
-python3 - "$tmp_final" "$tmp_body" "$anchor" "$gid" "$title" "$skills" "$engine" <<'PY'
+python3 - "$tmp_final" "$tmp_body" "$anchor" "$gid" "$title" "$skills" "$engine" "$wt" "$slug" "$no_wt" <<'PY'
 import json, sys
-brief_path, out_path, anchor, gid, title, skills, engine = sys.argv[1:8]
+brief_path, out_path, anchor, gid, title, skills, engine, wt, slug, no_wt = sys.argv[1:11]
 d = {"action": "dispatch", "anchor": anchor,
      "prompt": open(brief_path, encoding="utf-8").read(),
      "gid": gid, "title": title}
@@ -244,6 +273,11 @@ if skills.strip():
     d["skills"] = [t.strip() for t in skills.split(",") if t.strip()]
 if engine.strip():
     d["engine"] = engine.strip()
+# P1-1（审查A档返工）：worktree/slug 透传——relay dispatchWorker 认领边补写锁归属
+# （dispatch_id+session_id）；--no-worktree 不传=旧调用零影响（向后兼容）
+if no_wt == "0" and wt:
+    d["worktree"] = wt
+    d["slug"] = slug
 open(out_path, "w", encoding="utf-8").write(json.dumps(d, ensure_ascii=False))
 PY
 

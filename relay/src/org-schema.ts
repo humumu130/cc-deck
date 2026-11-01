@@ -128,6 +128,7 @@ export const BOARD_ENTRY_SCHEMA: Record<string, { type: "string" | "number" | "b
   priority: { type: "enum", enumTable: BOARD_PRIORITIES }, // #G3：词表分支细查
   parent_id: { type: "string" }, // #G3：父子链（坏引用渲染层孤儿容错，depends_on 同口径不炸）
   wakeup_at: { type: "number" }, // M2a 板卡唤醒（到点 patrol 触发后消费清空；毫秒时戳）
+  hold: { type: "object" }, // W-ORG-DEFECTS 件3：held 扣留位（{reason, since}，分支细查）
 };
 
 /** DispatchEntry（org.ts:316；stage/stage_detail 为 T1-STAGE 增量字段——先行入 schema） */
@@ -205,6 +206,8 @@ export function applyOrgChange(kind: OrgChangeKind, payload: unknown): OrgChange
       }
       const gate = payload.gate;
       if (gate !== undefined && gate !== null && (!isObj(gate) || !isStr(gate.reason) || !isNum(gate.opened_at))) return { ok: false, error: "gate 应为 {reason, opened_at}" };
+      const hold = payload.hold; // W-ORG-DEFECTS 件3：held 扣留位（gate 分立——gate=外部依赖阻塞，hold=我方流程扣留）
+      if (hold !== undefined && hold !== null && (!isObj(hold) || !isStr(hold.reason) || !isNum(hold.since))) return { ok: false, error: "hold 应为 {reason, since}" };
       const pr = payload.priority; // #G3：优先级词表（缺省=未标注合法）
       if (pr !== undefined && (!isStr(pr) || !(BOARD_PRIORITIES as readonly string[]).includes(pr))) return { ok: false, error: `板卡 priority 不在词表（P0/P1/P2）：${pr}` };
       return { ok: true };

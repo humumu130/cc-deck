@@ -1509,3 +1509,22 @@ export interface CommandAckPayload {
   // 的回执恒不带）；ok/error 语义保持首次原样，客户端不识别也不受影响
   duplicate?: boolean;
 }
+
+// ── W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排层产品缺陷 P0 批）──
+// 链路审计动作词表权威单点：此前词表散在 session-manager emitChainAudit 签名内联
+// union（15 词），本批新增六词时收敛到 types（「新词入 types」口径）。新词语义：
+//   harvest-violation = 越权收割拦截（scripts/hooks/pre-push 审计行→relay 轮询消费）
+//   worktree-busy     = worktree 互斥锁拒派/拒注（他人活锁，dispatch-lock.ts 判定）
+//   hold-overtime     = held 卡 >48h 超时提醒（出口①）
+//   hold-release      = held 卡一键破锁（出口②：用户催收/人工释放）
+//   zombie-retire     = 僵尸看门狗自动退休（两轮确认后 member-retire）
+//   receipt-drop      = 回执文件落盘事件（feedPM receipt-drop 源，事件唤醒）
+// session-manager 方法签名引用 ChainAuditAction（行为零变化）；两处改动需同步——同步
+// 责任在本注释（同 org-schema G5 镜像词表惯例）。
+export const CHAIN_AUDIT_ACTIONS = [
+  "pm-wake", "pm-claim", "dispatch-reroute", "stale-escalate", "failure-escalate",
+  "dispatch-close", "gate-release", "transition-illegal", "recon-autoclose",
+  "xmsg-send", "xmsg-recv", "xmsg-reject", "xmsg-inject", "xmsg-ack", "xmsg-first-contact",
+  "harvest-violation", "worktree-busy", "worktree-lock-race", "hold-overtime", "hold-release", "zombie-retire", "receipt-drop",
+] as const;
+export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

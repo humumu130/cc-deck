@@ -124,6 +124,12 @@ export interface BoardEntry {
   /** beads gate 思想（009 §2/§5：CI/定时/外部等待映射 blocked）：字段在场=blocked 可判定。
    * 红线：无自动放行/关闭路径——清除只能由人显式 upsert（gate:null），确认卡仍是用户决策唯一写面 */
   gate?: { reason: string; opened_at: number };
+  /** W-ORG-DEFECTS 件3（2026-11-01）：held 态扣留位——在场=卡被扣（等验证/等拍板），
+   * 出口=board-release 清除 / 48h 超时提醒 / 用户催收升级（三出口，session-manager
+   * holdOvertimeScan/holdNudgeScan）。since=首锁时刻（续锁不重置，出口按真扣留时长）。
+   * 与 gate 语义分立：gate=外部依赖阻塞（beads），hold=我方流程扣留——混用会污染
+   * blocked 判定。 */
+  hold?: { reason: string; since: number };
   /** #G3 板卡富模型：优先级三档（P0/P1/P2，对标 multica）——缺省=未标注；词表权威
    *  org-schema BOARD_PRIORITIES（本文件 re-export），派单透传同源 */
   priority?: string;
@@ -1034,6 +1040,9 @@ export type UpsertBoardEntryInput = {
   priority?: string | null;
   parent_id?: string | null;
   wakeup_at?: number | null; // M2a：null=消费/清除（patrol 触发后置空防重触）
+  /** W-ORG-DEFECTS 件3：held 态上锁（{reason}=新锁/null=破锁）；since 由 store 层单源
+   * 维护（首锁时刻，续锁不重置——48h 出口按真扣留时长计），不收外部入参。 */
+  hold?: { reason: string } | null;
 };
 export function upsertBoardEntry(
   gid: string,
@@ -1082,6 +1091,12 @@ function upsertBoardEntryInner(
       if (entry.gate === null) delete e.gate;
       else e.gate = { reason: entry.gate.reason, opened_at: now };
     }
+    if (entry.hold !== undefined) {
+      // W-ORG-DEFECTS 件3：hold 生命周期——null=破锁（delete）；set=新锁落 since / 续锁
+      // 保留原 since（闹钟不重置）；原样重写同 reason 也幂等无感。
+      if (entry.hold === null) delete e.hold;
+      else e.hold = { reason: entry.hold.reason, since: e.hold?.since ?? now };
+    }
     if (entry.priority !== undefined) { // #G3：null=清除回未标注
       if (entry.priority === null) delete e.priority;
       else e.priority = entry.priority;
@@ -1112,6 +1127,7 @@ function upsertBoardEntryInner(
       ...(t.review_required === true ? { review_required: true } : {}),
       ...(deps && deps.length > 0 ? { depends_on: deps } : {}),
       ...(entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}),
+      ...(entry.hold ? { hold: { reason: entry.hold.reason, since: now } } : {}), // W-ORG-DEFECTS 件3：新卡可带锁入库
       ...(entry.priority ? { priority: entry.priority } : {}), // #G3：缺省不落键（旧行兼容）
       ...(entry.parent_id ? { parent_id: entry.parent_id } : {}),
       ...(entry.wakeup_at ? { wakeup_at: entry.wakeup_at } : {}), // M2a：缺省不落键

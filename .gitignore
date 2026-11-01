@@ -68,3 +68,8 @@ docs/mockups/*.png
 # A/B preview 快照（临时对比物，走本地 serve/artifacts 不入 git）
 web-console/preview/
 cc-plugins/plugins/cc-deck/web-console/preview/
+
+# W-ORG-DEFECTS（2026-11-01）：编排互斥锁文件（worktree 侧 .cc-deck-lock 由 leader-dispatch
+# 落、relay dispatch-lock.ts 读；不入 git——纯运行时协调物，勿污染 worker 的 git status 认领）
+.cc-deck-lock
+.harvest-lock

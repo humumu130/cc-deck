@@ -106,6 +106,21 @@ base="${base_opt:-$(led_field base_sha)}"
 dl_status="$(dl_field status)"
 dl_receipt="$(dl_field receipt)"   # 台账的 receipt=收口回执摘要（≠回执文件路径）
 
+# ---------- W-ORG-DEFECTS 件1：收割实例锁（harvest.lock，2026-11-01 用户 1101 定性 P0） ----------
+# 事故回链：1101 收割撞车（双收割实例/PM 与外部会话同时织合同批分支，rebase 半途停手
+# 互踩——w-uifollowup-rebase.md）。语义：本机同刻只允许一个 leader-harvest 实例在跑；
+# 持有 pid 存活且锁龄 <2h → 拒跑（等对方收尾）；pid 已死/过期=陈锁覆写（不阻塞）。
+# relay 侧无此锁的消费面（纯本地互斥）；退出 trap 清锁。
+hlock="$data/harvest.lock"
+# 返工② P0-②（B 档攻防）：check-then-write 改原子——wt-lock.py hlock acquire（O_EXCL+
+# pid 存活判活+陈锁原子接管回读校验），双收割实例同刻并发恰一胜（B-档 ②d 复现：双双
+# 进闸零撞锁拒）。LOSE 即拒跑；WIN 后 trap 清锁不变。
+lock_bin="$(dirname "$0")/wt-lock.py"
+if ! python3 "$lock_bin" hlock acquire "$hlock" --pid "$$" --dispatch-id "${did:0:8}"; then
+  die 1 "收割锁原子获取判负（另一收割实例在跑/竞态输锁/fs 异常）: $hlock（撞车事故源：1101 定性 P0）"
+fi
+trap 'rm -f "$hlock"' EXIT
+
 echo "== 收割单 ${did:0:8} =="
 echo "标题：${title:-（账无标题）}"
 echo "会话：${sid:0:12}${sid:+…}"
@@ -150,7 +165,7 @@ if [ -n "$worktree" ] && [ -d "$worktree" ]; then
     echo "  （基线后无新提交——worker 未 commit？）"
     fails=$((fails+1))
   fi
-  dirty="$(git -C "$worktree" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  dirty="$(git -C "$worktree" status --porcelain 2>/dev/null | grep -v '\.cc-deck-lock$' | wc -l | tr -d ' ')" # W-ORG-DEFECTS 件2：互斥锁不计 dirty（.gitignore 行随本批合并，老基线 worktree 过渡期兜底）
   [ "$dirty" != "0" ] && { echo "  ⚠ 未提交改动 $dirty 处（squash 前需先收口）"; fails=$((fails+1)); }
   echo "  HEAD=$(git -C "$worktree" rev-parse --short HEAD 2>/dev/null || echo '?')"
 elif [ -n "$worktree" ]; then
@@ -177,6 +192,11 @@ echo "  # 不自动化项（SSOT 内核，逐项人工）：diff 抽查｜自测
 if [ "$fails" -gt 0 ]; then
   echo "RESULT harvest=$did fails=${fails}（闸有 ✗，处置后重跑）"
   exit 1
+fi
+# W-ORG-DEFECTS 件2：闸全绿=单终态，顺手清 worktree 互斥锁（relay 收口边/harvest 收尾/2h
+# 过期三路清锁之二；fails>0 时保留锁——单未收口，同树仍需互斥）。
+if [ -n "$worktree" ] && [ -d "$worktree" ] && [ -f "$worktree/.cc-deck-lock" ]; then
+  rm -f "$worktree/.cc-deck-lock" && echo "✓ worktree 互斥锁已清（$worktree/.cc-deck-lock）"
 fi
 echo "RESULT harvest=$did fails=0（机器闸全绿；人工判断项见上，勿跳过）"
 exit 0

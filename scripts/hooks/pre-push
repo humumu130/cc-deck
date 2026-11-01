@@ -1,0 +1,38 @@
+#!/bin/bash
+# W-ORG-DEFECTS 件1（2026-11-01 用户 1101 定性编排缺陷 P0）：越权收割拦截。
+# 事故回链：1101 越权收割×3——worker 会话自把工作分支 squash 进 dev
+#（5ef88172/8a70737f/d977b0f1，裁定需修未修完即进 dev，PM 只能 forward 修善后）。
+# 语义：worker 会话（cwd 落在 CCR_WT_ROOT 缺省 /private/tmp 的 worktree 内，或
+# CC_ORG_ROLE=worker——env 位预留）push dev/main → 当场拒绝 + 审计行落
+# $CCR_DATA_DIR/harvest-violations.ndjson（relay harvestViolationScan 消费→
+# harvest-violation 审计帧+PM 通知，事后可视）。tag push（refs/tags/v*）不受限。
+# 边界（防误不防恶——产品缺陷治理非对抗模型，纪律注入+审计兜底）：
+#   PM/用户收割=主仓（~/dev/cc-deck）操作 git，PWD 不在 worktree 根下 → 放行；
+#   worker 交付=分支内 commit 等 PM squash（leader-harvest 机器闸）——push dev 即越权。
+# 部署：git config core.hooksPath scripts/hooks（与 pre-commit 同装一次）。
+data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
+wt_root="${CCR_WT_ROOT:-/private/tmp}"
+# 返工② P0-①（B 档攻防实弹）：cwd 与 wt_root 双双 pwd -P 物理化——bash 继承逻辑 PWD，
+# macOS /tmp→/private/tmp 符号链接拼法（cd /tmp/cc-deck-w-x 后 push dev）绕过
+# "$wt_root"/* 匹配直推 rc=0（B 档实测）；物理化后逻辑别名不再逃逸。
+pwd_p="$( { cd "$PWD" 2>/dev/null && pwd -P; } || pwd -P )"
+wt_root_p="$( { cd "$wt_root" 2>/dev/null && pwd -P; } || printf '%s' "$wt_root" )"
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/dev|refs/heads/main)
+      in_wt=0
+      case "$pwd_p/" in "$wt_root_p"/*) in_wt=1 ;; esac
+      if [ "${CC_ORG_ROLE:-}" = "worker" ] || [ "$in_wt" = 1 ]; then
+        mkdir -p "$data" 2>/dev/null || true
+        printf '{"ts":%s000,"pid":%s,"cwd":"%s","refspec":"%s:%s","role":"%s"}\n' \
+          "$(date +%s)" "$$" "$pwd_p" "$local_ref" "$remote_ref" "${CC_ORG_ROLE:-}" \
+          >> "$data/harvest-violations.ndjson" 2>/dev/null || true
+        echo "pre-push：越权收割拦截——收割权在 PM（dev/main 直推与收割树写入均为 PM 主权面；1101 定性产品缺陷 P0）。" >&2
+        echo "  worker 交付路径：分支内 commit → 回执 → 等 PM squash 收割（leader-harvest 机器闸）。" >&2
+        echo "  误拦（PM 需在 worktree 内操作时）：到主仓目录 push，或 CCR_WT_ROOT 显式指错开。" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+exit 0

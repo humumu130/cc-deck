@@ -100,6 +100,10 @@ export function createMiscCommands(mgr: any) {
         sanitizeImages(cmd.payload.images),
         sanitizeFiles(cmd.payload.files),
       );
+      // W-ORG-DEFECTS 件3：用户催收关键词检测（held 卡出口②）——用户真身输入的唯一
+      // 确定边（bridge hook 上报），命中催收词且有 held 卡→升级通知 PM。try-catch
+      // 尽力而为，绝不影响输入注入主路径。
+      try { mgr.holdNudgeScan(String(cmd.payload.text ?? "")); } catch { /* 尽力而为 */ }
       return { command_id: cmd.command_id, ok: r.ok, error: r.error };
     },
     COMMAND_EXT_STOP(cmd: any, _by: string): CommandAckPayload {
