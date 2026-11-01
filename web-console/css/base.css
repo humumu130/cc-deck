@@ -2782,12 +2782,12 @@
     /* ===== 通知面板 v2（1101 三路审查合并单：去卡片化行流/kind badge/动效体系） ===== */
     .notifmask {
       position: absolute; inset: 0; z-index: 300;
-      background: transparent; background: rgba(0, 0, 0, .42);
-      -webkit-backdrop-filter: blur(6px) saturate(120%); backdrop-filter: blur(6px) saturate(120%);
+      background: transparent; background: rgba(0, 0, 0, .48);
+      /* P0 热修（用户 Mac 实锤 1101）：backdrop-filter blur 在 WKWebView 全窗遮罩=合成层冻结（关不掉的模糊+红旗卡顿）——按审查预案「GPU 验证不过则退纯色」执行，深度 .42→.48 补层次 */
       opacity: 0; transition: opacity var(--dur-enter) var(--ease-out); pointer-events: none;
     }
     #d-notify.on .notifmask { opacity: 1; pointer-events: auto; }
-    #d-notify.on .notifmask.closing { opacity: 0; transition: opacity var(--dur-exit) var(--ease-in); }
+    #d-notify.on.closing .notifmask { opacity: 0; transition: opacity var(--dur-exit) var(--ease-in); } /* P1-2 重落：closing 挂 section（首落随 worktree 误删遗失） */
     .notifpanel {
       position: absolute; left: 64px; bottom: 56px; width: min(400px, calc(100% - 84px)); max-height: 70%;
       display: flex; flex-direction: column; overflow: hidden;
@@ -2833,7 +2833,7 @@
     .notifpanel .np-foot:hover { background: var(--hover); color: var(--text-strong); }
     /* A7 组头：11px/600/.05em + 语义点 + 计数 badge；sticky+blur 下缘分隔；清空 hover 出现 */
     .ngrp {
-      position: sticky; top: 0; z-index: 2;
+      /* P1-1 重落：sticky 撤（平铺组头同钉叠加；首落随 worktree 误删遗失） */
       font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .05em;
       margin: 0; padding: 8px 12px 6px; display: flex; align-items: center; gap: 6px;
       background: var(--surface1); background: color-mix(in srgb, var(--surface1) 86%, transparent);
@@ -2932,7 +2932,6 @@
     .rail-btn.bell-swing .icon-nav { animation: bell-swing 420ms var(--ease-out); transform-origin: top center; }
     @keyframes bell-swing { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(14deg); } 55% { transform: rotate(-9deg); } 80% { transform: rotate(4deg); } }
     .ngrp .ndot.r.np-pulse { animation: ndot-pulse 2.4s var(--ease-out) infinite; }
-    #d-notify.on .ngrp .ndot.r.np-pulse { animation: none; } /* 面板开时停（唯一脉冲位的克制） */
     @keyframes ndot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, .5); } 50% { box-shadow: 0 0 0 5px rgba(248, 113, 113, 0); } }
     #d-settings .settings-panel {
       background: transparent; /* t25fix #13（验收 T11）：外层大边框退役——面板内子卡（relay 状态卡/设备卡）自带描边层次，外再套一圈即用户吐槽的「蒙加了个大边框」；对齐深色主题无边框基线 */
@@ -3118,7 +3117,7 @@ html[data-theme="light"] .mobile-project-card .pc2m-r1 .cc-badge.is-neutral { ba
 /* 无障碍降级：位移/缩放/脉冲/stagger 全清零，仅留 ≤80ms opacity（可感知不眩晕） */
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-enter: 80ms; --dur-exit: 60ms; --dur-fast: 0ms; --dur-move: 0ms; --dist-s: 0px; --dist-m: 0px; --ease-spring: linear; }
-  .np-stagger, .nrow.enter, .notifpanel.opening, .notifpanel.closing, .notify-badge-pop, .rail-btn.bell-swing { animation: none !important; transition: opacity var(--dur-enter) linear !important; }
+  .np-stagger, .np-body.np-stagger > .nrow, .nrow.enter, .notifpanel.opening, .notifpanel.closing, .notify-badge-pop, .rail-btn.bell-swing { animation: none !important; /* P2-1 重落：行级 stagger 入 kill list */ transition: opacity var(--dur-enter) linear !important; }
 }
 
     /* A8 面板展开 toggle（底栏「查看全部通知」）：高度过渡走 token（max-height 由 JS 内联切换） */

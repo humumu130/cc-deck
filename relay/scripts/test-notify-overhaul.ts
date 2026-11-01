@@ -3,8 +3,8 @@
 //   A 组静态锚：计数单源（reconcile 分支不再跳 syncCounts——内容 bug 真根因）/时间
 //     单轨（notifyRelTime 三档+window 共享）/kind badge 六类/行栅格 L1L2L3/去卡片化
 //     行流（透明底+1px 分隔+左缘色条）/组头 sticky+组级清空/头 48 底 40/× hover 显
-//   B 组静态锚：遮罩模态化+点外收起+ESC+Tab 锁/出入场 np-enter/np-exit 共享退场/
-//     stagger（>6 封顶）/塌缩/pop/铃铛摆动/脉冲唯一位（面板开停）
+//   B 组静态锚：遮罩纯色 dim+点外收起+ESC+Tab 锁/出入场 np-enter/np-exit 共享退场/
+//     stagger（>6 顶）/塌缩/pop/铃铛摆动/脉冲唯一位
 //   三端：mobile rowOf kind badge+时间单轨同源
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -102,7 +102,7 @@ async function main() {
   // ---------- B2/B3 遮罩+出入场+ESC ----------
   section("\nB2/B3 遮罩点外收起+出入场+ESC：");
   {
-    assert(css.includes("rgba(0, 0, 0, .42)") && css.includes("blur(6px) saturate(120%)"), "遮罩模态化（.42+blur+sat）");
+    assert(css.includes("rgba(0, 0, 0, .48)") && !css.includes("blur(6px) saturate"), "遮罩纯色 dim .48、无全窗 blur（P0 热修：WKWebView blur 冻结退纯色；组头小面积 blur(8px) 保留）");
     assert(js.includes("closePanel") && js.includes("keepVisual"), "三关闭路径共享退场（closePanel 单点）");
     assert(css.includes("@keyframes np-enter") && css.includes("@keyframes np-exit"), "出入场 keyframes（200ms out/130ms in）");
     assert(css.includes("transform-origin: 24px") && css.includes("calc(100% - 16px)"), "transform-origin 铃铛方向（左上）");
@@ -120,7 +120,7 @@ async function main() {
     assert(js.includes("playStagger") && js.includes("Math.min(i, 12)"), "stagger 编排（面板开后播放）");
     assert(css.includes("nrow-collapse 160ms"), "单卡塌缩 160ms ease-in");
     assert(css.includes("bell-swing 420ms") && js.includes("bell-swing"), "铃铛摆动 420ms 一次性");
-    assert(css.includes("ndot-pulse 2.4s") && css.includes("#d-notify.on .ngrp .ndot.r.np-pulse { animation: none"), "组级红点脉冲唯一位（面板开停）");
+    assert(css.includes("ndot-pulse 2.4s") && !css.includes("#d-notify.on .ngrp .ndot.r.np-pulse { animation: none"), "组级红点脉冲唯一位（停用条款自反退役——P0 热修重落）");
   }
 
   // ---------- 三端 ----------
