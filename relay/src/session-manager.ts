@@ -114,7 +114,7 @@ import {
 } from "./experience.js";
 // W-KWP1 件三（2026-10-11）岗位模板库（知识轴 fail-open，bizRole 权限轴不经过此）：
 // 岗位纪律注入块构建 + 只读查看（org role list/show）
-import { buildRoleInjection, getRoleTemplate, listRoleTemplates } from "./role-templates.js";
+import { buildRoleInjection, builderSeededTags, getRoleTemplate, listRoleTemplates, upsertRoleTemplate, validateRoleUpsertDraft } from "./role-templates.js";
 // W-RULES1（2026-10-11）团队规则库（org/rules.json，用户红线）：数值硬闸写入口/查询/
 // 替代链/升格复制 + 注入块构建（store 零依赖本文件，无环）
 import {
@@ -6553,6 +6553,32 @@ export class SessionManager {
           const t = getRoleTemplate(slug);
           return t ? { ok: true, data: { template: t } } : { ok: false, error: `岗位模板不存在: ${slug}` };
         }
+        // ---------- W-ROLE-BUILDER（#37 AI Builder 学 Multica）：对话建岗写面 ----------
+        // 铁律「不代创建」：PM/任意会话起草（agent 文本）→ 本口出确认卡（payload=完整
+        // 岗位卡）→ 用户 ✓ 后 applyConfirmEffects 才真落库；✗ 弃（零半态）。形状闸前置
+        //（validateRoleUpsertDraft 响亮拒——垃圾输入不出卡）。direct:true=用户 CLI 显式
+        // 直写免卡（org rule append 同款信任级，org role upsert CLI 面）。
+        case "role-upsert": {
+          const v = validateRoleUpsertDraft({
+            slug: p.slug, name: p.name, audience: p.audience, rows: p.rows, suggested_tags: p.suggested_tags,
+          });
+          if (!v.ok) return { ok: false, error: v.error };
+          const draft = { ...v.draft, ...(str("session_id") ? { session_id: str("session_id") } : {}) };
+          if (p.direct === true) {
+            const r = upsertRoleTemplate(v.draft);
+            if (!r.ok) return r;
+            console.log(`[role-builder] 直写落库 slug=${r.template.slug}（direct，${listRoleTemplates().length} 岗在库）`);
+            return { ok: true, data: { template: r.template, backup: r.backup } };
+          }
+          const c = addConfirm({
+            kind: "role-upsert",
+            title: `${listRoleTemplates().some((t) => t.slug === v.draft.slug) ? "岗位改版（覆盖已有）" : "新建岗位"}：${v.draft.name}（${v.draft.slug}）`, // P2修：覆盖性 upsert 机械标注
+            reason: str("reason") || `AI Builder 建岗提案（agent 起草，✓ 落入 role-templates 用户库、✗ 弃）——rows ${v.draft.rows.length} 行${v.draft.suggested_tags?.length ? ` · 建议 tag ${v.draft.suggested_tags.join(",")}` : ""}`,
+            payload: draft,
+          });
+          console.log(`[role-builder] 建岗提案出卡 ${c.id.slice(0, 8)} slug=${v.draft.slug}（待用户决议，不代创建）`);
+          return { ok: true, data: { confirm_id: c.id, pending: true, draft: v.draft } };
+        }
         // ---------- W-RULES1 团队规则库漏斗（org/rules.json，拍板 verdict-rules-20261011）。
         // 审计行经 auditRuleAction（口径同 exp-*）。安全面拍板 #7「agent 文本永不直入权威
         // 通道」：rule-append 缺省（无 direct）= 提案出确认卡（OrgConfirm kind=rule-append，
@@ -7061,6 +7087,21 @@ export class SessionManager {
           this.emitRules(); // W-RULES2：确认卡 ✓ 落库后广播（提案出卡时不发——零写入）
           break;
         }
+        case "role-upsert": {
+          // W-ROLE-BUILDER：建岗卡 ✓ → upsertRoleTemplate 真落库（回链 confirm_id 溯源，
+          // payload 内带 confirm 锚；✗ 无副作用——提案不落半态卡留审计）。写失败 fail 面
+          // 回传（卡已决不回滚，.bak-builder 有写前快照可手恢复）。
+          const r = upsertRoleTemplate({
+            slug: typeof c.payload.slug === "string" ? c.payload.slug : "",
+            name: typeof c.payload.name === "string" ? c.payload.name : "",
+            audience: typeof c.payload.audience === "string" ? c.payload.audience : "",
+            rows: Array.isArray(c.payload.rows) ? c.payload.rows : [],
+            ...(Array.isArray(c.payload.suggested_tags) ? { suggested_tags: c.payload.suggested_tags.filter((t): t is string => typeof t === "string") } : {}),
+          });
+          if (!r.ok) return fail("岗位入库", r);
+          console.log(`[role-builder] 确认卡 ${c.id.slice(0, 8)} ✓ 落库 slug=${r.template.slug}（rows=${r.template.rows.length}${r.template.suggested_tags?.length ? ` tags=${r.template.suggested_tags.join(",")}` : ""}${r.backup ? " 备份 .bak-builder" : ""}）`);
+          break;
+        }
         case "device-trust": {
           // X1 多机编排（§4.4 域内-首次确认）：✓ = device_trust 确认 + 悬置消息放行投递；
           // ✗ = 吊销 + 悬置消息弃置（各回 rejected:first-contact）。副作用体在 xmsg 控制器
@@ -7541,21 +7582,36 @@ export class SessionManager {
     if (veteran && !veteranTagHit && input.skills?.length && process.env.CCR_X0_PROBE !== "0") {
       const inventory = this.assemblyInventoryOf(veteran);
       if (inventory === null) {
-        const last = this.assemblyProbeNegative.get(veteran) ?? 0;
-        const first = Date.now() - last > 5 * 60_000;
-        if (first) this.assemblyProbeNegative.set(veteran, Date.now()); // 负缓存 5min：通知面按窗去重（台账恒记每单，防连环拒单刷屏打扰）
-        const msg = `装配探测无数据：熟手 ${veteran.slice(0, 8)} 装配观测缓存为空或过期（1h TTL；未见该会话工具/subagent 活动观测）——拒绝静默降级。该会话先跑任意一轮产生装配观测，或本单去 skills 重派，或 CCR_X0_PROBE=0 关闭探测`;
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
-        if (first) this.notifyDispatchClosed({ id: dispatchId, tier, ...(input.gid ? { gid: input.gid } : {}), anchor, actor }, "failed", msg, veteran); // 首发才进通知账（5min 窗内重复拒单台账行仍全量可查）
-        return { ok: false, error: msg };
+        // W-ROLE-BUILDER 冷启动通道（1101 实锤「新 tag 首派 422」对症）：skills 全部落在
+        // Builder 策展 tag 集（用户确认过的建岗卡 suggested_tags）→ 首派无装配观测属预期
+        //（新岗新 tag），探测降级为告警不拒收——清熟手走新会话路由（不盲信回落席装配），
+        // 单照常落，console+链路审计记因。观测就位（tag 上席/装配清单命中/tagHit）后本
+        // 分支自然失活。取舍：机械保护优于文本指引（回执指引依赖人记）；非 Builder tag
+        //（无策展声明）照旧拒收——公司侧「装配故障静默降级」防线不撤。
+        const seededTags = builderSeededTags();
+        if (input.skills.every((sk) => seededTags.has(String(sk).trim().toLowerCase()))) {
+          console.warn(`[role-builder] 新建岗 tag 冷启动：skills=[${input.skills.join(",")}] 全为 Builder 策展 tag 且无装配观测——探测降级告警（清熟手走新会话，不拒收）`);
+          this.emitChainAudit("builder-tag-coldstart", `新建岗 tag 首派无观测：skills=[${input.skills.join(",")}]（Builder 策展声明在档，清熟手走新会话——探测降级不拒收）`);
+          veteran = null;
+        } else {
+          const last = this.assemblyProbeNegative.get(veteran) ?? 0;
+          const first = Date.now() - last > 5 * 60_000;
+          if (first) this.assemblyProbeNegative.set(veteran, Date.now()); // 负缓存 5min：通知面按窗去重（台账恒记每单，防连环拒单刷屏打扰）
+          const msg = `装配探测无数据：熟手 ${veteran.slice(0, 8)} 装配观测缓存为空或过期（1h TTL；未见该会话工具/subagent 活动观测）——拒绝静默降级。该会话先跑任意一轮产生装配观测，或本单去 skills 重派，或 CCR_X0_PROBE=0 关闭探测`;
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
+          if (first) this.notifyDispatchClosed({ id: dispatchId, tier, ...(input.gid ? { gid: input.gid } : {}), anchor, actor }, "failed", msg, veteran); // 首发才进通知账（5min 窗内重复拒单台账行仍全量可查）
+          return { ok: false, error: msg };
+        }
       }
-      const hay = inventory.join(" ").toLowerCase();
-      const hit = input.skills.some((sk) => hay.includes(String(sk).toLowerCase()));
-      if (!hit) {
-        const msg = `装配缺项降级：skills=[${input.skills.join(",")}] 在熟手装配清单（${truncate(hay, 90)}）零命中`;
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
-        console.log(`[dispatch] probe-degrade id=${dispatchId.slice(0, 8)} veteran=${veteran.slice(0, 8)} skills=[${input.skills.join(",")}]`);
-        veteran = null; // 降级：清熟手走新会话路由（编制闸在下方照常拦截触顶态）
+      if (veteran && inventory !== null) { // 冷启动清席后跳过清单命中检查（inventory 已判空分支所有）
+        const hay = inventory.join(" ").toLowerCase();
+        const hit = input.skills.some((sk) => hay.includes(String(sk).toLowerCase()));
+        if (!hit) {
+          const msg = `装配缺项降级：skills=[${input.skills.join(",")}] 在熟手装配清单（${truncate(hay, 90)}）零命中`;
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
+          console.log(`[dispatch] probe-degrade id=${dispatchId.slice(0, 8)} veteran=${veteran.slice(0, 8)} skills=[${input.skills.join(",")}]`);
+          veteran = null; // 降级：清熟手走新会话路由（编制闸在下方照常拦截触顶态）
+        }
       }
     }
     // P0 编制闸：veteran 是否经「触顶复用」路径产生——是则 resume 失败**不得**走

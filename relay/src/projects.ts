@@ -189,7 +189,12 @@ export type ConfirmKind =
   // 自动 trim 不直接裁——出卡告知名单+理由（idle 时长），✓ 后真裁（applyConfirmEffects
   // case "headcount-trim-first" 带 viaConfirm 重入）且此后该 gid 永直裁；✗=本轮不裁，
   // 24h 冷却后再提（防 6h 轮询轰炸）。payload 携 gid/名单/keep_idle_hours
-  | "headcount-trim-first";
+  | "headcount-trim-first"
+  // W-ROLE-BUILDER（#37 AI Builder 学 Multica，2026-11-01）：对话建岗提案——payload 携
+  // 完整岗位卡（slug/name/audience/rows/suggested_tags）；✓=upsertRoleTemplate 落
+  // role-templates.json 用户库（applyConfirmEffects case "role-upsert"），✗=弃（不代
+  // 创建铁律）。防 agent 文本直入权威通道（rule-append 同款安全面口径）。
+  | "role-upsert";
 
 export interface OrgConfirm {
   id: string;

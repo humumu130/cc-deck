@@ -962,8 +962,10 @@ export function startServer(
             "exp-regroup",
             // W-EXPP1 追加：导出备份/导入恢复（导入整读校验+零半写在 store 层）
             "exp-export", "exp-import",
-            // W-KWP1 件三：岗位模板库只读查看（org role list/show 的 HTTP 面；写面 P2）
-            "role-list", "role-show",
+            // W-KWP1 件三：岗位模板库只读查看（org role list/show 的 HTTP 面）+
+            // W-ROLE-BUILDER 写面（role-upsert：缺省=建岗提案出确认卡零写入，用户 ✓ 后
+            // applyConfirmEffects 落库——HTTP 面不认 direct，直写仅 org CLI 用户主权面）
+            "role-list", "role-show", "role-upsert",
             // W-RULES1 团队规则库（org/rules.json 的 HTTP 面 = org rule 子命令）：直写
             // 面带 direct 标记（用户 CLI 主权面，org exp append 同款信任级）；缺省=
             // 提案出确认卡（零写入，决议仍走用户端——rule-append 不给 HTTP 开直批口，
@@ -992,7 +994,9 @@ export function startServer(
             );
             return;
           }
-          const r = mgr.orgAction(action.trim(), payload as Record<string, unknown>);
+          const httpPayload: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+          delete httpPayload.direct; // P1-①修：HTTP 面剥 direct——role-upsert 恒走确认卡（原注释宣称的边界现在成立，CLI 用户主权面不受影响）
+          const r = mgr.orgAction(action.trim(), httpPayload);
           res.writeHead(r.ok ? 200 : 422, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");

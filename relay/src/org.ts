@@ -861,8 +861,10 @@ PY
 )"
     ;;
   role)
-    # W-KWP1 岗位模板库只读查看（写面 P2：模板编辑走手编 org/role-templates.json）
-    [ $# -ge 1 ] || { echo "用法: org role list|show ..." >&2; exit 1; }
+    # W-KWP1 岗位模板库只读查看 + W-ROLE-BUILDER 写面（upsert=用户 CLI 主权面 direct
+    # 直写——PM/agent 起草走 relay role-upsert 缺省出确认卡，用户端 ✓ 落库不代创建；
+    # 手编 org/role-templates.json 仍是等价写面，upsert 增加原子写+.bak-builder 备份）
+    [ $# -ge 1 ] || { echo "用法: org role list|show|upsert ..." >&2; exit 1; }
     op="$1"; shift
     body="$(python3 - "$op" "$@" <<'PY'
 import json, sys
@@ -874,8 +876,21 @@ elif op == "show":
     if not args:
         print("用法: org role show <slug>", file=sys.stderr); sys.exit(1)
     d={"action":"role-show","slug":args[0]}
+elif op == "upsert":
+    # org role upsert <岗位卡.json>（字段 slug/name/audience/rows[/suggested_tags]；
+    # 文件或 -（stdin））——direct 直写（用户显式命令行=人为意图，org rule append 同款信任级）
+    if not args:
+        print("用法: org role upsert <岗位卡.json|->", file=sys.stderr); sys.exit(1)
+    raw = sys.stdin.read() if args[0] == "-" else open(args[0], encoding="utf-8").read()
+    try:
+        card = json.loads(raw)
+    except Exception as e:
+        print("岗位卡 JSON 解析失败: "+str(e), file=sys.stderr); sys.exit(1)
+    if not isinstance(card, dict):
+        print("岗位卡必须是 JSON 对象（slug/name/audience/rows[/suggested_tags]）", file=sys.stderr); sys.exit(1)
+    d={**card,"direct":True,"action":"role-upsert"} # P1-②修：action 键置尾——card 字段无法覆写改道任意 org 动作
 else:
-    print("未知 role 子命令: "+op, file=sys.stderr); sys.exit(1)
+    print("未知 role 子命令: "+op+"（list|show|upsert）", file=sys.stderr); sys.exit(1)
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"

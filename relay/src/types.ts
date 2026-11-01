@@ -1530,5 +1530,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "xmsg-send", "xmsg-recv", "xmsg-reject", "xmsg-inject", "xmsg-ack", "xmsg-first-contact",
   "harvest-violation", "worktree-busy", "worktree-lock-race", "hold-overtime", "hold-release", "zombie-retire", "receipt-drop",
   "continuity-disclose", // C-MODE-B2 模块5：续接断链披露（resume 失败/对准退役/上下文不可用→新会话承接时 prompt 注入连续性声明）
+  "builder-tag-coldstart", // W-ROLE-BUILDER：新建岗 tag 首派无装配观测——探测降级告警不拒收（清熟手走新会话；Builder 策展声明在档）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];
