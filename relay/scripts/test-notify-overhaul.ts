@@ -80,8 +80,8 @@ async function main() {
   {
     assert(css.includes("border-bottom: 1px solid color-mix") && css.includes("background: transparent"), "行透明底+1px 分隔（卡片退役）");
     assert(css.includes(".nrow:hover { background:"), "hover 提亮（120ms）");
-    assert(css.includes("width: 2px; height: 16px"), "左缘语义色条 2×16");
-    assert(css.includes(".nrow.alert::before") && css.includes(".nrow.warn::before"), "alert/warn 左缘色条");
+    assert(!css.includes("width: 2px; height: 16px"), "左缘语义色条退役（1101 晚用户实锤别扭；kind 徽章承载色语义）");
+    assert(!css.includes(".nrow.alert::before"), "alert 色条退役同上");
     assert(!css.includes(".nrow.alert { border-color: var(--danger-line)"), "大面积红底 tint 退役");
     assert(css.includes("opacity: 0;") && css.includes(".nrow:hover .x"), "× 默认隐 hover 显（22×22 热区）");
   }
@@ -102,7 +102,7 @@ async function main() {
   // ---------- B2/B3 遮罩+出入场+ESC ----------
   section("\nB2/B3 遮罩点外收起+出入场+ESC：");
   {
-    assert(css.includes("rgba(0, 0, 0, .48)") && !css.includes("blur(6px) saturate"), "遮罩纯色 dim .48、无全窗 blur（P0 热修：WKWebView blur 冻结退纯色；组头小面积 blur(8px) 保留）");
+    assert(css.includes("rgba(0, 0, 0, .32)") && !css.includes("blur(6px) saturate"), "遮罩纯色 dim .32（1101 晚用户实锤 .48 太暗）、无全窗 blur（组头小面积 blur(8px) 保留）");
     assert(js.includes("closePanel") && js.includes("keepVisual"), "三关闭路径共享退场（closePanel 单点）");
     assert(css.includes("@keyframes np-enter") && css.includes("@keyframes np-exit"), "出入场 keyframes（200ms out/130ms in）");
     assert(css.includes("transform-origin: 24px") && css.includes("calc(100% - 16px)"), "transform-origin 铃铛方向（左上）");
