@@ -3172,7 +3172,6 @@ html[data-theme="light"] .mobile-project-card .pc2m-r1 .cc-badge.is-neutral { ba
 /* 无障碍降级：位移/缩放/脉冲/stagger 全清零，仅留 ≤80ms opacity（可感知不眩晕） */
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-enter: 80ms; --dur-exit: 60ms; --dur-fast: 0ms; --dur-move: 0ms; --dist-s: 0px; --dist-m: 0px; --ease-spring: linear; }
-  #stage-mobile.pager-on { --dur-pager: 0ms; } /* W-MOBILE-SWIPE：吸附降级瞬切（跟手位移保留——用户手势非动画，reduce 只杀动画）；--dist-m 归零在 pager 段尾 reduce 块（级联序必须后于 28px 覆写行，放前面会被同特异度后至压过——E5-2 实锤） */
   .np-stagger, .np-body.np-stagger > .nrow, .nrow.enter, .notifpanel.opening, .notifpanel.closing, .notify-badge-pop, .rail-btn.bell-swing { animation: none !important; /* P2-1 重落：行级 stagger 入 kill list */ transition: opacity var(--dur-enter) linear !important; }
 }
 
@@ -3358,6 +3357,6 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
 #stage-mobile.pager-on { position: relative; --dur-pager: 260ms; } /* 定位上下文（.mode-stage 无 position，absolute inset:0 须锚在 stage 自身而非 viewport）+ 吸附档 token（任务书 260ms；独立于 --dur-move 200ms 全局档，避免一动全动） */
 #stage-mobile.pager-on .mobile-frame { height: 100vh; height: 100dvh; } /* 重派②补（塌陷根修）：frame 原由 active 屏内容撑高随文档滚；pager 化后 root 屏+覆盖层全 absolute，frame 无在流子元素塌 0 高（屏的包含块=最近定位祖先 .mobile-frame:relative，inset:0 映射到它）——此缺陷被上方地雷掩埋（pager 规则未生效时不可见）。定视口高后 strip 屏内部滚（.mobile-content flex:1 overflow:auto），整页滚动退役；100dvh 优先（地址栏收缩动态），旧 WebKit 回落 100vh */
 #stage-mobile.pager-on .mobile-screen[data-mobile-root] { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; min-height: 0; will-change: transform; backface-visibility: hidden; }
-#stage-mobile.pager-on .mobile-screen[data-mobile-root].pager-anim { transition: transform var(--dur-pager, 260ms) var(--ease-out); } /* 吸附/跳屏过渡；拖拽中无此类=实时跟手；reduce 段归零 token=瞬切（跟手位移保留——用户手势非动画） */
+#stage-mobile.pager-on .mobile-screen[data-mobile-root].pager-anim { transition: transform var(--dur-pager, 260ms) var(--ease-out); } /* 吸附/跳屏过渡；拖拽中无此类=实时跟手；reduce 瞬切=段尾归零行+全局 .01ms blanket 双保险（跟手位移保留——用户手势非动画） */
 #stage-mobile.pager-on #m-detail, #stage-mobile.pager-on #m-notify { position: absolute; inset: 0; z-index: 30; min-height: 0; background: var(--bg1); } /* strip 常驻显示后覆盖屏必须自带底（原单屏独显时代透明无妨） */
-@media (prefers-reduced-motion: reduce) { #stage-mobile { --dist-m: 0px; } } /* 位置即语义：须在上方 28px 覆写行之后（同特异度 #stage-mobile，级联后至者胜——放前部 reduce 块会被 28px 行压过，E5-2 探针实锤修正） */
+@media (prefers-reduced-motion: reduce) { #stage-mobile { --dist-m: 0px; } #stage-mobile.pager-on { --dur-pager: 0ms; } } /* 位置即语义：须在各 token 覆写行之后（同特异度，级联后至者胜——放前部 reduce 块会被压过成死码，E5-2 探针实锤修正+P2-1 review-w-mobileswipe 迁位）。--dur-pager 归零后吸附瞬切仍双保险：:2565 全局 .01ms blanket 兜底（belt+suspenders——blanket 未来收紧/移除时本行独立成立） */

@@ -1024,11 +1024,12 @@
         let cur = 0; // 当前吸附索引
         let drag = null; // 活动手势
         let snapT = 0; // 吸附收尾定时器（撤过渡类）
-        const apply = (offsetIdx, extraPx) => { // offsetIdx 可为小数；extraPx=跟手像素
+        const apply = (offsetIdx, extraPx, windowRange) => { // offsetIdx 可为小数；extraPx=跟手像素；windowRange=[lo,hi]=可见档覆写
           for (let i = 0; i < els.length; i++) {
             const el = els[i];
             el.style.transform = `translateX(calc(${(i - offsetIdx) * 100}% + ${extraPx || 0}px))`;
-            el.style.visibility = Math.abs(i - offsetIdx) <= 1.05 ? "" : "hidden"; // 只保当前±1 在档
+            const inWin = windowRange ? (i >= windowRange[0] && i <= windowRange[1]) : Math.abs(i - offsetIdx) <= 1.05;
+            el.style.visibility = inWin ? "" : "hidden"; // 只保当前±1 在档（跳变动画窗=起讫屏全展开，见 go）
           }
         };
         const syncMarkers = (root) => { // .active/nav 徽标/inbox 滚顶（对齐原 openMobileRoot）
@@ -1041,10 +1042,16 @@
           idx = Math.max(0, Math.min(ROOTS.length - 1, idx));
           clearTimeout(snapT);
           els.forEach((el) => el.classList.toggle("pager-anim", !!animate));
-          apply(idx, 0);
+          // P2-2（review-w-mobileswipe）：跳变动画（≥2 屏跨度）期间可见窗=起讫屏并展开
+          //（[min(起,讫)-1, max(起,讫)+1]）——transform 连续插值而 visibility 围绕目标
+          // 离散裁剪会让离开屏在第 0-2 帧即隐（跨屏直点闪空白帧，26 帧中 2 帧全空
+          // 实测）；过渡收尾窗回 ±1 常规裁剪。同屏/相邻跳变窗口=常规档零变化。
+          const span = animate ? Math.abs(idx - cur) : 0;
+          const wide = span > 1 ? [Math.max(0, Math.min(cur, idx) - 1), Math.min(ROOTS.length - 1, Math.max(cur, idx) + 1)] : null;
+          apply(idx, 0, wide);
           cur = idx;
           stage.dataset.pagerState = animate ? "snap" : "";
-          if (animate) snapT = setTimeout(() => { els.forEach((el) => el.classList.remove("pager-anim")); stage.dataset.pagerState = ""; }, 320); /* 320=--dur-pager 260ms + 60ms 收尾宽限（transition 完成后撤类） */
+          if (animate) snapT = setTimeout(() => { els.forEach((el) => el.classList.remove("pager-anim")); apply(idx, 0); stage.dataset.pagerState = ""; }, 320); /* 320=--dur-pager 260ms + 60ms 收尾宽限（transition 完成后撤类+可见窗收编） */
           syncMarkers(ROOTS[idx]);
         };
         const currentIdx = () => { // 以 .active root 屏为准（外路改 .active 后自愈）
