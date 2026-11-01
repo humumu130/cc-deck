@@ -64,14 +64,8 @@ ok(staggerGone, "A3 620ms 后 stagger 类撤除（一次性编排，后续替换
 await shot("02-session-settled");
 
 // ---------- ② 卡片 hover + 按压（CDP Input 真事件） ----------
-const cardBox = JSON.parse(await ev(`JSON.stringify(document.querySelector('[data-session-card]').getBoundingClientRect())`));
-await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: Math.round(cardBox.x + 80), y: Math.round(cardBox.y + 20) });
-await wait(260);
-await shot("03-session-card-hover");
-await send("Input.dispatchMouseEvent", { type: "mousePressed", x: Math.round(cardBox.x + 80), y: Math.round(cardBox.y + 20), button: "left", clickCount: 1 });
-await wait(60); // :active 中段（80ms 档）
-await shot("04-session-card-active");
-await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: Math.round(cardBox.x + 80), y: Math.round(cardBox.y + 20), button: "left", clickCount: 1 });
+// p2-batch2：A4 挪到卡片试验前——#d-session .queue-card:active 修复后卡片真缩放，
+// 04 后点击时序变化（select/hint 链）会推动 windowbar 布局，wBox 取样失真；先测钮再测卡
 // 断言面换静态元素（windowbar 刷新钮——按压不触发列表重建，卡片按压仅留视觉证据 04：
 // 会话卡点击即 select→keyed 替换，:active 随新节点消失属架构语义非缺陷）
 const wBox = JSON.parse(await ev(`JSON.stringify(document.querySelector('.windowbar-refresh').getBoundingClientRect())`));
@@ -81,6 +75,15 @@ const activeTransform = await ev(`getComputedStyle(document.querySelector('.wind
 ok(/0\.9[67]/.test(String(activeTransform)), "A4 按压 scale(.97) 生效（静态钮 computed=" + String(activeTransform).slice(0, 40) + "；卡片按压视觉见 04）");
 await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: Math.round(wBox.x + 12), y: Math.round(wBox.y + 12), button: "left", clickCount: 1 });
 
+
+const cardBox = JSON.parse(await ev(`JSON.stringify(document.querySelector('[data-session-card]').getBoundingClientRect())`));
+await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: Math.round(cardBox.x + 80), y: Math.round(cardBox.y + 20) });
+await wait(260);
+await shot("03-session-card-hover");
+await send("Input.dispatchMouseEvent", { type: "mousePressed", x: Math.round(cardBox.x + 80), y: Math.round(cardBox.y + 20), button: "left", clickCount: 1 });
+await wait(60); // :active 中段（80ms 档）
+await shot("04-session-card-active");
+await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: Math.round(cardBox.x + 80), y: Math.round(cardBox.y + 20), button: "left", clickCount: 1 });
 // ---------- ③ 域切换淡入（rail → team） ----------
 await ev(`document.querySelector('.rail-btn[data-domain="team"]').click()`);
 await wait(80); // mo-dom-in 中段（200ms ease-out 的 ~40% 处：opacity<1 + translateY 残留）
@@ -102,6 +105,50 @@ const paneAnim = await ev(`getComputedStyle(document.querySelector('.settings-pa
 ok(paneAnim === "mo-pane-in", "A6 设置子页切换动画挂载（animationName=" + paneAnim + "）");
 await wait(400);
 await shot("08-settings-settled");
+
+// ---------- ④b p2-batch2（motion 审 b-P2③）：cap 路径断言 + pane/手机运动数值 ----------
+// cap 单口直测（列表首装只挂一次不重放——8 卡重注入不重挂；直接调 __ccDeck005MoStagger
+// 对临时 host 验 >cap 挂 cap=1/动画名/撤类清理三面，比整列表注入更确定）
+const capProbe = await ev(`(() => {
+  const host = document.createElement("div");
+  for (let i = 0; i < 8; i++) host.appendChild(document.createElement("div"));
+  document.body.appendChild(host);
+  window.__ccDeck005MoStagger(host);
+  const capOn = host.getAttribute("data-stagger-cap") === "1";
+  const anim = getComputedStyle(host.children[0]).animationName;
+  const stI = host.children[7].style.getPropertyValue("--st-i");
+  return new Promise((res) => setTimeout(() => {
+    const clsGone = !host.classList.contains("mo-stagger");
+    const capGone = !host.hasAttribute("data-stagger-cap");
+    host.remove();
+    res(JSON.stringify({ capOn, anim, stI, clsGone, capGone }));
+  }, 700));
+})()`);
+const capJ = JSON.parse(capProbe);
+ok(capJ.capOn, "A6b cap>6 挂 data-stagger-cap=1（8 卡单口直测）");
+ok(capJ.anim === "mo-cap-fade", "A6c cap 路径动画=mo-cap-fade（animationName=" + capJ.anim + "）");
+ok(capJ.stI === "6", "A6d --st-i 编排封顶 min(i,cap)=6（末卡值=" + capJ.stI + "）");
+ok(capJ.clsGone && capJ.capGone, "A6e 620ms 撤类+dataset 清理（cls=" + capJ.clsGone + " cap=" + capJ.capGone + "）");
+// pane 运动数值断言（A5b 同款——补审 b-P2③(b)「A6 仅规则在场检查」缺口）
+await ev(`document.querySelector('.rail-btn[data-domain="settings"]').click()`);
+await wait(300);
+await ev(`document.querySelector('[data-settings-nav="provider"]').click()`);
+await wait(80);
+const paneOpMid = await ev(`getComputedStyle(document.querySelector('.settings-panel.active')).opacity`);
+ok(Number(paneOpMid) < 0.99999, "A6f pane 真实运动中（80ms opacity=" + paneOpMid + "≠1——A5b 同款数值断言补 pane 面）");
+await wait(400);
+// 手机屏运动数值（同款）
+await send("Emulation.setDeviceMetricsOverride", { width: 420, height: 900, deviceScaleFactor: 2, mobile: true });
+await wait(300);
+await ev(`document.getElementById('stage-desktop').classList.remove('active'); document.getElementById('stage-mobile').classList.add('active')`);
+await ev(`document.querySelector('.mobile-nav [data-mobile-root="team"]').click()`);
+await wait(80);
+const mobOpMid = await ev(`getComputedStyle(document.getElementById('m-team')).opacity`);
+ok(Number(mobOpMid) < 0.99999, "A6g 手机屏真实运动中（80ms opacity=" + mobOpMid + "≠1）");
+await wait(400);
+await ev(`document.getElementById('stage-mobile').classList.remove('active'); document.getElementById('stage-desktop').classList.add('active')`);
+await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 940, deviceScaleFactor: 1, mobile: false });
+await wait(300);
 
 // ---------- ⑤ 项目域（队列首装 stagger） ----------
 await ev(`document.querySelector('.rail-btn[data-domain="project"]').click()`);

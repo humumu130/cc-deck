@@ -137,6 +137,9 @@
       // 恢复贴底；换会话（sid 不匹配）不恢复。
       let mTabChatMemo = null;
       (() => {
+        // p2-batch2（motion 审 a-P2③）：iOS Safari 无 touch 监听不激活 :active（MDN 已知行为）
+        // ——空 touchstart 监听一行解锁全站按压态（Android 不受影响）
+        document.addEventListener("touchstart", () => {}, { passive: true });
         const bar = document.querySelector("#m-detail .mobile-detail-tabs");
         if (!bar) return;
         const se = () => document.scrollingElement || document.documentElement;
@@ -664,7 +667,7 @@
         // 1101 通知面板大修同语言（三端口径一致）：kind badge 六色+时间单轨右贴
         //（桌面 notifyRelTime 同源经 window 共享，缺席回落桌面无关的简版）+操作轻钮
         // 统一（primary-btn 大钮退役=移动同「文字链降权」语义）
-        const relT = window.__ccDeck005NotifyRelTime || ((ts) => { const d = Date.now() - (Number(ts) || 0); const m = Math.floor(d / 60000); return m < 60 ? (m < 1 ? "刚刚" : m + " 分钟前") : m < 1440 ? Math.floor(m / 60) + " 小时前" : ""; });
+        const relT = window.__ccDeck005NotifyRelTime || ((ts) => { const n0 = Number(ts) || 0; const d = Date.now() - n0; const m = Math.floor(d / 60000); if (m < 60) return m < 1 ? "刚刚" : m + " 分钟前"; if (m < 1440) return Math.floor(m / 60) + " 小时前"; const dt = new Date(n0); return (dt.getMonth() + 1) + "月" + dt.getDate() + "日"; }); /* p2-batch2 修（notify 审 P2-8）：>24h 补 M月D日 档（原回落空串） */
         const MB = { acceptance: ["验收单", "acceptance"], "org-confirm": ["确认", "confirm"], dispatch: ["派单", "dispatch"], waiting: ["待办", "waiting"], system: ["系统", "system"] };
         const rowOf = (n) => {
           const act = !isDone(n);

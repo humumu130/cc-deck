@@ -39,6 +39,11 @@
                   waiting: { icon: "bell", label: "待办", badge: "waiting" },
                   system: { icon: "info", label: "系统", badge: "system" },
                 };
+                // p2-batch2 修（notify 审 A9/P2-7）：ID/哈希/版本号等宽渲染——hex≥6 位、
+                // v?X.Y.Z 通道号、b3xxxx 短 id 模式包 <code class="nid">（mono+浅底），标题与摘要共用
+                const monoWrap = (s) => String(s ?? "")
+                  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                  .replace(/(\b[0-9a-f]{6,64}\b|\bv?\d+\.\d+\.\d+(?:-[\w.]+)?\b|\bw-[a-z0-9-]{2,24}\b)/g, '<code class="nid">$1</code>');
                 // 1101 A2 时间单轨：统一 11px 相对时间（≤60min 分钟 / <24h 小时 / 更早 M月D日）
                 // ——正文内联时间退役（旧 sub 拼 relTime 双轨）
                 const notifyRelTime = window.__ccDeck005NotifyRelTime = (ts) => {
@@ -137,8 +142,8 @@
                   return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
                     + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
-                    + '<b title="' + escapeHtml(row.title) + '">' + escapeHtml(row.title) + '</b><div class="s">' + escapeHtml(sub) + "</div></div>"
-                    + act + x + "</div>";
+                    + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + monoWrap(sub) + (act ? '<span class="act-slot">' + act + "</span>" : "") + "</div></div>"
+                    + x + "</div>";
                 }
 
                 function nodesFrom(markup) {
@@ -218,8 +223,11 @@
                   // V3 三级分组：ndot r/y/n = 需你行动/注意/动态（组头带计数）
                   // A7 组头 v2：11px/600/.05em+语义点+计数 badge+组级清空（hover 显）；
                   // 需你行动组红点带脉冲（B5 唯一脉冲位——面板开时 CSS 停）
+                  // p2-batch2 修（notify 审 P2-组清空越组）：grpClear 带组别（y=注意/n=动态）
+                  // ——旧版两组合用 "soft" 调 clearSoftNotifications（清全部非 active=点「注意」
+                  // 把「动态」也清了）；本版按组精确清
                   const group = (label, dot, items, grpClear) => items.length
-                    ? '<div class="ngrp"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
+                    ? '<div class="ngrp" data-notify-grp="' + (dot === "r" ? "r" : dot) + '"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
                       + '<span class="cnt">' + items.length + "</span>"
                       + (grpClear ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
                       + "</div>" + items.map(rowMarkup).join("")
@@ -228,8 +236,8 @@
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
                     const flatHtml = group("需你行动", "r", actionRows, "")
-                      + group("注意", "y", attentionRows, "soft")
-                      + group("动态", "n", dynamicRows, "soft");
+                      + group("注意", "y", attentionRows, "y")
+                      + group("动态", "n", dynamicRows, "n");
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
@@ -288,8 +296,9 @@
                   const row = lastRows.find((r) => r.key === key);
                   if (!row || dismissedNotifyKeys.has(key)) return;
                   dismissRow(row);
-                  // B5 单卡关闭塌缩：160ms ease-in 高度收束（FLIP 补位由 reconcile 下一帧
-                  // 自然完成）——退场可视后再重渲（旧式瞬消=生硬主诉之一）
+                  // B5 单卡关闭塌缩：160ms ease-in 高度收束。p2-batch2 注释诚实化（notify 审
+                  // P2-5）：旧行补位非真 FLIP（无 measure/invert）——塌缩后 reconcile 整段重排，
+                  // 下方行瞬时上移；真 FLIP（measure-prepare-play）另批按需实现，此处不谎称
                   const el = panelBody.querySelector('[data-notify-key="' + CSS.escape(key) + '"]');
                   if (el && el.animate) {
                     el.classList.add("leaving");
@@ -304,6 +313,17 @@
                   toast("已清除 " + rows.length + " 条通知");
                 }
 
+                // p2-batch2：按组清空（notify 审 P2-组清空越组修）——只清指定组（y=注意/n=动态）
+                function clearGroupNotifications(grp) {
+                  const pool = grp === "y"
+                    ? lastRows.filter((r) => !r.active && r.unresolved)
+                    : lastRows.filter((r) => !r.unresolved);
+                  const rows = pool.filter((r) => !dismissedNotifyKeys.has(r.key));
+                  if (!rows.length) { toast(grp === "y" ? "注意组没有可清除的通知" : "动态组没有可清除的通知"); return; }
+                  for (const row of rows) dismissRow(row);
+                  render();
+                  toast("已清空" + (grp === "y" ? "注意" : "动态") + "组 " + rows.length + " 条");
+                }
                 // W-V8 批5 温和清空（v8「清空 info/warn」语义）：只清注意+动态组，保留需你行动项
                 function clearSoftNotifications() {
                   const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key) && !r.active);
@@ -400,7 +420,7 @@
                   if (target.closest("[data-notify-mask]")) { closePanel(); return; } // B2 点外收起（遮罩命中层；面板内 mousedown 不达遮罩=不穿透）
                   if (target.closest("[data-notify-close]")) { closePanel(); return; } // 头部 ×（三路径共享退场）
                   const grpClear = target.closest("[data-notify-grp-clear]");
-                  if (grpClear) { clearSoftNotifications(); return; } // A7 组级清空（注意/动态组头；需行动组无此钮）
+                  if (grpClear) { clearGroupNotifications(grpClear.dataset.notifyGrpClear === "y" ? "y" : "n"); return; } // p2-batch2：按组精确清（y=注意/n=动态）
                   const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
                   if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");
@@ -417,9 +437,11 @@
                 // A8 底栏「查看全部通知」：面板过短时展开（70%↔90vh 一档 toggle，再点回落）
                 section.addEventListener("click", (event) => {
                   if (!event.target.closest("[data-notify-expand]")) return;
-                  const full = panel.classList.toggle("np-full");
-                  panel.style.maxHeight = full ? "min(90vh, calc(100% - 72px))" : "";
-                  event.target.textContent = full ? "收起面板" : "查看全部通知";
+                  // p2-batch2 修（notify 审 P2-10 死类）：np-full 类在 CSS 无定义（死类）——状态改 dataset 承载
+                  const full = panel.dataset.full === "1";
+                  panel.dataset.full = full ? "" : "1";
+                  panel.style.maxHeight = full ? "" : "min(90vh, calc(100% - 72px))";
+                  event.target.textContent = full ? "查看全部通知" : "收起面板";
                 });
 
                 bridge.subscribe(() => render());

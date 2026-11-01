@@ -2791,7 +2791,8 @@
     .notifpanel {
       position: absolute; left: 64px; bottom: 56px; width: min(400px, calc(100% - 84px)); max-height: 70%;
       display: flex; flex-direction: column; overflow: hidden;
-      background: var(--surface1); border: 1px solid var(--line); border-radius: 14px; outline: none;
+      background: var(--surface1); background: color-mix(in srgb, var(--surface1) 96%, var(--text-strong)); /* p2-batch2 修（notify 审 B6 P3 底色提亮）：与页面底分离一档 */
+      border: 1px solid var(--line); border-radius: 14px; outline: none;
       /* B6 三层阴影+顶部内高光：浮层与页面分层（旧单层 var(--shadow) 平贴） */
       box-shadow: 0 1px 2px rgba(0,0,0,.30), 0 8px 24px rgba(0,0,0,.38), 0 24px 64px rgba(0,0,0,.32),
                   inset 0 1px 0 rgba(255, 255, 255, .08); inset 0 1px 0 color-mix(in srgb, var(--text-strong) 8%, transparent);
@@ -2832,6 +2833,8 @@
     }
     .notifpanel .np-foot:hover { background: var(--hover); color: var(--text-strong); }
     /* A7 组头：11px/600/.05em + 语义点 + 计数 badge；sticky+blur 下缘分隔；清空 hover 出现 */
+    /* p2-batch2 修（notify 审 A7 残）：组间距 20~24px（首组除外——贴头部） */
+    .ngrp + .nrow + .ngrp, .np-body > .ngrp:nth-of-type(n+2) { margin-top: 22px; }
     .ngrp {
       position: sticky; top: 0; z-index: 2;
       font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .05em;
@@ -2898,6 +2901,11 @@
       font-weight: 600; color: var(--text-strong); font-size: 13px; line-height: 19px; overflow-wrap: anywhere;
     }
     .nrow .t .s { color: var(--faint); font-size: var(--fs-C); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* p2-batch2 修（notify 审 P2-4 act/× 同列纵叠让位）：act 挪 L3 摘要行内联（第三列只留 ×），
+       行动链与摘要同读线=视觉让位；nid=A9 等宽（hex/版本号/单号 mono+浅底） */
+    .nrow .t .s .act-slot { margin-left: 8px; white-space: nowrap; }
+    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: var(--fs-C); }
+    .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); }
     /* A6 操作钮降权=文字链（12px/500 强调色 hover 下划线） */
     .nrow .act {
       grid-column: 3; align-self: center; flex: none; font-size: 12px; font-weight: 500; color: var(--brand);
@@ -3140,24 +3148,44 @@ html[data-theme="light"] .mobile-project-card .pc2m-r1 .cc-badge.is-neutral { ba
 /* ---------- 一、state-feedback（P1：全站可点元素反馈补齐） ---------- */
 /* 按压反馈（skill corporate 档：scale .97 快落快起，无过冲）：卡片类 */
 .queue-card:active, .mobile-card:active, .member-card:active { transform: translateY(0) scale(.97); }
+/* p2-batch2（motion 审 a-P2①/b-P2①）：会话域存量 `#d-session .queue-card:hover { transform:none }`
+   （:2165 区，特异度 1,2,0）恒压 `.queue-card:active`（0,2,0）——鼠标按压 :hover 必伴随、
+   scale 恒被吞（审查目验 04 图无缩放实锤）。补同特异度 :active 显式规则 */
+#d-session .queue-card:active { transform: translateY(0) scale(.97); }
 /* 按压反馈：按钮类（transform 追加进 transition——append 覆盖原 transition 列表含既有属性，避免只动 transform 一项丢其余） */
 .primary-btn:active, .secondary-btn:active, .icon-btn:active, .kbd-chip:active, .row-share:active, .project-open-btn:active, .windowbar-refresh:active { transform: scale(.97); }
+/* p2-batch2（motion 审 a-P2②/b-P3⑦）：kbd-chip/project-open-btn 存量简写 transition（0,1,1 档）
+   压过本段（0,1,0 档）——补 button. 前缀同特异度显式规则，按压缓动真生效 */
+button.kbd-chip { transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out); }
+.project-open-btn { transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out); }
 .primary-btn { transition: filter var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .secondary-btn, .icon-btn, .kbd-chip, .row-share, .windowbar-refresh { transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out); }
 .queue-card { transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .mobile-card, #d-team .workspace-pane .member-card { transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
-/* 设置行/输出物行 hover 反馈（原缺）：提亮走 --dur-fast */
-button.settings-row:hover, .art-row:hover { border-color: var(--border-strong); background: var(--hover); }
+/* p2-batch2 修（motion 审 a-P2⑤/b-P2②/b-P3⑤）：
+   ① art-row 原有 hover `var(--q-row-hov)`（:1182）被本组等特异度后至覆盖=静默换肤（同面板
+   art-folder 仍走旧值→双 hover 色并存）——摘出本组，保留原值；
+   ② settings-row 原注「提亮走 --dur-fast」不实（无 transition=瞬跳）——补 transition（transform
+   除外，:2483 面板内 transform:none 语义让位）；面板内 :2483（0,3,0）仍胜出=接受（增量面=面板外行） */
+button.settings-row:hover { border-color: var(--border-strong); background: var(--hover); }
+button.settings-row { transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.art-row { transition: background var(--dur-fast) var(--ease-out); }
 .art-row:active { background: var(--q-row-sel, var(--hover)); }
-/* 行选中态过渡：.queue-card.selected 背景/边框过渡已由上方 transition 覆盖（类名同节点翻转路径，transition 生效） */
+/* 行选中态过渡：.queue-card.selected 背景/边框过渡已由上方 transition 覆盖（类名同节点翻转路径，transition 生效）。
+   p2-batch2 记录（motion 审 b-P3⑧）：会话域卡片存量 .06s/.18s（:2161 ID 特异度压制）与 settings-nav
+   .15s ease（:2426）不在本段覆盖面（token 化为增量原则，不重写存量声明）——全域统一另批 */
 
 /* ---------- 二、entrance-exit（域切换/面板/首装 stagger） ---------- */
 /* 域切换（rail 五屏）：display 翻转即重放（setDesktopDomain 不改 JS）；入场减速曲线+中位移 */
 @keyframes mo-dom-in { from { opacity: 0; transform: translateY(var(--dist-m)); } to { opacity: 1; transform: none; } }
 .desktop-screen.active { animation: mo-dom-in var(--dur-enter) var(--ease-out) both; }
-/* 手机端四屏切换（openMobileRoot 同款 display 翻转，零 JS） */
-.mobile-screen.active { animation: mo-dom-in var(--dur-enter) var(--ease-out) both; }
-/* 设置子页进出（activateSettings 面板 .active 翻转）：小位移+稍短于域切换（层级低一档） */
+/* 手机端四屏切换（openMobileRoot 同款 display 翻转，零 JS）。
+   p2-batch2 修（motion 审 a-P2④）：#m-notify 手机通知屏排除——通知域属禁碰面（通知线
+   v2 未过本批动效审），带 :not 防卷入 */
+.mobile-screen.active:not(#m-notify) { animation: mo-dom-in var(--dur-enter) var(--ease-out) both; }
+/* 设置子页进出（activateSettings 面板 .active 翻转）。p2-batch2 注释诚实化（motion 审 b-P2④）：
+   与域入场 mo-dom-in 叠放=opacity 复合+累计 12px 位移（时长同为 200ms 仅位移档不同），
+   「层级低一档」实由位移差表达非时长差——如需单层抑制（域帧吞 pane 帧）另批实现 */
 @keyframes mo-pane-in { from { opacity: 0; transform: translateY(var(--dist-s)); } to { opacity: 1; transform: none; } }
 .settings-panel.active { animation: mo-pane-in var(--dur-move) var(--ease-out) both; }
 /* 列表首装 stagger（np-stagger 同模式：首装一次性编排，620ms 后撤类——后续逐卡替换不重排）：

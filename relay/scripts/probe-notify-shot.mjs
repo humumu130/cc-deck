@@ -69,9 +69,18 @@ await ev(`document.documentElement.setAttribute('data-theme', 'dark')`);
 await send("Emulation.setDeviceMetricsOverride", { width: 420, height: 900, deviceScaleFactor: 2, mobile: true });
 await wait(400);
 await ev(`document.getElementById('stage-desktop').classList.remove('active'); document.getElementById('stage-mobile').classList.add('active')`);
-await ev(`document.querySelector('.mobile-nav [data-mobile-root="notify"]')?.click()`);
+// p2-batch2 修（notify 审 P2-8）：手机通知屏入口=收件箱头铃铛（.mobile-notify——nav 无 notify 根钮，
+// 旧探针点 nav 幽灵钮=无操作=04 图一直是收件箱屏）。先确收件箱 active 再点铃铛
+await ev(`document.querySelector('.mobile-nav [data-mobile-root="inbox"]')?.click()`);
+await wait(250);
+await ev(`document.querySelector('#m-inbox .mobile-notify')?.click()`);
+await wait(250);
 await wait(900);
 await shot("04-mobile-notify", { x: 0, y: 0, width: 420, height: 900, scale: 1 });
+// p2-batch2：真通知屏断言（行数+active 态——旧探针点 nav 幽灵钮=恒收件箱屏）
+const mobRows = await ev(`document.querySelectorAll('#m-notify [data-notify-card]').length`);
+const mobActive = await ev(`document.getElementById('m-notify').classList.contains('active')`);
+console.log(`  手机通知屏：active=${mobActive} 行数=${mobRows}` + (mobRows === 0 ? " ⚠️ 0 行（fixture 未达 mobile 面）" : ""));
 // 桌面面板行数断言（供回执）
 const rows = await ev(`document.querySelectorAll('[data-notify-panel-body] .nrow, [data-notify-panel-body] [data-notify-row]').length`);
 console.log(`  面板行数=${rows}；badge=${await ev(`document.querySelector('[data-notify-badge]')?.textContent`)}`);

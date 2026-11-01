@@ -56,7 +56,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       sendMessage: () => {
         setTimeout(() => {
           if (a.ended) return;
-          cb.onTurnEnd(true, "success", 10);
+          cb.onLog("assistant_text", "x0 模拟回合。\n结果：x0 模拟回合完成", {}); cb.onTurnEnd(true, "结果：x0 模拟回合完成", 10);
         }, 10);
       },
       allow: () => false,
@@ -71,7 +71,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       cb.onInit("sdk-" + a.id.slice(0, 8), model, opts?.permissionMode ?? "default");
       if (prompt !== undefined) setTimeout(() => {
         if (a.ended) return;
-        cb.onTurnEnd(true, "success", 10);
+        cb.onLog("assistant_text", "x0 模拟回合。\n结果：x0 模拟回合完成", {}); cb.onTurnEnd(true, "结果：x0 模拟回合完成", 10);
       }, 10);
     }, 20);
     return a;
@@ -79,7 +79,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
 
 // 环境保存/恢复（进程级全局面，尾部统一还原）
 const savedEnv: Record<string, string | undefined> = {};
-const ENV_KEYS = ["CCR_ORG_DIR", "CCR_STORAGE_READ_MODE", "CCR_NO_TITLE_GEN", "CCR_DATA_DIR", "CCR_X0_PROBE", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "CLAUDE_CODE_EXPERAMENTAL_AGENT_TEAMS", "CCR_CWD"] as const;
+const ENV_KEYS = ["CCR_ORG_DIR", "CCR_STORAGE_READ_MODE", "CCR_NO_TITLE_GEN", "CCR_DATA_DIR", "CCR_PM_DUTY", "CCR_X0_PROBE", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "CLAUDE_CODE_EXPERAMENTAL_AGENT_TEAMS", "CCR_CWD"] as const;
 for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
 const dirs: string[] = [];
 
@@ -95,6 +95,8 @@ async function main() {
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-x0-"));
   dirs.push(ORG, DATA);
   process.env.CCR_STORAGE_READ_MODE = "json";
+  // p2-batch2：duty 值守显式关（duty-chain 缺省开后喂活链介入回合收口——leader-weave 修②同款）
+  process.env.CCR_PM_DUTY = "0";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   delete process.env.CCR_X0_PROBE;
@@ -150,11 +152,11 @@ async function main() {
     {
       const html = readFileSync(join(repoRoot, "web-console/index-005.html"), "utf-8");
       assert(html.includes("data-team-copy-join"), "index-005.html 含 ⧉ 复制入队指令键（data-team-copy-join）");
-      assert(html.includes("team-x0-hint"), "index-005.html 团队侧栏含入队/AGENT_TEAMS 提示行");
+      assert(html.includes('class="team-x0"'), "index-005.html 团队侧栏含入队指引（team-x0 折叠结构——copyjoin-removal 批由 team-x0-hint 平铺行重构，p2-batch2 锚更新）");
       const js = readFileSync(join(repoRoot, "web-console/js/team-domain.js"), "utf-8");
       assert(js.includes("[data-team-copy-join]") && js.includes("org join "), "team-domain.js 含复制入队指令处理（org join <gid> 拼装+剪贴板降级）");
       const css = readFileSync(join(repoRoot, "web-console/css/base.css"), "utf-8");
-      assert(css.includes(".team-x0-hint"), "base.css 含 .team-x0-hint 提示行样式");
+      assert(css.includes(".team-x0") && css.includes("details"), "base.css 含 team-x0 折叠结构样式（或残留 .team-x0-hint 段——重构后兜底锚）");
     }
 
     // ---------- 立项 + 首单熟手 ----------
@@ -305,6 +307,10 @@ async function main() {
 
     // ---------- 件6 PM claim + 自动迁移 ----------
     section("\nX0-件6 PM claim + 自动迁移：");
+    // p2-batch2：件6 场景级开 duty（本套件头部为防 duty 喂活介入回合收口全局关了
+    // CCR_PM_DUTY——pmDutyStatus 现实现 envOn gate 会让值守面恒 null；本段测值守
+    // 本体，段内显式开、段尾还原）
+    process.env.CCR_PM_DUTY = "1";
     {
       // leader 模式（缺省）→ 拒收
       const c0 = mgr.orgAction("pm-claim", { cwd: anchor }) as { ok: boolean; error?: string };
@@ -336,6 +342,7 @@ async function main() {
     }
 
     // ---------- 件7 dispatch.md 预检节 R3 三问 ----------
+    process.env.CCR_PM_DUTY = "0"; // 件6 段尾还原（余段防 duty 介入）
     section("\nX0-件7 dispatch.md 预检节 R3 三问（静态锚）：");
     {
       const tpl = readFileSync(join(repoRoot, ".claude/commands/dispatch.md"), "utf-8");
