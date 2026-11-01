@@ -113,7 +113,7 @@
           const dpr = Number(window.devicePixelRatio) || 1;
           const frac = Math.abs(dpr - Math.round(dpr)) > 0.01;
           const plat = /Windows/.test(navigator.userAgent) ? "Windows" : /Mac/.test(navigator.userAgent) ? "macOS" : "Linux";
-          el.textContent = "渲染环境：" + plat + " · 缩放 " + Math.round(dpr * 100) + "%（DPR " + dpr.toFixed(2) + (frac ? " · 分数档=文字子像素 AA 关闭（Windows 显示缩放 125%/150% 的已知观感，调 100%/200% 整数档可恢复锐利——见 docs/windows-cleartype.md）" : " · 整数档") + "）";
+          el.textContent = "渲染环境：" + plat + " · 缩放 " + Math.round(dpr * 100) + "%（DPR " + dpr.toFixed(2) + (frac ? " · 分数档=文字子像素 AA 关闭（Windows 显示缩放 125%/150% 的已知观感，仅 100% 整数档恢复子像素 AA，200% 是像素密度变锐——见 docs/windows-cleartype.md）" : " · 整数档") + "）";
           // 跨屏拖动/系统缩放改档时 DPR 变——重臂监听自刷新（2K+1080p 混搭场景行内容随屏走）
           try {
             if (probeMq && probeMq.removeEventListener) probeMq.removeEventListener("change", fillRenderProbe);

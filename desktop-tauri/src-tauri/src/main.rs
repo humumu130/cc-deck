@@ -58,7 +58,7 @@ try {
     const now = Date.now();
     if (now - zoomHintAt > 2500) {
       zoomHintAt = now;
-      try { window.__ccDeck005B4 && window.__ccDeck005B4.toast && window.__ccDeck005B4.toast("窗口缩放已停用（分数缩放是 2K 屏发糊源之一）· 字号请走 设置 → 通用 → 界面字号"); } catch (_) {}
+      try { if (/windows/i.test(navigator.userAgent) && window.__ccDeck005B4 && window.__ccDeck005B4.toast) window.__ccDeck005B4.toast("窗口缩放已停用（分数缩放是 2K 屏发糊源之一）· 字号请走 设置 → 通用 → 界面字号"); } catch (_) {} // P2-2：仅 Windows 弹（mac 捏合=WebKit 合成 ctrl+wheel，弹则误导）
     }
   }, { passive: false, capture: true });
   document.addEventListener("keydown", (e) => {
