@@ -101,7 +101,13 @@ const events3 = [mk(1, "s3", "SESSION_CREATED", { cwd: "/x", initial_prompt: "�
 const rs3 = reduceHistory(events3).get("s3")!;
 assert(rs3.state.status === "DONE" && rs3.state.done_reason === "服务更新重启，会话已中断" && !rs3.state.last_error, "可恢复标 DONE 中性");
 assert(rs3.state.historical === true, "可恢复也标 historical");
-assert(rs3.logs.at(-1)!.text === "服务更新重启，会话已中断 · 发送消息即可继续", "可恢复时间线文案");
+assert(rs3.logs.at(-1)!.text === "服务更新重启，会话已中断 · 检测到进行中任务，将自动续跑", "可恢复时间线文案（WORKING→自动续跑，#36 同步）");
+
+// 可恢复但非 WORKING（WAITING 半截权限流）→ 指引文案分支（无法自答，人工触发续）
+const events3b = [mk(1, "s3b", "SESSION_CREATED", { cwd: "/x", initial_prompt: "权限中断测试", model: "m" }), mk(2, "s3b", "SESSION_UPDATED", { status: "WAITING", action_summary: "等权限", stats: null, relay_session_id: "sdk-456" })];
+const rs3b = reduceHistory(events3b).get("s3b")!;
+assert(rs3b.state.status === "DONE" && rs3b.state.historical === true, "可恢复 WAITING 也标 DONE+historical");
+assert(rs3b.logs.at(-1)!.text === "服务更新重启，会话已中断 · 发送消息即可继续", "可恢复非 WORKING 时间线文案");
 
 // ---------- EventBus 持久化 + 预载 ----------
 console.log("EventBus 持久化:");
