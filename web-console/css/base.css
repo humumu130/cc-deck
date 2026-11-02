@@ -3359,3 +3359,11 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
 #stage-mobile.pager-on .mobile-screen[data-mobile-root].pager-anim { transition: transform var(--dur-pager, 260ms) var(--ease-out); } /* 吸附/跳屏过渡；拖拽中无此类=实时跟手；reduce 瞬切=段尾归零行+全局 .01ms blanket 双保险（跟手位移保留——用户手势非动画） */
 #stage-mobile.pager-on #m-detail, #stage-mobile.pager-on #m-notify { position: absolute; inset: 0; z-index: 30; min-height: 0; background: var(--bg1); } /* strip 常驻显示后覆盖屏必须自带底（原单屏独显时代透明无妨） */
 @media (prefers-reduced-motion: reduce) { #stage-mobile { --dist-m: 0px; } #stage-mobile.pager-on { --dur-pager: 0ms; } } /* 位置即语义：须在各 token 覆写行之后（同特异度，级联后至者胜——放前部 reduce 块会被压过成死码，E5-2 探针实锤修正+P2-1 review-w-mobileswipe 迁位）。--dur-pager 归零后吸附瞬切仍双保险：:2565 全局 .01ms blanket 兜底（belt+suspenders——blanket 未来收紧/移除时本行独立成立） */
+
+/* =============== W-DESKNOTIFY（1102 用户实锤）：通知面板离屏行渲染豁免 ===============
+   四刀（零 JS）：.nrow content-visibility:auto——离屏行跳过布局/绘制（布局/首绘成本
+   ∝ 视口内行数而非总行数，300 行积压面板开帧实测 onClass→paint 700ms+ 的本体收敛）。
+   contain-intrinsic-size 给出占位尺寸防滚动条跳动；Safari 15.4+/WKWebView 支持，
+   不支持的环境该行被忽略零副作用（渐进增强）。DOM/滚动/分组计数全保留。 */
+.notifpanel .np-body .nrow { content-visibility: auto; contain-intrinsic-size: auto 46px; }
+.notifpanel .np-body .ngrp { content-visibility: auto; contain-intrinsic-size: auto 26px; }

@@ -392,6 +392,14 @@
                   const bell = document.querySelector('.rail-btn[data-domain="notify"]');
                   if (bell) bell.classList.toggle("active", on); // 弹窗开着=铃铛高亮（V3 bell.on 同语言）
                   if (on) {
+                    // W-DESKNOTIFY 兜底：面板开=即有内容——门/rAF 合并后首渲可能还排在下一
+                    // tick，空面板闪一帧不可接受（数据已到但从未渲过时同步补一次；已渲过
+                    // 零成本跳过——render 签名跳帧保底）
+                    if (!panelBody.firstElementChild) { try { render(); } catch (_) {} }
+                    // 三刀：面板开让位——撤掉已排定的渲染分片让本帧画面板（点击→可见优先），
+                    // 220ms 后恢复补渲（dirty 保留数据不丢）
+                    const g = window.__ccDeck005DeskRender;
+                    if (g && typeof g.yieldPaint === "function") { try { g.yieldPaint(220); } catch (_) {} }
                     lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
                     panel.focus({ preventScroll: true });
                     setTimeout(playStagger, 30); // 面板 frame 起手后编排行入场
