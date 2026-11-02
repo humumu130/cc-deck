@@ -36,6 +36,7 @@ for (const d of ["../data/test-retired-causes-org/", "../data/test-retired-cause
   rmSync(SB(d), { recursive: true, force: true });
   mkdirSync(SB(d), { recursive: true });
 }
+const ROOT = new URL("../..", import.meta.url).pathname; // 与 SB 同范式（URL 相对——零 dirname 依赖）
 process.env.CCR_ORG_DIR = SB("../data/test-retired-causes-org/");
 process.env.CCR_DATA_DIR = SB("../data/test-retired-causes-data/");
 process.env.CCR_PROJECTS_ROOT = SB("../data/test-retired-causes-projects/");
@@ -226,6 +227,21 @@ console.log("C9 keepIdleMs 缺省 72h:");
   ok(r.data.groups.every((x) => x.gid !== g.id || x.after === x.before - x.trimmed.length), "dryRun before/after 自洽");
   ok(!listPendingConfirms().some((c) => c.kind === "headcount-trim-first" && c.payload?.gid === g.id), "dryRun 不出确认卡");
   ok(!existsSync(join(ORG, "headcount-trim-journal.ndjson")) || !readFileSync(join(ORG, "headcount-trim-journal.ndjson"), "utf-8").includes(g.id), "dryRun 不落轮次账（零副作用）");
+}
+
+console.log("C11 retired-mislabel 名单门（1102 用户实锤 P0：全卡误挂离席——UI 判定链文件锚；编号避撞旧 C10 report 兼容段·审查 P3-2）:");
+{
+  const sd = readFileSync(join(ROOT, "web-console", "js", "session-domain.js"), "utf8");
+  const fnAt = sd.indexOf("const retiredCauseBits = (sid) => {");
+  ok(fnAt > 0, "retiredCauseBits 在位");
+  const gateAt = sd.indexOf("if (!S.retiredIds || !S.retiredIds.has(sid)) return null;", fnAt);
+  const getAt = sd.indexOf("const e = S.retiredEntries.get(sid);", fnAt);
+  ok(gateAt > 0 && getAt > 0 && gateAt < getAt, "名单门在 entries 查询之前（非退休名单成员恒 null——活跃会话零标签根修）");
+  ok(sd.slice(fnAt, fnAt + 2400).includes("离席（成因无记录——语义手术前历史事件）"), "名单内无账条目回落泛词语义保留（历史退休者）");
+  ok(sd.slice(fnAt, fnAt + 400).includes("!S.retiredEntries) return null"), "能力缺席（旧 relay）整组旧词语义保留");
+  const callAt = sd.indexOf("retiredCauseBits(session.session_id)");
+  const asmAt = sd.indexOf("retiredTag: retiredTag ?", callAt); // 组装链=调用位正向邻域（审查 P2-1：原 || callAt>0 尾使 && 子句死码，只验调用位）
+  ok(callAt > 0 && asmAt > callAt && asmAt - callAt < 400, "myCardItem 调用位与 retiredTag 组装链不破坏（修后天然幂等：名单外 null→三元不渲染）");
 }
 
 console.log(`\nretired-causes: ${pass} 通过 / ${fail} 失败`);

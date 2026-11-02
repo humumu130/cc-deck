@@ -1322,6 +1322,13 @@
                 // 无 retired_entries）返回 null=整组维持旧词「已退休成员」零破坏**
                 const retiredCauseBits = (sid) => {
                   if (!S.retiredEntries) return null;
+                  // retired-mislabel（1102 用户实锤 P0 根修）：名单门——非退休名单（retiredIds）
+                  // 成员恒 null。原实现的「查无条目回落离席泛词」是为名单内历史退休者（记账前
+                  // 事件）设计的，但调用点在 myCardItem 对**每一张卡**执行——活跃会话 sid 不在
+                  // entries Map → !e 恒真 → 全卡误挂「离席」。名单与 entries 同源同发（SNAPSHOT
+                  // /RETIRED_SESSIONS_UPDATED 双键），名单缺席=旧 relay 能力缺席语义，回落 null
+                  //（整组旧词「已退休成员」）不猜。名单内在场而无账条目=历史事件，泛词语义保留。
+                  if (!S.retiredIds || !S.retiredIds.has(sid)) return null;
                   const e = S.retiredEntries.get(sid);
                   if (!e) return { label: "离席", title: "离席（成因无记录——语义手术前历史事件）" };
                   const idleH = (() => { const m2 = /闲置\s*(\d+)\s*h/.exec(String(e.detail || "")); if (m2) return Number(m2[2 - 1]); const since = Number(e.since || 0); return since ? Math.max(1, Math.round((Date.now() - since) / 3600000)) : 0; })();
