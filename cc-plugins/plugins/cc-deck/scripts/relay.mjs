@@ -18045,6 +18045,10 @@ function evaluateLeaderActionableWork(snapshot) {
     ...workerDoneCandidates(snapshot)
   ];
   const blocked = [...snapshot.blocked ?? []];
+  const pendingUser = snapshot.pending_user_confirms ?? [];
+  if (pendingUser.length > 0) {
+    return { actionable: false, candidates: [], reason: "blocked", blocked: [...pendingUser, ...blocked] };
+  }
   if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
   if (blocked.length > 0) return { actionable: false, candidates, reason: "blocked", blocked };
   const running = (snapshot.running_sessions ?? []).filter((session) => session.status === "running" || session.status === "WORKING");
@@ -51509,6 +51513,64 @@ function autoReviveManaged(mgr2, limit = 3) {
   }
   return revived;
 }
+function resumeLeaderAfterReboot(mgr2) {
+  if (process.env.CCR_RESUME_ON_REBOOT === "0") return 0;
+  if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
+  const id2 = mgr2.leaderId;
+  if (!id2) return 0;
+  const s = mgr2.sessions.get(id2);
+  if (!s) return 0;
+  if (s.state.external) {
+    console.log("[pm-resume] Leader \u4E3A\u5916\u90E8\u4F1A\u8BDD\uFF08no-leader \u6A21\u5F0F\u7528\u6237\u7EC8\u7AEF\u7BA1\u8F96\uFF09\u2014\u2014relay \u65E0\u53E5\u67C4\u4E0D\u62C9\uFF0C\u5F52\u7528\u6237\u7EC8\u7AEF");
+    return 0;
+  }
+  if (s.agent) return 0;
+  if (!s.state.relay_session_id) {
+    console.log("[pm-resume] Leader \u65E0 SDK \u951A\uFF08\u9996\u56DE\u5408\u672A\u5B8C\u6210\u5373\u4E2D\u65AD\uFF09\u2014\u2014\u4E0D\u786C\u62C9\uFF0C\u7B49\u9996\u6761\u6D88\u606F/duty");
+    return 0;
+  }
+  if (mgr2.isRetiredMember && mgr2.isRetiredMember(id2)) {
+    console.log("[pm-resume] Leader \u5DF2\u9000\u4F11\uFF08\u7F16\u5236\u9664\u540D\uFF09\u2014\u2014\u4E0D\u62C9");
+    return 0;
+  }
+  if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
+    console.log("[pm-resume] resume \u4E92\u65A5\u7A97\u5185\u2014\u2014\u672C\u8F6E\u4E0D\u62C9\uFF08\u9632\u53CC\u8FDB\u7A0B\uFF09");
+    return 0;
+  }
+  if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
+    console.log("[pm-resume] resume \u7194\u65AD\u51B7\u5374\u4E2D\u2014\u2014\u672C\u8F6E\u4E0D\u62C9\uFF08\u9632\u6B7B\u5FAA\u73AF\uFF09");
+    return 0;
+  }
+  const wasWorking = s.state.pre_reboot_status === "WORKING";
+  s.state.pre_reboot_status = void 0;
+  try {
+    if (wasWorking) {
+      mgr2.resumeAgent(s, "[relay \u91CD\u542F\u81EA\u6108 \xB7 \u503C\u5B88\u5E2D\u4F4D] relay \u91CD\u542F\u5B8C\u6210\uFF0CPM \u503C\u5B88\u56DE\u5408\u88AB\u4E2D\u65AD\uFF0C\u5DF2\u81EA\u52A8\u7EED\u8DD1\uFF08#PMRESUME\u2014\u2014\u4E0D\u518D\u9700\u8981\u4EBA\u5DE5\u53D1\u6D88\u606F\u62C9\u56DE\uFF09\u3002" + reviveInstruction(s));
+    } else {
+      if (process.env.CCR_PM_DUTY === "0" || process.env.CCR_NO_LEADER === "1") return 0;
+      mgr2.reviveSaved(s);
+    }
+    try {
+      mgr2.upsertNotification("system", "pm-resume", `r${Date.now()}`, {
+        // revision 唯一化：同 entityId+同 revision 视陈版跳更（A/B 两态通知实证）
+        title: wasWorking ? "\u503C\u5B88 PM \u5DF2\u81EA\u52A8\u7EED\u8DD1" : "\u503C\u5B88 PM \u5DF2\u62C9\u8D77\u5F85\u547D",
+        body: `${s.state.title || id2.slice(0, 8)}\uFF1Arelay \u91CD\u542F\u540E\u5E2D\u4F4D\u81EA\u6108\uFF08${wasWorking ? "\u4E2D\u65AD\u56DE\u5408\u81EA\u52A8\u7EED\u8DD1" : "\u6E29\u5E8A\u5F85\u547D\u2014\u2014\u4E0B\u6761\u6D88\u606F\u96F6\u51B7\u542F\u52A8"}\uFF0C#PMRESUME\uFF09`,
+        severity: "info",
+        group: "activity",
+        actionable: false,
+        sessionId: id2,
+        domain: "session",
+        returnPath: "sessions"
+      });
+    } catch {
+    }
+    console.log(`[pm-resume] \u503C\u5B88\u5E2D\u4F4D\u81EA\u6108\uFF1A${wasWorking ? "\u4E2D\u65AD\u7EED\u8DD1" : "\u6E29\u5E8A\u5F85\u547D"} sid=${id2.slice(0, 8)}`);
+    return 1;
+  } catch (e) {
+    console.log(`[pm-resume] Leader \u62C9\u8D77\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}\uFF08\u7194\u65AD\u8D26\u63A5\u7BA1\uFF1B\u4EBA\u5DE5\u53D1\u9001\u6D88\u606F\u53EF\u6062\u590D\uFF09`);
+    return 0;
+  }
+}
 function resumeInterruptedByReboot(mgr2, limit = 3) {
   if (process.env.CCR_RESUME_ON_REBOOT === "0") return 0;
   if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
@@ -55579,6 +55641,10 @@ function dutyContinuationMs() {
   const v = Number(process.env.CCR_PM_DUTY_CONTINUATION_MS);
   return Number.isFinite(v) && v >= 0 ? v : 5 * 6e4;
 }
+function holdEscalateMs() {
+  const v = Number(process.env.CCR_CONFIRM_HOLD_ESCALATE_MS);
+  return Number.isFinite(v) && v >= 6e4 ? v : 2 * 36e5;
+}
 var SNAPSHOT_LOGS_BUDGET_BYTES2 = 512 * 1024;
 var SNAPSHOT_LOGS_PER_SESSION2 = 50;
 var SNAPSHOT_LOGS_BUDGET_BYTES_LAN2 = 4 * 1024 * 1024;
@@ -56492,6 +56558,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 状态信号，与 autoRevive 的待办驱动互补；CCR_RESUME_ON_REBOOT=0 逃生阀）。
   resumeInterruptedByReboot(limit = 3) {
     return resumeInterruptedByReboot(this, limit);
+  }
+  // #PMRESUME（用户 1102 实锤×3 手动拉回）：PM 席位重启自愈——体在 lifecycle/revive.ts
+  // resumeLeaderAfterReboot（席位豁免 pinned-dormant：WORKING 中断续跑+空闲温床待命；
+  // 普通会话零波及——共享闸不动，只认 leaderId）
+  resumeLeaderAfterReboot() {
+    return resumeLeaderAfterReboot(this);
   }
   // W-SPLIT-S5②：引擎登录恢复三面体+机制注释迁 lifecycle/revive.ts（构造区 :825/:830
   // 的 ready-hook 与 boot 扫描回调不改，走本壳）
@@ -59230,9 +59302,11 @@ provider=${opts.provider ?? "default"}` : void 0,
         running.push({ session_id: s.state.session_id, status: "WORKING", updated_at: s.state.updated_at, last_progress_at: s.lastProgressAt });
       }
     }
+    const pendingUserConfirms = listPendingConfirms().filter((c) => c && c.status === "pending").map((c) => ({ id: c.id, reason: "user_confirm" }));
     return {
       now,
       worker_done_pending: this.workerDonePending,
+      pending_user_confirms: pendingUserConfirms,
       pending_receipts: this.pendingAcceptanceReceipts(),
       failed_or_hanging_dispatches: failed,
       unlocked_todos: todos,
@@ -59471,6 +59545,29 @@ provider=${opts.provider ?? "default"}` : void 0,
         observed,
         from
       });
+      try {
+        if ((verdict.blocked ?? []).some((b) => b.reason === "user_confirm")) {
+          const pend = listPendingConfirms().filter((c) => c && c.status === "pending");
+          const oldest = pend.reduce((a, c) => !a || c.created_at < a.created_at ? c : a, null);
+          if (oldest) {
+            const holdMs = holdEscalateMs();
+            const age = from - oldest.created_at;
+            if (age >= holdMs) {
+              this.upsertNotification("system", "duty-hold", `${oldest.id}`, {
+                title: `\u503C\u5B88\u6302\u8D77\u4E2D\uFF1A\u786E\u8BA4\u5361\u7B49\u5F85\u4F60\u7684\u51B3\u8BAE\u5DF2 ${Math.round(age / 36e5)} \u5C0F\u65F6`,
+                body: truncate(`\u300C${oldest.title}\u300D\u672A\u51B3\u8BAE\u2014\u2014\u503C\u5B88\u5168\u7EBF\u6302\u8D77\uFF08worker_done/\u9A8C\u6536\u56DE\u6267\u7B49\u6682\u4E0D\u63A8\u8FDB\uFF09\uFF1B\u51B3\u8BAE\u540E\u503C\u5B88\u81EA\u52A8\u6062\u590D\u3002${pend.length > 1 ? `\u53E6\u6709 ${pend.length - 1} \u5F20\u5F85\u51B3\u5361\u3002` : ""}`, 160),
+                severity: "waiting",
+                group: "action",
+                actionable: true,
+                sessionId: this.leaderId ?? void 0,
+                domain: "org",
+                returnPath: "/"
+              });
+            }
+          }
+        }
+      } catch {
+      }
       return;
     }
     const transition = transitionDutyFeedCount(this.dutyFeed, "feed");
@@ -61026,6 +61123,14 @@ provider=${opts.provider ?? "default"}` : void 0,
           if (!d2.ok) return d2;
           const eff = this.applyConfirmEffects(d2.confirm);
           if (!eff.ok) return { ok: false, error: eff.error ?? "\u51B3\u8BAE\u526F\u4F5C\u7528\u6267\u884C\u5931\u8D25" };
+          try {
+            if (dutyEnabled()) this.feedPM("confirm-decided");
+          } catch {
+          }
+          try {
+            this.transitionNotifications((n) => n.key === `system:duty-hold:${cid}`, "resolved");
+          } catch {
+          }
           return { ok: true, data: { confirm: d2.confirm } };
         }
         default:
@@ -71769,6 +71874,10 @@ if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
 setTimeout(() => {
   try {
     mgr.autoReviveManaged();
+  } catch {
+  }
+  try {
+    mgr.resumeLeaderAfterReboot();
   } catch {
   }
   try {

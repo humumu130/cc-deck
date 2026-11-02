@@ -870,8 +870,10 @@
                   }
                 });
 
-                bridge.subscribe(() => render());
-                setTimeout(render, 0);
+                // W-DESKNOTIFY：project 域渲染走桌面可见性门+rAF 合并（原唯一直渲重域——
+                // 手机端 project 列表由 mobile.js renderProject 独立驱动，本 render 纯桌面）
+                bridge.subscribe(() => { const g = window.__ccDeck005DeskRender; if (g) g.run(render); else render(); });
+                setTimeout(() => { const g = window.__ccDeck005DeskRender; if (g) g.run(render); else render(); }, 0);
               })();
             
 // ---------- #282 定向渲染共享单口：keyed 子项 reconcile ----------
