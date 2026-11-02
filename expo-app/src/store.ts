@@ -597,41 +597,10 @@ class RelayStore {
     return () => this.listeners.delete(fn);
   };
 
-  // W-RNDRAGSUSPEND（五修）：拖拽挂起开关——App 翻页 PanResponder 在 grab 时
-  // suspendNotify、松手/被打断时 resumeNotify（spring native 驱动，恢复后的
-  // JS 工作不冻落位动画）。成对调用纪律：grab 与 release/terminate 两路都要接
-  private notifySuspended = false;
-  private notifyPending = false;
-  private pendingPatch: Partial<Snapshot> = {};
-  private suspendFuse: ReturnType<typeof setTimeout> | null = null;
-  suspendNotify(): void {
-    this.notifySuspended = true;
-    // 保险丝（5s）：异常路径漏 resume（手势中途切后台被系统吞掉 release 等）不能
-    // 让通知永久挂起=快照冻结——物理上单次拖拽不可能超 5s，到点强制恢复补发
-    if (this.suspendFuse) clearTimeout(this.suspendFuse);
-    this.suspendFuse = setTimeout(() => {
-      this.suspendFuse = null;
-      if (!this.notifySuspended) return;
-      this.notifySuspended = false;
-      if (this.notifyPending) {
-        this.notifyPending = false;
-        const patch = this.pendingPatch;
-        this.pendingPatch = {};
-        this.emit(patch);
-      }
-    }, 5_000);
-  }
-  resumeNotify(): void {
-    if (this.suspendFuse) { clearTimeout(this.suspendFuse); this.suspendFuse = null; }
-    if (!this.notifySuspended) return;
-    this.notifySuspended = false;
-    if (this.notifyPending) {
-      this.notifyPending = false;
-      const patch = this.pendingPatch;
-      this.pendingPatch = {};
-      this.emit(patch); // 全量补发：挂起窗内的一切状态变化（含合并的 patch-only 字段）一次可见
-    }
-  }
+  //（W-RNDRAGSUSPEND 拖拽挂起机制已随 PanResponder 翻页器退役整体删除——
+  //  W-PAGERFIX 清扫：suspendNotify/resumeNotify 调用方零处=notifySuspended 恒
+  //  false，emit 早退分支不可达死码；快照引用稳定性现由 snapshotSessions 的
+  //  src 懒盖章与未变会话对象复用保障）
 
   getSnapshot = (): Snapshot => this.snap;
 
@@ -641,18 +610,6 @@ class RelayStore {
   }
 
   private emit(patch: Partial<Snapshot> = {}) {
-    // W-RNDRAGSUSPEND（五修·用户 1102 五报）：拖拽挂起——翻页手势期间（grabbed）
-    // emit 整体早退（快照对象不重建=引用恒稳），挂起标记置位，恢复时补一发全量
-    // emit。RN 壳 App 经 useRelay 订阅整树：emit 即快照新引用+全树重渲，正撞拖拽
-    // 窗口=跟手冻结（web 侧 mobile.js drag suspend 的 RN 移植）。只挂「可见性」
-    // 不挂「写入」——期间到达的事件照常落 conn 状态，恢复 flush 一发全量可见。
-    // patch 合并（审查 A P2-1）：taskDoneQueue/lastErrorCmd 等只经 patch 传递的字段
-    // 挂起窗内不可丢——同键后值覆盖（与 emit 展开序同语义），恢复时随全量补发
-    if (this.notifySuspended) {
-      this.notifyPending = true;
-      Object.assign(this.pendingPatch, patch);
-      return;
-    }
     // 直接 emit 意味着全部状态（含已写入 timelines 的流式块）对监听者可见：
     // 取消挂起的日志合帧补发，避免随后再多通知一次（后续流式块会按新窗口重排）
     if (this.logEmitTimer) {

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, AppState, BackHandler, Dimensions, Easing, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
+import { Animated, AppState, BackHandler, Dimensions, Easing, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay, type ServerEntry } from "./src/store";
@@ -41,11 +41,12 @@ import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
 import NewSessionModal from "./src/screens/NewSessionModal";
 
-// W-RNDRAGSUSPEND 五修·memo 边界：五大子树包 React.memo——App 根级重渲（swipe 态
-// 切换 / store emit）时子树全量 reconcile 是拖拽期 JS 堵塞源之二（挂载风暴是其一，
-// 362fab8a 已治）。memo 生效前提=下传 props 引用稳定：全部 inline 回调已在 Shell 内
-// useCallback 化（见 openDetail 一带），snap.sessions 在 emit 间引用稳定（store
-// snapshotSessions 每 emit 新数组，但拖拽期 emit 已被 suspendNotify 挂起=窗口内恒稳）
+// memo 边界（W-RNDRAGSUSPEND 五修遗产，W-PAGERFIX 注释诚实化）：五大子树包
+// React.memo——App 根级重渲（store emit 等）时跳过子树全量 reconcile。memo 生效
+// 前提=下传 props 引用稳定：全部 inline 回调已在 Shell 内 useCallback 化（见
+// openDetail 一带）；snap.sessions 数组级引用每 emit 必新（MListScreen memo 照常
+// bust——行级不重渲靠的是元素级稳定：src 懒盖章+未变会话对象复用，#282 口径。
+// suspendNotify 拖拽挂起已随 PanResponder 翻页器退役删 API）
 const MListScreen = memo(ListScreen);
 const MTeamTab = memo(TeamTab);
 const MProjectsTab = memo(ProjectsTab);
@@ -629,19 +630,9 @@ function Shell() {
   // P0 二分实验 1：tab 锁死 sessions（其余域不挂载）——隔离「团队/项目/设置域
   // 挂载与切换」因子；60s 稳定则崩面在域挂载面，仍崩则崩面在会话域本体
   const [tab, setTab] = useState<TabKey>("sessions");
-  // 件六③：列表页左右滑切底部导航域（用户拍板，对齐主流 App 域切换手势）。横占优
-  // 判定（|dx| > |dy|*2 且 ≥24px）让垂直滚动（FlatList/ScrollView 纵滑）零冲突；
-  // 详情层（navLayer 盖顶）与各 Modal（向导/详情页/菜单 sheet）是独立渲染层，触点
-  // 到不了这里，天然不打架；TAB_ORDER 序=底栏序（左滑进右滑退，边界 no-op）。
-  // tabRef 镜像：PanResponder 创建一次，release 读实时 tab（闭包陈旧值防陈旧切回）
-  //
-  // W-NOTIFY2 件二（用户 1018 拍板：硬切改跟手过渡）：滑动期双页同相位位移+当前页
-  // 轻视差（0.35 系数，微信式）；松手按「过半 |dx|≥w/2 或速度 vx≥0.55」判定落位，
-  // spring 收尾后 setTab+卸载源页（落定仍单页挂载——保挂载纪律不破：会话域
-  // ListScreen 恒挂机制不变，仅动画期目标页临时挂载/恒挂容器参与位移）。native
-  // driver 全程（transform-only）。
-  const tabRef = useRef(tab);
-  tabRef.current = tab;
+  // （域滑切手势史：件六③ PanResponder 滑切→W-NOTIFY2 跟手过渡→六修原生分页器，
+  // 手势本体已全权交原生 ScrollView pagingEnabled——JS 侧零手势代码，tabRef 镜像
+  // 与滑切判定随 PanResponder 退役删除）
   // W-NATIVEPAGER（六修终章，用户 1102 六报）：PanResponder 手写翻页器退役——
   // JS 手势链经 79 跟手/81 渲染收敛/83 骨架化/84 真量程+store 挂起+memo 六轮修复，
   // 真机仍冻在半路（截图实证：真页+骨架页停在 55%）。换原生 horizontal
@@ -660,6 +651,10 @@ function Shell() {
   }, []);
   // 底栏/各入口 setTab → pager 跟随滚动（值语义驱动；翻页落定路径 setTab 到的
   // 就是当前页，scrollTo 同位 no-op，无回环）
+  // P1-1 R2 根修（B 审处方 1=ref 回调重同步，双审证伪 R1 lastTab-null 方案）：setup
+  // 往返只重挂 pager 子树，本 effect 宿主 Shell 常驻且 deps [tab,pageTo] 零变化→
+  // effect 永不重跑（R1「null 首跑」在生产路径纯 no-op）。ref 回调天然随子树每次
+  // 挂载触发、闭包取当次提交的 tab——重挂即免动画归位，本 effect 只管活态 tab 变化
   const lastTab = useRef(tab);
   useEffect(() => {
     if (lastTab.current !== tab) {
@@ -667,6 +662,17 @@ function Shell() {
       pageTo(tab);
     }
   }, [tab, pageTo]);
+  // P1-1 R2：ref 回调重同步——ScrollView 每次挂载（含 setup 编辑往返重挂）即刻归位
+  // 到当次 tab（x=0 起滚 vs tab 残留的死锁盲区在此闭合；detached=cb(null) 不动作）
+  const pagerAttach = useCallback((el: ScrollView | null) => {
+    pagerRef.current = el;
+    if (el) pageTo(tab, false);
+  }, [tab, pageTo]);
+  // P1-2（review-w-nativepager-a）：设置二级页开态上提——subPage 开且当前在设置
+  // tab 时锁 pager 横滚（scrollEnabled=false=原生父层不再 onInterceptTouchEvent，
+  // #207 edgeSwipe 侧滑返回回活）；tab 切走即解锁（二级页跨 tab 持久=四页常驻语义）
+  const [settingsSubOpen, setSettingsSubOpen] = useState(false);
+  const onSettingsSubPage = useCallback((open: boolean) => setSettingsSubOpen(open), []);
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
@@ -1029,17 +1035,19 @@ function Shell() {
       {hasCfg && !setup ? (
         <>
           {/* 底部导航骨架（0.7 批 1 起；件六回四域）：域内容区（flex）+ TabBar；
-              会话域保持挂载（display 切换，滚动位置/内部状态记忆保留），其余域按需
-              挂载（切走即卸载，状态回默认——设置服务器列表重取即最新）。通知不占
-              底栏域（件六），挂 ListScreen 顶栏铃铛 + sheet 弹层。详情层仍为全屏
-              覆盖（盖过底栏），从任一域推入、返回回原 tab */}
+              W-NATIVEPAGER 起四页全量常驻（切走不卸载，滚动位/二级页态跨 tab 记忆
+              ——设置服务器列表新鲜度改由 setup 门控重挂载触发 loadServers，见
+              SettingsPage 挂载注释）。通知不占底栏域（件六），挂 ListScreen 顶栏
+              铃铛 + sheet 弹层。详情层仍为全屏覆盖（盖过底栏），从任一域推入、
+              返回回原 tab */}
           <View style={st.tabRoot}>
 <ScrollView
-              ref={pagerRef}
+              ref={pagerAttach}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onPagerSettle}
+              scrollEnabled={!(settingsSubOpen && tab === "settings")}
               style={st.pagerBody}
             >
               {/* W-NATIVEPAGER：四页常驻（sessions/team/projects/settings 按 TAB_ORDER
@@ -1079,6 +1087,7 @@ function Shell() {
                   onGoSessions={goSessions}
                   onSetup={openSetupNew}
                   onEdit={editServerEntry}
+                  onSubPageChange={onSettingsSubPage}
                 />
               </View>
             </ScrollView>
@@ -1148,23 +1157,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   bootT: { color: c.faint, fontSize: 16, fontWeight: "600" },
   // 详情层：盖在列表上，滑入/滑出只动 translateX（native 驱动）
   navLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, elevation: 8 },
-  // 底部导航骨架（0.7 批 1）：tabRoot 纵向 = 域内容区(flex) + TabBar；domain 绝对
-  // 铺满域内容区，display 切换保持挂载（滚动位置记忆）
+  // 底部导航骨架（0.7 批 1）：tabRoot 纵向 = 域内容区(flex) + TabBar
   tabRoot: { flex: 1 },
-  tabPane: { flex: 1 },
   // W-NATIVEPAGER：原生分页器容器——flex:1 占 tabRoot 余空，四子页各占整屏宽
+  //（W-PAGERFIX 清扫：tabPane/domain/domainHidden/swipeOver/swipeSkel* 死样式随
+  //  旧翻页器退役删除——详情层用 navLayer，grep 零引用）
   pagerBody: { flex: 1 },
   pagerPage: { width: Dimensions.get("window").width, height: "100%" }, // 模块加载时取屏宽（旋转/分屏后重启 app 校正——手机主场景竖屏锁定，备案）
-  domain: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }, // 保留：其他层（如详情垫层）可能引用
-  domainHidden: { display: "none" },
-  // W-NOTIFY2 件二：swipe 目标页覆盖层（盖当前页之上，实底防透）
-  swipeOver: { zIndex: 30, backgroundColor: c.bg },
-  // W-SWIPE4 四修：拖拽期目标页骨架（头带+条+卡占位——语义「页面进入中」，真树
-  // settle 后 setTab 挂载接管）。全部静态 View，零列表零数据依赖=零挂载风暴。
-  swipeSkel: { flex: 1, paddingTop: 18, paddingHorizontal: 18, gap: 12 },
-  swipeSkelHead: { height: 22, width: 128, borderRadius: 7, backgroundColor: c.panel2 },
-  swipeSkelBar: { height: 13, borderRadius: 5, backgroundColor: c.panel },
-  swipeSkelCard: { height: 88, borderRadius: 12, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,

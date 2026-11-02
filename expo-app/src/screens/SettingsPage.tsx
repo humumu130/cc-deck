@@ -441,6 +441,7 @@ function SettingsPageBase({
   onSetup,
   onEdit,
   onGoSessions,
+  onSubPageChange,
   ref,
 }: {
   onSetup: () => void;
@@ -448,6 +449,9 @@ function SettingsPageBase({
   ref?: React.Ref<SettingsBackHandle>;
   /** W-HEAD4 ③④：源胶囊/铃铛点击回会话页 */
   onGoSessions?: () => void;
+  /** P1-2（review-w-nativepager-a）：二级页开态上提——App 锁 pager 横滚让 #207
+   * edgeSwipe 侧滑返回抢得过原生父层（scrollEnabled=false 期间父不再拦截） */
+  onSubPageChange?: (open: boolean) => void;
 }) {
   const { c } = useTheme();
   const bellN = useBellBadge();
@@ -491,6 +495,8 @@ function SettingsPageBase({
   // import 码在抽屉内弹 ImportPicker 选条目回发
   // W-MOBILE3 #122 设置二级页：null=一级目录页；conn/prefs/engines/about=二级详情
   const [subPage, setSubPage] = useState<"conn" | "prefs" | "engines" | "about" | null>(null);
+  // P1-2：开态上提（effect 盖全 setSubPage 路径：edgeSwipe/requestBack/PageHead/导航行）
+  useEffect(() => { onSubPageChange?.(subPage !== null); }, [subPage, onSubPageChange]);
   // W-BACKFIX：返回键句柄（与 PageHead onBack 同一 setSubPage(null)——同一状态源）
   // #207 追加：设置二级页侧滑返回（iOS 边缘滑/Android 手势导航同语义）——横向滑
   // ≥50 且横占优 1.5:1 时判定（与域滑切 tab/行滑删同模型阈值）；只在 subPage≠null
@@ -503,6 +509,9 @@ function SettingsPageBase({
       onMoveShouldSetPanResponder: (_e, g) =>
         subPageRef.current !== null && Math.abs(g.dx) > 50 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5 && g.dx > 0,
       onPanResponderRelease: () => { if (subPageRef.current !== null) setSubPage(null); },
+      // P1-2（review-w-nativepager-a）：手势被系统/父层打断即视为返回意图落定——
+      // 原 terminate 未定义=半途被拦时 subPage 开态跨页滞留（pager 已翻页，回来二级页还开着）
+      onPanResponderTerminate: () => { if (subPageRef.current !== null) setSubPage(null); },
     }),
   ).current;
   useImperativeHandle(ref, () => ({
