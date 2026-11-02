@@ -55,11 +55,12 @@
     .windowbar .source-trigger strong { word-spacing: 2px; } /* D8 中英混排 2px 呼吸（「本机 Relay」产品词） */
     .windowbar .source-trigger .src-conn-note { color: var(--windowbar-ink); font-weight: 500; }
     .windowbar .source-trigger .src-chev { width: 12px; height: 12px; color: var(--windowbar-ink); }
-    .windowbar .source-conn { width: 7px; height: 7px; border-radius: 50%; margin-left: 1px; background: var(--windowbar-dot-idle); }
-    .windowbar .source-conn.conn-on { background: var(--windowbar-dot-ok); box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.14); }
-    .windowbar .source-conn.conn-wait { background: var(--windowbar-dot-warn); animation: windowbarDotBlink 1.1s ease-in-out infinite; }
-    .windowbar .source-conn.conn-fail { background: var(--windowbar-dot-warn); }
-    .windowbar .source-conn.conn-idle { background: var(--windowbar-dot-idle); }
+    .windowbar .source-conn { display: inline-flex; align-items: center; flex: none; width: auto; height: auto; border-radius: 0; margin-left: 1px; color: var(--windowbar-dot-idle); } /* 用户 1102 实锤②：JS 已注入电脑形 SVG，但本块还是「CSS 画 7px 圆点」旧形态（width:7+自带 background 把 SVG 裁掉照画绿点）——改 SVG 宿主，色随状态走 currentColor */
+    .windowbar .source-conn svg { display: block; }
+    .windowbar .source-conn.conn-on { color: var(--windowbar-dot-ok); }
+    .windowbar .source-conn.conn-wait { color: var(--windowbar-dot-warn); animation: windowbarDotBlink 1.1s ease-in-out infinite; }
+    .windowbar .source-conn.conn-fail { color: var(--windowbar-dot-warn); }
+    .windowbar .source-conn.conn-idle { color: var(--windowbar-dot-idle); }
     @keyframes windowbarDotBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     /* W-STATUSBAR C5 唯一彩色落底：Windows 三钮同样压到 ink 档（关闭钮 hover 红保留=破坏性动作惯例） */
     .windowbar-winbtns button { color: var(--windowbar-ink); }
@@ -2828,7 +2829,7 @@
     /* ===== 通知面板 v2（1101 三路审查合并单：去卡片化行流/kind badge/动效体系） ===== */
     .notifmask {
       position: absolute; inset: 0; z-index: 300;
-      background: transparent; background: rgba(0, 0, 0, .32); /* 用户实锤 1101 晚：.48 太暗看不清 */
+      background: transparent; /* 用户实锤 1102：铃铛开的是锚定小面板，背后整页压暗（.48→.32 两轮只降暗）仍看不清——彻底去暗，遮罩仅作点外收起命中层（面板自身三层阴影+提亮底已够浮层层次） */
       /* P0 热修（用户 Mac 实锤 1101）：backdrop-filter blur 在 WKWebView 全窗遮罩=合成层冻结（关不掉的模糊+红旗卡顿）——按审查预案「GPU 验证不过则退纯色」执行，深度 .42→.48 补层次 */
       opacity: 0; transition: opacity var(--dur-enter) var(--ease-out); pointer-events: none;
     }
