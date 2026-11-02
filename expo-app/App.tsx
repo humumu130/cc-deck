@@ -1112,23 +1112,24 @@ function Shell() {
                   )}
                 </Animated.View>
               ) : null}
-              {/* swipe 目标页覆盖层（to!=='sessions'：三域轻挂，落位 setTab 后由上方
-                  正式渲染接管并清态卸载本层；to==='sessions' 走 ListScreen 恒挂容器） */}
+              {/* swipe 目标页覆盖层（to!=='sessions'）——W-SWIPE4 四修（用户 1102 三次
+                  实锤「卡到一半」）：拖拽期只挂骨架，不挂真树。原实现手势起点 setSwipe
+                  即挂 TeamTab/ProjectsTab/SettingsPage 整树（挂载风暴堵 JS 线程数百
+                  ms）→ 拖拽期每帧 swipeX.setValue（App.tsx onPanResponderMove，JS 驱
+                  动）排队冻结=跟手停在半路；settle 时 setTab 正式接管+本层卸载又一场
+                  风暴正撞 spring 完成帧。修：跟手期骨架（成本≈零），真树由 settle 分
+                  支 setTab 挂载（spring native 驱动中/后挂载不冻跟手）；回弹路径永不
+                  挂真树。to==='sessions' 走 ListScreen 恒挂容器（本就零挂载成本）。 */}
               {swipe && swipe.to !== "sessions" ? (
                 <Animated.View style={[st.domain, st.swipeOver, { transform: [{ translateX: swipePageX.toX }] }]}>
-                  {swipe.to === "team" ? (
-                    <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
-                  ) : swipe.to === "projects" ? (
-                    <ProjectsTab
-                      onOpenSession={openDetail}
-                      onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
-                      onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
-                      onGoTeam={() => setTab("team")}
-                      onGoSessions={() => setTab("sessions")}
-                    />
-                  ) : (
-                    <SettingsPage onGoSessions={() => setTab("sessions")} onSetup={() => undefined} onEdit={() => undefined} />
-                  )}
+                  <View style={st.swipeSkel}>
+                    <View style={st.swipeSkelHead} />
+                    <View style={[st.swipeSkelBar, { width: "62%" }]} />
+                    <View style={[st.swipeSkelBar, { width: "86%" }]} />
+                    <View style={st.swipeSkelCard} />
+                    <View style={st.swipeSkelCard} />
+                    <View style={[st.swipeSkelCard, { opacity: 0.55 }]} />
+                  </View>
                 </Animated.View>
               ) : null}
             </View>
@@ -1203,6 +1204,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   domainHidden: { display: "none" },
   // W-NOTIFY2 件二：swipe 目标页覆盖层（盖当前页之上，实底防透）
   swipeOver: { zIndex: 30, backgroundColor: c.bg },
+  // W-SWIPE4 四修：拖拽期目标页骨架（头带+条+卡占位——语义「页面进入中」，真树
+  // settle 后 setTab 挂载接管）。全部静态 View，零列表零数据依赖=零挂载风暴。
+  swipeSkel: { flex: 1, paddingTop: 18, paddingHorizontal: 18, gap: 12 },
+  swipeSkelHead: { height: 22, width: 128, borderRadius: 7, backgroundColor: c.panel2 },
+  swipeSkelBar: { height: 13, borderRadius: 5, backgroundColor: c.panel },
+  swipeSkelCard: { height: 88, borderRadius: 12, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.lineStrong,
