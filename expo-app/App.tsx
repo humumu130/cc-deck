@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, AppState, BackHandler, Dimensions, Easing, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import { store, useRelay } from "./src/store";
+import { store, useRelay, type ServerEntry } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
 import type { DetailBackHandle } from "./src/screens/DetailScreen";
@@ -40,6 +40,18 @@ import ArtPoolModal from "./src/screens/ArtPoolModal";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
 import NewSessionModal from "./src/screens/NewSessionModal";
+
+// W-RNDRAGSUSPEND 五修·memo 边界：五大子树包 React.memo——App 根级重渲（swipe 态
+// 切换 / store emit）时子树全量 reconcile 是拖拽期 JS 堵塞源之二（挂载风暴是其一，
+// 362fab8a 已治）。memo 生效前提=下传 props 引用稳定：全部 inline 回调已在 Shell 内
+// useCallback 化（见 openDetail 一带），snap.sessions 在 emit 间引用稳定（store
+// snapshotSessions 每 emit 新数组，但拖拽期 emit 已被 suspendNotify 挂起=窗口内恒稳）
+const MListScreen = memo(ListScreen);
+const MTeamTab = memo(TeamTab);
+const MProjectsTab = memo(ProjectsTab);
+const MSettingsPage = memo(SettingsPage);
+const MBottomTabs = memo(BottomTabs);
+const MDetailScreen = memo(DetailScreen);
 
 // 全局错误 Toast：弹簧上滑入场 + 到期下滑退场（入场/退场动画，#242）
 function Toast() {
@@ -651,6 +663,10 @@ function Shell() {
         if (ni < 0 || ni >= TAB_ORDER.length) return false; // 边界 no-op
         swipeRef.current = { to: TAB_ORDER[ni], dir, grabbed: true };
         swipeX.setValue(0);
+        // W-RNDRAGSUSPEND 五修·件二：拖拽期挂起 store 通知——emit 即快照新引用+全树
+        // 重渲（useRelay 订阅在 App 根），拖拽窗口内任何 ws 帧到达都会冻跟手。挂起
+        // 后快照引用恒稳=M* memo 全线生效；恢复时补一发全量 emit，零丢失
+        store.suspendNotify();
         setSwipe({ from: tabRef.current, to: TAB_ORDER[ni], dir });
         return true;
       },
@@ -665,6 +681,9 @@ function Shell() {
         const s = swipeRef.current;
         if (!s?.grabbed) return;
         s.grabbed = false;
+        // W-RNDRAGSUSPEND 件二：松手即恢复通知——后续 spring 是 native 驱动，JS 侧
+        // 补发 emit（若有挂起窗内到达的帧）不冻落位动画；成对纪律（grab 挂起↔两路恢复）
+        store.resumeNotify();
         const w = swipeW();
         const prog = s.dir === 1 ? -g.dx : g.dx;
         const settle = prog >= w / 2 || (s.dir === 1 ? g.vx : -g.vx) <= -0.55;
@@ -689,6 +708,7 @@ function Shell() {
         const s = swipeRef.current;
         if (!s?.grabbed) return;
         s.grabbed = false;
+        store.resumeNotify(); // W-RNDRAGSUSPEND 件二：与 release 同纪律——被打断也恢复
         Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(() => {
           setSwipe(null);
           swipeRef.current = null;
@@ -697,8 +717,13 @@ function Shell() {
     }),
   ).current;
   // 双页位移插值：目标页 toX = dir*w → 0（从侧缘进）；当前页 curX = 0 → -dir*w*0.35（轻视差）
+  // W-PAGER5 真量程根修（反方审查 B 实锤）：原「占位 w=500」在宽屏机（1256px）上
+  // 插值 inputRange [0,500] 提前饱和——拖过 40% 屏宽后 toX/curX 输出钳在端值=页面
+  // 视觉原地冻结、松手跳帧=用户五报的「卡到一半」字面本体（帧率正常，gfxinfo 测
+  // 不出「不动」）。改每次手势起点取真实屏宽：swipeDir 在 null↔dir 切换时本 memo
+  // 重建，宽度随抓取瞬间的 Dimensions 现值烘焙（分屏/旋转后下一次手势自动校正）
   const swipePageX = useMemo(() => {
-    const w = 500; // 占位量程（插值对象只建一次，实际 w 在 setValue clamp 已控）
+    const w = Dimensions.get("window").width;
     return {
       toX: swipeX.interpolate({ inputRange: [0, w], outputRange: [swipe?.dir === 1 ? w : -w, 0], extrapolate: "clamp" }),
       curX: swipeX.interpolate({ inputRange: [0, w], outputRange: [0, (swipe?.dir === 1 ? -1 : 1) * w * 0.35], extrapolate: "clamp" }),
@@ -764,6 +789,19 @@ function Shell() {
     });
     return true;
   }, [navPhase, detail, navX]);
+  // W-RNDRAGSUSPEND 五修·回调稳定化：下传五大子树的全部回调 useCallback 化——
+  // inline 箭头每次渲染换身份=M* memo 全数失效（拖拽期重渲照跑全树 reconcile）
+  const goSessions = useCallback(() => setTab("sessions"), []);
+  const goTeam = useCallback(() => setTab("team"), []);
+  const openSettingsTab = useCallback(() => setTab("settings"), []);
+  const openArtPool = useCallback(() => setArtPoolOpen(true), []);
+  const newSessionPlain = useCallback(() => { setNewPresetCwd(null); setSheet(true); }, []);
+  const newSessionInDir = useCallback((dir: string) => { setNewPresetCwd(dir); setSheet(true); }, []);
+  const viewSessionsInDir = useCallback((dir: string) => { setDirFilter(dir); setTab("sessions"); }, []);
+  const clearDirFilter = useCallback(() => setDirFilter(null), []);
+  const openTeamFromList = useCallback(() => { setTab("team"); closeDetail(); }, [closeDetail]);
+  const openSetupNew = useCallback(() => { setSetupScan(false); setSetup("new"); }, []);
+  const editServerEntry = useCallback((e: ServerEntry) => { setSetupScan(false); setSetup(e.id); }, []);
   // navPhase 卡相位兜底（#282）：动画 finished 回调可能因 JS 线程繁忙被打断/丢失，
   // entering/closing 永不回 idle 会让 openDetail/closeDetail 永久拒绝——正是详情页
   // 返回键静默失灵的守卫源头。500ms > 滑入 230ms/滑出 200ms，超时按应然结果收场放行
@@ -814,6 +852,9 @@ function Shell() {
     () => snap.sources.reduce((n, src) => n + (src.orgConfirms?.length ?? 0), 0),
     [snap.sources],
   );
+  // W-RNDRAGSUSPEND 五修：badges 对象稳定化——inline 对象每渲染换身份=MBottomTabs
+  // memo 失效。值变（badge 数变）才换引用，拖拽窗口内两值恒稳=底栏跳过重渲
+  const tabBadges = useMemo(() => ({ sessions: pendingCount, team: teamBadge }), [pendingCount, teamBadge]);
 
   // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
   // ListScreen 抽屉+图例/TaskDoneFloat/SetupScreen 各自订阅全部并入）。按
@@ -1074,40 +1115,40 @@ function Shell() {
                     盖顶零感知；返回=closing 滑出时列表本就渲染（navPhase!=="idle"
                     分支既有），落 idle 后列表常驻=零黑屏+零重建秒出（保挂载初衷
                     在列表侧正确落地）；转场视觉与原生导航一致 */}
-                <ListScreen
+                <MListScreen
                   ref={listBackRef}
                   sessions={snap.sessions}
                   connected={snap.connected}
                   connText={snap.connText}
                   dirFilter={dirFilter}
-                  onClearDirFilter={() => setDirFilter(null)}
+                  onClearDirFilter={clearDirFilter}
                   onOpen={openDetail}
-                  onNew={() => { setNewPresetCwd(null); setSheet(true); }}
-                  onOpenSettings={() => setTab("settings")}
-                  onOpenArtPool={() => setArtPoolOpen(true)}
+                  onNew={newSessionPlain}
+                  onOpenSettings={openSettingsTab}
+                  onOpenArtPool={openArtPool}
                   // W-MOBFUSION R2（审查 B P1）：关详情再切 tab——详情层盖屏时只 setTab
                   // 用户看不见（navLayer 在上层），切了等于没切
-                  onOpenTeam={() => { setTab("team"); closeDetail(); }}
+                  onOpenTeam={openTeamFromList}
                 />
               </Animated.View>
               {tab !== "sessions" ? (
                 <Animated.View style={[st.domain, swipe?.from === tab ? { transform: [{ translateX: swipePageX.curX }] } : null]}>
                   {tab === "team" ? (
-                    <TeamTab onOpenSession={openDetail} onGoSessions={() => setTab("sessions")} />
+                    <MTeamTab onOpenSession={openDetail} onGoSessions={goSessions} />
                   ) : tab === "projects" ? (
-                    <ProjectsTab
+                    <MProjectsTab
                       onOpenSession={openDetail}
-                      onNewInDir={(dir) => { setNewPresetCwd(dir); setSheet(true); }}
-                      onViewSessionsInDir={(dir) => { setDirFilter(dir); setTab("sessions"); }}
-                      onGoTeam={() => setTab("team")}
-                      onGoSessions={() => setTab("sessions")}
+                      onNewInDir={newSessionInDir}
+                      onViewSessionsInDir={viewSessionsInDir}
+                      onGoTeam={goTeam}
+                      onGoSessions={goSessions}
                     />
                   ) : (
-                    <SettingsPage
+                    <MSettingsPage
                       ref={settingsBackRef}
-                      onGoSessions={() => setTab("sessions")}
-                      onSetup={() => { setSetupScan(false); setSetup("new"); }}
-                      onEdit={(e) => { setSetupScan(false); setSetup(e.id); }}
+                      onGoSessions={goSessions}
+                      onSetup={openSetupNew}
+                      onEdit={editServerEntry}
                     />
                   )}
                 </Animated.View>
@@ -1133,14 +1174,17 @@ function Shell() {
                 </Animated.View>
               ) : null}
             </View>
-            <BottomTabs tab={tab} onChange={setTab} badges={{ sessions: pendingCount, team: teamBadge }} />
+            <MBottomTabs tab={tab} onChange={setTab} badges={tabBadges} />
           </View>
           {detail ? (
             <Animated.View
               style={[st.navLayer, { transform: [{ translateX: navX }] }]}
             >
-              <DetailScreen
-          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} onOpenArtPool={() => setArtPoolOpen(true)} onOpenSession={(sid2) => openDetail(sid2)} onOpenTeam={() => { setTab("team"); closeDetail(); }} />
+              {/* MDetailScreen（五修 B-P1-2）：详情隐藏保挂载（W-PUSHPERF）使其在拖拽
+                  期间仍挂在树上——零 memo 时 App 根级重渲整树 reconcile 含它；包 memo+
+                  回调稳定化后拖拽窗口跳过。sid/initialView 是值语义项，变即重渲（正确） */}
+              <MDetailScreen
+          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} onOpenArtPool={openArtPool} onOpenSession={openDetail} onOpenTeam={openTeamFromList} />
             </Animated.View>
           ) : null}
           {/* #72 E 线 产物池视图（入口①/②共用；NewSessionModal 同层全 App 弹面） */}
