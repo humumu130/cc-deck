@@ -153,17 +153,25 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ]; then
   SMOKE_DIR="$(mktemp -d /tmp/ccdeck-smoke-data.XXXXXX)"
   SMOKE_LOG="$SMOKE_DIR/out.log"
   SMOKE_PORT=$(( (RANDOM % 20000) + 40000 ))
-  # 密闭六件套（2026-10-03 实锤补齐五件+2026-11-02 第六件）：此前只隔端口+数据目录
-  # ——冒烟 relay 仍会 ①在默认 ~/.cc-deck/org 引导真 Leader（P0 同款生产污染）②连
-  # 生产云桥 ③镜像写 ~/.cc-deck/data/bridge.json（沙盒检测漏网时）④mDNS 广播幽灵实例
-  # ⑤sqlite 影子档把全机 ~/.claude/tasks（本机 219 会话/2257 文件）全量导入临时库——
-  # 冒烟每次全新 dataDir=checkpoint 永不存在=每次都付分钟级全量导入，8s 横幅窗必超
+  # 密闭七件套（2026-10-03 实锤补齐五件+2026-11-02 第六/七件）：此前只隔端口+数据
+  # 目录——冒烟 relay 仍会 ①在默认 ~/.cc-deck/org 引导真 Leader（P0 同款生产污染）
+  # ②连生产云桥 ③镜像写 ~/.cc-deck/data/bridge.json（沙盒检测漏网时）④mDNS 广播
+  # 幽灵实例 ⑤sqlite 影子档把全机 ~/.claude/tasks（本机 219 会话/2257 文件）全量导入
+  # 临时库——冒烟每次全新 dataDir=checkpoint 永不存在=每次都付分钟级全量导入
   # （2026-11-02 test.81 出包实锤：横幅前卡 importSessionTask 串行读全部任务 json，
-  # fs-probe 栈 importAllForShadow→importSessionTask→parseTaskFile 现行抓获）。org/
-  # 云桥/镜像/mdns/tasks 全部钉死，冒烟只剩「bundle 能起、横幅能出」一件事
+  # fs-probe 栈 importAllForShadow→importSessionTask→parseTaskFile 现行抓获）
+  # ⑥tasks 根钉空 ⑦引擎扫描推出启动窗：scanExternalEngines 每 5s tick 同步跑
+  # ps 进程表（5s 超时档）+codex 转录根扫描（本机 ~/.codex/sessions 397MB/66 文件）
+  # ——同步重活堵事件循环，横幅被挤到 +53s 后（adopt-gate 拒收洪流实证）。且引擎根
+  # 经 homedir() 解析（engineRoot(spec, homedir())）——冒烟全新 dataDir=cursor 永不
+  # 存在=每次全量冷扫。⑧HOME 钉沙盒：引擎根不存在→scan() 静默返回空（框架头注明
+  # 示语义），一并隔离一切 homedir() 泄漏源。CCR_ENGINE_SCAN_MS=10min 再把后续
+  # tick 推出窗（双保险：定时器外构造器 :509 尚有首扫直调，靠 ⑧ 封住）。org/云桥/
+  # 镜像/mdns/tasks/engine-scan/HOME 全部钉死
   CCR_PORT="$SMOKE_PORT" CCR_DATA_DIR="$SMOKE_DIR" CCR_ORG_DIR="$SMOKE_DIR/org" \
     CCR_CLOUD_URL="" CCR_NO_BRIDGE_MIRROR=1 CCR_NO_MDNS=1 CC_DECK_PLUGIN=1 \
-    CCR_TASKS_DIR="$SMOKE_DIR/tasks" \
+    CCR_TASKS_DIR="$SMOKE_DIR/tasks" CCR_ENGINE_SCAN_MS=600000 \
+    HOME="$SMOKE_DIR/home" \
     node cc-plugins/plugins/cc-deck/scripts/relay.mjs >"$SMOKE_LOG" 2>&1 &
   SMOKE_PID=$!
   # 45s 轮询（2026-11-02 test.81 实锤三连根修之三）：历史 3s→8s 两轮加窗都追不上
