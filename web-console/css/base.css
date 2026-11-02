@@ -49,8 +49,8 @@
     @keyframes wrefSpinOnceKf { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     /* W-STATUSBAR B3：胶囊规范——28px 高/radius 6/描边 12% 白；状态点=全 bar 唯一彩色
        （绿=连接/琥珀=未连接含连不上/灰=未配置）；多源时右 12px 下拉箭头；文字 12px/500 */
-    .windowbar .source-trigger { min-height: 28px; gap: 8px; padding: 0 10px; border: 1px solid var(--windowbar-trigger-line); border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; }
-    .windowbar .source-trigger:hover { border-color: rgba(255, 255, 255, 0.24); background: var(--windowbar-hover); }
+    .windowbar .source-trigger { min-height: 28px; gap: 8px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; } /* 用户 1102：去胶囊边框底色（裸形态） */
+    .windowbar .source-trigger:hover { background: var(--windowbar-hover); border-radius: 6px; } /* 去边框后 hover 保留软底 */
     html[data-theme="light"] .windowbar .source-trigger:hover { border-color: rgba(0, 0, 0, 0.24); }
     .windowbar .source-trigger strong { word-spacing: 2px; } /* D8 中英混排 2px 呼吸（「本机 Relay」产品词） */
     .windowbar .source-trigger .src-conn-note { color: var(--windowbar-ink); font-weight: 500; }

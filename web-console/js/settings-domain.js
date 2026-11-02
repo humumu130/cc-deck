@@ -662,8 +662,7 @@ function connectLan(ctx) {
       // 电脑形 SVG 只注入移动 sourcebar 壳（移动端形态本批不动）
       const SOURCE_CONN_SVG = '<svg viewBox="0 0 16 13" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.2" y="1.5" width="13.6" height="9" rx="1.6"/><path d="M5.5 12.5h5" stroke-linecap="round"/></svg>';
       document.querySelectorAll("[data-source-conn]").forEach((el) => {
-        if (el.closest(".windowbar")) { el.innerHTML = ""; return; }
-        el.innerHTML = SOURCE_CONN_SVG;
+        el.innerHTML = SOURCE_CONN_SVG; /* 用户 1102：桌面壳也用电脑图标（状态色随 sourceDotClass） */
       });
       function refreshSourceSwitchers() {
         const bridge = window.__ccDeck005B4;
