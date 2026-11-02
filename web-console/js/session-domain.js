@@ -1499,6 +1499,9 @@
                   }
                 }
                 function renderSlimDrawer() {
+                  const __g = window.__ccDeck005DeskRender;
+                  if (__g && !__g.active()) { __g.mark(); __g.flushers.add(renderSlimDrawer); return; } // W-MOBILE-PERF：桌面台不在视跳渲记脏
+
                   const el = document.querySelector("#d-session [data-slim-drawer]");
                   if (!el) return;
                   if (!S.drawerGid && !el.classList.contains("open")) return; // 收起态稳态早退（UPDATED 高频路径零 DOM 操作）
@@ -1648,6 +1651,10 @@
                   list.addEventListener("touchmove", mark, { passive: true, capture: true });
                 }
                 function renderMyList() {
+                  const __g = window.__ccDeck005DeskRender;
+                  if (__g && !__g.active()) { __g.mark(); __g.flushers.add(renderMyList); return; } // W-MOBILE-PERF：桌面台不在视跳渲记脏
+                  { const __pf = (window.__ccDeck005Perf ||= { mobileRender: 0, mobileMs: 0, myList: 0, notifyRender: 0, settingsRender: 0, t0: 0 }); __pf.myList++; } /* 审查P1-2：计数器挪门后——只计实渲（门内跳过不计），41 调用→1 实渲口径成立 */
+
                   if (!UI) return;
                   const list = UI.sessionList;
                   if (!S.hasSnapshot) return; // 连接中的占位由地基渲染，不抢
@@ -2517,6 +2524,9 @@
                   return '<div class="context-meter ' + grade + '"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">' + esc(eng[0] + " · " + modelShort) + '</strong></div><span class="context-meter-grade">' + gradeLabel + '</span></div><div class="context-meter-band" aria-label="上下文已使用 ' + pct + '%">' + Array.from({ length: 12 }, (_, i) => "<i" + (i < onCount ? ' class="on"' : "") + "></i>").join("") + '</div><div class="context-meter-stats"><span><b class="context-meter-used">' + tokStr(s.context_usage) + '</b> <span class="context-meter-limit">/ ' + tokStr(lim) + ' tokens</span></span><strong class="context-meter-pct">' + pct + '%</strong></div><div class="context-meter-note">' + note + '</div></div>';
                 }
                 function renderInspector() {
+                  const __g = window.__ccDeck005DeskRender;
+                  if (__g && !__g.active()) { __g.mark(); __g.flushers.add(renderInspector); return; } // W-MOBILE-PERF：桌面台不在视跳渲记脏
+
                   const s = curSession();
                   // #282 S3 块级拆分：块集合（不再拼单串整写）——写点在函数尾部稳定内层容器
                   // [data-insp-body] 上 keyed reconcile：未变块零触碰（成员胶囊展开/详情块

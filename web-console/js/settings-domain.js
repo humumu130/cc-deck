@@ -1601,7 +1601,7 @@ function connectLan(ctx) {
           setSub(1, catalog ? readyN + " 引擎已接 · " + (catalog.length - readyN) + " 待装/未接入" : "引擎目录未下发");
           setSub(5, "v" + (window.__shellVer || CONSOLE_VERSION) + " · 通道");
         };
-        bridge.subscribe(() => render());
+        bridge.subscribe(() => { const g = window.__ccDeck005DeskRender; if (g) g.run(render); else render(); }); // W-MOBILE-PERF：桌面台不在视跳渲记脏（回桌面 flush 补渲）
         render();
         // W-SDEL 借道：服务器条目增删改后主动刷设置页实时区（bridge.subscribe 只随桥事件走，
         // 删本地条目无桥事件——不借道则 else 分支 DOM 停留旧列表）

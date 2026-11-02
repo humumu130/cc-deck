@@ -19,4 +19,20 @@
       window.addEventListener("unhandledrejection", (e) => push("[Promise]", (e.reason && (e.reason.message || e.reason.stack && e.reason.stack.split("\n")[0])) || e.reason || "unknown"));
       window.__blankset2Paint = paint; // 分段 try/catch 借道同一显形条
     })();
-  
+  // ===== W-MOBILE-PERF（1102 用户 P0）：桌面管线可见性门（手机 WebView 跑整页，桌面域
+// hidden 时其渲染管线仍在每桥事件全量渲=主线程饱和真凶之一）。语义：桌面台不在视→
+// 桌面渲染函数只记脏跳过；台激活（viewport 切回/类翻转）时一次性补渲（flushers 去重）。
+// 状态合并（S.sessions 等）不在门内——帧处理照常，只门 DOM 渲染。=====
+window.__ccDeck005DeskRender = {
+  _dirty: false,
+  active() { return !!document.querySelector("#stage-desktop.active"); },
+  mark() { this._dirty = true; },
+  flushers: new Set(),
+  run(fn) { this.flushers.add(fn); if (this.active()) { try { fn(); } catch (_) {} return true; } this._dirty = true; return false; },
+  flush() { if (!this._dirty || !this.active()) return; this._dirty = false; for (const f of this.flushers) { try { f(); } catch (_) {} } },
+};
+(() => {
+  const el = document.getElementById("stage-desktop");
+  if (!el) return;
+  new MutationObserver(() => { window.__ccDeck005DeskRender && window.__ccDeck005DeskRender.flush(); }).observe(el, { attributes: true, attributeFilter: ["class"] });
+})();

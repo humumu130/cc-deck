@@ -101,6 +101,7 @@
         if (active && active.id !== "m-notify" && active.id !== "m-detail") mobileReturn = ["inbox", "team", "project", "settings"].includes(active.id.replace("m-", "")) ? active.id.replace("m-", "") : "inbox";
         hideNotifyDetail();
         setSingleActive(target);
+        renderNotify(); // W-MOBILE-PERF：活跃屏门配套——通知面板开即渲（原依赖全屏常渲已退役）
       }
       function openMobileDetail(sid) {
         const target = screenOf("detail");
@@ -129,6 +130,7 @@
         if (mobileReturn === "notify") { openMobileNotify(); const back = document.querySelector("[data-mobile-back]"); if (back) back.textContent = "‹"; return; }
         const home = screenOf(mobileReturn);
         if (home) home.classList.add("active");
+        refreshMobileNow(); // W-MOBILE-PERF：返航落位即渲返回屏（活跃屏门配套）
       }
       function jumpDesktop(domain) {
         if (typeof bridge.jumpMode === "function") bridge.jumpMode("desktop");
@@ -1003,10 +1005,35 @@
         if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
       });
 
+      // W-MOBILE-PERF（1102 用户 P0 整体很卡）：渲染收敛——原每次桥事件五屏全量重渲
+      //（隐藏屏白渲 4/5 + 桌面域管线同帧另渲，事件风暴下主线程饱和=滑屏卡半/点击
+      // 数秒才弹的真凶）。门=只渲当前在视屏（pager 常驻 DOM 语义下隐藏屏不可见，
+      // 切屏点由 go/openMobileNotify/openMobileDetail 落位时补渲目标屏）。
       function refreshMobile() {
-        renderInbox(); renderNotify(); renderTeam(); renderProject(); renderSettingsRows();
-        const detail = screenOf("detail"); // ⑥c-3：详情屏活跃时随桥事件刷新五 tab + 状态坞（保持滚动位）
-        if (detail && detail.classList.contains("active") && detailSid) renderMobileDetail(detailSid);
+        const __pf = (window.__ccDeck005Perf ||= { mobileRender: 0, mobileMs: 0, myList: 0, notifyRender: 0, settingsRender: 0, t0: 0 });
+        __pf.mobileRender++; __pf.t0 = performance.now();
+        queueMicrotask(() => { __pf.mobileMs += performance.now() - __pf.t0; });
+        const active = document.querySelector(".mobile-screen.active");
+        if (!active) return;
+        if (active.id === "m-notify") { renderNotify(); return; }
+        if (active.id === "m-detail") { if (detailSid) renderMobileDetail(detailSid); return; } // ⑥c-3 语义保持（滚动位）
+        const root = active.dataset ? active.dataset.mobileRoot : "";
+        if (root === "team") renderTeam();
+        else if (root === "project") renderProject();
+        else if (root === "settings") renderSettingsRows();
+        else renderInbox();
+      }
+      function stageDragActive() { // W-MOBILE-PERF：pager 拖拽在途判定（挂起事件渲染）
+        const st = document.getElementById("stage-mobile");
+        return !!(st && st.dataset && st.dataset.pagerState === "drag");
+      }
+      function flushMobileDeferred() { // 松手吸附后补渲挂起的帧（拖拽期事件不丢）
+        if (!mobileDeferred) return;
+        mobileDeferred = false;
+        refreshMobileNow();
+      }
+      function refreshMobileNow() { // 切屏/强制路径：绕过合帧立渲（目标屏落位即渲染）
+        mobileRafPend = false; refreshMobile();
       }
       // ---------- W-MOBILE-SWIPE（1101 用户 P0）：四屏跟手 pager ----------
       // strip 化（CSS #stage-mobile.pager-on 段）：四 root 屏 absolute+translateX 百分比
@@ -1053,6 +1080,7 @@
           stage.dataset.pagerState = animate ? "snap" : "";
           if (animate) snapT = setTimeout(() => { els.forEach((el) => el.classList.remove("pager-anim")); apply(idx, 0); stage.dataset.pagerState = ""; }, 320); /* 320=--dur-pager 260ms + 60ms 收尾宽限（transition 完成后撤类+可见窗收编） */
           syncMarkers(ROOTS[idx]);
+          refreshMobileNow(); // W-MOBILE-PERF：活跃屏门配套——隐藏屏曾按需不渲，切换落位即补渲目标屏
         };
         const currentIdx = () => { // 以 .active root 屏为准（外路改 .active 后自愈）
           const act = document.querySelector(".mobile-screen.active");
@@ -1110,6 +1138,7 @@
           if (Math.abs(dx) > d.w / 3) target = d.base + (dx < 0 ? 1 : -1); // 过 1/3 屏
           else if (Math.abs(vx) > 0.3) target = d.base - Math.sign(vx); // 速度甩（px/ms）
           go(target, true);
+          flushMobileDeferred(); // 拖拽期挂起的事件渲染在此补（吸附已起，重渲不再打断手势）
         };
         stage.addEventListener("touchend", end, { passive: true });
         stage.addEventListener("touchcancel", end, { passive: true });
@@ -1128,7 +1157,16 @@
       safeInit("setupMobileSettings", () => setupMobileSettings());
       safeInit("setupMobileDetail", () => setupMobileDetail()); // ⑥c-3：收编五 pane + composer 发送接线
       safeInit("refreshMobile", () => refreshMobile());
-      safeInit("subscribe", () => bridge.subscribe(() => refreshMobile()));
+      // W-MOBILE-PERF：订阅 rAF 合帧——事件风暴（忙会话 stats 流/重连回放）下「每事件
+      // 一轮五屏全渲」改「每显示帧至多一轮活跃屏渲」；帧间多事件天然合并。
+      let mobileRafPend = false;
+      let mobileDeferred = false; // W-MOBILE-PERF：拖拽期事件渲染挂起（真机手势帧不被 innerHTML 重渲打断——重渲触发层重栅格化=滑半卡的设备级机制）
+      safeInit("subscribe", () => bridge.subscribe(() => {
+        if (stageDragActive()) { mobileDeferred = true; return; }
+        if (mobileRafPend) return;
+        mobileRafPend = true;
+        requestAnimationFrame(() => { mobileRafPend = false; refreshMobile(); });
+      }));
       // #158-批3：桌面壳版本异步回填完成（app_version invoke）后刷「关于」版本行
       window.addEventListener("ccdeck:shellver", () => { try { refreshMobile(); } catch (err) { console.warn("[005-mobile] shellver 刷新失败", err); } });
     })();

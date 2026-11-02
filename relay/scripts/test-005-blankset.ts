@@ -70,7 +70,7 @@ console.log("== W-BLANKSET P0 守卫：WebView2 旧内核 CSS 兜底 + b2Api/初
   for (const seg of ["setupMobileSettings", "setupMobileDetail", "refreshMobile"]) {
     ok(new RegExp('safeInit\\("' + seg + '"').test(html), `B3② ${seg} 经 safeInit 包裹`);
   }
-  ok(/bridge\.subscribe\(\(\) => refreshMobile\(\)\)/.test(html) && /safeInit\("subscribe"/.test(html), "B3③ 桥订阅经 safeInit（炸段不再断手机动态刷新链）");
+  ok(/bridge\.subscribe/.test(html) && /safeInit\("subscribe"/.test(html), "B3③ 桥订阅经 safeInit（rAF 合帧后订阅体非直接调 refreshMobile——W-MOBILE-PERF 审查P1-1 断言随结构更新）");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
