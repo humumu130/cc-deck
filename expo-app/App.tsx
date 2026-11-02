@@ -642,93 +642,31 @@ function Shell() {
   // driver 全程（transform-only）。
   const tabRef = useRef(tab);
   tabRef.current = tab;
-  // swipe 态：from=源 tab（正在显示），to=目标 tab，dir=+1 左滑进右页 / -1 右滑回左页
-  const [swipe, setSwipe] = useState<{ from: TabKey; to: TabKey; dir: 1 | -1 } | null>(null);
-  const swipeRef = useRef<{ to: TabKey; dir: 1 | -1; grabbed: boolean } | null>(null);
-  // 进度值：0=未动 .. W=完成切换（clamp）。动画期每帧 setValue（native driver）
-  const swipeX = useRef(new Animated.Value(0)).current;
-  const swipeW = () => Dimensions.get("window").width;
-  const swipeTabs = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      // 捕获阶段抢判（FlatList/ScrollView 滚动响应器会先占普通阶段——横占优时
-      // 父层在 capture 阶段接管，垂直滚动 dy 占优时放行给列表，零冲突）。
-      // swipe 进行中（grabbed）持续接管
-      onMoveShouldSetPanResponderCapture: (_e, g) => {
-        if (swipeRef.current?.grabbed) return true;
-        if (Math.abs(g.dx) < 24 || Math.abs(g.dx) <= Math.abs(g.dy) * 2) return false;
-        const i = TAB_ORDER.indexOf(tabRef.current);
-        const dir = g.dx < 0 ? 1 : -1; // 左滑(dir=1)=进右页；右滑(dir=-1)=回左页
-        const ni = i + dir;
-        if (ni < 0 || ni >= TAB_ORDER.length) return false; // 边界 no-op
-        swipeRef.current = { to: TAB_ORDER[ni], dir, grabbed: true };
-        swipeX.setValue(0);
-        // W-RNDRAGSUSPEND 五修·件二：拖拽期挂起 store 通知——emit 即快照新引用+全树
-        // 重渲（useRelay 订阅在 App 根），拖拽窗口内任何 ws 帧到达都会冻跟手。挂起
-        // 后快照引用恒稳=M* memo 全线生效；恢复时补一发全量 emit，零丢失
-        store.suspendNotify();
-        setSwipe({ from: tabRef.current, to: TAB_ORDER[ni], dir });
-        return true;
-      },
-      onPanResponderMove: (_e, g) => {
-        const s = swipeRef.current;
-        if (!s?.grabbed) return;
-        // 跟手：反方向拖动允许退回（进度 clamp 0..w）
-        const prog = s.dir === 1 ? -g.dx : g.dx;
-        swipeX.setValue(Math.max(0, Math.min(swipeW(), prog)));
-      },
-      onPanResponderRelease: (_e, g) => {
-        const s = swipeRef.current;
-        if (!s?.grabbed) return;
-        s.grabbed = false;
-        // W-RNDRAGSUSPEND 件二：松手即恢复通知——后续 spring 是 native 驱动，JS 侧
-        // 补发 emit（若有挂起窗内到达的帧）不冻落位动画；成对纪律（grab 挂起↔两路恢复）
-        store.resumeNotify();
-        const w = swipeW();
-        const prog = s.dir === 1 ? -g.dx : g.dx;
-        const settle = prog >= w / 2 || (s.dir === 1 ? g.vx : -g.vx) <= -0.55;
-        if (settle) {
-          // 落位：spring 到 w → setTab（目标页接管）→ 卸载源页/清态
-          Animated.spring(swipeX, { toValue: w, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
-            if (!finished) return;
-            setTab(s.to);
-            setSwipe(null);
-            swipeRef.current = null;
-          });
-        } else {
-          // 回弹：spring 回 0 → 清态（停在源页）
-          Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(({ finished }) => {
-            if (!finished) return;
-            setSwipe(null);
-            swipeRef.current = null;
-          });
-        }
-      },
-      onPanResponderTerminate: () => {
-        const s = swipeRef.current;
-        if (!s?.grabbed) return;
-        s.grabbed = false;
-        store.resumeNotify(); // W-RNDRAGSUSPEND 件二：与 release 同纪律——被打断也恢复
-        Animated.spring(swipeX, { toValue: 0, speed: 20, bounciness: 6, useNativeDriver: true }).start(() => {
-          setSwipe(null);
-          swipeRef.current = null;
-        });
-      },
-    }),
-  ).current;
-  // 双页位移插值：目标页 toX = dir*w → 0（从侧缘进）；当前页 curX = 0 → -dir*w*0.35（轻视差）
-  // W-PAGER5 真量程根修（反方审查 B 实锤）：原「占位 w=500」在宽屏机（1256px）上
-  // 插值 inputRange [0,500] 提前饱和——拖过 40% 屏宽后 toX/curX 输出钳在端值=页面
-  // 视觉原地冻结、松手跳帧=用户五报的「卡到一半」字面本体（帧率正常，gfxinfo 测
-  // 不出「不动」）。改每次手势起点取真实屏宽：swipeDir 在 null↔dir 切换时本 memo
-  // 重建，宽度随抓取瞬间的 Dimensions 现值烘焙（分屏/旋转后下一次手势自动校正）
-  const swipePageX = useMemo(() => {
-    const w = Dimensions.get("window").width;
-    return {
-      toX: swipeX.interpolate({ inputRange: [0, w], outputRange: [swipe?.dir === 1 ? w : -w, 0], extrapolate: "clamp" }),
-      curX: swipeX.interpolate({ inputRange: [0, w], outputRange: [0, (swipe?.dir === 1 ? -1 : 1) * w * 0.35], extrapolate: "clamp" }),
-    };
-  }, [swipe, swipeX]);
+  // W-NATIVEPAGER（六修终章，用户 1102 六报）：PanResponder 手写翻页器退役——
+  // JS 手势链经 79 跟手/81 渲染收敛/83 骨架化/84 真量程+store 挂起+memo 六轮修复，
+  // 真机仍冻在半路（截图实证：真页+骨架页停在 55%）。换原生 horizontal
+  // pagingEnabled ScrollView（微信/支付宝同款机制）：跟手/回弹/手势协商全在原生
+  // 层，JS 零参与，断线面归零。四页全量常驻挂载（ListScreen 恒挂纪律推广到全域
+  // ——首次启动多付一次挂载，换来此后切换零挂载零卸载零手势代码
+  const pagerRef = useRef<ScrollView>(null);
+  const winW = () => Dimensions.get("window").width;
+  const pageTo = useCallback((t: TabKey, animated = true) => {
+    pagerRef.current?.scrollTo({ x: TAB_ORDER.indexOf(t) * winW(), animated });
+  }, []);
+  // 手势翻页落定（onMomentumScrollEnd=松手翻页动画收尾完成）→ tab 状态同步
+  const onPagerSettle = useCallback((e: { nativeEvent: { contentOffset: { x: number } } }) => {
+    const i = Math.max(0, Math.min(TAB_ORDER.length - 1, Math.round(e.nativeEvent.contentOffset.x / winW())));
+    setTab(TAB_ORDER[i]);
+  }, []);
+  // 底栏/各入口 setTab → pager 跟随滚动（值语义驱动；翻页落定路径 setTab 到的
+  // 就是当前页，scrollTo 同位 no-op，无回环）
+  const lastTab = useRef(tab);
+  useEffect(() => {
+    if (lastTab.current !== tab) {
+      lastTab.current = tab;
+      pageTo(tab);
+    }
+  }, [tab, pageTo]);
   const [detail, setDetail] = useState<string | null>(null);
   // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
@@ -1096,25 +1034,19 @@ function Shell() {
               底栏域（件六），挂 ListScreen 顶栏铃铛 + sheet 弹层。详情层仍为全屏
               覆盖（盖过底栏），从任一域推入、返回回原 tab */}
           <View style={st.tabRoot}>
-            <View style={st.tabPane} {...swipeTabs.panHandlers}>
-              {/* W-NOTIFY2 件二：swipe 态 ListScreen 域参与双页位移——
-                  to==='sessions'（回会话）=目标页角色（显示+toX 从左缘进）；
-                  from==='sessions'（离会话）=当前页角色（curX 视差退）；否则维持 hidden */}
-              <Animated.View
-                style={[
-                  st.domain,
-                  tab !== "sessions" && !swipe && st.domainHidden,
-                  swipe?.to === "sessions" && { transform: [{ translateX: swipePageX.toX }] },
-                  swipe?.from === "sessions" && { transform: [{ translateX: swipePageX.curX }] },
-                ]}
-              >
-                {/* W-UIFIX 件一 P0（返回黑屏根修）：列表常驻双页并存——原条件在
-                    idle+detail（保挂载隐藏态）把列表卸载，而详情 navX 已停屏外
-                    =两层皆空整屏黑（610b69a 保挂载假设「列表在详情底下」，真壳条件
-                    渲染不成立，test.39 主力机实锤）。改恒挂载：详情 navLayer 不透明
-                    盖顶零感知；返回=closing 滑出时列表本就渲染（navPhase!=="idle"
-                    分支既有），落 idle 后列表常驻=零黑屏+零重建秒出（保挂载初衷
-                    在列表侧正确落地）；转场视觉与原生导航一致 */}
+<ScrollView
+              ref={pagerRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={onPagerSettle}
+              style={st.pagerBody}
+            >
+              {/* W-NATIVEPAGER：四页常驻（sessions/team/projects/settings 按 TAB_ORDER
+                  序）——ListScreen 恒挂纪律全域化，切换零挂载零卸载；每页宽=屏宽
+                  （pagingEnabled 对齐）。tab 状态与滚动位双向同步：手势落定
+                  onPagerSettle→setTab；setTab（底栏/入口）→ effect pageTo */}
+              <View style={st.pagerPage}>
                 <MListScreen
                   ref={listBackRef}
                   sessions={snap.sessions}
@@ -1126,54 +1058,30 @@ function Shell() {
                   onNew={newSessionPlain}
                   onOpenSettings={openSettingsTab}
                   onOpenArtPool={openArtPool}
-                  // W-MOBFUSION R2（审查 B P1）：关详情再切 tab——详情层盖屏时只 setTab
-                  // 用户看不见（navLayer 在上层），切了等于没切
                   onOpenTeam={openTeamFromList}
                 />
-              </Animated.View>
-              {tab !== "sessions" ? (
-                <Animated.View style={[st.domain, swipe?.from === tab ? { transform: [{ translateX: swipePageX.curX }] } : null]}>
-                  {tab === "team" ? (
-                    <MTeamTab onOpenSession={openDetail} onGoSessions={goSessions} />
-                  ) : tab === "projects" ? (
-                    <MProjectsTab
-                      onOpenSession={openDetail}
-                      onNewInDir={newSessionInDir}
-                      onViewSessionsInDir={viewSessionsInDir}
-                      onGoTeam={goTeam}
-                      onGoSessions={goSessions}
-                    />
-                  ) : (
-                    <MSettingsPage
-                      ref={settingsBackRef}
-                      onGoSessions={goSessions}
-                      onSetup={openSetupNew}
-                      onEdit={editServerEntry}
-                    />
-                  )}
-                </Animated.View>
-              ) : null}
-              {/* swipe 目标页覆盖层（to!=='sessions'）——W-SWIPE4 四修（用户 1102 三次
-                  实锤「卡到一半」）：拖拽期只挂骨架，不挂真树。原实现手势起点 setSwipe
-                  即挂 TeamTab/ProjectsTab/SettingsPage 整树（挂载风暴堵 JS 线程数百
-                  ms）→ 拖拽期每帧 swipeX.setValue（App.tsx onPanResponderMove，JS 驱
-                  动）排队冻结=跟手停在半路；settle 时 setTab 正式接管+本层卸载又一场
-                  风暴正撞 spring 完成帧。修：跟手期骨架（成本≈零），真树由 settle 分
-                  支 setTab 挂载（spring native 驱动中/后挂载不冻跟手）；回弹路径永不
-                  挂真树。to==='sessions' 走 ListScreen 恒挂容器（本就零挂载成本）。 */}
-              {swipe && swipe.to !== "sessions" ? (
-                <Animated.View style={[st.domain, st.swipeOver, { transform: [{ translateX: swipePageX.toX }] }]}>
-                  <View style={st.swipeSkel}>
-                    <View style={st.swipeSkelHead} />
-                    <View style={[st.swipeSkelBar, { width: "62%" }]} />
-                    <View style={[st.swipeSkelBar, { width: "86%" }]} />
-                    <View style={st.swipeSkelCard} />
-                    <View style={st.swipeSkelCard} />
-                    <View style={[st.swipeSkelCard, { opacity: 0.55 }]} />
-                  </View>
-                </Animated.View>
-              ) : null}
-            </View>
+              </View>
+              <View style={st.pagerPage}>
+                <MTeamTab onOpenSession={openDetail} onGoSessions={goSessions} />
+              </View>
+              <View style={st.pagerPage}>
+                <MProjectsTab
+                  onOpenSession={openDetail}
+                  onNewInDir={newSessionInDir}
+                  onViewSessionsInDir={viewSessionsInDir}
+                  onGoTeam={goTeam}
+                  onGoSessions={goSessions}
+                />
+              </View>
+              <View style={st.pagerPage}>
+                <MSettingsPage
+                  ref={settingsBackRef}
+                  onGoSessions={goSessions}
+                  onSetup={openSetupNew}
+                  onEdit={editServerEntry}
+                />
+              </View>
+            </ScrollView>
             <MBottomTabs tab={tab} onChange={setTab} badges={tabBadges} />
           </View>
           {detail ? (
@@ -1244,7 +1152,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 铺满域内容区，display 切换保持挂载（滚动位置记忆）
   tabRoot: { flex: 1 },
   tabPane: { flex: 1 },
-  domain: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  // W-NATIVEPAGER：原生分页器容器——flex:1 占 tabRoot 余空，四子页各占整屏宽
+  pagerBody: { flex: 1 },
+  pagerPage: { width: Dimensions.get("window").width, height: "100%" }, // 模块加载时取屏宽（旋转/分屏后重启 app 校正——手机主场景竖屏锁定，备案）
+  domain: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }, // 保留：其他层（如详情垫层）可能引用
   domainHidden: { display: "none" },
   // W-NOTIFY2 件二：swipe 目标页覆盖层（盖当前页之上，实底防透）
   swipeOver: { zIndex: 30, backgroundColor: c.bg },
