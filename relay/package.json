@@ -103,6 +103,7 @@
     "test:sqlite-resilience": "tsx scripts/test-sqlite-resilience.ts",
     "test:org-defects": "tsx scripts/test-org-defects.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
+    "test:pmresume": "tsx scripts/test-pmresume.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",
     "rehearse:rollback": "tsx scripts/rehearse-cutover-rollback.ts",
     "test:m1-import-parity": "tsx scripts/test-m1-import-parity.ts",

@@ -1723,6 +1723,13 @@ export class SessionManager {
     return reviveMod.resumeInterruptedByReboot(this, limit);
   }
 
+  // #PMRESUME（用户 1102 实锤×3 手动拉回）：PM 席位重启自愈——体在 lifecycle/revive.ts
+  // resumeLeaderAfterReboot（席位豁免 pinned-dormant：WORKING 中断续跑+空闲温床待命；
+  // 普通会话零波及——共享闸不动，只认 leaderId）
+  resumeLeaderAfterReboot(): number {
+    return reviveMod.resumeLeaderAfterReboot(this);
+  }
+
   // W-SPLIT-S5②：引擎登录恢复三面体+机制注释迁 lifecycle/revive.ts（构造区 :825/:830
   // 的 ready-hook 与 boot 扫描回调不改，走本壳）
   private recoverEngineAfterAuth(engine: SessionEngine): void {

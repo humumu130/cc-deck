@@ -484,6 +484,12 @@ setTimeout(() => {
   try {
     mgr.autoReviveManaged();
   } catch {}
+  // #PMRESUME（用户 1102 实锤×3）：值守席位先行——PM 中断续跑/空闲温床，先于 #36 跑
+  // （席位通道清 pre_reboot_status 防 #36 双拉；席位豁免 pinned-dormant 闸的实锤见
+  // revive.ts resumeLeaderAfterReboot 头注）
+  try {
+    mgr.resumeLeaderAfterReboot();
+  } catch {}
   // #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话自动续跑（与 autoRevive
   // 待办驱动互补——状态信号选人；CCR_RESUME_ON_REBOOT=0 逃生阀）
   try {

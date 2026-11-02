@@ -64,6 +64,59 @@ export function autoReviveManaged(mgr: any, limit = 3): number {
   return revived;
 }
 
+// ---------- #PMRESUME（用户 1102 晚实锤×3「手动拉回」）：PM 席位重启自愈专用通道 ----------
+// 闸实锤（哪道闸吃的 PM）：**pinned-dormant**（reviveEligible 的 W-LEADFIX 闸——
+// 「用户拍板开机不自动 resume」当年面向普通置顶会话；而 PM 首建即 pin（pinLeaderFile）
+// + 重启 ensureLeader→adoptExistingLeader 无条件置 saved+DONE「已保存（Leader 休眠）」
+// ⇒ WORKING 中断的 PM 虽被 #36 打标选中，恰撞 pinned&&saved 被拦=静默停摆）。
+// 第二断点：PM 空闲（无标）态重启——#36 只收 WORKING，adoptExistingLeader 明确
+// 「不 spawn」，keepalive 是 onSessionEnd 调度（relay 死=事件不达）⇒ 无人拉起。
+// 修法（用户 1102 新令，口径变更备案）：PM 席位=常驻值守位（#287 常驻化语义）——
+// ①WORKING 中断：席位豁免 pinned-dormant（仅此一道；retired/互斥窗/冷却三安全闸
+//   全数尊重），resumeAgent 续跑（#36 同款文案链）；②空闲态：reviveSaved 温床拉起
+//   待命（keepalive 同语义，受 duty 门 CCR_PM_DUTY=0/CCR_NO_LEADER=1 管——紧急关
+//   停不拉闲）；两态都清 pre_reboot_status 防 #36 双拉。普通会话零波及：本通道只认
+// leaderId，reviveEligible 共享闸不动（autoRevive/激活器/看门狗语义原样）。
+export function resumeLeaderAfterReboot(mgr: any): number {
+  if (process.env.CCR_RESUME_ON_REBOOT === "0") return 0; // 逃生阀（#36 同款）
+  if (process.env.CCR_NO_AUTOREVIVE === "1") return 0; // 沙盒/测试铁闸
+  const id = mgr.leaderId;
+  if (!id) return 0;
+  const s = mgr.sessions.get(id);
+  if (!s) return 0;
+  if (s.state.external) { console.log("[pm-resume] Leader 为外部会话（no-leader 模式用户终端管辖）——relay 无句柄不拉，归用户终端"); return 0; }
+  if (s.agent) return 0; // 已在岗（boot 竞态窗，理论不可达）
+  if (!s.state.relay_session_id) { console.log("[pm-resume] Leader 无 SDK 锚（首回合未完成即中断）——不硬拉，等首条消息/duty"); return 0; }
+  // 三安全闸全数尊重（席位豁免只豁 pinned-dormant 一道）
+  if (mgr.isRetiredMember && mgr.isRetiredMember(id)) { console.log("[pm-resume] Leader 已退休（编制除名）——不拉"); return 0; }
+  if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) { console.log("[pm-resume] resume 互斥窗内——本轮不拉（防双进程）"); return 0; }
+  if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) { console.log("[pm-resume] resume 熔断冷却中——本轮不拉（防死循环）"); return 0; }
+  const wasWorking = s.state.pre_reboot_status === "WORKING";
+  s.state.pre_reboot_status = undefined; // 清标防 #36 通道双拉（席位通道先跑）
+  try {
+    if (wasWorking) {
+      // 中断续跑：与 #36 同语义（活工作中断=必须自动恢复，不受 duty 门）
+      mgr.resumeAgent(s, "[relay 重启自愈 · 值守席位] relay 重启完成，PM 值守回合被中断，已自动续跑（#PMRESUME——不再需要人工发消息拉回）。" + reviveInstruction(s));
+    } else {
+      // 空闲温床拉起待命：keepalive 同语义（duty 门管——紧急关停=0 不拉闲）
+      if (process.env.CCR_PM_DUTY === "0" || process.env.CCR_NO_LEADER === "1") return 0;
+      mgr.reviveSaved(s);
+    }
+    try {
+      mgr.upsertNotification("system", "pm-resume", `r${Date.now()}`, { // revision 唯一化：同 entityId+同 revision 视陈版跳更（A/B 两态通知实证）
+        title: wasWorking ? "值守 PM 已自动续跑" : "值守 PM 已拉起待命",
+        body: `${s.state.title || id.slice(0, 8)}：relay 重启后席位自愈（${wasWorking ? "中断回合自动续跑" : "温床待命——下条消息零冷启动"}，#PMRESUME）`,
+        severity: "info", group: "activity", actionable: false, sessionId: id, domain: "session", returnPath: "sessions",
+      });
+    } catch { /* 通知面尽力而为 */ }
+    console.log(`[pm-resume] 值守席位自愈：${wasWorking ? "中断续跑" : "温床待命"} sid=${id.slice(0, 8)}`);
+    return 1;
+  } catch (e) {
+    console.log(`[pm-resume] Leader 拉起失败: ${e instanceof Error ? e.message : String(e)}（熔断账接管；人工发送消息可恢复）`);
+    return 0;
+  }
+}
+
 // ---------- #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话 boot 自动续跑 ----------
 // 与 autoReviveManaged（#75 待办驱动）互补：待办闸会把「回合在跑但任务清单无开放项」
 // 的中断会话（长构建/纯执行回合）漏成「发送消息即可继续」人工干等——本通道以
