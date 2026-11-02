@@ -22,8 +22,8 @@
        图标同族 16px/stroke1.5/round；「CC Deck」标题退役（app 名在 Dock/关于页，第三次出现零信息）。
        注意：本段新增规则只写在雷前区（文件尾部 @media reduce 未闭合地雷 3207 仍在，append=被吞）。 */
     .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; background: var(--windowbar-bg); border-bottom: 1px solid var(--windowbar-line); }
-    .windowbar { --windowbar-bg: #1A1E24; --windowbar-line: rgba(255, 255, 255, 0.08); --windowbar-ink: rgba(255, 255, 255, 0.55); --windowbar-trigger-line: rgba(255, 255, 255, 0.12); --windowbar-hover: rgba(255, 255, 255, 0.06); --windowbar-active: rgba(255, 255, 255, 0.10); --windowbar-dot-ok: #3FB950; --windowbar-dot-warn: #F59E0B; --windowbar-dot-idle: rgba(255, 255, 255, 0.28); }
-    html[data-theme="light"] .windowbar { --windowbar-bg: #FAFAFA; --windowbar-line: rgba(0, 0, 0, 0.08); --windowbar-ink: #71717A; --windowbar-trigger-line: rgba(0, 0, 0, 0.12); --windowbar-hover: rgba(0, 0, 0, 0.05); --windowbar-active: rgba(0, 0, 0, 0.09); --windowbar-dot-idle: rgba(0, 0, 0, 0.25); } /* 浅色 zinc-50/zinc-500 档 */
+    .windowbar { --windowbar-bg: var(--rail); --windowbar-line: var(--line-soft); /* 用户 1102 拍板：顶栏与侧边导航栏同色（分层突兀回改） */ --windowbar-ink: rgba(255, 255, 255, 0.55); --windowbar-trigger-line: rgba(255, 255, 255, 0.12); --windowbar-hover: rgba(255, 255, 255, 0.06); --windowbar-active: rgba(255, 255, 255, 0.10); --windowbar-dot-ok: #3FB950; --windowbar-dot-warn: #F59E0B; --windowbar-dot-idle: rgba(255, 255, 255, 0.28); }
+    html[data-theme="light"] .windowbar { --windowbar-bg: var(--rail); --windowbar-line: var(--line-soft); --windowbar-ink: #71717A; --windowbar-trigger-line: rgba(0, 0, 0, 0.12); --windowbar-hover: rgba(0, 0, 0, 0.05); --windowbar-active: rgba(0, 0, 0, 0.09); --windowbar-dot-idle: rgba(0, 0, 0, 0.25); } /* 浅色 zinc-50/zinc-500 档 */
     /* W-UIFIX A（2026-10-11 test.11 真机反馈「比其他软件小多了」）：9px→12px 对齐 macOS
        系统灯标准直径，间距 6→8px；色值本就是 mac 标准三色（下方 nova 覆盖段）。
        W-STATUSBAR 标题退役后交通灯区让位：首内容距灯 ≥28px */
@@ -49,8 +49,8 @@
     @keyframes wrefSpinOnceKf { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     /* W-STATUSBAR B3：胶囊规范——28px 高/radius 6/描边 12% 白；状态点=全 bar 唯一彩色
        （绿=连接/琥珀=未连接含连不上/灰=未配置）；多源时右 12px 下拉箭头；文字 12px/500 */
-    .windowbar .source-trigger { min-height: 28px; gap: 8px; padding: 0 10px; border: 1px solid var(--windowbar-trigger-line); border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; }
-    .windowbar .source-trigger:hover { border-color: rgba(255, 255, 255, 0.24); background: var(--windowbar-hover); }
+    .windowbar .source-trigger { min-height: 28px; gap: 8px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; } /* 用户 1102：去胶囊边框底色（裸形态） */
+    .windowbar .source-trigger:hover { background: var(--windowbar-hover); border-radius: 6px; } /* 去边框后 hover 保留软底 */
     html[data-theme="light"] .windowbar .source-trigger:hover { border-color: rgba(0, 0, 0, 0.24); }
     .windowbar .source-trigger strong { word-spacing: 2px; } /* D8 中英混排 2px 呼吸（「本机 Relay」产品词） */
     .windowbar .source-trigger .src-conn-note { color: var(--windowbar-ink); font-weight: 500; }

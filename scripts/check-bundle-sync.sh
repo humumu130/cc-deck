@@ -153,20 +153,30 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ]; then
   SMOKE_DIR="$(mktemp -d /tmp/ccdeck-smoke-data.XXXXXX)"
   SMOKE_LOG="$SMOKE_DIR/out.log"
   SMOKE_PORT=$(( (RANDOM % 20000) + 40000 ))
-  # 密闭五件套（2026-10-03 实锤补齐）：此前只隔端口+数据目录——冒烟 relay 仍会
-  # ①在默认 ~/.cc-deck/org 引导真 Leader（P0 同款生产污染）②连生产云桥 ③镜像写
-  # ~/.cc-deck/data/bridge.json（沙盒检测漏网时）④mDNS 广播幽灵实例。org/云桥/
-  # 镜像/mdns 全部钉死，冒烟只剩「bundle 能起、横幅能出」一件事
+  # 密闭六件套（2026-10-03 实锤补齐五件+2026-11-02 第六件）：此前只隔端口+数据目录
+  # ——冒烟 relay 仍会 ①在默认 ~/.cc-deck/org 引导真 Leader（P0 同款生产污染）②连
+  # 生产云桥 ③镜像写 ~/.cc-deck/data/bridge.json（沙盒检测漏网时）④mDNS 广播幽灵实例
+  # ⑤sqlite 影子档把全机 ~/.claude/tasks（本机 219 会话/2257 文件）全量导入临时库——
+  # 冒烟每次全新 dataDir=checkpoint 永不存在=每次都付分钟级全量导入，8s 横幅窗必超
+  # （2026-11-02 test.81 出包实锤：横幅前卡 importSessionTask 串行读全部任务 json，
+  # fs-probe 栈 importAllForShadow→importSessionTask→parseTaskFile 现行抓获）。org/
+  # 云桥/镜像/mdns/tasks 全部钉死，冒烟只剩「bundle 能起、横幅能出」一件事
   CCR_PORT="$SMOKE_PORT" CCR_DATA_DIR="$SMOKE_DIR" CCR_ORG_DIR="$SMOKE_DIR/org" \
     CCR_CLOUD_URL="" CCR_NO_BRIDGE_MIRROR=1 CCR_NO_MDNS=1 CC_DECK_PLUGIN=1 \
+    CCR_TASKS_DIR="$SMOKE_DIR/tasks" \
     node cc-plugins/plugins/cc-deck/scripts/relay.mjs >"$SMOKE_LOG" 2>&1 &
   SMOKE_PID=$!
-  # 8s：orphan-adopt 扫描（~/.claude/projects）+ 2.3MB bundle 冷加载会把横幅拖过
-  # 3s 窗口——曾误报「起服失败」（实为 flaky，2026-10-03 复现实测横幅 ~5s 出）
-  sleep 8
-  SMOKE_OK=1
-  kill -0 "$SMOKE_PID" 2>/dev/null || SMOKE_OK=0
-  grep -q "CC Deck Relay 已启动" "$SMOKE_LOG" || SMOKE_OK=0
+  # 45s 轮询（2026-11-02 test.81 实锤三连根修之三）：历史 3s→8s 两轮加窗都追不上
+  # 机器负载漂移——启动链含同步重活（captureCliProcesses 的 ps 5s 超时档+engine
+  # auth spawnSync 探针+sqlite 首建迁移），空闲机 ~5s 出横幅，高载机（4GB transcript
+  # 落盘+CI+Spotlight 并发）实测 38s。固定 sleep 对负载敏感=必 flaky；改 2s 步进
+  # 轮询（横幅出即过、进程死即败、45s 帽）——横幅通常秒级出，慢机也不误杀
+  SMOKE_OK=0
+  for _ in $(seq 1 23); do
+    sleep 2
+    if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi          # 进程先死=真伤
+    if grep -q "CC Deck Relay 已启动" "$SMOKE_LOG" 2>/dev/null; then SMOKE_OK=1; break; fi
+  done
   if [ "$SMOKE_OK" != "1" ]; then
     echo "❌ bundle 冒烟：隔离端口 $SMOKE_PORT 起服失败（语法检查逮不住的运行期伤）："
     head -8 "$SMOKE_LOG"

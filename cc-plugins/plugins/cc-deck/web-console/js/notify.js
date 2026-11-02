@@ -444,7 +444,7 @@
                   event.target.textContent = full ? "查看全部通知" : "收起面板";
                 });
 
-                bridge.subscribe(() => render());
-                setTimeout(render, 0);
+                bridge.subscribe(() => { const g = window.__ccDeck005DeskRender; if (g) g.run(render); else render(); }); // W-MOBILE-PERF：桌面台不在视跳渲记脏（回桌面 flush 补渲）
+                setTimeout(() => { const g = window.__ccDeck005DeskRender; if (g) g.run(render); else render(); }, 0);
               })();
             
