@@ -15,6 +15,7 @@ import {
 } from "../src/leader-duty.js";
 
 const fixture = <T>(name: string): T => JSON.parse(readFileSync(join(process.cwd(), "tests/fixtures", name), "utf8")) as T;
+const root = process.cwd(); // duty-selfloop（process.cwd()=relay/，src 就在其下）：src 面文本锚基准（relay/scripts 相对仓根 relay/ 的上级）
 let pass = 0;
 let fail = 0;
 function check(condition: boolean, message: string): void {
@@ -84,5 +85,32 @@ check(evaluateDutyPolicy(knownTodo, { enabled: false }).mode === "blocked", "dis
 const nightSnapshot = fixture<DutyQueueSnapshot>("duty-night-budget.json");
 const nightCandidate = evaluateLeaderActionableWork(nightSnapshot).candidates[0]!;
 check(evaluateDutyPolicy(nightCandidate, nightSnapshot.duty_policy).mode === "notify", "night budget fixture prevents automatic dispatch");
+
+// ---- duty-selfloop（1102 用户实锤 P0）：awaiting-user 真挂起 + 注入行活动判定排除 ----
+// 自持环修前：worker_done/receipt 候选非空→喂活→值守回执 none+blocked(awaiting-user)→
+// 候选不清→patrol light 2min 再触发→无限 2min 一轮（卡片黄绿闪+刷屏）
+const loopSnapshot: DutyQueueSnapshot = {
+  worker_done_pending: 1,
+  pending_user_confirms: [{ id: "cf-awaiting-1", reason: "user_confirm" }],
+  blocked: [{ id: "dns-push", reason: "user_confirm" }],
+};
+const loopVerdict = evaluateLeaderActionableWork(loopSnapshot);
+check(loopVerdict.reason === "blocked" && loopVerdict.actionable === false, "awaiting-user（pending_user_confirms 非空）挂起优先——candidates（worker_done）在场也不 actionable（零新回执轮）");
+check(loopVerdict.blocked.some((b) => b.id === "cf-awaiting-1" && b.reason === "user_confirm"), "挂起 blocked 含 user_confirm 项（awaiting-user 语义入账）");
+const noConfirmSnapshot: DutyQueueSnapshot = { worker_done_pending: 1 };
+check(evaluateLeaderActionableWork(noConfirmSnapshot).reason === "actionable", "无待决议确认卡=旧语义零变化（worker_done 候选照常 actionable）");
+const emptyConfirmsSnapshot: DutyQueueSnapshot = { worker_done_pending: 1, pending_user_confirms: [] };
+check(evaluateLeaderActionableWork(emptyConfirmsSnapshot).reason === "actionable", "pending_user_confirms 空数组=缺省等价（字段缺席向后兼容）");
+// 挂起轮 feedPM 走 idle 路径：transitionDutyFeedCount("idle") 归零不推进（零新喂活触发）
+const idleT = transitionDutyFeedCount({ consecutive_feeds: 2 }, "idle");
+check(idleT.shouldSleep === false && idleT.state.consecutive_feeds === 0, "挂起轮 idle 信号：chain 归零不推进（挂起≠喂活——无 k_exhausted 退避定时器再生）");
+// 修②断言锁：pushExternalLog 的 system 注入行不刷 last_tool_use_at（#291 帧分类判活——
+// 「CLI 状态恢复运行（转录增长判定）」的 lastGrow 源=bridge 转录增量，system 行不沾）
+const smSrc = readFileSync(join(root, "src", "session-manager.ts"), "utf8");
+check(smSrc.includes('if (kind === "tool_use" || kind === "tool_result") s.state.last_tool_use_at'), "注入行活动判定排除锁：pushExternalLog 仅 tool_use/tool_result 刷活动账（system 注入行零污染——#291 口径保持）");
+const bridgeSrc = readFileSync(join(root, "src", "bridge.ts"), "utf8");
+const growIdx = bridgeSrc.indexOf("this.lastGrow.set");
+const pushIdx = bridgeSrc.indexOf("private pushAssistantTexts");
+check(growIdx > 0 && pushIdx > 0 && growIdx > pushIdx && growIdx - pushIdx < 4000, "lastGrow 记账位=pushAssistantTexts 转录增量链内（bridge 合法调 pushExternalLog 留痕不沾记账——文本域锚）");
 
 finish();

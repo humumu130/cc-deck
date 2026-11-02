@@ -69,6 +69,9 @@ export interface DutyPolicy {
 export interface DutyQueueSnapshot {
   /** W-PMWAKE：worker 回合 DONE 且未被 Leader 处理过的计数（Leader turn_end 归零） */
   worker_done_pending?: number;
+  /** duty-selfloop（1102 用户实锤 P0）：待用户决议的确认卡在场清单——非空=值守真挂起
+   *（等用户，不喂活空转；卡到期走通知面升级，与本字段正交）。缺省/空数组=旧语义零变化 */
+  pending_user_confirms?: DutyBlockedItem[];
   pending_receipts?: DutyPendingReceipt[];
   failed_or_hanging_dispatches?: DutyDispatchCandidate[];
   unlocked_todos?: DutyUnlockedTodo[];
@@ -176,6 +179,18 @@ export function evaluateLeaderActionableWork(snapshot: DutyQueueSnapshot): DutyA
     ...workerDoneCandidates(snapshot),
   ];
   const blocked = [...(snapshot.blocked ?? [])];
+  // duty-selfloop（1102 P0）：待用户决议的确认卡在场=值守真挂起——优先于 candidates。
+  // 自持环实录：worker_done/receipt 候选非空→喂活→值守会话发现「都在等用户」→回执
+  // none+blocked(awaiting-user-verdict)→候选不清→patrol 2min light 再触发→无限 2min
+  // 一轮（卡片黄绿闪+刷屏）。用户决议是唯一出口：喂活不可能推进任何候选（PM 不代
+  // 用户决定），挂起=零注入零回合。
+  // duty R2（1102 双审 B 纠偏）：到期升级原表述失实——挂起期感知与复活边沿均在
+  // session-manager feedPM/confirm-decide 侧落地（P2-B system:duty-hold 升级通知+
+  // P2-A confirm-decided 边沿），本纯函数层不承担。
+  const pendingUser = snapshot.pending_user_confirms ?? [];
+  if (pendingUser.length > 0) {
+    return { actionable: false, candidates: [], reason: "blocked", blocked: [...pendingUser, ...blocked] };
+  }
   if (candidates.length > 0) return { actionable: true, candidates, reason: "actionable", blocked };
   if (blocked.length > 0) return { actionable: false, candidates, reason: "blocked", blocked };
   const running = (snapshot.running_sessions ?? []).filter((session) => session.status === "running" || session.status === "WORKING");

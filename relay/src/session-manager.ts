@@ -689,6 +689,12 @@ function dutyContinuationMs(): number {
   const v = Number(process.env.CCR_PM_DUTY_CONTINUATION_MS);
   return Number.isFinite(v) && v >= 0 ? v : 5 * 60_000;
 }
+// duty R2 P2-B（1102 双审 B）：挂起期确认卡升级提醒阈值——最老待决卡龄达阈值即通知面
+// 提醒（每满一档刷一次）；缺省 2h，env 可调（测试缩窗缝）。
+function holdEscalateMs(): number {
+  const v = Number(process.env.CCR_CONFIRM_HOLD_ESCALATE_MS);
+  return Number.isFinite(v) && v >= 60_000 ? v : 2 * 3_600_000;
+}
 
 // #408 SNAPSHOT 大帧根治（2026-09-09 事故）：客户端 last_seq 落到事件缓冲窗外走
 // 全量 SNAPSHOT，此前 LAN 快照把全部时间线日志塞单帧（随历史线性膨胀，实测 3 会话
@@ -4989,9 +4995,15 @@ export class SessionManager {
         running.push({ session_id: s.state.session_id, status: "WORKING", updated_at: s.state.updated_at, last_progress_at: s.lastProgressAt });
       }
     }
+    // duty-selfloop（1102 P0）：待用户决议确认卡在场清单——evaluate 挂起优先的消费源。
+    // reason="user_confirm"（awaiting-user 语义）：用户未答复期间值守零新回执轮
+    const pendingUserConfirms: DutyBlockedItem[] = listPendingConfirms()
+      .filter((c) => c && c.status === "pending")
+      .map((c) => ({ id: c.id, reason: "user_confirm" as const }));
     return {
       now,
       worker_done_pending: this.workerDonePending,
+      pending_user_confirms: pendingUserConfirms,
       pending_receipts: this.pendingAcceptanceReceipts(),
       failed_or_hanging_dispatches: failed,
       unlocked_todos: todos,
@@ -5230,6 +5242,29 @@ export class SessionManager {
         feed_id: feedId, feed_generation: generation, trigger: [trigger],
         result: "sleep", reason: verdict.reason, blocked: verdict.blocked, observed, from,
       });
+      // duty R2 P2-B（1102 双审 B）：挂起期感知面——user_confirm 在场且最老卡龄达阈值
+      // →通知面升级提醒（此前挂起态零通知：dismiss/漏看后静默永续；pm_parked/resume_breaker
+      // 同族升级缺失补齐）。stableKey=system:duty-hold:<卡id> 恒定——同一卡不逐轮堆新条
+      //（r2 终验 P2 备案：upsertNotification 非 dispatch kind 早退=首达后标题定格阈值龄，
+      // 不随龄刷新——实现与声明以此注释为准）；决议后值守由 P2-A 边沿恢复推进。
+      try {
+        if ((verdict.blocked ?? []).some((b) => b.reason === "user_confirm")) {
+          const pend = listPendingConfirms().filter((c) => c && c.status === "pending");
+          const oldest = pend.reduce<(typeof pend)[number] | null>((a, c) => (!a || c.created_at < a.created_at ? c : a), null);
+          if (oldest) {
+            const holdMs = holdEscalateMs();
+            const age = from - oldest.created_at;
+            if (age >= holdMs) {
+              this.upsertNotification("system", "duty-hold", `${oldest.id}`, {
+                title: `值守挂起中：确认卡等待你的决议已 ${Math.round(age / 3_600_000)} 小时`,
+                body: truncate(`「${oldest.title}」未决议——值守全线挂起（worker_done/验收回执等暂不推进）；决议后值守自动恢复。${pend.length > 1 ? `另有 ${pend.length - 1} 张待决卡。` : ""}`, 160),
+                severity: "waiting", group: "action", actionable: true,
+                sessionId: this.leaderId ?? undefined, domain: "org", returnPath: "/",
+              });
+            }
+          }
+        }
+      } catch { /* 感知面尽力而为，绝不影响值守主路径 */ }
       return;
     }
     const transition = transitionDutyFeedCount(this.dutyFeed, "feed");
@@ -6973,6 +7008,14 @@ export class SessionManager {
           if (!d.ok) return d;
           const eff = this.applyConfirmEffects(d.confirm);
           if (!eff.ok) return { ok: false, error: eff.error ?? "决议副作用执行失败" };
+          // duty R2 P2-A（1102 双审 B）：决议复活边沿——confirm-decide 全链（CLI/HTTP/ws
+          // 三通道都汇本漏斗）此前零 feedPM，用户决议完卡后值守无事件拉回（vacation 场景
+          // 静默死透：挂起后没有任何边沿触发评估）。决议=挂起的唯一出口事件，此处喂一次：
+          // 若已无别的待决卡→evaluate 直返 actionable（值守恢复推进）；若还有→下一轮照常
+          // 挂起（P2-B 到期感知兜底）。feedPM 幂等（leader WORKING 早退/duty 关时 no-op）。
+          try { if (dutyEnabled()) this.feedPM("confirm-decided"); } catch { /* 边沿尽力而为，绝不阻决议回执 */ }
+          // P2-B 联动：该卡的挂起升级提醒（system:duty-hold:<id>）随决议 resolved
+          try { this.transitionNotifications((n) => n.key === `system:duty-hold:${cid}`, "resolved"); } catch { /* 尽力而为 */ }
           return { ok: true, data: { confirm: d.confirm } };
         }
         default:
