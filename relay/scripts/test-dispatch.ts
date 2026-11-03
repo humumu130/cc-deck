@@ -720,7 +720,7 @@ async function main() {
     //（不点头=组滞留 active，名额不释放，下游 phi 立项撞 5 组护栏——本行即 10 连挂
     // 之根的二段）。oldwork 无派单史板净，仍一句话。
     const azD = mgr.orgAction("project-status", { id: gidD, to: "archived" }) as { ok: boolean; data?: { needsConfirm?: boolean; confirm?: { id: string } } };
-    if (azD.data?.needsConfirm) mgr.orgAction("confirm-decide", { confirm_id: azD.data.confirm.id, approve: true, by: "u" });
+    if (azD.data?.needsConfirm && azD.data.confirm) mgr.orgAction("confirm-decide", { confirm_id: azD.data.confirm.id, approve: true, by: "u" });
     mgr.orgAction("project-status", { id: gidO2, to: "archived" });
     const cRc = mgr.orgAction("project-create", { name: "rho", anchor: join(DATA, "proj-rc"), tier: "轻立项" });
     const gidRc = listGroups().find((g) => g.name === "rho")?.id ?? "";
