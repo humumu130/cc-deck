@@ -1666,6 +1666,11 @@ function connectLan(ctx) {
           } catch (_) { return null; }
         }
         if (!isHttpPage) return null;
+        // R2-P2（A 审）：浏览器探针仅当页面自身回环 served 才有效——浏览器把 127.0.0.1 解析到
+        // 访问者本机，跨机形态（手机/他机浏览器访问本页）探到的是访问者自己的回环，命中其
+        // 同端口 relay 会把别机 token 灌进本页 cfg（投毒自持，R1 每轮探针放大了该存量面）；
+        // 壳形态走 shellProbe（Rust 直探本机）不受此限
+        if (location.hostname !== "127.0.0.1" && location.hostname !== "localhost") return null;
         const port = location.port || (location.protocol === "https:" ? "443" : "80");
         try {
           const r = await fetch("http://127.0.0.1:" + port + "/local-info", { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined });
@@ -1685,7 +1690,7 @@ function connectLan(ctx) {
         window.__ccDeck005Token = relayToken; // W-NOVAFIX B2：域脚本活读点同步刷新
         try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
       }
-      let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后交给 6s 周期自愈）
+      let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后的持续自愈=每轮重连前探针先行，见 scheduleReconnect [W-LOCALTOKEN]）
       // W-NOVAFIX B1：LAN/桌面形态配对链接与弹窗。桌面壳 location 是 tauri.localhost 不可分享
       // ——用探测结果（local-info 的 lan_ip + port）拼 LAN 可达地址；浏览器形态页面即 relay，
       // location.origin 直用。云形态不走此链（openCloudPairUI 输码）。
@@ -2053,7 +2058,23 @@ function connectLan(ctx) {
         if (context.stopped) return;
         clearTimeout(context.reconnectTimer);
         const jitter = context.reconnectDelay * (0.8 + Math.random() * 0.4); // #143 盲评A-3：±20% 抖动防多端同步重连风暴
-        context.reconnectTimer = setTimeout(() => connectLan(context), jitter);
+        // [W-LOCALTOKEN]（1103 双机 P0）：重连前探针先行——token 失配自愈闭环真化。基线的
+        // 6s 周期自愈（healTimer，#158-批3）真实存在但三重自限（桌面壳限定/15 次≈90s 停表/
+        // online 或 connecting 即自清）——长驻会话越过 heal 窗后 token 漂移，重连链仍零探针：
+        // connectLan 拿陈旧 cfg.token 无限重试=401 循环（embedded-relay.log 十一次 reject
+        // ~6s 退避曲线实证）。本修把探针放进无封顶的重连链：每轮重连都探，命中即刷
+        // cfg.wsUrl/token+localStorage（applyLocalProbe）再连，401 循环当轮自愈（healTimer
+        // 仍在场，双轨并存无冲突）；探针失败照旧连（transport 类故障与 token 无关，不因
+        // 探针失败弃连）。探针 1.5s 超时叠加退避抖动可接受（30s 档抖动上限实为 36s）。
+        context.reconnectTimer = setTimeout(async () => {
+          if (context.stopped) return;
+          try {
+            const probed = await probeLocalRelay();
+            if (probed && context === ctx) applyLocalProbe(probed); // 仅本机 ctx（云 ctx 不经本函数——防御性判同）
+          } catch { /* 探针失败不弃连 */ }
+          if (context.stopped) return; // R2-P1-1（A/B 双审同锤）：await 探针窗（≤1.5s）内停连（pagehide 唯一写点）不复活连接——healTimer await 后复查同款范式（:4541）
+          connectLan(context);
+        }, jitter);
         context.reconnectDelay = Math.min(context.reconnectDelay * 2, 30000);
       }
 
@@ -2516,7 +2537,14 @@ function connectLan(ctx) {
           clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
           ctx.reconnectDelay = CLOUD_RETRY_BASE_MS; // 连上即归零退避
           if (!peer || pair) {
-            if (pair && pair.pc === "" && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); } // 空码信标态预取发现帧（路径保留，005 无 QR UI 不会走到）
+            if (pair && !pair.rd && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); } // 无锚广播态预取发现帧（扫码空码信标路径保留 + R2-B2 输码广播需 RELAYS 补 cands 供 ack 试解）
+            // R2：未配对且无 pendingPair（中毒存量 boot/静默未配对源）——原路 sendPairReq
+            // 读 pair.pc 空引用炸断 onopen（判定链全灭）。改发现在帧交 RELAYS 判定
+            //（B1 suspect-lead/裸态采信/换代守卫——同 index.html R2 同构修）
+            if (!pair) {
+              if (!ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); cloudSetConn("connecting", "定位 relay…"); }
+              return;
+            }
             // #258 自愈铁律：配对态每次连接建立必补发一查——pair_req 幂等（relay 对已配对
             // 设备直补 pair_ack，cloud-client.ts「幂等补发 ack」），30s 级配对退避不再拦开门首查。
             // 旧版窗内跳过发送且不起看门狗，而看门狗耗尽后的快速重连（3s）恰在退避窗内打开
@@ -2609,7 +2637,12 @@ function connectLan(ctx) {
         const peer = cloudPeerOf(ctx.cfg);
         if (!peer || pair) {
           cloudSetConn("connecting", "配对中（轮询）");
-          if (pair && pair.pc === "" && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); }
+          if (pair && !pair.rd && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); } // R2-B2：无锚广播态（含输码广播）预取发现帧补 cands
+          // R2：!pair 空引用守卫（同 ws onopen——发现在帧交 RELAYS 判定，两传输同构）
+          if (!pair) {
+            if (!ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); cloudSetConn("connecting", "定位 relay…"); }
+            return;
+          }
           // #258 同 onopen 口径：轮询传输建连即补发一查（幂等），退避窗不拦——防同型停摆
           sendPairReq(ctx, pair, dev);
           startPairWatchdog(ctx);
@@ -2729,19 +2762,32 @@ function connectLan(ctx) {
             .filter((x) => !x.rk || (typeof x.rk === "string" && devId(x.rk, "rl") === x.dev));
           const pair = ctx.pendingPair || pendingPairOf(cfg.id);
           const peer = cloudPeerOf(cfg);
-          const known = [pair && pair.rd, peer && peer.relay_dev, cfg.cloud && cfg.cloud.rd, BAKED_RELAY.rd]
+          // R2-P1-B1（B 审攻点1）：中毒存量残留形状——paired=false ∧ rd 非空 ∧ rd≠BAKED ∧
+          // 无单播配对锚（pair.rd 置位=用户/发现帧明确锚定该 rd，广播态 rd 空串不算）。合法写点
+          // 不落此形状（建源/nack 回退=BAKED；配对成功=paired:true）。旧版「唯一陌生者被采信→覆写 rd=陌生者」的中毒客户端
+          //（paired=false+rd=陌生者，1103 用户实锤群体）升级即命中（广播态输码经 RELAYS 走 bc-pair
+          // 时 cloud.rd 同样被排除——否则唯一陌生者命中 hit 走 pair-resend 单播，劫持复活）——该 rd 不再进可信列表、
+          // 禁用唯一采信（防列表里陌生者反复自采信覆写）；输码走广播定位（B2）凭码找到家
+          // relay 即自愈，无需手工删源
+          const suspect = !!(cfg.cloud && !cfg.cloud.paired && cfg.cloud.rd && cfg.cloud.rd !== BAKED_RELAY.rd && !(pair && pair.rd));
+          const known = [pair && pair.rd, peer && peer.relay_dev, !suspect && cfg.cloud && cfg.cloud.rd, BAKED_RELAY.rd]
             .filter((x) => x && typeof x === "string");
           const hit = all.find((x) => known.includes(x.dev));
           // 「列表唯一=换代新身份」只服务无锚点的新配对；流程携带 rd 锚（配对链接/输码携记忆身份）
           // 时禁止被唯一在线者覆盖——假 relay 注册成唯一在线即被当「换代」采信
-          const anchored = !!(pair && pair.rd);
-          const pick = hit || (!anchored && all.length === 1 ? all[0] : null);
+          // W-PAIRFIX：已配对运行中同权为锚（防桥上陌生 relay 唯一在线被采信顶替——
+          // 用户 1103 公司电脑实锤；同 index.html 发现分支同构修）
+          const pairedAnchor = !!(peer && peer.relay_dev && cfg.cloud && cfg.cloud.paired);
+          const anchored = !!(pair && pair.rd) || pairedAnchor;
+          const pick = hit || (!anchored && !suspect && all.length === 1 ? all[0] : null);
           if (!pick) {
-            // 输码态 + 多台在线且无可信锚点：配对码即定位凭据——改广播 pair_req，候选公钥逐个试解
-            if (pair && pair.pc && all.length > 1) {
+            // 输码态 + 在线者均非可信锚点：配对码即定位凭据——改广播 pair_req，候选公钥逐个试解
+            // R2-P1-B2（B 审攻点2）：门槛 all>1 → all>0——手动输码=用户意图压过锚：锚定
+            // rd 不在线而唯一在线者恰是持码者（真换代 Shape B）时，原门槛把码锁死在死锚上
+            if (pair && pair.pc && all.length > 0) {
               ctx.pendingPair = { rd: "", rk: "", pc: pair.pc, bc: true, cands: all.filter((x) => x.rk) };
               setPendingPair(cfg.id, ctx.pendingPair);
-              console.log("[cloud:" + cfg.name + "] 多 relay 无锚点，转配对码广播定位（候选 " + all.length + " 台）");
+              console.log("[cloud:" + cfg.name + "] " + (all.length > 1 ? "多 relay 无锚点" : "锚定 relay 不在线") + "，转配对码广播定位（候选 " + all.length + " 台）");
               cloudSetConn("connecting", "定位持码服务器…");
               if (Date.now() >= (ctx.pairNextAt || 0)) {
                 sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
@@ -2750,6 +2796,42 @@ function connectLan(ctx) {
               return;
             }
             clearInterval(ctx.pairTimer);
+            if (pairedAnchor) {
+              // R2-P1-A（A 审 P1-1）：列表非空=有新身份证据（真换代/换机的新 relay 在线、旧
+              // rd 永不再现）——同置观察钟，窗内「观察中」、持续超窗走同一降级（未配对已
+              // 换代+可重配）；列表空=无新身份证据=纯离线（2 分钟掉线窗 << 10min 钟）不置
+              // 钟纯重试（同 index.html R2 同构修）
+              if (all.length > 0) {
+                ctx.genesisSeenAt = ctx.genesisSeenAt || Date.now();
+                const graceMs = Number(window.__CCD_GENESIS_GRACE_MS) > 0 ? Number(window.__CCD_GENESIS_GRACE_MS) : 10 * 60_000;
+                if (Date.now() - ctx.genesisSeenAt >= graceMs) {
+                  // R3-P1-F3（B 审攻点 3，降级不覆写锚）：超窗降级不再覆写 cfg.cloud——出差关机
+                  // >10min+桥上唯一陌生者在场的假换代组合曾把家身份（唯一副本）换成陌生者并落盘
+                  //（idx saveServers），回家后 hello-resume 门槛（peer 匹配记忆 rd）永假、恢复全要
+                  // 人工领码=零伤害承诺破。改后锚原样保留（paired/rd/rk 不动）：回家 hit 命中自动
+                  // 续上；真换代经输码广播定位（B2）+pair_ack 落库（inner.relay_dev 覆写+paired:true）
+                  // 自然换新 rd，旧 rd 无残留。sole 唯一采信随覆写退役。
+                  ctx.genesisSeenAt = 0; // 降级即出观察态（P2-2：防陈钟跨态残留）
+                  cloudSetConn("offline", "relay 可能已换代·请输码重新配对", "unpaired");
+                  return;
+                }
+                cloudSetConn("offline", "relay 身份观察中·持续 " + Math.max(1, Math.round(graceMs / 60_000)) + " 分钟不变将提示重配" + (all.length > 1 ? "（忽略 " + all.length + " 个桥上陌生服务器）" : ""), "bridge");
+              } else {
+                ctx.genesisSeenAt = 0; // P2-2（A 审）：观察中列表变空=新身份证据消失，钟清零（累计→持续语义）
+                cloudSetConn("offline", "已配对 relay 离线·重试中", "bridge");
+              }
+              ctx.awayFails = Math.min((ctx.awayFails || 0) + 1, 6); // R2-B3：桥活 relay 缺席退避梯（onopen 归零 reconnectDelay 不影响本梯；风暴 ~1200 轮/h → ≤30 轮/h）
+              scheduleCloudReconnect(ctx, Math.min(6_000 * 2 ** (ctx.awayFails - 1), 120_000));
+              return;
+            }
+            if (suspect) {
+              // R2-P1-B1：中毒残留已识别——不再采信列表里的陌生者，直接引导重配（输码即
+              // 广播定位到家 relay，配对成功覆写合法身份=自愈闭环，无需手工删源）
+              cloudSetConn("offline", "检测到未完成配对·建议输码重连", "pair"); // R3-P2①：中性措辞（同 index.html 同构）
+              ctx.awayFails = Math.min((ctx.awayFails || 0) + 1, 6);
+              scheduleCloudReconnect(ctx, Math.min(6_000 * 2 ** (ctx.awayFails - 1), 120_000));
+              return;
+            }
             cloudSetConn("offline", all.length > 1 ? "发现多个 relay，请重新领码" : "电脑端 relay 离线", all.length > 1 ? "pair" : "bridge");
             scheduleCloudReconnect(ctx);
             return;
@@ -2771,13 +2853,32 @@ function connectLan(ctx) {
             return;
           }
           if (peer && peer.relay_dev === pick.dev) {
-            // 已配对运行中吃 ROUTE_MISS 多为桥闪断竞态：relay 实际在线，重发 hello 恢复
+            ctx.genesisSeenAt = 0; // W-PAIRFIX：记忆身份回列表——换代观察钟清零
+            ctx.awayFails = 0; // R2-B3：缺席退避梯同刻复位（家回线即恢复敏捷重试）
             cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
             sendCloudHello(ctx); // #259 hello 收口（四号发出点）
             startCloudPing(ctx);
             return;
           }
-          // 在线 relay 与已配对身份不符 = relay 换代：更新记忆身份（仅内存，等用户重新领码）
+          // W-PAIRFIX：已配对态持续超观察窗才降级换代（窗内锚不动离线重试；同 index.html）
+          if (pairedAnchor) {
+            ctx.genesisSeenAt = ctx.genesisSeenAt || Date.now();
+            const graceMs = Number(window.__CCD_GENESIS_GRACE_MS) > 0 ? Number(window.__CCD_GENESIS_GRACE_MS) : 10 * 60_000;
+            if (Date.now() - ctx.genesisSeenAt < graceMs) {
+              cloudSetConn("offline", "relay 身份观察中·持续 " + Math.max(1, Math.round(graceMs / 60_000)) + " 分钟不变将提示重配", "bridge");
+              ctx.awayFails = Math.min((ctx.awayFails || 0) + 1, 6); // R2-B3：观察态同吃退避梯
+              scheduleCloudReconnect(ctx, Math.min(6_000 * 2 ** (ctx.awayFails - 1), 120_000));
+              return;
+            }
+          } else ctx.genesisSeenAt = 0;
+          // 超窗/裸态：R3-P1-F3 分叉（同 index.html 同构）——已配对超窗=假换代高危，
+          // 不覆写锚只提示输码重配（真换代经输码广播+pair_ack 落库自然换新）；裸态
+          // （新客户端）pick 采信=记忆身份建立合法写点，保留。
+          if (pairedAnchor) {
+            clearInterval(ctx.pairTimer);
+            cloudSetConn("offline", "relay 可能已换代·请输码重新配对", "unpaired");
+            return;
+          }
           cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: pick.dev, rk: pick.rk || BAKED_RELAY.rk, paired: false };
           clearInterval(ctx.pairTimer);
           cloudSetConn("offline", "未配对（relay 已换代）", "unpaired");
@@ -2838,6 +2939,7 @@ function connectLan(ctx) {
           setPendingPair(cfg.id, null);
           ctx.pendingPair = null;
           ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #258 成功即清：配对退避归零，下次配对满速（看门狗 tick 路径之外补齐——ack 到达即清 timer，tick 不再跑）
+          ctx.genesisSeenAt = 0; ctx.awayFails = 0; // R2-P2-2（A 审）：配对成功清观察钟+缺席梯——防陈钟在首个 RELAYS 秒降级打掉新配对
           cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接");
           showToast("配对成功");
           sendCloudHello(ctx); // #259：配对完成即 hello + 看门狗——ack 到 hello 之间通道死/POST 被吞不再静默
@@ -3125,9 +3227,13 @@ function connectLan(ctx) {
         const cfg = cloudCtx.cfg;
         const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
         // rd/rk 只要有就优先（发现帧刷新的新鲜身份 paired=false 也要用），烘焙值仅兜底
-        const src = c.rd && c.rk ? { rd: c.rd, rk: c.rk } : BAKED_RELAY;
-        if (!src.rd || !src.rk) { showToast("缺少 relay 信息，请使用配对链接"); return; }
-        const pair = { rd: src.rd, rk: src.rk, pc: code };
+        // R2-P1-B2（B 审攻点2）：持码者优先——中毒残留（paired=false ∧ rd≠BAKED）时锚指向
+        // 的是陌生者，单播 pair_req 只会发给它（用户实锤「relay 全程 0 请求」）；改广播态
+        // （rd 空串）凭码找持码者，onopen 预取发现帧补 cands 供 ack 试解
+        const suspectSubmit = !!(c && !c.paired && c.rd && c.rd !== BAKED_RELAY.rd);
+        const src = !suspectSubmit && c.rd && c.rk ? { rd: c.rd, rk: c.rk } : (suspectSubmit ? { rd: "", rk: "" } : BAKED_RELAY);
+        if (!suspectSubmit && (!src.rd || !src.rk)) { showToast("缺少 relay 信息，请使用配对链接"); return; }
+        const pair = suspectSubmit ? { rd: "", rk: "", pc: code, bc: true } : { rd: src.rd, rk: src.rk, pc: code };
         setPendingPair(cfg.id, pair);
         cloudCtx.pendingPair = pair;
         cloudCtx.pairNextAt = 0; cloudCtx.pairBackoffMs = 0; // 手动输码=用户意图：清配对退避满速

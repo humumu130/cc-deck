@@ -14317,15 +14317,25 @@ function appendLine(path6, env) {
   mkdirSync3(dirname(path6), { recursive: true });
   writeFileSync3(path6, JSON.stringify(env) + "\n", { flag: "a" });
 }
-function markManagedRebootInterrupted(rs2, interruptedStatus) {
+function rebootAutoResumable(st2) {
+  if (st2.external) return false;
+  if (!st2.relay_session_id) return false;
+  if (st2.engine === "codex") return false;
+  if (st2.org_parked) return false;
+  if (st2.pinned && st2.saved) return false;
+  if (typeof st2.updated_at === "number" && st2.updated_at > 0 && Date.now() - st2.updated_at > 48 * 36e5) return false;
+  return true;
+}
+function markManagedRebootInterrupted(rs2, interruptedStatus, autoResumable) {
   rs2.state.status = "DONE";
   rs2.state.done_reason = "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD";
   rs2.state.historical = true;
-  if (interruptedStatus === "WORKING") rs2.state.pre_reboot_status = "WORKING";
+  const willAutoResume = interruptedStatus === "WORKING" && autoResumable;
+  if (willAutoResume) rs2.state.pre_reboot_status = "WORKING";
   rs2.logs.push({
     ts: Date.now(),
     kind: "system",
-    text: interruptedStatus === "WORKING" ? "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD \xB7 \u68C0\u6D4B\u5230\u8FDB\u884C\u4E2D\u4EFB\u52A1\uFF0C\u5C06\u81EA\u52A8\u7EED\u8DD1" : "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD \xB7 \u53D1\u9001\u6D88\u606F\u5373\u53EF\u7EE7\u7EED"
+    text: willAutoResume ? "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD \xB7 \u68C0\u6D4B\u5230\u8FDB\u884C\u4E2D\u4EFB\u52A1\uFF0C\u5C06\u81EA\u52A8\u7EED\u8DD1" : "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD \xB7 \u53D1\u9001\u6D88\u606F\u5373\u53EF\u7EE7\u7EED"
   });
 }
 function reduceHistory(events) {
@@ -14398,6 +14408,7 @@ function reduceHistory(events) {
           s.pre_compact_summary = p.pre_compact_summary;
         }
         if (p.relay_session_id) s.relay_session_id = p.relay_session_id;
+        if (p.external === true) s.external = true;
         if (p.permission_mode) s.permission_mode = p.permission_mode;
         {
           const cp2 = p.cli_pid;
@@ -14488,7 +14499,7 @@ function reduceHistory(events) {
           rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u670D\u52A1\u66F4\u65B0\u91CD\u542F \xB7 \u53D1\u9001\u6D88\u606F\u5373\u53EF\u7EE7\u7EED" });
         }
       } else if (rs2.state.relay_session_id) {
-        markManagedRebootInterrupted(rs2, rs2.state.status);
+        markManagedRebootInterrupted(rs2, rs2.state.status, rebootAutoResumable(rs2.state));
       } else {
         rs2.state.status = "ERROR";
         rs2.state.last_error = "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD";
@@ -63415,6 +63426,11 @@ ${out}`;
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical,
+      // [W-REBOOTTXT R2-P1-B]（1103 双审 B 处方）：external 随增量帧显式携带布尔——重放面
+      // （history.ts UPDATED 消费 external===true）自此真生效：收养型外部会话（CREATED
+      // 缺 external 的坏帧存量）靠后续 UPDATED 帧还原身份，中断分类不再空诺「将自动续跑」。
+      // 消费侧只认 true 不翻 false（external 是身份不是状态）；恒带布尔=帧形态完整
+      external: !!s.state.external,
       // #157 载荷显式带 updated_at：客户端最后活跃时间以它为准（水合帧 ≠ 活动帧，
       // 信 envelope ts 会把重启时刻误当活动时刻）；旧客户端忽略此字段不受影响
       updated_at: s.state.updated_at,
