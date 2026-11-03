@@ -530,11 +530,17 @@ async function main() {
     assert(readDispatchLog().some((e) => e.id === "dsp-fall-x" && e.status === "done" && (e.receipt ?? "").endsWith("stopped")), "流关闭兜底收口 done（task_ref 头 tolerated）");
     assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "兜底收口同样不写熟手账");
 
-    // d) 结项编制解散（§2.2）：eps 零悬账零未完 → 一句话归档 + 成员归属解除 +
-    //    路由表档案永存 + 编制快照留组内
+    // d) 结项编制解散（§2.2）：eps 零悬账但板有交付待审卡（boardlife 04275fe3 起 done
+    //    收口翻卡走 R2 内核落 submitted 审查中，收割才 done）→ 归档命中 #26 M2 结项
+    //    核对闸（openBoardEntries=非 done 计数>0）出确认卡，裁决 ✓ 知情放行后归档 +
+    //    成员归属解除 + 路由表档案永存 + 编制快照留组内。零未完一句话路径由 theta
+    //    归档锚（下方「theta 一句话归档」）继续覆盖——本段跟形即防「为绿而绿」：
+    //    核对闸与审查态语义全保留，只改断言到新语义的合法出口。
     const hcE_before = (listGroups().find((g) => g.id === gidE)?.headcount ?? []).length;
-    const az = mgr.orgAction("project-status", { id: gidE, to: "archived" }) as { ok: boolean; data?: { archived?: boolean } };
-    assert(az.ok === true && az.data?.archived === true, "eps 一句话归档");
+    const az = mgr.orgAction("project-status", { id: gidE, to: "archived" }) as { ok: boolean; data?: { archived?: boolean; needsConfirm?: boolean; confirm?: { id: string }; checklist?: { openBoardEntries?: number } } };
+    assert(az.ok === true && az.data?.needsConfirm === true && (az.data?.checklist?.openBoardEntries ?? 0) > 0, "eps 板有审查中卡 → 归档走结项确认卡（boardlife 交付→submitted，核对闸非零未完不放行）");
+    mgr.orgAction("confirm-decide", { confirm_id: az.data?.confirm?.id ?? "", approve: true, by: "u" });
+    assert(listGroups().find((g) => g.id === gidE)?.status === "archived", "eps 裁决 ✓ 知情放行后归档（一句话零未完路径=theta 锚）");
     assert(hack.sessions.get(wE3)?.state.project_gid === undefined, "编制解散：成员 project_gid 清空");
     assert(hack.sessions.get(wE3)?.state.done_reason === "项目组结项（编制解散）", "解散收口 done_reason 写实");
     assert(routingFor(gidE).length > 0 && (routingFor(gidE).find((x) => x.session_id === wE3)?.count ?? 0) === 2, "路由表档案永存（结项后历史可查）");
@@ -709,7 +715,12 @@ async function main() {
     assert(listGroups().find((g) => g.id === gidSt)?.tier === "轻立项", "陈旧卡复核：结项组档位不动（决议口守卫）");
 
     // b) recover_abandon：杀树等待窗口内组被挂起收口 → 看门狗放弃恢复（不起死回生）
-    mgr.orgAction("project-status", { id: gidD, to: "archived" }); // 腾名额（delta/oldwork 已无悬账未完）
+    // boardlife 跟形：delta 有历史派单 → done 收口卡落 submitted 待审，旧前提「已无
+    // 悬账未完」随审查态语义失效 → 归档命中结项核对闸出确认卡，点头放行才真腾名额
+    //（不点头=组滞留 active，名额不释放，下游 phi 立项撞 5 组护栏——本行即 10 连挂
+    // 之根的二段）。oldwork 无派单史板净，仍一句话。
+    const azD = mgr.orgAction("project-status", { id: gidD, to: "archived" }) as { ok: boolean; data?: { needsConfirm?: boolean; confirm?: { id: string } } };
+    if (azD.data?.needsConfirm) mgr.orgAction("confirm-decide", { confirm_id: azD.data.confirm.id, approve: true, by: "u" });
     mgr.orgAction("project-status", { id: gidO2, to: "archived" });
     const cRc = mgr.orgAction("project-create", { name: "rho", anchor: join(DATA, "proj-rc"), tier: "轻立项" });
     const gidRc = listGroups().find((g) => g.name === "rho")?.id ?? "";
