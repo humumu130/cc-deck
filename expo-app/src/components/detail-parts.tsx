@@ -273,7 +273,8 @@ export function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef
         </Pressable>
       );
     }
-    // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
+    // #149 长消息折叠：3 行 + tail 省略号，展开即全文（用户消息面维持折叠；assistant_text
+    // 已按 1103 用户令改恒展开——W-EXPOFOLD，两边界有意分立）；
     // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
     // W-MSGFIX（1016 实锤 20/29 字也显「展开全文」）：relay 对所有 user_message 都带
     // full（text=截断版/full=全文）——!!e.full 恒真=假折叠。改为「full 比 text 长才折叠」
@@ -324,16 +325,15 @@ export function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef
     );
   }
   if (e.kind === "assistant_text") {
+    // W-EXPOFOLD（1103 用户令，与 web cf661d21 同口径）：AI 消息零折叠全展开——恒渲
+    // full（缺 full 回落 text；summarizer 契约：未截断 ⇔ text 即全文，回落等价），
+    // 「展开全文」二段式退役（open 态残留恒无效，无害兼容旧会话）。工具面/思考过程/
+    // 用户消息折叠不在此口径内（web 面同边界）。
     return (
       <View style={d.trMsg}>
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
-        <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
+        <MdText src={e.full ?? e.text} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
         {cursor}
-        {e.full && e.full.length > e.text.length ? ( /* W-MSGFIX：同 user_message——未截断（text==full）不显展开钮 */
-          <Pressable onPress={onToggle} hitSlop={6}>
-            <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full.length} 字 ▾`}</Text>
-          </Pressable>
-        ) : null}
       </View>
     );
   }

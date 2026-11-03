@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "wrangler": "^4.128.0"
   },
@@ -36,7 +37,7 @@
     "web": "expo start --web",
     "deploy": "npx expo export -p web && wrangler deploy",
     "preview": "npx expo export -p web && wrangler dev",
-    "test:wave1": "node --import tsx/dist/loader.mjs scripts/test-wave1.ts"
+    "test:wave1": "node --import tsx scripts/test-wave1.ts"
   },
   "private": true
 }
