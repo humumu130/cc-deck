@@ -2842,11 +2842,13 @@
                     const avaSrcRaw = String((s && (s.relay_source || S.relayName)) || "");
                     // W-AVABG R2（审查 P2 修）：哈希输入对齐列表 item.source 口径=esc(显示名)——源名含 &<>"' 时与列表同源同色
                     const aiAvaColor = { claude: "var(--engine-claude)", glm: "var(--engine-glm)", codex: "var(--engine-codex)", trae: "var(--engine-trae)", qwen: "var(--engine-qwen)", codebuddy: "var(--engine-codebuddy)", zcode: "var(--engine-zcode)" }[eng[1]] || b2SourceColor(esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(avaSrcRaw) : avaSrcRaw));
-                    const full = e.full ? String(e.full) : "";
+                    // W-NOFOLD（1103 用户令）：AI 消息零折叠全展开——恒渲 e.full（缺 full 回落 text），
+                    // x-full「展开全文」钮退役；expanded 键若残留指向 AI 条目恒无效（无害兼容旧会话）。
+                    // 桌面/手机同一渲染路径（本函数），手机壳借道 b2Api.entryHtml 同步生效。
+                    // 工具面（trow/detail/diff）与用户消息 clamp（.ub.clamp 100 字 3 行）不在本批面
                     return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
-                      mdHtml(open ? String(e.full ?? e.text ?? "") : String(e.text ?? "")) +
+                      mdHtml(String(e.full ?? e.text ?? "")) +
                       (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") +
-                      (full ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + full.length + " 字 ▾") + "</span>" : "") +
                       "</div></div>";
                   }
                   if (role === "ai-think") {

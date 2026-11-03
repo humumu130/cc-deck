@@ -989,8 +989,20 @@
        footer padding = (100%-900)/2 = 22 + (宽-44-900)/2，恒等（百分比参照同一 containing block）。
        源序：两规则均排 :646/:651 存量之后（#d-session .workspace-footer 同特异度靠源序压制）。
        team 域（.team-conversation-pane 自带 720px 阅读列体系）本批不动。 */
-    .conversation-pane { max-width: 900px; margin-left: auto; margin-right: auto; }
-    #d-session .workspace-footer { padding-left: max(22px, calc((100% - 900px) / 2)); padding-right: max(22px, calc((100% - 900px) / 2)); }
+    /* 居中 v2（用户 1103 装机实锤两件）：列宽 900→max(900px, min(1180px, 68vw))——
+       1180 对齐 WorkBuffy 参考形态（≈窗宽 50% 阅读列：2560 窗≈1200px+），68vw 中窗档
+       （1324~1735 视窗）按比例过渡，max(900px,·) 外壳保证任何窗 ≥900 列=窄窗零回归
+       （构造性退化沿用：中窗加宽、窄窗贴现状 900 满宽，无断点连续）。
+       v2-2 状态栏/审批卡入列（centercol 反方 P2-2 预警用户确认收）：dock 与 agbox 与
+       footer 同为 #d-session 域满宽容器——同表达式 padding calc 入列，地板分别取各自
+       现状值（dock 16px / agbox 20px / footer 22px）窄窗贴现状。对齐数学：pane 左缘 =
+       workspace 列内 auto margin 居中；三容器 padding = calc((100% - COL)/2)，COL 四处
+       同一表达式（vw 处处=视口宽，100% 各容器=同一 workspace 列宽）恒等 ΔL=0；
+       窄窗（列宽 < COL）calc 为负被 max() 地板回收=各容器现状 padding。 */
+    .conversation-pane { max-width: max(900px, min(1180px, 68vw)); margin-left: auto; margin-right: auto; }
+    #d-session .workspace-footer { padding-left: max(22px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); padding-right: max(22px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); }
+    #d-session .session-state-dock { padding-left: max(16px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); padding-right: max(16px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); }
+    #d-session .agbox { padding-left: max(20px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); padding-right: max(20px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); }
     .msg-user-row .bubble.me { margin-bottom: 0; }
     /* #201 VISFIX③b：己方气泡右侧尖角（WorkBuddy 同款小三角，色随气泡底） */
     .bubble.me::after { content: ""; position: absolute; top: 10px; right: -5px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid var(--bubble-me-bg); }
@@ -1036,7 +1048,8 @@
     .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; margin-top: 5px; }
     .x-full:hover { text-decoration: underline; }
     .bubble.me .x-full { display: block; text-align: right; margin: 5px 2px 0 0; }
-    .message-body .x-full { margin: 7px 0 0 2px; }
+    /* W-NOFOLD：.message-body .x-full（AI 面钮专属边距）随 AI 展开钮退役移除——用户气泡
+       （上方）与工具面（.tline 内）x-full 消费面继续走 .x-full 通用规则 */
     /* 轻量 Markdown（旧壳 md-* 体系贴 005 token；assistant 正文无卡片直接排版） */
     .message-body .md-p, .th-body .md-p { white-space: pre-wrap; margin: 9px 0; }
     .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 15px 0 6px; }
@@ -2273,7 +2286,7 @@
     #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
     /* B2 批2 A#bg-live：r2 走秒行 warn 呼吸点 + ⑂N tag（task-ref chip 形制；bgCount>0 恒显，含 WORKING 态） */
     #d-session .srow-live-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
-    #d-session .srow-r2 .tag.bg-live-tag { flex: none; padding: 0 5px; font-size: 10px; line-height: 14px; font-weight: 600; border-color: transparent; border-color: color-mix(in srgb, var(--working) 45%, transparent); background: transparent; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); } /* W-FB66D ⑬：子 Agent 计数 chip 缩小不撑 r2 行——盒高 16px（14 行高+1px 边×2）==r2 行高 16px（旧 10.5 字号+1px 6px pad≈19px 撑行）；⑂与数字随字号同缩 */
+    #d-session .srow-r2 .tag.bg-live-tag { flex: none; padding: 0 4px; font-size: 10px; line-height: 14px; font-weight: 400; border-color: transparent; border-color: color-mix(in srgb, var(--working) 28%, transparent); background: transparent; background: color-mix(in srgb, var(--working) 8%, transparent); color: color-mix(in srgb, var(--working) 82%, var(--dim)); } /* W-FB66D ⑬：子 Agent 计数 chip 缩小不撑 r2 行——盒高 16px（14 行高+1px 边×2）==r2 行高 16px（旧 10.5 字号+1px 6px pad≈19px 撑行）；⑂与数字随字号同缩。bgtag（1103 用户实锤「过大」）：CDP 定罪=物理已小于兄弟 tag（10/16px vs 11/24px），「大」=视觉重量三重叠加（字重 600 vs 兄弟 400 / 橙系高对比 vs 灰 / 前置呼吸绿点）——weight 400 对齐兄弟+底 12→8%+描边 45→28%+字色掺 dim 18%（活体语义由绿点呼吸承载，tag 本体退为辅助信息不抢层级） */
     /* r3 徽章行：footnote 级（用户直馈二次微调：高度再降一档——字号/行高/徽章 padding
        整体压缩，比摘要行明显更小更淡）；三徽全空整行不渲染（高度自适应不虚胖） */
     #d-session .srow-r3 { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; color: var(--faint); font-size: var(--srow-badge-size); line-height: calc(12px * var(--ui-scale)); }

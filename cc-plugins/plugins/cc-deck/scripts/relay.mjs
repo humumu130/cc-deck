@@ -65504,6 +65504,9 @@ var Bridge = class _Bridge {
     this.noPidNote.delete(id2);
     this.resumeSpawns.delete(id2);
     this.orphanProbe.delete(id2);
+    this.deadSweepAt.delete(id2);
+    this.resumeAnnouncedAt.delete(id2);
+    this.deadGrowNoteAt.delete(id2);
     const rc2 = this.resumeClosures.get(id2);
     if (rc2) {
       clearTimeout(rc2);
@@ -65605,6 +65608,12 @@ var Bridge = class _Bridge {
   injectFailNoted = /* @__PURE__ */ new Map();
   // W-INJECT：无 pid 滞留提示一次性标记（防每轮 flush 刷屏；pid 重定位即清）
   noPidNote = /* @__PURE__ */ new Set();
+  // cliflap（1103 P0）：乒乓防抖双账——deadGrowNoteAt=陈旧 pid 守卫留痕节流（审计
+  // 不刷屏）；deadSweepAt=退出报时刻（5min 滞回带：真死只报一次）；resumeAnnouncedAt
+  // =恢复播报时刻（5min 限频：状态照翻播报不重复）
+  deadGrowNoteAt = /* @__PURE__ */ new Map();
+  deadSweepAt = /* @__PURE__ */ new Map();
+  resumeAnnouncedAt = /* @__PURE__ */ new Map();
   // W-INJECT：given_up 后的宽限期失败判定定时器（给最后一次补发回车留晋升窗口）
   stuckFailTimers = /* @__PURE__ */ new Map();
   // W-INJECT：粘贴后立即提交——注入成功后的补发回车定时器（ integrated Return 被
@@ -66369,10 +66378,16 @@ var Bridge = class _Bridge {
       const st2 = cliSessionStatus(s.cli_pid);
       if (!st2 && now - (this.lastGrow.get(s.session_id) ?? 0) > 3e4) continue;
       try {
-        if (st2 === "busy" || st2 !== "idle" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 3e4) {
+        const busyFresh = st2 === "busy" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 3e5;
+        if (busyFresh || st2 !== "idle" && st2 !== "busy" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 3e4) {
           if (s.status !== "WORKING") {
             this.mgr.setExternalStatus(s.session_id, "WORKING", st2 === "busy" ? s.action_summary || "CLI \u8FD0\u884C\u4E2D" : "\u8F6C\u5F55\u589E\u957F\u4E2D\uFF08\u8FDB\u7A0B\u8FD0\u884C\uFF09");
-            this.mgr.pushExternalLog(s.session_id, "system", st2 === "busy" ? "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u72B6\u6001\u6587\u4EF6\uFF09" : "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u8F6C\u5F55\u589E\u957F\u5224\u5B9A\uFF09");
+            const lastResume = this.resumeAnnouncedAt.get(s.session_id) ?? 0;
+            if (now - lastResume > 3e5) {
+              if (this.resumeAnnouncedAt.size > 200) this.resumeAnnouncedAt.clear();
+              this.resumeAnnouncedAt.set(s.session_id, now);
+              this.mgr.pushExternalLog(s.session_id, "system", st2 === "busy" ? "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u72B6\u6001\u6587\u4EF6\uFF09" : "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u8F6C\u5F55\u589E\u957F\u5224\u5B9A\uFF09");
+            }
           }
         } else if (st2 === "idle") {
           const quiet = now - Math.max(
@@ -66548,6 +66563,23 @@ var Bridge = class _Bridge {
         s.updated_at ?? 0
       );
       if (deadSweepOn && s.cli_pid && !cliHostAlive(s.cli_pid)) {
+        const growAt = this.lastGrow.get(id2) ?? 0;
+        if (growAt && now - growAt <= 3e5) {
+          const lastNote = this.deadGrowNoteAt.get(id2) ?? 0;
+          if (now - lastNote > 3e5) {
+            if (this.deadGrowNoteAt.size > 200) this.deadGrowNoteAt.clear();
+            this.deadGrowNoteAt.set(id2, now);
+            console.log(`[bridge] dead-sweep \u8DF3\u8FC7\uFF1Asid=${id2.slice(0, 12)} \u8F6C\u5F55 ${Math.round((now - growAt) / 1e3)}s \u524D\u4ECD\u5728\u589E\u957F\u800C pid \u67E5\u65E0\uFF08\u9648\u65E7 pid \u5224\u5B9A\u2014\u2014cliflap \u5B88\u536B\uFF09\uFF0C\u4F1A\u8BDD\u4FDD\u7559 WORKING`);
+          }
+          continue;
+        }
+        const lastDead = this.deadSweepAt.get(id2) ?? 0;
+        if (now - lastDead <= 3e5) {
+          continue;
+        }
+        if (this.deadSweepAt.size > 200) this.deadSweepAt.clear();
+        this.deadSweepAt.set(id2, now);
+        this.deadGrowNoteAt.delete(id2);
         const turn2 = this.turnStart.get(id2) ?? s.started_at;
         this.turnStart.delete(id2);
         this.mgr.finishExternal(id2, "disconnected", now - turn2, idleSince);
