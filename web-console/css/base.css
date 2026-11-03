@@ -1048,7 +1048,8 @@
     .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; margin-top: 5px; }
     .x-full:hover { text-decoration: underline; }
     .bubble.me .x-full { display: block; text-align: right; margin: 5px 2px 0 0; }
-    .message-body .x-full { margin: 7px 0 0 2px; }
+    /* W-NOFOLD：.message-body .x-full（AI 面钮专属边距）随 AI 展开钮退役移除——用户气泡
+       （上方）与工具面（.tline 内）x-full 消费面继续走 .x-full 通用规则 */
     /* 轻量 Markdown（旧壳 md-* 体系贴 005 token；assistant 正文无卡片直接排版） */
     .message-body .md-p, .th-body .md-p { white-space: pre-wrap; margin: 9px 0; }
     .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 15px 0 6px; }
