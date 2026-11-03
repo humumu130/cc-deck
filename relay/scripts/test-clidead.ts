@@ -253,6 +253,104 @@ const hookEnv = (home: string): NodeJS.ProcessEnv => {
   assert(a.equals(b), "T7 hook copies byte-identical");
 }
 
+// ============ cliflap（1103 用户实锤 P0）：乒乓穿透面——hook 失联形态 ============
+// #49（T1/T2/T4）修的是 hook 在报时的 pid 采纳链；本形态 hook 全失联（「未见主动
+// 结束上报」）——无新 pid 输入，s.cli_pid 停在陈旧值，deadSweep 判死↔转录增长（新
+// 进程真写）翻回，分钟级十数轮。三修：①转录增长守卫（实干不判退）②退出滞回带
+// （真死只报一次）③恢复播报限频（乒乓放大器）。
+
+// T8 修①：WORKING+死 pid+转录 5min 内增长 → sweep 不判退不报文（修前=刷屏源）
+{
+  const dead8 = await spawnDead();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t8", prompt: "cliflap 守卫", cli_pid: dead8 });
+  await wait(150);
+  assert(st("clidead-t8").status === "WORKING", "T8 starts WORKING");
+  // 模拟「新进程真在写转录」（pushAssistantTexts 增量链的记账位——测试直调等价）
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t8"), Date.now());
+  sweep();
+  assert(st("clidead-t8").status === "WORKING", "T8 转录增长中：sweep 不判退（陈旧 pid 守卫——实干会话零误报）");
+  assert(!alarmed("clidead-t8"), "T8 无「已退出」报文（刷屏源根除）");
+  // 增长停 5min 后（守卫过期）真死照报（守卫不是免死金牌）
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t8"), Date.now() - 301_000);
+  sweep();
+  assert(st("clidead-t8").done_reason === "disconnected", "T8 增长停+pid 死：照常 disconnected（守卫窗口有限）");
+  assert(alarmed("clidead-t8"), "T8 真死报文在场");
+}
+
+// T9 修②：退出滞回带——报过一次后带内二次到达不重报（乒乓收殓）
+{
+  const logsBefore = JSON.stringify(mgr.getExternalLogs(extId("clidead-t8"))).split("CLI 进程已退出").length - 1;
+  // 模拟 pollCliStatus 竞速翻回（残留增长）后再进 sweep：手动翻 WORKING+带内再 sweep
+  mgr.setExternalStatus(extId("clidead-t8"), "WORKING", "竞速翻回模拟");
+  sweep(); // deadSweepAt 带内（刚报过）
+  const logsAfter = JSON.stringify(mgr.getExternalLogs(extId("clidead-t8"))).split("CLI 进程已退出").length - 1;
+  assert(logsAfter === logsBefore, `T9 滞回带内不重报（前 ${logsBefore} 后 ${logsAfter}——真死只报一次）`);
+}
+
+// T10 修③：恢复播报限频——带内翻 WORKING 状态照翻、播报不重复
+{
+  const dead10 = await spawnDead();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t10", prompt: "恢复限频", cli_pid: dead10 });
+  await wait(150);
+  // 先推 DONE 形态（非 WORKING 才能 触发恢复分支）+增长新鲜
+  mgr.setExternalStatus(extId("clidead-t10"), "DONE", "先落");
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t10"), Date.now());
+  const poll = () => { process.env.CCR_DEAD_SWEEP = "1"; (bridge as unknown as { pollCliStatus(): void }).pollCliStatus(); process.env.CCR_DEAD_SWEEP = "0"; };
+  poll();
+  const first = JSON.stringify(mgr.getExternalLogs(extId("clidead-t10"))).split("CLI 状态恢复运行").length - 1;
+  assert(first === 1, `T10 首次恢复播报一条（实 ${first}）`);
+  // 竞速窗模拟：再落 DONE+带内再 poll → 状态翻 WORKING 但播报静默
+  mgr.setExternalStatus(extId("clidead-t10"), "DONE", "竞速再落");
+  (bridge as unknown as { cliStatusAt: Map<string, number> }).cliStatusAt.delete(extId("clidead-t10")); // 清 5s 轮询节流（测试两次 poll 毫秒间隔会被节流吞）
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t10"), Date.now());
+  poll();
+  const second = JSON.stringify(mgr.getExternalLogs(extId("clidead-t10"))).split("CLI 状态恢复运行").length - 1;
+  assert(second === 1, `T10 带内重复翻回零新播报（前 1 后 ${second}——乒乓放大器拆除）`);
+  assert(st("clidead-t10").status === "WORKING", `T10 状态照翻（真活必须 WORKING——限频只限播报不限状态）`);
+}
+
+// T11 cliflap R2-P2-1：busy 子句新鲜度——死 pid+busy 状态文件+lastGrow 过期 → 不翻回零播报
+//（修前=cliSessionStatus 裸读无新鲜度，真死会话被无条件翻 WORKING→滞回带满重报→5min 一对无限刷）
+{
+  const { homedir } = await import("node:os");
+  const dead11 = await spawnDead();
+  const busyFile = join(homedir(), ".claude", "sessions", `${dead11}.json`);
+  mkdirSync(join(homedir(), ".claude", "sessions"), { recursive: true });
+  writeFileSync(busyFile, JSON.stringify({ status: "busy" }), "utf-8"); // CLI mid-turn 被杀：文件卡 busy（无时钟无新鲜度）
+  sleepers.push({ kill: () => { try { rmSync(busyFile, { force: true }); } catch {} } });
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t11", prompt: "busy 新鲜度", cli_pid: dead11 });
+  await wait(150);
+  const poll11 = () => { process.env.CCR_DEAD_SWEEP = "1"; (bridge as unknown as { pollCliStatus(): void }).pollCliStatus(); process.env.CCR_DEAD_SWEEP = "0"; };
+  const countResume = () => JSON.stringify(mgr.getExternalLogs(extId("clidead-t11"))).split("CLI 状态恢复运行").length - 1;
+  // 面 A（修前刷屏形态）：DONE + busy 文件 + lastGrow 过期（301s 前）→ 不翻回零播报
+  mgr.setExternalStatus(extId("clidead-t11"), "DONE", "T11 先落");
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t11"), Date.now() - 301_000);
+  (bridge as unknown as { cliStatusAt: Map<string, number> }).cliStatusAt.delete(extId("clidead-t11"));
+  poll11();
+  assert(st("clidead-t11").status === "DONE", "T11 死 pid+busy 文件+lastGrow 过期：不翻回 WORKING（busy 子句受 300s 新鲜度约束——B 审攻点3）");
+  assert(countResume() === 0, `T11 陈旧 busy 零播报（实 ${countResume()}——对死进程假报「恢复运行（状态文件）」根除）`);
+  // 面 B（活形态不误伤）：DONE + busy 文件 + lastGrow 新鲜 → 照常翻回+播报一条
+  mgr.setExternalStatus(extId("clidead-t11"), "DONE", "T11 再落");
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t11"), Date.now());
+  (bridge as unknown as { cliStatusAt: Map<string, number> }).cliStatusAt.delete(extId("clidead-t11"));
+  poll11();
+  assert(st("clidead-t11").status === "WORKING", "T11 busy+转录新鲜：照常翻回 WORKING（真活必须翻——守卫不误伤）");
+  assert(countResume() === 1, `T11 新鲜 busy 播报恰一条（实 ${countResume()}）`);
+  rmSync(busyFile, { force: true });
+}
+
+// T11b cliflap R2-P2-2：forget 清三 Map（防乒乓防抖账无界涨）+set 位 cap 纪律
+{
+  const id = extId("clidead-t11");
+  const b = bridge as unknown as { deadSweepAt: Map<string, number>; resumeAnnouncedAt: Map<string, number>; deadGrowNoteAt: Map<string, number>; forget(id: string): void };
+  b.deadSweepAt.set(id, 1);
+  b.resumeAnnouncedAt.set(id, 1);
+  b.deadGrowNoteAt.set(id, 1);
+  assert(b.deadSweepAt.has(id) && b.resumeAnnouncedAt.has(id) && b.deadGrowNoteAt.has(id), "T11b 前置：三 Map 键在场");
+  b.forget(id);
+  assert(!b.deadSweepAt.has(id) && !b.resumeAnnouncedAt.has(id) && !b.deadGrowNoteAt.has(id), "T11b forget 后三 Map 无残留键（deadSweepAt/resumeAnnouncedAt/deadGrowNoteAt——B 审攻点4）");
+}
+
 cleanup();
 console.log("clidead: all ok");
 process.exit(0);

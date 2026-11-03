@@ -353,6 +353,9 @@ export class Bridge {
     this.noPidNote.delete(id);
     this.resumeSpawns.delete(id);
     this.orphanProbe.delete(id);
+    this.deadSweepAt.delete(id); // cliflap R2-P2-2（B 审攻点4）：乒乓防抖三账随会话清场（防 Map 无界涨）
+    this.resumeAnnouncedAt.delete(id);
+    this.deadGrowNoteAt.delete(id);
     const rc = this.resumeClosures.get(id);
     if (rc) { clearTimeout(rc); this.resumeClosures.delete(id); }
     const vt = this.verifyTimers.get(id);
@@ -436,6 +439,12 @@ export class Bridge {
   private injectFailNoted = new Map<string, string>();
   // W-INJECT：无 pid 滞留提示一次性标记（防每轮 flush 刷屏；pid 重定位即清）
   private noPidNote = new Set<string>();
+  // cliflap（1103 P0）：乒乓防抖双账——deadGrowNoteAt=陈旧 pid 守卫留痕节流（审计
+  // 不刷屏）；deadSweepAt=退出报时刻（5min 滞回带：真死只报一次）；resumeAnnouncedAt
+  // =恢复播报时刻（5min 限频：状态照翻播报不重复）
+  private deadGrowNoteAt = new Map<string, number>();
+  private deadSweepAt = new Map<string, number>();
+  private resumeAnnouncedAt = new Map<string, number>();
   // W-INJECT：given_up 后的宽限期失败判定定时器（给最后一次补发回车留晋升窗口）
   private stuckFailTimers = new Map<string, NodeJS.Timeout>();
   // W-INJECT：粘贴后立即提交——注入成功后的补发回车定时器（ integrated Return 被
@@ -1374,10 +1383,24 @@ export class Bridge {
         //（老 CLI 不写/恢复进程路径漂移/存量会话 hook 死链的环境层修复不热载）恒
         // null/盲，单源下「转录在长+进程活」的 external 会话永不翻活（生产 pm 案：
         // 活进程+帧在打恒 DONE）。转录 30s 内增长=活跃铁证，与状态文件 busy 等价
-        if (st === "busy" || (st !== "idle" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 30_000)) {
+        // cliflap R2-P2-1（B 审攻点3）：busy 子句同受新鲜度约束——cliSessionStatus 裸读
+        // ~/.claude/sessions/<pid>.json 无新鲜度校验，CLI mid-turn 被杀文件卡 busy→真死
+        // 会话被无条件翻回 WORKING→滞回带满重报→稳态每 5min 一对消息无限循环（含对死
+        // 进程假播报「恢复运行（状态文件）」）。与实干守卫同窗 300s：busy 文件只在转录
+        // 近期真长过的会话上可信（状态文件可能陈旧无时钟，转录增长账是唯一带时钟证据）。
+        const busyFresh = st === "busy" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 300_000;
+        if (busyFresh || (st !== "idle" && st !== "busy" && now - (this.lastGrow.get(s.session_id) ?? 0) <= 30_000)) {
           if (s.status !== "WORKING") {
             this.mgr.setExternalStatus(s.session_id, "WORKING", st === "busy" ? (s.action_summary || "CLI 运行中") : "转录增长中（进程运行）");
-            this.mgr.pushExternalLog(s.session_id, "system", st === "busy" ? "CLI 状态恢复运行（状态文件）" : "CLI 状态恢复运行（转录增长判定）");
+            // cliflap 根修③：恢复播报限频——乒乓放大器面。状态照翻（真活必须翻），
+            // 但 system 播报 5min 带内只发一次：旧形态 deadSweep 误报→翻回→再误报
+            // 每轮两条刷屏（1103 实锤分钟级十数轮）；带内重复翻回静默处理。
+            const lastResume = this.resumeAnnouncedAt.get(s.session_id) ?? 0;
+            if (now - lastResume > 300_000) {
+              if (this.resumeAnnouncedAt.size > 200) this.resumeAnnouncedAt.clear(); // R2-P2-2：会话量上限兜底（lastGrow/lastHookAt 同纪律）
+              this.resumeAnnouncedAt.set(s.session_id, now);
+              this.mgr.pushExternalLog(s.session_id, "system", st === "busy" ? "CLI 状态恢复运行（状态文件）" : "CLI 状态恢复运行（转录增长判定）");
+            }
           }
         } else if (st === "idle") {
           // #276②（决定性线索③断点）：quiet 分母加卡既有 updated_at 做基线锚——
@@ -1575,6 +1598,30 @@ export class Bridge {
       // 推新，纯静默判定对僵尸会话失效——#114 遗留面）。卡片保留（done_reason=
       // disconnected），客户端发消息可触发服务端 claude --resume 恢复。
       if (deadSweepOn && s.cli_pid && !cliHostAlive(s.cli_pid)) {
+        // cliflap（1103 用户实锤 P0·乒乓根修①）：实干守卫——转录 5min 内增长=有进程
+        // 正在写文件，「pid 查无」必是陈旧 pid（CLI 换代后 hook 失联未重定位 cli_pid：
+        // resume 新窗口新进程，旧 pid 死但转录链真活）。信号冲突时转录增长是更硬的
+        // 活体证据：跳过判退（会话照常走静默窗判定），仅首拍留痕审计防陈 pid 静默漂移。
+        const growAt = this.lastGrow.get(id) ?? 0;
+        if (growAt && now - growAt <= 300_000) {
+          const lastNote = this.deadGrowNoteAt.get(id) ?? 0;
+          if (now - lastNote > 300_000) {
+            if (this.deadGrowNoteAt.size > 200) this.deadGrowNoteAt.clear(); // R2-P2-2：会话量上限兜底（lastGrow 同纪律）
+            this.deadGrowNoteAt.set(id, now);
+            console.log(`[bridge] dead-sweep 跳过：sid=${id.slice(0, 12)} 转录 ${Math.round((now - growAt) / 1000)}s 前仍在增长而 pid 查无（陈旧 pid 判定——cliflap 守卫），会话保留 WORKING`);
+          }
+          continue;
+        }
+        // cliflap 根修②：退出滞回带——真死只报一次。状态翻 disconnected 后本循环
+        // 不再进（仅扫 WORKING），但 pollCliStatus 可能翻回（残留增长/竞速窗）——带内
+        // 二次到达不重报不重翻，安静收殓。
+        const lastDead = this.deadSweepAt.get(id) ?? 0;
+        if (now - lastDead <= 300_000) {
+          continue; // 滞回带内：不重复报「已退出」（真死报一次即够——用户口径）
+        }
+        if (this.deadSweepAt.size > 200) this.deadSweepAt.clear(); // R2-P2-2：会话量上限兜底（lastGrow 同纪律）
+        this.deadSweepAt.set(id, now);
+        this.deadGrowNoteAt.delete(id);
         const turn = this.turnStart.get(id) ?? s.started_at;
         this.turnStart.delete(id);
         this.mgr.finishExternal(id, "disconnected", now - turn, idleSince);
