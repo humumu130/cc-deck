@@ -15,7 +15,7 @@ import { statfsSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSyn
 import { join } from "node:path";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
-import { listGroups, loadBoardFile, upsertBoardEntry } from "./projects.js";
+import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
 import { readDispatchLog, orgDir } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import type { SessionManager } from "./session-manager.js";
@@ -154,6 +154,25 @@ export class PatrolModule {
   runFull(): void {
     if (!this.opts.enabled()) return;
     const now = Date.now();
+    // boardfix 刀3（1103 板面说谎）：台账→看板收敛扫从 boot-only 升周期自愈——
+    // runFull 30min 一拍（boot 既有调用保留）；72h 强翻分支（刀2）在此路径生效，
+    // 长跑 relay 不重启也能翻正陈卡。
+    // boardfix R3：①强翻两道人工豁免（hold/人工重开）命中计 skipped，通知改述明示
+    // 「跳过 N 张疑似人工在管」（不静默不谎报——豁免已根治「碾人后静默」，skip 文案
+    // 同文去重属信息不重复推送，人机打架面已不存在）②强翻命中经回调发 board-force-close
+    // 审计（converge 自由函数无 this，mgr.emitChainAudit R3 转公）③catch 补 warn 与
+    // boot 侧口径对齐（长期抛错不再无感）。
+    try {
+      const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.mgr.emitChainAudit(action, detail));
+      if (converged.moved > 0 || converged.skipped > 0) {
+        const parts: string[] = [];
+        if (converged.moved > 0) parts.push(`翻正 ${converged.moved} 张陈卡（backlog+台账 done>72h 断链残留）`);
+        if (converged.skipped > 0) parts.push(`跳过 ${converged.skipped} 张疑似人工在管（hold 锁/人工重开豁免）`);
+        this.push("board-converge", `台账→看板收敛：${parts.join("，")}`);
+      }
+    } catch (e) {
+      console.warn(`[patrol] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
+    }
     // ① worker 帧新鲜度：WORKING 且静默 >40min（压缩期静默合法，排除）
     // #199 B3：盲面双补——①WAITING 久滞（等用户确认超 2h=疑似确认卡丢失/没人管，与
     // WORKING 停滞分列报告）②compacting 挂死（压缩标志 >90min 不落=看门狗状态机卡死，

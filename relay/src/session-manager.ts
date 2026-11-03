@@ -1137,7 +1137,7 @@ export class SessionManager {
   // waiting=request_id、dispatch 无 revision（一单一行）
   // #92 W-NOTIFY2 E：派发/回执链三类动作（唤醒/重路由/升级）统一入 events.ndjson 审计——
   // emit 落盘帧（非 transient），事后可在事件流按 NOTIFY_CHAIN_AUDIT 全量检索归因
-  private emitChainAudit(action: ChainAuditAction, detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autocloose=对账自动搬卡收敛；X0 件6：pm-claim；X1：xmsg 六词=跨机消息收发/拒/注入/回执/首联（§4.4 域内-审计）；W-ORG-DEFECTS：词表收敛 types.ts CHAIN_AUDIT_ACTIONS（+六新词 harvest-violation/worktree-busy/hold-overtime/hold-release/zombie-retire/receipt-drop） */
+  emitChainAudit(action: ChainAuditAction, detail: string, target?: string): void { /* #205：gate-release；W-SMIMPL ③：transition-illegal；#263：recon-autocloose=对账自动搬卡收敛；X0 件6：pm-claim；X1：xmsg 六词=跨机消息收发/拒/注入/回执/首联（§4.4 域内-审计）；W-ORG-DEFECTS：词表收敛 types.ts CHAIN_AUDIT_ACTIONS（+六新词 harvest-violation/worktree-busy/hold-overtime/hold-release/zombie-retire/receipt-drop）；boardfix R3：private→public（patrol 收敛扫经回调发 board-force-close 审计——converge 为 projects.ts 自由函数无 this 通道） */
     try {
       this.bus.emit(target ?? "system", "NOTIFY_CHAIN_AUDIT", { action, detail, ts: Date.now() });
       this.chainAuditMirror(action, detail); /* #199 C：镜像队列文件（KV 批量同步现成队列） */
@@ -1332,10 +1332,12 @@ export class SessionManager {
    * 零搬动零审计（防 turn-report/patrol 双触发轮询刷屏）。 */
   private reconAutoCloseStaleCards(trigger: string, now: number): void {
     const led = new Map<string, "done" | "failed">();
+    const ledAt = new Map<string, number>(); // boardfix R3 补（双审 B-P1①）：终态行 ts——backlog 人工重开守护判据
     for (const e of readDispatchLog()) {
       if (e.status !== "done" && e.status !== "failed") continue;
       if (now - e.ts < 3_600_000) continue; // 1h 缓冲窗（防收口在途）
       led.set(e.id, e.status);
+      ledAt.set(e.id, Number(e.ts) || 0);
     }
     if (!led.size) return;
     let movedDone = 0, movedBacklog = 0, frozenSkipped = 0;
@@ -1348,6 +1350,12 @@ export class SessionManager {
         if ((x.status !== "claimed" && x.status !== "backlog") || !x.dispatch_id) return [];
         const led2 = led.get(x.dispatch_id);
         if (!led2) return [];
+        // boardfix R3 补（双审 B-P1①）：backlog 卡的人工重开守护——终态行 ts 之后又有
+        // backlog 迁移行=人工退回重做（刀1 接卡合法前置），recon 不得在 30-90min 窗内碾
+        // 回 done（判据与 converge 强翻豁免①同款零 ε 口径；程序性刷文本不产生 backlog
+        // 迁移行，误挡面零）。claimed 卡不适用：#263 的 22 卡实锤正是 claimed 停滞形态，
+        // 时间线判据无意义，维持原语义。
+        if (x.status === "backlog" && (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id!) || 0))) return [];
         const to = led2 === "done" ? "done" : "backlog"; // failed→backlog 保留卡（不吞——重派/换人/放弃是 failed 单的对账决策面）
         return to === x.status ? [] : [{ dispatch_id: x.dispatch_id, to, text: x.text }];
       });
@@ -4212,8 +4220,10 @@ export class SessionManager {
     // 中断单退回 backlog 的历史断点残留（10-11 时代收割卡）在此归位 done；口径与防碾见
     // convergeBoardsWithDispatchLog 注释。失败自吞不阻断启动（收敛是清扫非关键路径）
     try {
-      const converged = convergeBoardsWithDispatchLog();
-      if (converged) console.log(`[projects] 板收敛：${converged} 张已收口卡归 done 泳道`);
+      // boardfix R3：返回 { moved, skipped }（豁免计数明示）+强翻审计回调（与 patrol 同口径）
+      const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.emitChainAudit(action, detail));
+      if (converged.moved) console.log(`[projects] 板收敛：${converged.moved} 张已收口卡归 done 泳道`);
+      if (converged.skipped) console.log(`[projects] 板收敛：跳过 ${converged.skipped} 张疑似人工在管（hold 锁/人工重开豁免）`);
     } catch (e) {
       console.warn(`[projects] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -8229,9 +8239,56 @@ ${lines.join("\n")}
     const receiptPath = receiptRel ? join(homedir(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : undefined;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) }); /* #G5：重试标记随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板对比的比对源 */
     if (input.gid) {
-      upsertBoardEntry(input.gid, input.entry_id
+      // boardfix 刀1（1103 用户实锤「板面说谎」形态 A）：重派接卡——无 entry_id 时按
+      // 归一题名匹配同组 backlog 陈卡（R2/R3 续单经 leader-dispatch 不带 entry_id，
+      // 旧路径必开新卡=同题双卡+旧卡 dispatch_id 悬空停积）。命中旧卡走认领分支接回
+      // （新 dispatch_id 写入+note 留痕续单），题名不匹配才开新卡。
+      let claimEntryId = input.entry_id;
+      if (!claimEntryId) {
+        try {
+          // boardfix R3（A 审 1.1/B 审 P3-1）：题名键与建卡文本同口径截 60——无题名派单
+          // （org CLI title 可选）首行 >60 字时卡 text=前 60 字，键取全行恒不匹配=接卡
+          // 对该形态静默失效（同题双卡复发）；两侧同表达式后归一比对。
+          const rawTitle = input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60) || "";
+          const titleKey = rawTitle.replace(/\s+/g, " ").trim().toLowerCase();
+          if (titleKey) {
+            const board = loadBoard(input.gid);
+            const stale = board.entries
+              .filter((x) => x.status === "backlog" && (x.text || "").replace(/\s+/g, " ").trim().toLowerCase() === titleKey)
+              .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))[0];
+            if (stale) {
+              // boardfix R3-P2-2（A 审 1.2/B 审攻点1）：接卡前验旧单台账终态——未终态
+              // （在跑/中断，或台账无该 id 行）不接，回落开新卡（防「claimed 卡被人工
+              // 退回 backlog 后接卡改写 dispatch_id=旧单成果脱钩」+note 谎注「已终态」
+              // 入审计流）；note 如实记终态词。裸卡（无 dispatch_id）无在途冲突面直接。
+              let prevTerm: { status: string } | null = null;
+              if (stale.dispatch_id) {
+                const rows = readDispatchLog(undefined, 20_000).filter((r) => r.id === stale.dispatch_id);
+                const last = rows[rows.length - 1];
+                prevTerm = last ? { status: String(last.status || "") } : null;
+              }
+              const adoptable = !stale.dispatch_id || !!(prevTerm && (prevTerm.status === "done" || prevTerm.status === "failed"));
+              // boardfix R3 补（双审 B-P2①）：就绪闸——显式 entry_id 认领在 :7682 前置检查
+              // 会被 computeReady 拒（依赖未全 done/gate 未过），题名接卡不得成侧门绕行：
+              // 未就绪不接（回落新卡），跳过入审计流（不静默——板面上旧卡带 gate 留人处置）。
+              const ready = computeReady(stale, board);
+              if (adoptable && !ready.ready) {
+                this.emitChainAudit("board-adopt", `接卡跳过：${stale.id} 题名命中但未就绪（${[...ready.reasons, ...(ready.gate_reason ? [`gate 未过: ${ready.gate_reason}`] : [])].join("；").slice(0, 120)}）——开新卡，旧卡留 gate 待人`);
+              }
+              if (adoptable && ready.ready) {
+                claimEntryId = stale.id;
+                const prevDesc = !stale.dispatch_id ? "无派单史（裸卡）" : `已终态（${prevTerm!.status}）`;
+                const prevNote = stale.note ? stale.note + "\n" : "";
+                upsertBoardEntry(input.gid, { id: stale.id, text: stale.text, note: prevNote + `[boardfix 续单接卡 ${new Date().toLocaleDateString("zh-CN")}] 旧单 ${String(stale.dispatch_id || "无").slice(0, 8)} ${prevDesc}，本卡接续单 ${dispatchId.slice(0, 8)}——不另开新卡` });
+                this.emitChainAudit("board-adopt", `重派接卡：${stale.id}（题名匹配 backlog 陈卡，旧单${prevDesc}）接续单 ${dispatchId.slice(0, 8)}，note 留痕`);
+              }
+            }
+          }
+        } catch { /* 接卡尽力而为：失败回落新卡路径 */ }
+      }
+      upsertBoardEntry(input.gid, claimEntryId
         ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
-          { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...(input.priority ? { priority: input.priority } : {}), ...(input.parent_id ? { parent_id: input.parent_id } : {}) }
+          { id: claimEntryId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...(input.priority ? { priority: input.priority } : {}), ...(input.parent_id ? { parent_id: input.parent_id } : {}) }
         : // W-TASKFLOW task_ref：新卡带预生成 id（与 prompt 头注入的 [task_ref:...] 同键）
           { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...(input.priority ? { priority: input.priority } : {}), ...(input.parent_id ? { parent_id: input.parent_id } : {}) }); /* #G3：priority/parent_id 透传建卡（认领模式既有卡不动富字段——只新卡带；改卡走显式 upsert） */
       this.emitBoard(input.gid);

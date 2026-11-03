@@ -891,6 +891,37 @@ function migrateBoardStatuses(gid: string, board: ProjectBoard, dir?: string): P
   return board;
 }
 
+/** boardfix R2（双审 B-P0-2）：transitions 行形状惰性自愈——板外写手（如 pm-reconcile
+ * 带外对账脚本）会落 {at,by,note,status} 形状行，schema（org-schema）要求 {status,ts}：
+ * ts 缺席的卡此后任何机写都被「transitions 行应为 {status 词表内, ts 数字}」拒收=碰不得
+ * 的瓷娃娃（1103 生产板 8 张实锤）。读入时逐行归一：ts 缺席有 at → ts←at（by/note 为
+ * 超额信息保留不删——schema 只查 status/ts 两键）；status 缺席无法归一 → 弃行+stderr（无
+ * status 的行不承载时间线语义）。修过即落盘一次（journal action=heal-transitions 留痕），
+ * 此后文件自洁、sqlite 投影随导入跟进。 */
+function normalizeTransitionsShape(gid: string, board: ProjectBoard, dir?: string): ProjectBoard {
+  let fixed = 0;
+  for (const e of board.entries) {
+    if (!Array.isArray(e.transitions)) continue;
+    const kept = e.transitions.filter((row) => {
+      const r = row as Record<string, unknown>;
+      if (typeof r.status === "string" && typeof r.ts === "number") return true; // 合现行
+      if (typeof r.status === "string" && typeof r.at === "number") {
+        (r as { status: string; ts: number }).ts = r.at; // ts←at 归一（by/note 超额键保留）
+        fixed++;
+        return true;
+      }
+      console.warn(`[projects] transitions 异行弃置（无 status 无法归一）: gid=${gid} entry=${e.id} row=${JSON.stringify(row).slice(0, 80)}`);
+      fixed++;
+      return false;
+    });
+    if (kept.length !== e.transitions.length) e.transitions = kept;
+  }
+  if (fixed > 0) {
+    try { saveBoardFile(board, dir, { action: "heal-transitions", entry_id: "*", next: { status: `${fixed} 行形状归一（ts←at 带外写）` } }); } catch { /* 自愈失败不阻断读（下次读重试） */ }
+  }
+  return board;
+}
+
 /** 板文件读取三态：成功=解析归一后的板；ENOENT=空板（板懒创建常态，未写过≠读失败）；
  * 其余失败（坏 JSON 半态/EACCES/磁盘抖动）=null——读失败≠空板（M13-REV P3-2 定案：catch
  * 兜底空板会让广播差分出「整板 removes」清板帧，UI 闪断+半态扩散）。消费面分两路：广播链
@@ -899,13 +930,13 @@ function migrateBoardStatuses(gid: string, board: ProjectBoard, dir?: string): P
 export function loadBoardFile(gid: string, dir?: string): ProjectBoard | null {
   try {
     const raw = JSON.parse(readFileSync(boardFilePath(gid, dir), "utf-8")) as Partial<ProjectBoard>;
-    return migrateBoardStatuses(gid, {
+    return normalizeTransitionsShape(gid, migrateBoardStatuses(gid, {
       gid,
       entries: Array.isArray(raw.entries) ? (raw.entries as BoardEntry[]) : [],
       ...(Array.isArray(raw.lessons) ? { lessons: raw.lessons as LessonEntry[] } : {}),
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0,
-    }, dir);
+    }, dir), dir);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
       return { gid, entries: [], frozen: false, updated_at: 0 }; // 板懒创建常态：未写过=空板（非读失败，emitBoard 照常发空板帧）
@@ -1198,29 +1229,43 @@ export function removeBoardEntry(gid: string, entryId: string, dir?: string): { 
   return { ok: true };
 }
 
-/** 派单联动搬卡：按台账 id 找条目改状态（dispatch 收口 onTurnEnd 调用；无对应条目 = no-op 不报错） */
-export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEntryStatus, dir?: string): void {
-  const w = writableBoard(gid, dir);
-  if (!w.ok) return;
-  const e = w.board.entries.find((x) => x.dispatch_id === dispatchId);
-  if (!e || e.status === to) return;
-  const jPrev = sideOf(e);
-  e.status = to;
-  // 基线债②（1029 清还·公司侧/CI 同红）：schema 收严（ts 必需）前落盘的存量卡无 ts
-  // 字段——搬卡改后态过闸被「必需字段 ts 缺失」拒写，F-08 中断退 todo 断链（活没
-  // 交付卡死 doing）。upsert 建卡口恒带 ts（:318），无 ts 卡只可能是旧文件/手写
-  // 残留：搬卡即回填（updated_at 同刻），一次落盘后随文件持久——旧卡兼容不破闸
-  if (typeof e.ts !== "number") e.ts = Date.now();
-  e.updated_at = Date.now();
-  w.board.updated_at = e.updated_at;
-  // W-CMDIMPL T0b：reducer 写严格——裸设置器同样过闸（第四写口不断链）；void 返回
-  // 语义不变，拒写走 stderr 显式报（不静默吞）
-  const chk = applyOrgChange("board-entry", e);
-  if (!chk.ok) {
-    console.error(`[projects] dispatch-move 拒写：${chk.error}（gid=${gid} dispatch=${dispatchId}）`);
-    return;
-  }
-  saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
+/** 派单联动搬卡：按台账 id 找条目改状态（dispatch 收口 onTurnEnd 调用；无对应条目 = no-op 不报错）。
+ * boardfix R3（B 审 P2-1）：本口纳入 withOrgWriteTx 互斥域——出口级函数（boot/收口/巡检
+ * 强翻三路直达，无上级 tx 包裹=零嵌套风险），此前裸 writableBoard+saveBoardFile 在
+ * 30min 周期化（刀3）后写窗频放大；返回 boolean（A 审 2.3）：**实翻落盘才 true**——
+ * 卡缺席/已在目标态/writableBoard 拒/applyOrgChange 拒写全 false，converge 计数只认
+ * true（对齐 session-manager :1356「搬后回读核实」先例——静默 no-op 不再虚报 moved）。 */
+export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEntryStatus, dir?: string): boolean {
+  return withOrgWriteTx(dir, () => {
+    const w = writableBoard(gid, dir);
+    if (!w.ok) return false;
+    const e = w.board.entries.find((x) => x.dispatch_id === dispatchId);
+    if (!e || e.status === to) return false;
+    const jPrev = sideOf(e);
+    e.status = to;
+    // boardfix R2（1103 板面说谎·transitions 留痕收口）：第四写口对齐件十九时间线——
+    // dispatch 联动搬卡（收口翻面/72h 强翻/recon 收敛）同样追加 transitions，翻面在
+    // 卡内时间线可见（此前仅 upsert/moveById 两写口记线，联动搬卡全走本口=自愈无痕的
+    // 结构性缺口）。裸设语义不变（不走 resolveStatusTransition——台账驱动的合法迁移）；
+    // append-only 无重复行（同态不追行）。
+    if (!e.transitions) e.transitions = [];
+    if (e.transitions[e.transitions.length - 1]?.status !== to) e.transitions.push({ status: to, ts: Date.now() });
+    // 基线债②（1029 清还·公司侧/CI 同红）：schema 收严（ts 必需）前落盘的存量卡无 ts
+    // 字段——搬卡改后态过闸被「必需字段 ts 缺失」拒写，F-08 中断退 todo 断链（活没
+    // 交付卡死 doing）。upsert 建卡口恒带 ts（:318），无 ts 卡只可能是旧文件/手写
+    // 残留：搬卡即回填（updated_at 同刻），一次落盘后随文件持久——旧卡兼容不破闸
+    if (typeof e.ts !== "number") e.ts = Date.now();
+    e.updated_at = Date.now();
+    w.board.updated_at = e.updated_at;
+    // W-CMDIMPL T0b：reducer 写严格——裸设置器同样过闸（第四写口不断链）；拒写走
+    // stderr 显式报（不静默吞）+ 返回 false（调用方计数不虚报）
+    const chk = applyOrgChange("board-entry", e);
+    if (!chk.ok) {
+      console.error(`[projects] dispatch-move 拒写：${chk.error}（gid=${gid} dispatch=${dispatchId}）`);
+      return false;
+    }
+    return saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
+  });
 }
 
 // ---------- #236 D：台账终态 → 看板收敛扫（boot 一次性，W-TEAMVIS） ----------
@@ -1233,7 +1278,7 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
 // 处置）；中断补记行（receipt 带「relay 重启」）不算收割（F-08 退 backlog 有意设计）；
 // 卡 updated_at 严格晚于终态行 ts=收口后被人工/流程搬过，不碾——收敛只清断点残留，不碾压
 // 人工板面操作。只扫 active 组（parked/archived 板冻结由 writableBoard 天然挡）。
-export function convergeBoardsWithDispatchLog(dir?: string): number {
+export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "board-force-close", detail: string) => void): { moved: number; skipped: number } {
   // 读预算（#25-P3 同款教训：readDispatchLog 全文件读，循环内重读=每卡一遍全量）——
   // 一次读入，末行赢语义按追加序后写覆盖。max 显式放大（默认 500 行窗口装不下长史
   // 项目，10-11 时代旧单恰是本扫的目标面，漏读=白扫）。
@@ -1247,8 +1292,8 @@ export function convergeBoardsWithDispatchLog(dir?: string): number {
     if (String(row.receipt || "").startsWith("relay 重启")) continue;
     doneAtById.set(row.id, Number(row.ts) || 0);
   }
-  if (!doneAtById.size) return 0;
-  let moved = 0;
+  if (!doneAtById.size) return { moved: 0, skipped: 0 };
+  let moved = 0, skipped = 0;
   for (const g of listGroupsByStatus(dir).active) {
     let board: ReturnType<typeof loadBoard>;
     try { board = loadBoard(g.id, dir); } catch { continue; }
@@ -1256,15 +1301,43 @@ export function convergeBoardsWithDispatchLog(dir?: string): number {
       if (entry.status === "done" || !entry.dispatch_id) continue;
       const doneAt = doneAtById.get(entry.dispatch_id);
       if (doneAt === undefined) continue;
+      // boardfix 刀2（1103 板面说谎形态 C）：backlog 陈卡强翻分支——原防碾条件
+      // （updated_at>doneAt 不碾）会被「收口后任何 upsert 刷文本」误触发（重派/normalize
+      // 等刷 updated_at 但状态仍 backlog），8 张实锤卡全卡在此挡板外。backlog 态+
+      // 台账 done 已超 72h（板龄豁免窗：给人工处置的充分时间，窗内零打扰）=断链残留
+      // 铁证，绕过防碾直接翻正。非 backlog 态（claimed/ready_to_install 等在途三态）
+      // 维持原防碾（人工正在流程中的卡不碰）。
+      // boardfix R3（A/B 双审同锤 P1）：强翻前置两道人工意图豁免——程序自愈不碾
+      // 人工在管的卡：①hold 锁（board-hold 出口语义「这卡别动」，强翻会造成 held+done
+      // 脏态）②done 后人工重开——**序列判据**：transitions 里存在 done 行且其后存在
+      // backlog 行（done→backlog 迁移=人工重开铁证；R2 留痕恰给判据）。不用「ts>doneAt」
+      // 单条判据：新建陈卡（doneAt 73h 前+建卡行恒新）会被误豁免=挡住治愈主路径本身
+      // （测试 staleCard 形态实证）；序列判据只认「先 done 后 backlog」的迁移，建卡
+      // backlog 行前无 done 行不豁免，程序性刷文本不产生迁移行——误挡面零。豁免命中计
+      // skipped 由调用方明示「跳过 N 张疑似人工在管」（不静默不谎报）；8 张生产旧卡
+      // dispatch-log 全行史零 done→backlog 迁移行（A 审逐 id 实测），豁免不挡其治愈。
+      const staleMs = Date.now() - doneAt;
+      if (entry.status === "backlog" && staleMs > 72 * 3600_000) {
+        if (entry.hold) { skipped++; continue; }
+        const trSeq = entry.transitions || [];
+        let lastDoneIdx = -1;
+        for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && trSeq[i].status === "done") lastDoneIdx = i;
+        const reopened = lastDoneIdx >= 0 && trSeq.slice(lastDoneIdx + 1).some((t) => t && t.status === "backlog");
+        if (reopened) { skipped++; continue; }
+        if (moveEntryByDispatch(g.id, entry.dispatch_id as string, "done", dir)) {
+          moved++;
+          onAudit?.("board-force-close", `72h 断链残留强翻：${entry.id}（dispatch ${String(entry.dispatch_id).slice(0, 8)}，done @${new Date(doneAt).toLocaleString("zh-CN")}）`);
+        }
+        continue;
+      }
       // 严格晚于即不碾（无容差）：closeHungDispatchRows 的「补记 done(T1)→立即退 backlog
       // (T2>T1)」序列里 T2-T1<1s，60s 容差会放过它=把中断单拽进 done（1023 实测教训；
       // 同机时钟无抖动，容差无必要）
       if (Number(entry.updated_at || 0) > doneAt) continue;
-      moveEntryByDispatch(g.id, entry.dispatch_id, "done", dir);
-      moved++;
+      if (moveEntryByDispatch(g.id, entry.dispatch_id, "done", dir)) moved++;
     }
   }
-  return moved;
+  return { moved, skipped };
 }
 
 // ---------- #087 beads 思想采纳（009 §4 M1/M2 + §5 裁决；零外部依赖，不引 bd/Dolt） ----------

@@ -16,8 +16,9 @@
 // 降级语义（#158 同族）：SQLite 不可用（驱动缺失/建库失败/json 读档）时整段落回纯
 // 文件账 + console.warn 一次——relay 主流程零影响（文件账本就是完整真相）。
 //
-// 可重入性：不可重入（port.begin 已有事务=编程错误）。**只在三域出口函数包**
-// （setGroupStatus/upsertBoardEntry/decideConfirm），低层（saveGroup/saveBoardFile/
+// 可重入性：不可重入（port.begin 已有事务=编程错误）。**只在出口函数包**
+// （setGroupStatus/upsertBoardEntry/decideConfirm + boardfix R3 增 moveEntryByDispatch
+// ——第四写口 30min 周期化后纳入互斥域，B 审 P2-1），低层（saveGroup/saveBoardFile/
 // writeConfirms）不包——出口互调低层安全，出口互调出口（嵌套）是接线错误。
 
 import { homedir } from "node:os";

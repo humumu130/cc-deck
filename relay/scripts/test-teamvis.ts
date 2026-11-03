@@ -63,8 +63,8 @@ console.log("\n[件D] convergeBoardsWithDispatchLog 收敛扫");
     writeFileSync(bf, JSON.stringify(bj), "utf-8");
   }
 
-  const moved = convergeBoardsWithDispatchLog(org);
-  ok(moved === 1, `恰好搬 1 张（实际 ${moved}）`);
+  const moved = convergeBoardsWithDispatchLog(org); // boardfix R3：返回 { moved, skipped }（豁免计数）——本套件只看 moved
+  ok(moved.moved === 1, `恰好搬 1 张（实际 ${moved.moved}）`);
   ok(uE.ok && statusOf(org, gid, uE.entry!.id) === "backlog", "中断补记行（receipt 带 relay 重启）不算收割，退 backlog 口径不被碾");
   ok(uA.ok && statusOf(org, gid, uA.entry!.id) === "done", "台账 done 的旧卡归 done 泳道（断点残留清扫）");
   ok(uB.ok && statusOf(org, gid, uB.entry!.id) === "claimed", "failed 单不动（失败面留板待人处置）");
@@ -72,7 +72,7 @@ console.log("\n[件D] convergeBoardsWithDispatchLog 收敛扫");
   ok(uD.ok && statusOf(org, gid, uD.entry!.id) === "backlog", "无 dispatch_id 卡不碰（非派单联动）");
 
   const moved2 = convergeBoardsWithDispatchLog(org);
-  ok(moved2 === 0, `重扫幂等零搬（实际 ${moved2}）`);
+  ok(moved2.moved === 0, `重扫幂等零搬（实际 ${moved2.moved}）`);
 }
 
 // parked 组冻结面：同款残留不被扫（writableBoard 挡）
@@ -92,7 +92,7 @@ console.log("\n[件D] convergeBoardsWithDispatchLog 收敛扫");
   }), "utf-8");
   appendDispatch({ id: "disp-P", ts: now - 10 * DAY, status: "done", tier: "正经立项", target: "worker", receipt: "r-P", session_id: "s-P", project_anchor: anchor, actor: "test" }, org);
   const moved = convergeBoardsWithDispatchLog(org);
-  ok(moved === 0 && statusOf(org, gid, "eP") === "claimed", "parked 板冻结不被扫（listGroupsByStatus active 面外）");
+  ok(moved.moved === 0 && statusOf(org, gid, "eP") === "claimed", "parked 板冻结不被扫（listGroupsByStatus active 面外）");
 }
 
 for (const d of dirs) rmSync(d, { recursive: true, force: true });
