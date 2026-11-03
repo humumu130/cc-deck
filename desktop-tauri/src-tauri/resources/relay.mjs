@@ -17013,16 +17013,42 @@ function migrateBoardStatuses(gid, board, dir) {
   }
   return board;
 }
+function normalizeTransitionsShape(gid, board, dir) {
+  let fixed = 0;
+  for (const e of board.entries) {
+    if (!Array.isArray(e.transitions)) continue;
+    const kept2 = e.transitions.filter((row) => {
+      const r = row;
+      if (typeof r.status === "string" && typeof r.ts === "number") return true;
+      if (typeof r.status === "string" && typeof r.at === "number") {
+        r.ts = r.at;
+        fixed++;
+        return true;
+      }
+      console.warn(`[projects] transitions \u5F02\u884C\u5F03\u7F6E\uFF08\u65E0 status \u65E0\u6CD5\u5F52\u4E00\uFF09: gid=${gid} entry=${e.id} row=${JSON.stringify(row).slice(0, 80)}`);
+      fixed++;
+      return false;
+    });
+    if (kept2.length !== e.transitions.length) e.transitions = kept2;
+  }
+  if (fixed > 0) {
+    try {
+      saveBoardFile(board, dir, { action: "heal-transitions", entry_id: "*", next: { status: `${fixed} \u884C\u5F62\u72B6\u5F52\u4E00\uFF08ts\u2190at \u5E26\u5916\u5199\uFF09` } });
+    } catch {
+    }
+  }
+  return board;
+}
 function loadBoardFile(gid, dir) {
   try {
     const raw = JSON.parse(readFileSync17(boardFilePath(gid, dir), "utf-8"));
-    return migrateBoardStatuses(gid, {
+    return normalizeTransitionsShape(gid, migrateBoardStatuses(gid, {
       gid,
       entries: Array.isArray(raw.entries) ? raw.entries : [],
       ...Array.isArray(raw.lessons) ? { lessons: raw.lessons } : {},
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0
-    }, dir);
+    }, dir), dir);
   } catch (e) {
     if (e.code === "ENOENT") {
       return { gid, entries: [], frozen: false, updated_at: 0 };
@@ -17226,31 +17252,35 @@ function removeBoardEntry(gid, entryId, dir) {
   return { ok: true };
 }
 function moveEntryByDispatch(gid, dispatchId, to2, dir) {
-  const w2 = writableBoard(gid, dir);
-  if (!w2.ok) return;
-  const e = w2.board.entries.find((x) => x.dispatch_id === dispatchId);
-  if (!e || e.status === to2) return;
-  const jPrev = sideOf(e);
-  e.status = to2;
-  if (typeof e.ts !== "number") e.ts = Date.now();
-  e.updated_at = Date.now();
-  w2.board.updated_at = e.updated_at;
-  const chk = applyOrgChange("board-entry", e);
-  if (!chk.ok) {
-    console.error(`[projects] dispatch-move \u62D2\u5199\uFF1A${chk.error}\uFF08gid=${gid} dispatch=${dispatchId}\uFF09`);
-    return;
-  }
-  saveBoardFile(w2.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
+  return withOrgWriteTx(dir, () => {
+    const w2 = writableBoard(gid, dir);
+    if (!w2.ok) return false;
+    const e = w2.board.entries.find((x) => x.dispatch_id === dispatchId);
+    if (!e || e.status === to2) return false;
+    const jPrev = sideOf(e);
+    e.status = to2;
+    if (!e.transitions) e.transitions = [];
+    if (e.transitions[e.transitions.length - 1]?.status !== to2) e.transitions.push({ status: to2, ts: Date.now() });
+    if (typeof e.ts !== "number") e.ts = Date.now();
+    e.updated_at = Date.now();
+    w2.board.updated_at = e.updated_at;
+    const chk = applyOrgChange("board-entry", e);
+    if (!chk.ok) {
+      console.error(`[projects] dispatch-move \u62D2\u5199\uFF1A${chk.error}\uFF08gid=${gid} dispatch=${dispatchId}\uFF09`);
+      return false;
+    }
+    return saveBoardFile(w2.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
+  });
 }
-function convergeBoardsWithDispatchLog(dir) {
+function convergeBoardsWithDispatchLog(dir, onAudit) {
   const doneAtById = /* @__PURE__ */ new Map();
   for (const row of readDispatchLog(dir, 2e4)) {
     if (row.status !== "done" || !row.id) continue;
     if (String(row.receipt || "").startsWith("relay \u91CD\u542F")) continue;
     doneAtById.set(row.id, Number(row.ts) || 0);
   }
-  if (!doneAtById.size) return 0;
-  let moved = 0;
+  if (!doneAtById.size) return { moved: 0, skipped: 0 };
+  let moved = 0, skipped = 0;
   for (const g2 of listGroupsByStatus(dir).active) {
     let board;
     try {
@@ -17260,14 +17290,34 @@ function convergeBoardsWithDispatchLog(dir) {
     }
     for (const entry of board.entries) {
       if (entry.status === "done" || !entry.dispatch_id) continue;
+      if (entry.status === "submitted" || entry.status === "ready_to_install") continue;
       const doneAt = doneAtById.get(entry.dispatch_id);
       if (doneAt === void 0) continue;
+      const staleMs = Date.now() - doneAt;
+      if (entry.status === "backlog" && staleMs > 72 * 36e5) {
+        if (entry.hold) {
+          skipped++;
+          continue;
+        }
+        const trSeq = entry.transitions || [];
+        let lastSettledIdx = -1;
+        for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && (trSeq[i].status === "done" || trSeq[i].status === "submitted")) lastSettledIdx = i;
+        const reopened = lastSettledIdx >= 0 && trSeq.slice(lastSettledIdx + 1).some((t) => t && t.status === "backlog");
+        if (reopened) {
+          skipped++;
+          continue;
+        }
+        if (moveEntryByDispatch(g2.id, entry.dispatch_id, "done", dir)) {
+          moved++;
+          onAudit?.("board-force-close", `72h \u65AD\u94FE\u6B8B\u7559\u5F3A\u7FFB\uFF1A${entry.id}\uFF08dispatch ${String(entry.dispatch_id).slice(0, 8)}\uFF0Cdone @${new Date(doneAt).toLocaleString("zh-CN")}\uFF09`);
+        }
+        continue;
+      }
       if (Number(entry.updated_at || 0) > doneAt) continue;
-      moveEntryByDispatch(g2.id, entry.dispatch_id, "done", dir);
-      moved++;
+      if (moveEntryByDispatch(g2.id, entry.dispatch_id, "done", dir)) moved++;
     }
   }
-  return moved;
+  return { moved, skipped };
 }
 function computeReady(card, board) {
   const gate_reason = card.gate ? card.gate.reason || "gate \u672A\u8FC7\uFF08\u539F\u56E0\u672A\u6CE8\u660E\uFF09" : null;
@@ -56283,10 +56333,12 @@ provider=${opts.provider ?? "default"}` : void 0,
    * 零搬动零审计（防 turn-report/patrol 双触发轮询刷屏）。 */
   reconAutoCloseStaleCards(trigger, now) {
     const led = /* @__PURE__ */ new Map();
+    const ledAt = /* @__PURE__ */ new Map();
     for (const e of readDispatchLog()) {
       if (e.status !== "done" && e.status !== "failed") continue;
       if (now - e.ts < 36e5) continue;
       led.set(e.id, e.status);
+      ledAt.set(e.id, Number(e.ts) || 0);
     }
     if (!led.size) return;
     let movedDone = 0, movedBacklog = 0, frozenSkipped = 0;
@@ -56298,6 +56350,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (x.status !== "claimed" && x.status !== "backlog" || !x.dispatch_id) return [];
         const led2 = led.get(x.dispatch_id);
         if (!led2) return [];
+        if (x.status === "backlog" && (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id) || 0))) return [];
         const to2 = led2 === "done" ? "done" : "backlog";
         return to2 === x.status ? [] : [{ dispatch_id: x.dispatch_id, to: to2, text: x.text }];
       });
@@ -58744,8 +58797,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     this.closeHungDispatchRows();
     try {
-      const converged = convergeBoardsWithDispatchLog();
-      if (converged) console.log(`[projects] \u677F\u6536\u655B\uFF1A${converged} \u5F20\u5DF2\u6536\u53E3\u5361\u5F52 done \u6CF3\u9053`);
+      const converged = convergeBoardsWithDispatchLog(void 0, (action, detail) => this.emitChainAudit(action, detail));
+      if (converged.moved) console.log(`[projects] \u677F\u6536\u655B\uFF1A${converged.moved} \u5F20\u5DF2\u6536\u53E3\u5361\u5F52 done \u6CF3\u9053`);
+      if (converged.skipped) console.log(`[projects] \u677F\u6536\u655B\uFF1A\u8DF3\u8FC7 ${converged.skipped} \u5F20\u7591\u4F3C\u4EBA\u5DE5\u5728\u7BA1\uFF08hold \u9501/\u4EBA\u5DE5\u91CD\u5F00\u8C41\u514D\uFF09`);
     } catch (e) {
       console.warn(`[projects] \u677F\u6536\u655B\u626B\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF09: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -59140,7 +59194,23 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
       if (status === "done" || status === "failed") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath);
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
+        if (!boardTo && status === "done") {
+          let handled = false;
+          try {
+            const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
+            if (card && card.status === "submitted") {
+              upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true });
+              handled = true;
+            } else if (card && card.status !== "done") {
+              const r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true });
+              handled = r.ok;
+            }
+          } catch {
+          }
+          if (!handled) moveEntryByDispatch(e.gid, e.id, "done");
+        } else {
+          moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
+        }
         if (status === "done") {
           const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
           const lr2 = this.orgAction("lesson-append", {
@@ -62198,9 +62268,48 @@ ${msg2}`);
     const receiptPath = receiptRel ? join48(homedir17(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : void 0;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...receiptPath ? { receiptPath } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {} });
     if (input.gid) {
-      upsertBoardEntry(input.gid, input.entry_id ? (
+      let claimEntryId = input.entry_id;
+      if (!claimEntryId) {
+        try {
+          const rawTitle = input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60) || "";
+          const titleKey = rawTitle.replace(/\s+/g, " ").trim().toLowerCase();
+          if (titleKey) {
+            const board = loadBoard(input.gid);
+            const normText = (s2) => (s2 || "").replace(/\s+/g, " ").trim().toLowerCase();
+            const byOldest = (a, b) => Number(a.ts || 0) - Number(b.ts || 0);
+            const pool = board.entries.filter((x) => x.status === "backlog" || x.status === "submitted");
+            const allowDrift = titleKey.length >= 6;
+            const stale = pool.filter((x) => normText(x.text) === titleKey).sort(byOldest)[0] ?? (allowDrift ? board.entries.filter((x) => x.status === "backlog" && (() => {
+              const t = normText(x.text);
+              return t.startsWith(titleKey) && t.length - titleKey.length <= 12;
+            })()).sort(byOldest)[0] : void 0);
+            if (stale) {
+              let prevTerm = null;
+              if (stale.dispatch_id) {
+                const rows = readDispatchLog(void 0, 2e4).filter((r) => r.id === stale.dispatch_id);
+                const last = rows[rows.length - 1];
+                prevTerm = last ? { status: String(last.status || "") } : null;
+              }
+              const adoptable = !stale.dispatch_id || !!(prevTerm && (prevTerm.status === "done" || prevTerm.status === "failed"));
+              const ready2 = computeReady(stale, board);
+              if (adoptable && !ready2.ready) {
+                this.emitChainAudit("board-adopt", `\u63A5\u5361\u8DF3\u8FC7\uFF1A${stale.id} \u9898\u540D\u547D\u4E2D\u4F46\u672A\u5C31\u7EEA\uFF08${[...ready2.reasons, ...ready2.gate_reason ? [`gate \u672A\u8FC7: ${ready2.gate_reason}`] : []].join("\uFF1B").slice(0, 120)}\uFF09\u2014\u2014\u5F00\u65B0\u5361\uFF0C\u65E7\u5361\u7559 gate \u5F85\u4EBA`);
+              }
+              if (adoptable && ready2.ready) {
+                claimEntryId = stale.id;
+                const prevDesc = !stale.dispatch_id ? "\u65E0\u6D3E\u5355\u53F2\uFF08\u88F8\u5361\uFF09" : `\u5DF2\u7EC8\u6001\uFF08${prevTerm.status}\uFF09`;
+                const prevNote = stale.note ? stale.note + "\n" : "";
+                upsertBoardEntry(input.gid, { id: stale.id, text: stale.text, note: prevNote + `[boardfix \u7EED\u5355\u63A5\u5361 ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u65E7\u5355 ${String(stale.dispatch_id || "\u65E0").slice(0, 8)} ${prevDesc}\uFF0C\u672C\u5361\u63A5\u7EED\u5355 ${dispatchId.slice(0, 8)}\u2014\u2014\u4E0D\u53E6\u5F00\u65B0\u5361` });
+                this.emitChainAudit("board-adopt", `\u91CD\u6D3E\u63A5\u5361\uFF1A${stale.id}\uFF08\u9898\u540D\u5339\u914D backlog \u9648\u5361\uFF0C\u65E7\u5355${prevDesc}\uFF09\u63A5\u7EED\u5355 ${dispatchId.slice(0, 8)}\uFF0Cnote \u7559\u75D5`);
+              }
+            }
+          }
+        } catch {
+        }
+      }
+      upsertBoardEntry(input.gid, claimEntryId ? (
         // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
-        { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...input.priority ? { priority: input.priority } : {}, ...input.parent_id ? { parent_id: input.parent_id } : {} }
+        { id: claimEntryId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...input.priority ? { priority: input.priority } : {}, ...input.parent_id ? { parent_id: input.parent_id } : {} }
       ) : (
         // W-TASKFLOW task_ref：新卡带预生成 id（与 prompt 头注入的 [task_ref:...] 同键）
         { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...input.priority ? { priority: input.priority } : {}, ...input.parent_id ? { parent_id: input.parent_id } : {} }
@@ -70426,6 +70535,31 @@ var PatrolModule = class {
   runFull() {
     if (!this.opts.enabled()) return;
     const now = Date.now();
+    try {
+      const converged = convergeBoardsWithDispatchLog(void 0, (action, detail) => this.mgr.emitChainAudit(action, detail));
+      if (converged.moved > 0 || converged.skipped > 0) {
+        const parts = [];
+        if (converged.moved > 0) parts.push(`\u7FFB\u6B63 ${converged.moved} \u5F20\u9648\u5361\uFF08backlog+\u53F0\u8D26 done>72h \u65AD\u94FE\u6B8B\u7559\uFF09`);
+        if (converged.skipped > 0) parts.push(`\u8DF3\u8FC7 ${converged.skipped} \u5F20\u7591\u4F3C\u4EBA\u5DE5\u5728\u7BA1\uFF08hold \u9501/\u4EBA\u5DE5\u91CD\u5F00\u8C41\u514D\uFF09`);
+        this.push("board-converge", `\u53F0\u8D26\u2192\u770B\u677F\u6536\u655B\uFF1A${parts.join("\uFF0C")}`);
+      }
+    } catch (e) {
+      console.warn(`[patrol] \u677F\u6536\u655B\u626B\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    try {
+      const staleMs = Number(process.env.CCR_BOARD_SUBMITTED_STALE_MS) || 24 * 36e5;
+      const stale2 = [];
+      for (const g2 of listGroups()) {
+        const board = loadBoardFile(g2.id);
+        if (!board) continue;
+        for (const e of board.entries) {
+          if (e.status !== "submitted") continue;
+          if (now - Number(e.updated_at || 0) > staleMs) stale2.push(`\u300C${String(e.text || e.id).slice(0, 24)}\u300D\uFF08${Math.floor((now - Number(e.updated_at || 0)) / 36e5)}h\uFF09`);
+        }
+      }
+      if (stale2.length) this.push("board-submitted-stale", `\u5BA1\u67E5\u4E2D\u5361\u6EDE\u7559\u8D85 ${Math.floor(staleMs / 36e5)}h\uFF1A${stale2.length} \u5F20\u5F85\u6536\u5272\u2014\u2014${stale2.slice(0, 3).join("\u3001")}`);
+    } catch {
+    }
     const stale = this.mgr.snapshot().filter((s) => s.status === "WORKING" && (!s.compacting || now - (s.updated_at ?? 0) > 90 * 6e4) && now - (s.updated_at ?? 0) > WORKER_STALE_MIN * 6e4);
     const staleWaiting = this.mgr.snapshot().filter((s) => s.status === "WAITING" && now - (s.updated_at ?? 0) > 2 * 36e5);
     if (stale.length) {

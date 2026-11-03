@@ -30,13 +30,16 @@
       --st-blocked: #E5895B;
       --st-error: var(--error); /* 随主题（暗 #E5484D/亮 #C84C51） */
       --st-closed: var(--faint); /* 关闭退役=灰随主题（暗 #7A889F/亮 #42587A） */
-      /* V8R 看板泳道进度色（v8-ui-interactive-v2 --p-* 原值直引）：待认领灰蓝/进行中绿/
-         待审查品牌橙/待收单琥珀/完成暗色——总览分段条与图例共用同一映射 */
+      /* W-BOARDCOLOR（1103 用户口径·全局语义统一）：看板五态对齐状态灯语义族——进行中恒黄
+         （--working 同源）、完成恒绿（--done 同源）、待动作恒橙（submitted 深档/ready 浅档
+         两档）、未开始恒灰。原「绿=进行中（#2FBF71）」与会话灯「绿=空闲」同色异义=用户实锤
+         冲突源，废；原「黄琥珀=待收单」进行中已占黄族，改橙浅档；原「深灰=完成」违「完成恒
+         绿族」口径，废。总览分段条/图例/泳道条/expo LANE_COLORS 共用同一映射。 */
       --p-backlog: #55677F;
-      --p-claimed: #2FBF71;
-      --p-submitted: #E08A63;
-      --p-ready: #FFC53D;
-      --p-done: #2C3B52;
+      --p-claimed: var(--working); /* 进行中=黄（全局 working 同源） */
+      --p-submitted: #E08A63; /* 待审查=橙·深档 */
+      --p-ready: #F0B183; /* 待收单=橙·浅档（R2 拉差：ΔL*=11.4 vs submitted，对暗 bg 9.6） */
+      --p-done: var(--done); /* 完成=绿（全局 done 同源） */
       --info: #7CB8FF;
       --ctx-safe: #4BCB91;
       --ctx-attention: #E9B84C;
@@ -188,12 +191,12 @@
       --working: #A56D00;
       --error: #C84C51;
       --st-working: #FFB020; /* 1019 用户拍板：浅色工作灯提亮提饱和（#B8860B 深琥珀偏闷废弃；与手机端 theme.ts 浅色 working 同源） */
-      /* V8R 看板泳道进度色·浅色（v8-ui-interactive-v2 浅色 --p-* 原值直引） */
-      --p-backlog: #C3CEDD;
-      --p-claimed: #22A06B;
-      --p-submitted: #C05B33;
-      --p-ready: #E0A43C;
-      --p-done: #D7DEE9;
+      /* W-BOARDCOLOR 看板五态·浅色（语义族同暗色组：进行中黄/完成绿/待动作橙两档/未开始灰） */
+      --p-backlog: #74879E; /* 未开始=灰蓝（原 #C3CEDD 浅面对比度 1.4-1.6 不达 3:1，加深过线——语义不变） */
+      --p-claimed: var(--working); /* 进行中=黄（浅色档 working #A56D00——对比度核验见回执） */
+      --p-submitted: #C05B33; /* 待审查=橙·深档 */
+      --p-ready: #C96F42; /* 待收单=橙·浅档（R2 拉差折中：探针实测拉差值 2.66 破 3:1——亮底上 ΔL* 与对比度互斥，取对比度优先维持原值；dark 档已拉 ΔL*=11.4） */
+      --p-done: var(--done); /* 完成=绿（浅色档 done #168D60） */
       --info: #3978B8;
       --ctx-safe: #168D60;
       --ctx-attention: #A56D00;

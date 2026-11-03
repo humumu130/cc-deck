@@ -1559,10 +1559,12 @@
        近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来。
        V8R：均分 flex 1 1 0 + min-width 186（原型 bcol flex:1 1 0 无滚动；窄窗可滚不压缩） */
     #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 1 0; min-width: 186px; flex-direction: column; min-height: 0; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); }
-    /* V8R：待收单列 = 原型 bcol.go（行动列）——琥珀描边 + 1px 光环 + 顶部琥珀渐变 + 列头琥珀字
-      （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中） */
-    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install { border-color: transparent; border-color: color-mix(in srgb, var(--working) 42%, transparent); background: var(--surface1); background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, var(--surface1)), var(--surface1) 40%); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--working) 15%, transparent); }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--working); }
+    /* V8R：待收单列 = 原型 bcol.go（行动列）——描边 + 1px 光环 + 顶部渐变 + 列头亮字
+      （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中）。
+      W-BOARDCOLOR：列高亮色随五态语义族改走 --p-ready（橙族——待收单=待动作；原
+      var(--working) 黄与「进行中恒黄」口径打架，且进行中列已非高亮列） */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install { border-color: transparent; border-color: color-mix(in srgb, var(--p-ready) 42%, transparent); background: var(--surface1); background: linear-gradient(180deg, color-mix(in srgb, var(--p-ready) 8%, var(--surface1)), var(--surface1) 40%); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--p-ready) 15%, transparent); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--p-ready); }
     /* W-LV8：空列空态（v8 .arch 语义）——死黑矩形→轻提示，扫读不失衡 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-empty { padding: 14px 0 10px; text-align: center; color: var(--faint); font-size: var(--fs-C); line-height: 1.6; }
     /* 件9：看板 pane 内的图纸/输出物侧区——限高内滚不与甬道争纵向空间（恒 ≤190px） */
@@ -1652,6 +1654,13 @@
     #d-team .task-card.compact > p { margin: 2px 0 0; font-size: var(--fs-D); color: var(--faint); }
     #d-team .task-owner { flex-wrap: wrap; gap: 5px; }
     #d-team .task-owner .tchip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding: 2px 7px; border-radius: 6px; background: var(--bg1); color: var(--card-sub); font-size: var(--fs-C); line-height: 15px; }
+    /* boardlife ②③：执行者 chip 可点跳会话（owner-jump）+ submitted 处理者 chip（reviewer
+       在岗可跳/reviewer-none 灰牌无 PM）——交互语义同 member-msg-btn 先例（:1390） */
+    #d-team .task-owner .tchip.owner-jump { cursor: pointer; }
+    #d-team .task-owner .tchip.owner-jump:hover, #d-team .task-owner .tchip.owner-jump:focus-visible { border: 1px solid var(--border-strong); color: var(--brand); }
+    #d-team .task-owner .tchip.reviewer { cursor: pointer; background: color-mix(in srgb, var(--st-blocked, #8b7ac6) 14%, transparent); color: var(--st-blocked, #8b7ac6); font-weight: 600; }
+    #d-team .task-owner .tchip.reviewer:hover, #d-team .task-owner .tchip.reviewer:focus-visible { border: 1px solid var(--border-strong); }
+    #d-team .task-owner .tchip.reviewer-none { background: transparent; border: 1px dashed var(--border-strong); color: var(--faint); }
     /* #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀——P2=默认档不显）+卡左缘色条；
        子任务折叠钮+子卡缩进挂靠容器 */
     .task-title .tchip.prio-p0, .task-title .tchip.prio-p1 { flex: none; padding: 1px 6px; border-radius: 5px; font-size: var(--fs-micro); font-weight: 700; letter-spacing: .4px; }
