@@ -220,7 +220,7 @@ async function main(): Promise<void> {
   check(partsSrc.includes("toFade") && partsSrc.includes("stepped ? swipeAskPan.panHandlers"), "圆点跟手淡入淡出 + 仅多问题挂手势（单问题不启）");
 
   console.log("G. 会话页（ListScreen：顶栏铃铛 + r3 引擎徽章）");
-  check(listSrc.includes("function BellGlyph"), "铃铛 glyph（v3 #i-bell 同形线稿）");
+  check(listSrc.includes("BellGlyphBase"), "铃铛 glyph（v3 #i-bell 同形线稿）");
   check(listSrc.includes("styles.bellBtn"), "顶栏铃铛钮");
   check(listSrc.includes("bellBadge"), "bbadge 红底白字计数（display 切换常挂）");
   check(listSrc.includes("bellBadgeOff: { display: \"none\" }"), "badge 隐藏态不插拔（P0 加固口径）");

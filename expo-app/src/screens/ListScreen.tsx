@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 
 // dda6490+6fb7180 并集合并残留收口：w63（TextInput/PanResponder）与 w54（Modal）两行 import 并存致重复标识符——合一行取并集
-import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, Vibration, View } from "react-native"
+import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, useWindowDimensions, Vibration, View } from "react-native"
 import { HEAD_BASE } from "../head-unify";
 
 import * as Clipboard from "expo-clipboard";
@@ -13,7 +13,7 @@ import { isRealWorking } from "../protocol"; /* #291 帧分类判活 */
 import { inferEngine } from "../engine-infer";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { PlusMark } from "../brand";
-import { SessionStatSub } from "./page-head";
+import { BellGlyphBase, SessionStatSub } from "./page-head";
 import { SourceSwitch } from "./source-switch";
 import { fmtLastActive, fmtTok, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
@@ -578,21 +578,16 @@ function DeskGlyph({ color }: { color: string }) {
 // W-MV8A 顶栏铃铛 glyph（v3 #i-bell 同形 lucide bell 线稿——通知中心入口对齐 v3
 // appbar bell + bbadge 语言）；badge 红底白字（v3 .bbadge：需你行动计数，与底栏
 // 琥珀 badge 色轴分工——红=通知行动，琥珀=tab 待处理）
-function BellGlyph({ color }: { color: string }) {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <Path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </Svg>
-  );
-}
+/* mtopicons R2-P2②（B 审 1b）：本地自绘 BellGlyph 18×18/1.8 退役——四页铃铛单源
+   page-head BellGlyphBase 20×20/2.0（import 见顶）；badge 仍本地常挂 display 切换
+   （Fabric re-parent 崩面前科 W-MV8A P0 加固口径不动），规格对齐 PageHead badge。 */
 
 function ThemeGlyph({ dark }: { dark: boolean }) {
   const { c } = useTheme();
   return (
     <Image
       source={dark ? THEME_SUN : THEME_MOON}
-      style={{ width: 15, height: 15, tintColor: c.dim }}
+      style={{ width: 16, height: 16, tintColor: c.dim }}/* mtopicons R2 尺寸阶梯两档 16/20：theme 15→16 与 search 同档 */
     />
   );
 }
@@ -1203,6 +1198,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [renameSid, setRenameSid] = useState<string | null>(null);
   // W-PORT-B P0-2：会话列表搜索——顶栏图标展开搜索条，输入即过滤（sessionSearchTest）
   const [searchOpen, setSearchOpen] = useState(false);
+  // mtopicons R2-P2④（B 审攻点 2）：窄屏 chips 兜底——320dp 级屏双 chip 挂载时右簇定宽
+  // 超可用宽（≈334>296），＋（末位）被截出屏（标题块 flex:1 吞不掉定宽溢出）；<360dp
+  // 时闲/物 chip 不入 topbar（闲 N 计数副题统计行仍有；物入口设置域可达），＋恒在。
+  const { width: winW } = useWindowDimensions();
+  const headChipsOn = winW >= 360;
   const [searchQ, setSearchQ] = useState("");
   const renameTarget = useMemo(
     () => sessions.find((s) => s.session_id === renameSid) ?? null,
@@ -1661,7 +1661,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       <View style={styles.topbar}>
         {/* W-HEAD4 ①②：会话页大标题+五色状态灯计数副题（用户 1016 拍板四页统一；
             源胶囊/铃铛本页原有③④天然满足）——状态计数直扫 snap.sessions 四态 */}
-        <View style={{ flexShrink: 0, marginRight: 8 }}>
+        {/* mtopicons R2-P1（B 审 1a git 考古）：右锚恢复——W-HEAD6 删 connChip 时把全行
+            唯一 marginLeft:auto 右锚机关一并删掉无替补，动作簇（search/theme/bell/chips/＋）
+            自那天起左充贴标题=切页＋实际差 80~100dp（容器几何统一救不了页内摆放）。
+            标题块 flex:1 minWidth:0（PageHead:72 同款）→右簇恒贴右缘，＋右缘距屏右缘
+            恒 = paddingHorizontal+mR-4 四页同式；chips 挂卸只推左侧动作钮，＋纹丝不动。 */}
+        <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={styles.headTitleT}>会话</Text>
             {/* W-HEAD6 追加：源切换标题行内联（与 PageHead 同位——间隔 8px 垂直居中） */}
@@ -1709,7 +1714,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           hitSlop={4}
           accessibilityLabel={notifPending.length > 0 ? `通知中心，${notifPending.length} 项需行动` : "通知中心"}
         >
-          <BellGlyph color={c.dim} />
+          <BellGlyphBase color={c.dim} />
           <View style={[styles.bellBadge, notifPending.length <= 0 && styles.bellBadgeOff]} pointerEvents="none">
             <Text style={styles.bellBadgeT}>{notifPending.length > 99 ? "99+" : notifPending.length}</Text>
           </View>
@@ -1718,7 +1723,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             右上角加号同语言）——会话页右下 FAB 退役（少一个悬浮遮挡元素，跨端动作
             位置肌肉记忆统一）；44px 触区，行为=原 FAB（新建会话弹层） */}
         {/* W-HEAD6 C：折叠空闲收进 head（原 statRow chip 迁入；有空闲才显） */}
-        {idleCount > 0 ? (
+        {idleCount > 0 && headChipsOn ? (
           <Pressable
             style={[styles.headCollapseBtn, collapseIdle && styles.headCollapseBtnOn]}
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
@@ -1732,7 +1737,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           </Pressable>
         ) : null}
         {/* W-HEAD6 C：输出物入口收进 head（原 statRow chip 迁入；能力开才显） */}
-        {artPoolOn ? (
+        {artPoolOn && headChipsOn ? (
           <Pressable
             style={styles.headCollapseBtn}
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
@@ -1745,7 +1750,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ) : null}
         <Pressable
           style={styles.plusBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}/* mtopicons R2-P2①：r16→r13 与容器角/OrgTabs 同值一套（B 审「同 ripple r13」失实纠正） */
           onPress={onNew}
           hitSlop={4}
           accessibilityLabel="新建会话"
@@ -2079,7 +2084,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcMenuManage: { borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 12, paddingVertical: 10, marginTop: 2 },
   srcMenuManageT: { color: c.dim, fontSize: 12 },
   topbar: {
-    flexDirection: "row", alignItems: "center", gap: 10,
+    flexDirection: "row", alignItems: "center", gap: 8, /* mtopicons（1104）：10→8 对齐 PageHead c.head gap 8——四页 pager 切换右侧动作区间距零跳 */
     // 件八：品牌行移除后顶栏=纯功能行（连接 chip / 主题 / ＋），净高由这三件承担。
     // W-HEAD5（#148 用户拍板）：对齐详情页 d.head——弃 headBg 特别底色（常规 bg）、
     // paddingVertical 4、总高≈48px；headTitleT 15/600 c.text（d.title 同款）
@@ -2347,12 +2352,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // W-MV8A 顶栏铃铛（v3 appbar bell）：与 searchBtn/themeBtn 同 30px 触区族 +
   // 红底白字 bbadge（display 切换常挂——P0 加固口径）
   bellBtn: { width: 30, height: 30, alignItems: "center", justifyContent: "center", marginRight: 2 },
+  /* mtopicons R2-P2②（B 审 1b）：badge 规格统一 PageHead（15×15 r8 偏移(-3,-6) 字 9.5/700
+     ——原 14/r7/(-1,-5)/9/800 双规格，横滑铃铛徽标大小位置双跳根除；常挂 display 策略不动） */
   bellBadge: {
-    position: "absolute", top: -1, right: -5, minWidth: 14, height: 14, borderRadius: 7,
+    position: "absolute", top: -3, right: -6, minWidth: 15, height: 15, borderRadius: 8,
     paddingHorizontal: 3, backgroundColor: c.error, alignItems: "center", justifyContent: "center",
   },
   bellBadgeOff: { display: "none" },
-  bellBadgeT: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
+  bellBadgeT: { color: "#FFFFFF", fontSize: 9.5, fontWeight: "700" },
   // 删除撤销条（#247）：底部浮条；右侧留出让任务汇报悬浮钮（44dp@right12）的空档。
   // zIndex 50：高于列表/边缘手势条（5），低于抽屉/图例（60）——配合打开时隐藏双保险
   undoBar: {

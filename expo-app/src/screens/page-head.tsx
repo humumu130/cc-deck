@@ -14,12 +14,23 @@ import { useRelay } from "../store";
 import { notifActionableOf } from "../notify-jump";
 import type { ThemeColors } from "../theme";
 
+/** mtopicons R2（B 审 1b 铃铛统一）：铃铛 glyph 单源导出——20×20/strokeWidth 2 唯一实现
+ *（会话页原本地自绘 18×18/1.8 双实现退役，四页同形）；badge 挂载策略各页自理：
+ * PageHead 族=条件插拔（本文件内包一层），会话页因 Fabric re-parent 崩面前科
+ *（W-MV8A P0 加固口径）走常挂 display 切换——badge 样式各页自持（规格已统一
+ * 15/r8/(-3,-6)/9.5/700，见两侧 makeStyles）。 */
+export function BellGlyphBase({ color }: { color: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24">
+      <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 function BellGlyph({ color, badge, c }: { color: string; badge: number; c: ReturnType<typeof makeStyles> }) {
   return (
     <View>
-      <Svg width={20} height={20} viewBox="0 0 24 24">
-        <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      </Svg>
+      <BellGlyphBase color={color} />
       {badge > 0 ? (
         <View style={c.badge}>
           <Text style={c.badgeT}>{badge > 99 ? "99+" : badge}</Text>

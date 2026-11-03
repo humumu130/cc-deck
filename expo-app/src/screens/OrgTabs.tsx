@@ -473,7 +473,7 @@ const makeStyles = (c: ThemeColors) =>
     // W-MOBILE3 #121：head/headT/headSub 退役（页头上收 PageHead 统一组件——
     // v3 .appbar 两行式规格；样式键删除防残留回退）
     plusBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginLeft: 6, backgroundColor: withA(c.brandA, 0.12), borderWidth: 1, borderColor: withA(c.brandA, 0.38), overflow: "hidden" },
-    plusBtnBare: { width: 36, height: 40, alignItems: "center", justifyContent: "center", marginLeft: 2, overflow: "hidden" }, /* W-HEAD6 D：＋裸形制（去边框去底，对齐会话页） */
+    plusBtnBare: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", marginRight: -4, overflow: "hidden" }, /* mtopicons（1104 用户实锤切页＋跳变）：对齐会话页 plusBtn 基准 44×44 r13 mR-4——原 36×40 mL2 与基准 x/y 双差（宽 8/高 4/对边反号）=pager 切页跳变根；同 PlusMark 20 同 ripple r13 同 hitSlop 4，四页一套 */
     plusT: { color: c.brandA, fontSize: 20, fontWeight: "600", lineHeight: 24, marginTop: -2 },
     list: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
     // 确认卡队列（A9 节头 + v3 pcfq 语言：标题行 + 红计数徽 cfcount）
