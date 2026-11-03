@@ -114,13 +114,13 @@ async function main(): Promise<void> {
   const notifPage = await import("../src/screens/NotifCenterPage.tsx");
 
   console.log("A. 泳道五色 + 渲染序 + 总览比例（TeamDetailPage 纯函数）");
-  eq(teamDetail.laneColorOf("backlog", "dark"), "#55677F", "backlog 深色档 = v3 --p-b");
-  eq(teamDetail.laneColorOf("claimed", "dark"), "#2FBF71", "claimed 深色档 = v3 --p-r");
-  eq(teamDetail.laneColorOf("submitted", "dark"), "#E08A63", "submitted 深色档 = v3 --p-v");
-  eq(teamDetail.laneColorOf("ready_to_install", "dark"), "#FFC53D", "待收单深色档 = v3 --p-ok");
-  eq(teamDetail.laneColorOf("done", "dark"), "#2C3B52", "done 深色档 = v3 --p-d");
-  eq(teamDetail.laneColorOf("backlog", "light"), "#C3CEDD", "backlog 浅色档 = v3 light --p-b");
-  eq(teamDetail.laneColorOf("ready_to_install", "light"), "#E0A43C", "待收单浅色档 = v3 light --p-ok");
+  eq(teamDetail.laneColorOf("backlog", "dark"), "#55677F", "未开始 暗档=灰蓝（R2 同步：--p-backlog 语义组）");
+  eq(teamDetail.laneColorOf("claimed", "dark"), "#FFC53D", "进行中 暗档=黄（W-BOARDCOLOR：=web var(--working) 解析值，绿=进行中旧义废）");
+  eq(teamDetail.laneColorOf("submitted", "dark"), "#E08A63", "待审查 暗档=橙·深档（R2 锚不动）");
+  eq(teamDetail.laneColorOf("ready_to_install", "dark"), "#F0B183", "待收单 暗档=橙·浅档（R2 拉差后：ΔL*=11.4 vs submitted）");
+  eq(teamDetail.laneColorOf("done", "dark"), "#35DC97", "完成 暗档=绿（W-BOARDCOLOR：=web var(--done) 解析值）");
+  eq(teamDetail.laneColorOf("backlog", "light"), "#74879E", "未开始 亮档=灰蓝加深（原 #C3CEDD 对比不达，随 web 同步）");
+  eq(teamDetail.laneColorOf("ready_to_install", "light"), "#C96F42", "待收单 亮档=橙·浅档（R2 折中维持：探针实测拉差值破 3:1——对比度优先，dark 档已拉差）");
   eq(teamDetail.laneColorOf("unknown-lane", "dark"), "#55677F", "词表外 lane 回落中性色（不崩不造）");
   eq(teamDetail.LANE_RENDER_ORDER[0], "ready_to_install", "渲染序首位 = 待收单（行动队列置顶，v3 拍板）");
   eq(teamDetail.LANE_RENDER_ORDER.join(","), "ready_to_install,claimed,submitted,backlog,done",
@@ -232,7 +232,7 @@ async function main(): Promise<void> {
   console.log("H. 回归锚（不动的红线）");
   const orgZoneSrc = srcOf("../src/screens/OrgZone.tsx");
   check(orgZoneSrc.includes('["backlog", "待认领"]'), "BOARD_LANES 词表序不动（数据面契约）");
-  check(appSrc.includes("badges={{ sessions: pendingCount, team: teamBadge }}"), "底栏 badge 口径不变（W-EXPOLISH 红线）");
+  check(appSrc.includes("tabBadges = useMemo(() => ({ sessions: pendingCount, team: teamBadge })"), "底栏 badge 口径不变（W-EXPOLISH 红线；boardcolor R2 锚同步：W-RNDRAGSUSPEND 五修 badges 稳定化 inline→useMemo，语义恒同 sessions=待处理/team=确认卡——原 inline 字面锚随该修过时=基线首败即退掩盖的既有红）");
   check(tdSrc.includes("BOARD_LANES.find(([k]) => k === st)?.[1]"), "词表→label 映射仍走 BOARD_LANES（渲染序只换遍历序，词面不复制）");
 
   console.log(`OK ${tests} assertions（W-MV8A：v8.5 v3 手机壳实装五项 + 回归锚）`);

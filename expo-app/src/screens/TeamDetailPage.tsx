@@ -135,14 +135,16 @@ export function EngineBadge({ engine, size = "md" }: { engine?: string; size?: "
 }
 
 // ---------- W-MV8A 看板 v8.5 v3 视觉层 ----------
-// 泳道五色（v3 手机壳 --p-b/--p-r/--p-v/--p-ok/--p-d 深浅双档直译；色只表达
-// 「哪个泳道」一个维度——产品三原则①）
+// 泳道五色（W-BOARDCOLOR 1103 用户口径·全局语义统一）：进行中恒黄（web tokens
+// --working 同值）/完成恒绿（--done 同值）/待动作恒橙两档/未开始恒灰——与状态灯
+// 「绿=空闲、黄=工作中」同族不再同色异义（原绿=进行中废）。与 web-console/css/
+// tokens.css --p-* 双主题组逐值同步（改一处必同步另一处——无共享层，注释契约）。
 export const LANE_COLORS: Record<string, { dark: string; light: string }> = {
-  backlog: { dark: "#55677F", light: "#C3CEDD" },
-  claimed: { dark: "#2FBF71", light: "#22A06B" },
-  submitted: { dark: "#E08A63", light: "#C05B33" },
-  ready_to_install: { dark: "#FFC53D", light: "#E0A43C" },
-  done: { dark: "#2C3B52", light: "#D7DEE9" },
+  backlog: { dark: "#55677F", light: "#74879E" }, // 浅档原 #C3CEDD 对比度不达 3:1，随 web 同步加深
+  claimed: { dark: "#FFC53D", light: "#A56D00" }, // 进行中=黄（=web var(--working) 解析值）
+  submitted: { dark: "#E08A63", light: "#C05B33" }, // 待审查=橙·深档
+  ready_to_install: { dark: "#F0B183", light: "#C96F42" }, // 待收单=橙·浅档（原黄琥珀废；R2 拉差：dark ΔL*=11.4 vs submitted 达标；light 维持——探针实测拉差值破 3:1（chip 底 2.66<3），ΔL* 与对比度在亮底互斥，取对比度优先=双审 B 折中条款，light 分辨靠 ΔE 色相复合）
+  done: { dark: "#35DC97", light: "#168D60" }, // 完成=绿（=web var(--done) 解析值）
 };
 export function laneColorOf(st: string, mode: "dark" | "light"): string {
   const pair = LANE_COLORS[st];

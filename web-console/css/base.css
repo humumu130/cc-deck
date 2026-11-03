@@ -1559,10 +1559,12 @@
        近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来。
        V8R：均分 flex 1 1 0 + min-width 186（原型 bcol flex:1 1 0 无滚动；窄窗可滚不压缩） */
     #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 1 0; min-width: 186px; flex-direction: column; min-height: 0; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); }
-    /* V8R：待收单列 = 原型 bcol.go（行动列）——琥珀描边 + 1px 光环 + 顶部琥珀渐变 + 列头琥珀字
-      （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中） */
-    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install { border-color: transparent; border-color: color-mix(in srgb, var(--working) 42%, transparent); background: var(--surface1); background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, var(--surface1)), var(--surface1) 40%); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--working) 15%, transparent); }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--working); }
+    /* V8R：待收单列 = 原型 bcol.go（行动列）——描边 + 1px 光环 + 顶部渐变 + 列头亮字
+      （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中）。
+      W-BOARDCOLOR：列高亮色随五态语义族改走 --p-ready（橙族——待收单=待动作；原
+      var(--working) 黄与「进行中恒黄」口径打架，且进行中列已非高亮列） */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install { border-color: transparent; border-color: color-mix(in srgb, var(--p-ready) 42%, transparent); background: var(--surface1); background: linear-gradient(180deg, color-mix(in srgb, var(--p-ready) 8%, var(--surface1)), var(--surface1) 40%); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--p-ready) 15%, transparent); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--p-ready); }
     /* W-LV8：空列空态（v8 .arch 语义）——死黑矩形→轻提示，扫读不失衡 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-empty { padding: 14px 0 10px; text-align: center; color: var(--faint); font-size: var(--fs-C); line-height: 1.6; }
     /* 件9：看板 pane 内的图纸/输出物侧区——限高内滚不与甬道争纵向空间（恒 ≤190px） */
