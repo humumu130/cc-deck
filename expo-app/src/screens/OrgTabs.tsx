@@ -11,7 +11,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { statusColor, withA, type ThemeColors } from "../theme";
+import { ENGINE_ACCENT, statusColor, withA, type ThemeColors } from "../theme";
+// rnvisual RN-V3：未立项 folder 头像线稿件（SettingsPage LineGlyph 同款内联——各屏自持先例）
+function LineGlyph({ path, size = 14, color }: { path: string; size?: number; color: string }) {
+  const Svg = require("react-native-svg").Svg as typeof import("react-native-svg").Svg;
+  const Path = require("react-native-svg").Path as typeof import("react-native-svg").Path;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={path} />
+    </Svg>
+  );
+}
 import { displaySrcName, fmtLastActive } from "../fmt";
 import type { ProjectGroup, SessionState } from "../protocol";
 import { useRelay, type SourceStatus } from "../store";
@@ -26,6 +36,36 @@ import { SourceSwitch } from "./source-switch";
 
 // 未立项折叠组展开态持久键（折叠态独立记账：默认折叠，用户展开过的桶记展开——与桌面
 // expandedTeams「集合=展开过的」同语义，防 collapsed 语义互染）
+// rnvisual（1104 审查 RN-V3；R2 色轴纪律）：项目头像区分——立项卡=项目名首字母+名 hash
+// 识别轴直值表（ENGINE_ACCENT 七色——R2 前三色表含 c.working 撞状态轴黄，B 审 P2-1；
+// 直值不随主题=与主题化状态轴分离更彻底；身份由首字母承载，色为辅助色征）；未立项卡=文件夹
+// 线稿（类型差异图形化，与「未立项」chip 双通道）
+const AVATAR_AXES = [ENGINE_ACCENT.claude, ENGINE_ACCENT.codex, ENGINE_ACCENT.trae, ENGINE_ACCENT["qwen-code"], ENGINE_ACCENT.codebuddy, ENGINE_ACCENT.zcode, ENGINE_ACCENT.glm] as const;
+const PROJ_AVATAR_COLORS = AVATAR_AXES.length; // =7（与 theme.ts ENGINE_ACCENT 键数同源——加引擎色须同步此表）
+function projAvatarColorIdx(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return h % PROJ_AVATAR_COLORS;
+}
+function projAvatarLetter(name: string): string {
+  const ch = (name || "").trim().charAt(0);
+  return ch ? ch.toUpperCase() : "?";
+}
+// rnvisual（RN-V5）：路径中段省略——390 逻辑宽下全路径必截（numberOfLines=1 尾省略先吃
+// 前置时间戳）。head…tail 保两端（家目录头+末两段），中段折叠；390 数字口径（R2 修真，
+// A 审 P3-c）：可用宽 = 390 −（页 padding 14×2 + 卡 padding 12×2 + projMeta 缩进 38）= 300px；
+// 行内前缀「N 会话 · 最近 MM-DD · 」@fontSize 10.5 ≈115px 先占 → 路径预算 ~185px；
+// 阈值 34（半角字符数）超则 head 14+…+tail 19（=34−14−1），省略后 ≤34 半角 @~5px ≈170px
+// ≤185px 余量 ~5-15px；CJK 路径按字符计数宽盲区仍在（全角 ~10px/字符，34 全角=340px 超预
+// 算——numberOfLines=1 尾省略兜底，真机观察过激可调 max）
+export function midEllipsizePath(p: string, max = 34): string {
+  const s2 = String(p || "");
+  if (s2.length <= max) return s2;
+  const headKeep = 14, tailKeep = Math.max(4, max - headKeep - 1);
+  return s2.slice(0, headKeep) + "…" + s2.slice(s2.length - tailKeep);
+}
+const FOLDER_PATH = "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"; // rnvisual RN-V3 未立项 folder 线稿
+
 const UNFILED_KEY = "ccdeck_proj_unfiled_open";
 
 // 页面骨架共享：SafeArea 顶 + 标题行（右上角 ＋ 钮）+ 滚动内容
@@ -334,7 +374,7 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
           {/* W-WAVE3IMPL 件2（#189）：两行轻卡（audit 3#2）——行1 图标+名+状态点（V3 pcard
               ●绿/蓝语言，状态胶囊降为点），行2 三计数副行（路径并入副行尾段截断） */}
           <View style={styles.teamR1}>
-            <View style={styles.projectIcon}><Text style={styles.projectIconT}>P</Text></View>
+            <View style={[styles.projectIcon, { backgroundColor: withA(AVATAR_AXES[projAvatarColorIdx(g.name)] ?? AVATAR_AXES[0], 0.16), borderColor: withA(AVATAR_AXES[projAvatarColorIdx(g.name)] ?? AVATAR_AXES[0], 0.34) }]}><Text style={[styles.projectIconT, { color: AVATAR_AXES[projAvatarColorIdx(g.name)] ?? AVATAR_AXES[0] }]}>{projAvatarLetter(g.name)}</Text></View>
             <Text style={styles.teamName} numberOfLines={1}>{g.name}</Text>
             <View style={[styles.stPillDot, { backgroundColor: stColor, marginLeft: "auto" }]} />
           </View>
@@ -390,13 +430,13 @@ export function ProjectsTab({ onOpenSession, onNewInDir, onViewSessionsInDir, on
                     onPress={() => setUnfiledExpand(open ? null : b.dir)}
                   >
                     <View style={styles.teamR1}>
-                      <View style={styles.projectIcon}><Text style={styles.projectIconT}>P</Text></View>
+                      <View style={[styles.projectIcon, { backgroundColor: "transparent", borderColor: c.line }]}><LineGlyph path={FOLDER_PATH} size={15} color={c.dim} /></View>
                       <Text style={styles.teamName} numberOfLines={1}>{shortDirOf(b.native || b.dir)}</Text>
                       <Text style={styles.unfiledTag}>未立项</Text>
                     </View>
                     <Text style={[styles.teamMeta, styles.projMeta]} numberOfLines={1}>
                       <Text style={styles.teamMetaStrong}>{b.items.length} 会话</Text>
-                      {" · "}{b.dir} · 最近 {displayLastAt(b.items)}
+                      {" · 最近 "}{displayLastAt(b.items)}{" · "}{midEllipsizePath(b.dir)}
                     </Text>
                   </Pressable>
                   {open ? (

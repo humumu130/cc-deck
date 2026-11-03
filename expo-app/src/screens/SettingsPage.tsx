@@ -151,7 +151,9 @@ function Lever<T extends string>({ options, value, onChange }: {
 // + 15px stroke 1.8 线图标），LineIcon 裸图标组件随之退役
 const ICON_MSG = "M4 5h16v10H9l-4 4z"; // 消息泡（过程消息）
 const ICON_GRID = "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"; /* W-HEAD6 C：密度行图标 */
-const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; // 半月（空闲变灰）
+const ICON_SLIDERS = "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"; /* rnvisual RN-V4：滑杆三段（通用与偏好——主题/置灰/输入/保活四项的「调节」语义；原半月只覆盖主题一项） */
+const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; /* 半月（空闲变灰行内图标——原注释位在旧常量，随 rnvisual 迁移保留） */
+const ICON_INFO_ABOUT = "M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zM12 11.2v4.6M12 7.9v.2"; /* rnvisual RN-V4（R2 圈版——B 审 P3）：info-circle（外圆+圆点竖线，15px 存在感对齐行内帮助 ⓘ；关于——版本/更新/反馈的「信息」语义；值与 ICON_INFO 同款圆版，命名 _ABOUT 区分用途避让） */
 const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回车发送）
 const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
 const ICON_HOME = "M3 11 12 4l9 7M5 10v10h14V10"; // 小屋（#17 第二批 雇员独立家）
@@ -172,9 +174,9 @@ const ICON_REFRESH = "M19.5 12a7.5 7.5 0 1 1-2.1-5.2M19.5 3.8v3.4h-3.4"; // ↻�
 // icon 复用各组既有线稿；sub 即二级页 PageHead 副题
 const SET_NAV: { key: "conn" | "prefs" | "engines" | "about"; title: string; sub: string; note: string; icon: string }[] = [
   { key: "conn", title: "连接与设备", sub: "连接", note: "服务器 · 已配设备 · 规则与权限", icon: ICON_PHONE },
-  { key: "prefs", title: "通用与偏好", sub: "偏好", note: "主题 · 空闲置灰 · 输入习惯 · 保活", icon: ICON_MOON },
+  { key: "prefs", title: "通用与偏好", sub: "偏好", note: "主题 · 空闲置灰 · 输入习惯 · 保活", icon: ICON_SLIDERS },
   { key: "engines", title: "Agent 引擎", sub: "引擎", note: "引擎目录 · 经验库", icon: ICON_BOOK },
-  { key: "about", title: "关于", sub: "关于", note: "版本 · 检查更新 · 反馈", icon: ICON_BOX },
+  { key: "about", title: "关于", sub: "关于", note: "版本 · 检查更新 · 反馈", icon: ICON_INFO_ABOUT },
 ];
 
 // W-MSET3 ⑤ 裸线图标（无方格底）：小尺寸 stroke 图标统一出口（问号/折角/ⓘ/＋/↻），

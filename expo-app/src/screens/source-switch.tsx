@@ -90,7 +90,7 @@ export function SourceSwitch({ onOpenSettings }: { onOpenSettings?: () => void }
     <View style={c.wrap} ref={wrapRef}>
       <Pressable
         ref={trigRef}
-        style={c.trigger}
+        style={[c.trigger, { backgroundColor: connColor + "1f" }]} /* rnvisual RN-V1：状态淡底（12% 透明十六进制后缀）——读作独立状态 chip 不再贴标题歧义「项目 1/1」 */
         hitSlop={6}
         android_ripple={{ color: tc.tintSoft, borderless: false, radius: 14 }}
         accessibilityLabel={`数据源 ${onlineN}/${sources.length} 在线，点击${multi ? "切换或聚合" : "查看或管理连接"}`}
@@ -156,7 +156,7 @@ const makeStyles = (c: ThemeColors) =>
     rowTwoLine: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7 }, /* P0-1 二行行高 */
     rowSub: { fontSize: 10, marginTop: 1, opacity: 0.9 }, /* P0-1 副行（四态+原因） */
     wrap: { position: "relative", flexShrink: 0 },
-    trigger: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 6, borderRadius: 13 }, /* W-UIFIX 件八：30→26——titleRow 内不撑高（设置页 51→48 与四页齐一） */
+    trigger: { flexDirection: "row", alignItems: "center", gap: 4, height: 26, paddingHorizontal: 6, borderRadius: 13 }, /* W-UIFIX 件八：30→26——titleRow 内不撑高（设置页 51→48 与四页齐一）；rnvisual RN-V1：容器已有 pill 几何，底色由渲染处按连接态注入（见下 rgba） */
     countT: { fontSize: 11, fontWeight: "600" },
     menu: {
       /* #290：right:0 是首开未测到锚时的回落（右缘对齐触发器）；测到后 clampMenuLeft
