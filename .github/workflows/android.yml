@@ -63,8 +63,9 @@ jobs:
 
       - name: Build release APK
         working-directory: expo-app/android
-        # 2026-10-11 用户拍板：CI 出 nova 变体包（applicationId online.humumu.ccdeck.nova，
-        # 与正式版 com.humumu.ccwatch 共存不覆盖——Mac nova 同款形态）。标准包如需
+        # 2026-10-11 用户拍板 nova 变体 → 1103 W-NOVAONLY 收敛：nova 已是唯一通道
+        #（plain 退役，与 desktop.yml 同口径——手机装机面本就全线 nova 清单）。恒
+        # -PAPP_VARIANT=nova 出包（原双装设计「与 com.humumu.ccwatch 共存」口径退役）。标准包如需
         # 本地构建去掉该传参即可（W-NOVAVAR B1 双形态接线）。
         run: ./gradlew assembleRelease -PAPP_VARIANT=nova --stacktrace
 
