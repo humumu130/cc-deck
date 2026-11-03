@@ -48,7 +48,11 @@ function transcriptKey(transcriptPath) {
  * fire-and-forget 语义：本函数从不 throw；调用方无需 await（返回 promise 自吞）。
  */
 export function reportTurn(input) {
-  if (process.env.CCR_RELAY_CHILD === "1") return Promise.resolve(false);
+  // W-DELIVERCB R2（P1-a，review-w-delivercb-a）：CCR_RELAY_CHILD 自环闸原本把 relay
+  // 托管沃克（childEnv 无条件注入）整线吞死——线二生产形态 0% 覆盖。白名单放行：
+  // childEnv 对编排 worker 额外注入 CCR_TURN_REPORT=1（外部用户会话不带两 env 照旧放行；
+  // 托管非编排子进程照旧自跳——bridge hook 双注册语义不动）
+  if (process.env.CCR_RELAY_CHILD === "1" && process.env.CCR_TURN_REPORT !== "1") return Promise.resolve(false);
   const sid = String(input?.session_id ?? "");
   const tr = String(input?.transcript_path ?? "");
   if (!sid || !tr || !existsSync(tr)) return Promise.resolve(false);

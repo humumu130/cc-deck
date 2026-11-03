@@ -51,7 +51,7 @@ import { AskUserHold, askHoldMs } from "./ask-user-hold.js";
 // PATH 仅 /usr/bin:/bin:/usr/sbin:/sbin——会话里 hook 报 node: command not found、
 // gradle 报 Cannot run program "node"（当日实证），每个会话被迫手动补 PATH。spawn 时
 // 统一补常见安装目录（不存在的目录在 PATH 里无害），CCR_EXTRA_PATH 可追加自定义位。
-export function childEnv(opts?: { configHome?: string; orgRole?: string }): NodeJS.ProcessEnv {
+export function childEnv(opts?: { configHome?: string; orgRole?: string; turnReport?: boolean }): NodeJS.ProcessEnv {
   const extra = [
     join(homedir(), "node/bin"),       // 用户级 node（本机实证位置）
     "/usr/local/bin",                  // macOS Intel / 惯装位
@@ -74,6 +74,9 @@ export function childEnv(opts?: { configHome?: string; orgRole?: string }): Node
     //（cwd 在 worktree 判据之外，env 位全域生效：worker 在任意 cwd push dev/main 均拦；
     // leader/PM 不注入=误拦零面）
     ...(opts?.orgRole ? { CC_ORG_ROLE: opts.orgRole } : {}),
+    // W-DELIVERCB R2 P1-a：编排 worker 白名单——turn-report.mjs 自环闸（CCR_RELAY_CHILD）
+    // 对带本标记的托管会话放行（线二交付自报对托管沃克复活；bridge hook 双注册语义不动）
+    ...(opts?.turnReport ? { CCR_TURN_REPORT: "1" } : {}),
   };
 }
 
@@ -447,6 +450,7 @@ export class AgentSession {
       rules?: AllowRuleStore; // #212 允许并记住：缺省 = 无规则（标题生成等非会话级用法）
       configHome?: string;    // #17 雇员独立家：传入则 CLI 子进程带 CLAUDE_CONFIG_DIR
       orgRole?: string;       // W-ORG-DEFECTS A-P2-2：编排 worker 身份位（CC_ORG_ROLE，pre-push 收割闸 env 判据）
+      turnReport?: boolean;   // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT，钩子自环闸放行）
       // W-KWP2 件一：雇员会话插件通路（plugin-config.listWorkerPluginPaths() 产物，
       // session-manager newAgent 按 state.employee 守卫后传入）。undefined/空 = 不传
       // plugins（维持现状零波及）；非空 = 显式 local 插件注入（toSdkPlugins 映射）。
@@ -481,7 +485,7 @@ export class AgentSession {
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
         // PATH 补全：见 childEnv()（M0）；#17 雇员独立家：configHome 时注入
         // CLAUDE_CONFIG_DIR（transcript/任务清单落独立家）
-        env: childEnv({ configHome: opts?.configHome, orgRole: opts?.orgRole }),
+        env: childEnv({ configHome: opts?.configHome, orgRole: opts?.orgRole, turnReport: opts?.turnReport }),
         permissionMode: opts?.permissionMode ?? "default",
         // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
         // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过

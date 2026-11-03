@@ -829,6 +829,16 @@ export function startServer(
     // worker→60s 去重+worker_done 边沿。失败 relay 侧不回 5xx（钩子已 spool，回 200
     // 防重报风暴——接受窗语义：收到即受理）
     if (req.method === "POST" && url.pathname === "/api/turn-report") {
+      // R3-P2-a③（r2-a 审随批建议）：回环校验——线二复活后该端点升值为「PM 注入触发
+      // 器+去重占坑器」，托管 worker 群全打此口；钩子只打 127.0.0.1（回环即信任边界），
+      // 非回环来源拒 403（原「绑全网卡+零校验」面随端点升值放大）
+      const ra = req.socket.remoteAddress ?? "";
+      const isLoop = ra === "127.0.0.1" || ra === "::1" || ra === "::ffff:127.0.0.1";
+      if (!isLoop) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "loopback only" }));
+        return;
+      }
       let trBody = "";
       req.on("data", (c: Buffer) => { trBody += c; });
       req.on("end", () => {

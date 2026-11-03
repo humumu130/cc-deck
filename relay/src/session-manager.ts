@@ -84,12 +84,14 @@ import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { readCodexThreadName } from "./title-codex.js";
 import { generateTitle } from "./title-gen.js";
-import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, effectiveRelayName, sanitizeRelayName, writeRelayName, readEngineProfiles, type CollabMode } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, readCollabMode, writeCollabMode, effectiveRelayName, sanitizeRelayName, writeRelayName, readEngineProfiles, ensureEmployeeHomeStopHook, type CollabMode } from "./settings.js";
 import type { EmployeeHomeSettingsPayload
   , RetiredEntry } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 // W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排缺陷 P0 批）：worktree 互斥锁底座 + 审计词表
 import { claimWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther } from "./dispatch-lock.js";
+// W-DELIVERCB（用户 1102 拍板）：沃克交付 Callback 三线机制——去重账+文案（纯 fs 模块）
+import { appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js";
 import type { ChainAuditAction } from "./types.js";
 import { readTaskStoreTodos } from "./task-store.js";
 // W-TASKFLOW（2026-10-12 唯一事实源强制）：看板→PM 会话清单单向镜像 + 对账看门 v2
@@ -819,7 +821,7 @@ export class SessionManager {
     model: string,
     cb: AgentCallbacks,
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; orgWorker?: boolean; orgRole?: string },
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; orgWorker?: boolean; orgRole?: string; turnReport?: boolean },
   ): AgentLike {
     // #27 引擎分叉（V2 Agent 无关编排的工厂缝）：codex = CodexAgentSession
     //（一回合一进程，resume 锚 = codex thread_id；允许规则/雇员家是 Claude 概念，
@@ -869,6 +871,9 @@ export class SessionManager {
     // 非 leader 守卫后传 orgWorker；adapter 侧翻成 CC_ORG_ROLE env——pre-push 收割闸）
     if (restOpts.orgWorker) { restOpts.orgRole = "worker"; }
     delete restOpts.orgWorker;
+    // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单直透（adapter 翻成 CCR_TURN_REPORT=1
+    // ——turn-report.mjs 自环闸对带标托管会话放行；spawn 点守卫同 orgWorker）
+    if (restOpts.turnReport) { restOpts.turnReport = true; }
     const withRules = {
       ...restOpts,
       rules: this.allowRules,
@@ -1023,6 +1028,9 @@ export class SessionManager {
     }
     const next = resolveEmployeeHome(this.cfg.dataDir);
     this.cfg.employeeConfigDir = next.value;
+    // W-DELIVERCB R2 P2-a：运行期开启边挂一次钩子种子——此前只在 relay boot 种，重启
+    // 窗内新开的雇员家要等下次 boot 才有钩子（线二缺席窗）；幂等（已种/已含=no-op）
+    try { if (next.enabled && next.value) ensureEmployeeHomeStopHook(this.cfg.dataDir); } catch { /* 尽力而为 */ }
     const payload: EmployeeHomeSettingsPayload = { employee_home: next.enabled, value: next.value, source: next.source };
     this.bus.emitTransient("SETTINGS_UPDATED", payload);
     return { ok: true, data: payload };
@@ -1193,11 +1201,56 @@ export class SessionManager {
     } else {
       this.emitChainAudit("pm-wake", `trigger=turn-report(worker) sid=${sid.slice(0, 12)} key=${String(key).slice(0, 12)}`, sid);
       this.workerDonePending += 1;
+      // W-DELIVERCB 线二（Stop 钩子自报·双保险，用户 1102 拍板）：worker 收工即报——
+      // 该席有 leader 派单在途则提前直达 PM（比 relay 收口解析早一个窗）；去重账与
+      // 线一共口（先到先投，relay 观测线随后收口时跳过不双投）。hook 缺席/失败零影响
+      // ——线一收口边恒在（兜底语义）。边界备案：收工即交付假设（派单纪律收工=回执
+      // 末行「结果：」）；罕见「收工但收口判 failed」（零产出闸）由 failed 通知独立
+      // 通道（action 桶）覆盖，不误导收割
+      // P1-b 根修（review-w-delivercb-a）：FIFO 头≠「刚收工单」——收口(a)先落时排水微任务
+      // 已把队首 B 派给同一 worker，hook POST(b) 后到会把未开工的 B 误投+占坑（真交付
+      // 被 seen 永久压制）。判定序改为：①近窗收口单优先（closeOpenDispatches 刚 shift 的
+      // A——seen 则 skip=线一已投/占坑，B 不碰；未见则投 A 本尊）②退化 FIFO 头（relay
+      // 完全没收到 turn-end 的兜底：A 仍在队头，投 A 正确——此时不存在 B 竞态）
+      const RECENT_MS = 120_000;
+      const recent = this.recentDispatchClosed.get(sid);
+      if (recent && Date.now() - recent.ts <= RECENT_MS) {
+        const seenRecent = deliverCallbackSeen(recent.id);
+        if (seenRecent) {
+          this.emitChainAudit("deliver-callback", `dispatch=${recent.id.slice(0, 8)} via=stop-hook 跳过（近窗收口单已由 ${seenRecent.via} 投递/占坑——FIFO 头为排水新单不误投，P1-b）`);
+        } else {
+          this.deliverCallbackToPM(recent.entry, "Stop 钩子自报（收工即报）", sid, "stop-hook");
+        }
+      } else {
+        const open = this.openDispatches.get(sid);
+        const hit = open?.find((d) => d.actor === "leader");
+        // R3-P2-a①（r2-b 审格②廉价加固）：退化 FIFO 头投递前加 mid-turn 守卫——过窗
+        // （>120s：hook 迟到/spool 重放/睡眠唤醒时钟跳变）时队头可能是排水新单 B（在途
+        // 未开工）。该席正在跑回合（turn_started_at 新于单派发时刻或状态 WORKING）=头单
+        // 非刚收工单，跳投（线一收口边恒在兜底，真交付不丢）。
+        if (hit) {
+          // 时间判据（非 status——收工瞬间 relay 侧 status 恒 WORKING，status 判据会误拦
+          // 合法「钩子先报竞速」形态）：头单派发（dispatched 行 ts）距今 <90s=刚收工单
+          // （钩子秒级到达），放行；>90s（仅 spool 重放/时钟跳变通道）=头单疑为排水新单
+          // B，跳投封窗（线一收口边恒在兜底，真交付不丢）。
+          let dispatchedAt = 0;
+          try { dispatchedAt = readDispatchLogFile().find((r) => r.id === hit.id && r.status === "dispatched")?.ts ?? 0; } catch { /* 读失败放行 */ }
+          const freshDispatch = dispatchedAt > 0 && Date.now() - dispatchedAt < 90_000;
+          if (!freshDispatch) {
+            this.emitChainAudit("deliver-callback", `dispatch=${hit.id.slice(0, 8)} via=stop-hook 跳过（退化 FIFO 头派发已 ${dispatchedAt ? Math.round((Date.now() - dispatchedAt) / 1000) + "s" : "??"}——过窗竞态封窗，线一收口边兜底）`);
+          } else {
+            this.deliverCallbackToPM(hit, "Stop 钩子自报（收工即报）", sid, "stop-hook");
+          }
+        }
+      }
       this.feedPM("worker_done"); // 与 finishExternal turn_end 同边沿（60s 去重上幂等——K=3 退避兜底）
     }
     return true;
   }
   private turnReportSeen = new Map<string, { at: number; key: string }>();
+  /** P1-b（review-w-delivercb-a）：每席最近一次被 closeOpenDispatches shift 的 leader 派单
+   * （handleTurnReport 的「刚收工单」判据——替代裸 FIFO 头，排水接续竞态根修） */
+  private recentDispatchClosed = new Map<string, { id: string; ts: number; entry: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; receiptPath?: string } }>();
 
   /** #199 D：三账对账——台账（dispatch-log running 行 title 提 #NN）↔ 任务面
    *（~/.cc-deck 全局任务 json subject 提 #NN，限 pending/in_progress）↔ 板面（org
@@ -3174,6 +3227,14 @@ export class SessionManager {
             appendChildSession(this.cfg.dataDir, sdkId);
           }
           managed.state.relay_session_id = sdkId;
+          // 丢注入①（W-DELIVERCB R2；R3 接线修正 review-w-delivercb-r2-a）：PM 上线边
+          // 补扫挂点=relay_session_id 回填**之后**（原挂回调体早段：bootstrap 边读 ""
+          // 恒 throw 空转=军令「上线时刻」死边；resume 边读陈旧 sdkId 会把刚握手的
+          // 新流 stop+killTree 三拉 #3——F-07 悬空 user 轮挂死通路）。回填后读本流
+          // 新 sdkId，配合 flush 内活流 sendMessage（A-②）双保险。
+          try {
+            if (this.leaderId && managed.state.session_id === this.leaderId) this.flushUndeliveredCallbacks();
+          } catch { /* 尽力而为 */ }
           // #26 Leader 锚回写：resume 会产生新 sdkId（onInit 无条件覆盖上面这行即证），
           // 锚必须跟着收敛——否则下次恢复用旧 sid 必 404。「固定 session id」的实现
           // 就是这个锚 + 每次回写，而非假设 id 不变。
@@ -3513,7 +3574,12 @@ export class SessionManager {
             delivered && !zeroOutputBlocked ? undefined : "backlog",
             zeroOutputBlocked
               ? { failureReason: "zero_output" }
-              : ok && !receiptProbe.hasResultLine ? { receiptMissing: true } : undefined);
+              : ok && reason === "interrupted"
+                // R3-B-边一（r2-b 审探针实锤）：用户手停 onTurnEnd(true,"interrupted")——ok=true
+                // 走 done 但**非交付**，原透传漏 interrupted → 线一伪「已交付·待收割」直达 PM。
+                // 与 :3620 流关闭兜底同形：flag 透传让通知文案区分+不直达。
+                ? { receiptMissing: !receiptProbe.hasResultLine, interrupted: true }
+                : ok && !receiptProbe.hasResultLine ? { receiptMissing: true } : undefined);
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -3586,7 +3652,7 @@ export class SessionManager {
           // 未开工/被打断），不写熟手 count（含用户停止触发的 pump finally 路径）。
           // M1/M2 审查轮：板去向也按中断口径退 todo——活没交付，台账 done 只写实
           //「流关了」，条目退回待认领（否则结项核对清单看不见未完，绕过知情放行卡）
-          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "backlog");
+          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "backlog", { interrupted: true }); // P1-c：中断口径 done——非交付（通知文案区分，不直达 PM）
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             this.transition(managed.state.session_id, "DONE", "stream-close"); /* W-SMIMPL③ 直写收口 */
@@ -3677,6 +3743,7 @@ export class SessionManager {
         configHome: this.employeeHome(s.state),
         ...(s.state.employee ? { employee: true } : {}), // W-KWP2 件一：插件通路守卫
         orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
+        turnReport: !!s.state.project_gid && s.state.session_id !== this.leaderId, // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT——钩子自环闸放行）
       });
       s.agent = agent;
       this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */
@@ -3766,6 +3833,7 @@ export class SessionManager {
           images,
           configHome: this.employeeHome(s.state),
           orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
+        turnReport: !!s.state.project_gid && s.state.session_id !== this.leaderId, // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT——钩子自环闸放行）
           // W-KWP2 件一：resume 同注入雇员标记（插件通路 resume 后不丢）
           ...(s.state.employee ? { employee: true } : {}),
           // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
@@ -3844,7 +3912,7 @@ export class SessionManager {
             const q = this.openDispatches.get(s.state.session_id);
             if (!q || q.length <= 1) break;
             q.unshift(q.pop()!);
-            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
+            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog", { interrupted: true }); // P1-c：重放合并收口——非交付
           }
         }
         const replayText = (pendingNow.length ? pendingNow : opts?.renewable ? [] : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
@@ -3865,6 +3933,7 @@ export class SessionManager {
             images: replayImages.length ? replayImages : undefined,
             configHome: this.employeeHome(s.state),
             orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
+        turnReport: !!s.state.project_gid && s.state.session_id !== this.leaderId, // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT——钩子自环闸放行）
             // W-KWP2 件一：fresh 回退同注入雇员标记（重放会话插件不丢）
             ...(s.state.employee ? { employee: true } : {}),
             // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
@@ -4028,6 +4097,7 @@ export class SessionManager {
         // W-KWP2 件一：parked revive 同注入雇员标记
         ...(s.state.employee ? { employee: true } : {}),
         orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId, // A-P2-2：编排 worker 身份位（CC_ORG_ROLE——pre-push 收割闸 env 判据；leader 不注入）
+        turnReport: !!s.state.project_gid && s.state.session_id !== this.leaderId, // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT——钩子自环闸放行）
         // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
         ...(s.state.engine ? { engine: s.state.engine } : {}),
       });
@@ -4508,7 +4578,7 @@ export class SessionManager {
     }
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog", opts?: { receiptMissing?: boolean; /** S1 零产出闸（relfix-s）：收口行显式 failure_reason（跳过文本分类器——闸的判定是结构性的，receipt 前缀「零产出闸」会被分类器误落 logic_error） */ failureReason?: DispatchFailureReason }): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "backlog", opts?: { receiptMissing?: boolean; /** W-DELIVERCB R2 P1-c：中断口径收口（流关闭兜底/重放合并——done 但非交付，不直达 PM 改中断文案） */ interrupted?: boolean; /** S1 零产出闸（relfix-s）：收口行显式 failure_reason（跳过文本分类器——闸的判定是结构性的，receipt 前缀「零产出闸」会被分类器误落 logic_error） */ failureReason?: DispatchFailureReason }): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     // P0 排队排水挂点前置说明：方法尾部对本批受影响 gid 逐个 drainDispatchQueue——
@@ -4525,6 +4595,14 @@ export class SessionManager {
         ? q.splice(0)
         : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string; generation?: number; task_snapshot?: { text?: string; status?: string; updated_at?: number } } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
+    // P1-b：近窗收口记账（handleTurnReport「刚收工单」判据——只记 leader 派单）
+    for (const e of es) {
+      if (e.actor === "leader") this.recentDispatchClosed.set(key, { id: e.id, ts: Date.now(), entry: { id: e.id, tier: e.tier, ...(e.gid ? { gid: e.gid } : {}), ...(e.anchor ? { anchor: e.anchor } : {}), actor: e.actor, ...(e.receiptPath ? { receiptPath: e.receiptPath } : {}) } });
+    }
+    if (this.recentDispatchClosed.size > 200) { // 防陈账膨胀（席位级）
+      const cut = Date.now() - 600_000;
+      for (const [k, v] of this.recentDispatchClosed) if (v.ts < cut) this.recentDispatchClosed.delete(k);
+    }
     for (const e of es) {
       // S3 世代 CAS（relfix-s，multica dispatched_at generation token 范式）：收口写前
       // 与台账该 id 末行比对——①末行已终态（done/failed）→ 该单已被别的路径收口
@@ -4596,7 +4674,7 @@ export class SessionManager {
       // #40 M4 派单完成回调（谁派活谁收通知）：收口即通知——端上广播帧恒发；
       // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
       // W-TASKFLOW：通知文本同带 [task_ref] 头（回执流四处同键）
-      this.notifyDispatchClosed(e, status, refReceipt, key);
+      this.notifyDispatchClosed(e, status, refReceipt, key, opts?.interrupted);
       // W-SMIMPL ②：回执缺失通知账一行（Leader 巡检面放大——「账面 done 内容空」
       // 三次实锤的止痛件；stableKey 按 dispatch id 去重幂等；纯信息行无跳转，
       // actionable=false 不生成待办）。仅 done 单（failed 已有异常通道不双计）。
@@ -4780,7 +4858,7 @@ export class SessionManager {
       if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
-        "done", "relay 重启，回合中断", e.session_id,
+        "done", "relay 重启，回合中断", e.session_id, true, // P1-c：重启清扫=中断口径（非交付）
       );
     }
   }
@@ -4845,7 +4923,114 @@ export class SessionManager {
     } catch { /* 升级尽力而为，绝不炸收口主路径 */ }
   }
 
-  private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string): void {
+  /** W-DELIVERCB（用户 1102 拍板）：沃克交付直达 PM 收件箱——线一线二共口。
+   * 目标解析：leader 模式=this.leaderId；no-leader=dutyTargetId()（external PM 走
+   * bridge.extInput 排队跟随——「PM 离线则排队，复活即达」；managed PM 走
+   * resumeAgent 拉活注入，熔断/停放经 suppressAutoResume 入 unacked 补投账同语义）。
+   * 去重：deliver-callbacks.ndjson 单源（含 skip 占坑——一次判定终身有效）；后到线
+   * 只出审计行。PM 卡不在场（重启窗）：账+通知已落（持久面），duty worker_done 边
+   * 与 PM 上线喂活兜底——不无限重试。 */
+  private deliverCallbackToPM(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; receiptPath?: string }, receipt: string, workerSessionId: string, via: DeliverCallbackVia): void {
+    // 跨机②备案（review-w-delivercb-b 格⑤）：交付回调（与整条 org 编排）=**单 relay
+    // 主机半径**——dutyTargetId 扫本机 sessions、注入面（resumeAgent/extInput 键鼠）
+    // 均本机；沃克与 PM 分属两台 relay 时本机制恒判 no-pm-target（通知面经云桥可达
+    // 配对手机=人的可见面在，PM 会话注入不到）。真多机需 relay 间 org 同步，明确不入本批。
+    if (e.actor !== "leader") return; // 谁派活谁收（随手办/用户自派不投）
+    const targetId = this.leaderId && this.leaderId !== workerSessionId
+      ? this.leaderId
+      : (() => { const t = this.dutyTargetId(); return t && t !== workerSessionId ? t : ""; })();
+    const seen = deliverCallbackSeen(e.id);
+    if (seen) {
+      this.emitChainAudit("deliver-callback", `dispatch=${e.id.slice(0, 8)} via=${via} 跳过（已由 ${seen.via} 投递/占坑${seen.skipped ? "·skip:" + seen.skipped : ""}）——单次收敛`);
+      return;
+    }
+    const prompt = buildDeliverCallbackPrompt({ dispatchId: e.id, tier: e.tier, receiptPath: e.receiptPath, receipt, via });
+    // 通知账：收件箱直达款（action 桶可操作——「已交付待收割」是 PM 的下一步动作；
+    // stableKey=dispatch:id 与 notifyDispatchClosed 的 done 行同键——upsert 幂等，
+    // 正文被本行覆盖为「待收割」行动语义）。**先于目标判定落账**：PM 无卡/离线窗
+    // 通知面持久兜底（PM 上线即见），与会话注入解耦
+    try {
+      this.upsertNotification("dispatch", e.id, undefined, {
+        title: `worker 已交付 · 待收割（${e.tier}）`,
+        body: truncate(prompt, 200),
+        severity: "waiting", group: "action", actionable: true,
+        sessionId: workerSessionId, domain: "dispatch", returnPath: "dispatch",
+      });
+    } catch { /* 尽力而为 */ }
+    if (!targetId) {
+      appendDeliverCallback({ ts: Date.now(), dispatch_id: e.id, session_id: workerSessionId, via, skipped: "no-pm-target" });
+      this.emitChainAudit("deliver-callback", `dispatch=${e.id.slice(0, 8)} via=${via} skip：无 PM 目标（账占坑+通知面持久兜底）`);
+      return;
+    }
+    const t = this.sessions.get(targetId);
+    // 丢注入①（B 审格①）：PM 卡不在场=占坑但未投——行记 delivered:false（PM 上线边
+    // flushUndeliveredCallbacks 补扫聚合注入，见 agentCallbacks onInit leader 边）；
+    // 在场投递（suppress 入账/resumeAgent/extInput 成功发出）=delivered:true 缺省
+    appendDeliverCallback({ ts: Date.now(), dispatch_id: e.id, session_id: workerSessionId, via, target: targetId, tier: e.tier, ...(t ? {} : { delivered: false }) });
+    try {
+      this.pushExternalLog(targetId, "system", `[worker 已交付] ${e.tier}单 ${e.id.slice(0, 8)}（via ${via}）——待收割`);
+      if (t?.state.external) {
+        if (!this.bridge) throw new Error("外部会话通道未就绪（bridge 未挂）");
+        const r = this.bridge.extInput(targetId, prompt);
+        if (!r.ok) throw new Error(r.error ?? "外部会话注入失败");
+      } else if (t) {
+        if (this.suppressAutoResume(t, "交付直达", prompt)) return; // 熔断/停放：prompt 入 unacked 补投账（手动恢复即达）
+        this.resumeAgent(this.require(targetId), prompt);
+      } else {
+        // PM 卡不在场（relay 重启窗/未建）：账（delivered:false）+通知已落——丢注入①
+        // 修复：PM 上线边沿 flushUndeliveredCallbacks 聚合补投（不再只靠通知面轮询）
+        this.emitChainAudit("deliver-callback", `dispatch=${e.id.slice(0, 8)} via=${via} PM 卡不在场：账 delivered:false+通知已落，PM 上线边补扫（丢注入①）`);
+      }
+    } catch (err) {
+      console.warn(`[delivercb] 交付直达注入失败（通知账已落兜底）: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** 丢注入①（B 审审①）：PM 上线边补扫——deliver-callbacks 账中 delivered:false 的
+   * 未投行（24h 窗）聚合成一条 prompt 注入 PM（恢复即达）；逐单追加 delivered:true
+   * 补账行（末行赢——seen 语义保持，后续线不重投）。触发=leader 会话 onInit（PM
+   * spawn/resume 成功的上线时刻，agentCallbacks 调用）。幂等：无未投行=no-op 零噪音。 */
+  flushUndeliveredCallbacks(): number {
+    try {
+      const pending = undeliveredCallbacks();
+      if (!pending.length) return 0;
+      const targetId = this.leaderId ?? this.dutyTargetId() ?? "";
+      if (!targetId) return 0; // 无 PM 目标：留给下次上线边（通知面恒在）
+      const lines = pending.map((r) => `· ${r.tier}单 ${r.dispatch_id.slice(0, 8)}（via ${r.via}，worker ${r.session_id.slice(0, 8)}）`);
+      const prompt = `[PM 上线补投 · 交付回调 ${pending.length} 单未达（你离场/重启窗内交付）]
+${lines.join("\n")}
+——逐单按 dispatch id 对账收割（完整上下文见通知面各单行动卡）。`;
+      const t = this.sessions.get(targetId);
+      if (!t) return 0;
+      if (t.state.external) {
+        if (this.bridge) { const r = this.bridge.extInput(targetId, prompt); if (!r.ok) return 0; }
+        else return 0;
+      } else if (t.agent && !t.agent.ended) {
+        // R3-A-②（r2-a 审）：活流免杀——流已就绪（onInit 刚握手）直接 sendMessage；
+        // suppress/resume 会把刚握手的流 stop+killTree 重拉（F-07 悬空轮挂死通路+
+        // WORKING 打断面同族）。仅无流时才走 suppress/resume 换流。
+        try {
+          t.agent.sendMessage(prompt);
+        } catch (e) {
+          console.warn(`[delivercb] 上线补投活流投递异常（留通知面兜底）: ${e instanceof Error ? e.message : String(e)}`);
+          return 0;
+        }
+      } else {
+        if (this.suppressAutoResume(t, "上线补投", prompt)) { /* 熔断/停放：入 unacked 恢复即达 */ }
+        else this.resumeAgent(t, prompt);
+      }
+      for (const r of pending) {
+        appendDeliverCallback({ ts: Date.now(), dispatch_id: r.dispatch_id, session_id: r.session_id, via: r.via, target: targetId }); // 末行 delivered 缺省=已投
+      }
+      this.emitChainAudit("deliver-callback", `PM 上线补投 ${pending.length} 单（delivered:false 聚合——丢注入①闭合）`);
+      return pending.length;
+    } catch (e) {
+      console.warn(`[delivercb] 上线补扫失败（留通知面兜底）: ${e instanceof Error ? e.message : String(e)}`);
+      return 0;
+    }
+  }
+
+  private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string, interrupted = false): void {
     // W-ORG-DEFECTS 件2：收口清 worktree 锁——该单持有的 .cc-deck-lock 随终态释放
     //（worker「退出收尾清锁」的机制面；leader-harvest 收尾/2h 过期为另两路兜底）。
     // 尽力而为：CCR_WT_ROOT 扫描失败不阻断收口主路径。
@@ -4865,16 +5050,27 @@ export class SessionManager {
     // 离线端收不到），通知账持久 + 随快照/NOTIFICATIONS_UPDATED 兜底。stableKey=
     // dispatch:id 一单一行，重复收口事件不双发（对账去重口径）；done 归 activity 桶
     //（结果可见即可），failed 归 action 桶可操作（重派/换人/放弃要对账决策）
+    // P1-c（review-w-delivercb-b）：中断口径 done（流关闭兜底/重放合并/重启清扫）≠交付
+    // ——通知文案区分「中断待重派」（action 可操作）vs「完成」（activity），且**不走
+    // deliverCallback 直达**（伪「已交付·待收割」根除——PM 不再被指向收割一张 backlog 卡）
+    const isInterruptedDone = interrupted && status === "done";
     this.upsertNotification("dispatch", e.id, undefined, {
-      title: `${e.tier} 单${status === "done" ? "完成" : "失败"}`,
+      title: isInterruptedDone ? `${e.tier} 单中断（待重派）` : `${e.tier} 单${status === "done" ? "完成" : "失败"}`,
       body: truncate(receipt, 160),
-      severity: status === "done" ? "done" : "error",
-      group: status === "done" ? "activity" : "action",
-      actionable: status !== "done",
+      severity: isInterruptedDone ? "waiting" : status === "done" ? "done" : "error",
+      group: isInterruptedDone ? "action" : status === "done" ? "activity" : "action",
+      actionable: status !== "done" || isInterruptedDone,
       sessionId: workerSessionId,
       domain: "dispatch",
       returnPath: "dispatch",
     });
+    // W-DELIVERCB 线一（relay 观测·主链，用户 1102 拍板「PM 收件箱直达」）：done 单
+    // 对 leader 派单直达注入 PM——此前 done 只发帧+activity 通知（PM 无感知，1102 晚
+    // 两单积压 9min 轮询才发现的实锤缺口）；failed 维持下方既有注入。去重账收敛线二
+    // （stop-hook 先到则此处跳过——同一 dispatch 只投一次）
+    if (status === "done" && e.actor === "leader" && !interrupted) { // P1-c：中断口径不直达（板已退 backlog，收割指引=误导）
+      this.deliverCallbackToPM({ id: e.id, tier: e.tier, gid: e.gid, anchor: e.anchor, actor: e.actor, receiptPath: (e as { receiptPath?: string }).receiptPath }, receipt, workerSessionId, "relay-observe");
+    }
     if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
     // W-LEADFIX：回执注入先过熔断/pin 休眠闸——Leader 死卡时这里曾是死循环主驱动
     // 之一（每条 failed 回执拉一次 resume）。压制时 prompt 入队 unacked，手动恢复后
@@ -9192,6 +9388,18 @@ export class SessionManager {
       try {
         removeMember(gid, sid);
         this.closeOpenDispatches(sid, "failed", `僵尸看门狗：${mins}min 无进度帧两轮确认，自动退休`, true, false, undefined, "backlog");
+        // R3-P2-a②（r2-b 审格④）：retire 边补杀树——原「removeMember+failed 收口+清锁」
+        // 全程不 killTree，误判形态（>45min 长命令静默）老 CLI 活着写 worktree+锁已放+
+        // PM 按 failed 重派 → 新 worker 进同树=双写。对齐 parkGroupMembers 口径先停流
+        // 再杀树（老流真死，重派单独占树；误杀代价=一段长命令中断，两害取轻）。
+        try {
+          const st = this.sessions.get(sid);
+          const cp = st?.agent?.childPid;
+          if (st?.agent && !st.agent.ended) {
+            void st.agent.stop?.();
+            if (cp) void this.watchdogProcs.killTree(cp).catch(() => {});
+          }
+        } catch { /* 杀树尽力而为——retire 主路径不因它失败 */ }
       } catch (e) {
         this.emitChainAudit("zombie-retire", `retire 失败 sid=${sid.slice(0, 12)}: ${e instanceof Error ? e.message : String(e)}（下轮重试）`);
         continue;
@@ -9611,7 +9819,7 @@ export class SessionManager {
           const q = this.openDispatches.get(s.state.session_id);
           if (!q || q.length <= 1) break;
           q.unshift(q.pop()!);
-          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog");
+          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "backlog", { interrupted: true }); // R3-B-边二（r2-b 审）：与 :3880 孪生位——重放合并=中断口径非交付，不直达 PM
         }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
@@ -9624,7 +9832,7 @@ export class SessionManager {
         // 口径全清（回执写实；不写路由），否则 org status 挂假账直到下一条消息
         // 冲刺 F-06：板去向同中断口径退 todo（对照 onSessionEnd 兜底 :2240 与多消息
         // 重放 :3657）——活没交付不能停 done，否则结项核对清单看不见未完
-        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "backlog");
+        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "backlog", { interrupted: true }); // R3-B-边三（r2-b 审）：回执文本自证「回合中断」——单派单 stall 最常见形态，必须非交付口径
         this.reviveSaved(s); // 无未回显消息：parked 恢复，停在等待输入
       }
       s.wd.phase = "idle";

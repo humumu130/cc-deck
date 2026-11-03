@@ -8,7 +8,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { attachAgentActivator } from "./agent-activator.js";
 import { loadConfig } from "./config.js";
-import { resolveEmployeeHome, writeSettingsFile, ensureEmployeeHomeSeed, effectiveRelayName } from "./settings.js";
+import { resolveEmployeeHome, writeSettingsFile, ensureEmployeeHomeSeed, ensureEmployeeHomeStopHook, effectiveRelayName } from "./settings.js";
 import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
@@ -282,6 +282,7 @@ if (cliArgs.has("--stop")) {
   // W-RULES1 雇员家轻种子（拍板 #7/C 路 §6.3）：独立家开启且无 CLAUDE.md 时种断链
   // 说明（存在即认绝不覆盖；自动同步用户全局文件=越权写，不做）
   ensureEmployeeHomeSeed(cfg.dataDir);
+  ensureEmployeeHomeStopHook(cfg.dataDir); // W-DELIVERCB 线二部署面：雇员家 Stop 钩子（收工自报交付）
 }
 
 // #158 批1（2026-10-08）：sqlite 原生驱动 boot 探测——0.7.0-test.3 Windows 包实锤

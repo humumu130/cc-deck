@@ -993,7 +993,15 @@ async function main() {
       const d15b = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "独立家生效单" }) as { ok: boolean; session_id?: string };
       assert(d15b.ok === true, "生效单派发");
       await waitFor(() => mgr.snapshot().find((s) => s.session_id === d15b.session_id && s.status === "DONE") !== undefined);
-      assert(created.slice(before15b).every((c) => c.configHome === EMP), "开关开启：spawn 收到 configHome=独立家（含 resume 原班路径）");
+      // R4-P1（review-w-delivercb-r3）：窗收窄——W-DELIVERCB 线一的 leader 交付直达
+      // 注入流（resume+「[worker 已交付]」prompt，默认家 configHome=undefined）是本
+      // 机制新语义（T1 断言其在场），worker 流断言把它排除后 .every；并正向钉住新行为
+      const win15b = created.slice(before15b);
+      const isLeaderDeliverInj = (c: { resume?: string; prompt?: string }) => !!c.resume && String(c.prompt || "").includes("[worker 已交付]");
+      const worker15b = win15b.filter((c) => !isLeaderDeliverInj(c));
+      assert(worker15b.every((c) => c.configHome === EMP), `开关开启：worker spawn 收到 configHome=独立家（含 resume 原班路径；窗 ${win15b.length} 流=worker ${worker15b.length}+交付注入 ${win15b.length - worker15b.length}）`);
+      const leaderInj15b = win15b.find((c) => isLeaderDeliverInj(c));
+      assert(!!leaderInj15b && leaderInj15b.configHome === undefined, "交付直达注入 leader 流在窗且走默认家（W-DELIVERCB 新语义正向钉——leader 不带独立家）");
       cfg.employeeConfigDir = null;
       // P2-b（边界审查）：上面两单皆无 gid = 恒 fresh create，"resume 原班"声明此前
       // 未被真正盖住——gid 组造熟手，第二单必走 resume spawn，锁 configHome 到达
@@ -1008,7 +1016,10 @@ async function main() {
       const f15 = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "熟手首单", gid: gid15 }) as { ok: boolean; session_id?: string };
       assert(f15.ok === true, "熟手首单派发（前置）");
       assert(await waitFor(() => (routingFor(gid15).find((x) => x.session_id === f15.session_id)?.count ?? 0) === 1), "首单收口入路由表（前置）");
-      assert(created.slice(before15c).every((c) => c.configHome === EMP), "组 worker fresh spawn 带 configHome");
+      // R4-P1 同款：排除 leader 交付注入流（若窗内有收口触发直达）后 .every
+      const win15c = created.slice(before15c);
+      const worker15c = win15c.filter((c) => !(!!c.resume && String(c.prompt || "").includes("[worker 已交付]")));
+      assert(worker15c.every((c) => c.configHome === EMP), `组 worker fresh spawn 带 configHome（窗 ${win15c.length}=worker ${worker15c.length}+交付注入 ${win15c.length - worker15c.length}）`);
       assert(mgr.snapshot().find((s) => s.session_id === f15.session_id)?.employee === true, "组 worker 卡带雇员标记");
       // W-SCHEDFIX2：DONE 熟手活流直注免换流（不 spawn）——configHome 是 resume/spawn
       // 面参数，杀流走 resume 路径锁「resume 原班带独立家」原语义

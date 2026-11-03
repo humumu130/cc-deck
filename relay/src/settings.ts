@@ -5,7 +5,7 @@
 // 存量升级默认关（行为不变，UI 引导后再开——开启只影响新会话，存量会话按
 // 创建时记录的家走，无需迁移）。
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { parseEmployeeConfigDir } from "./config.js";
 import type { SessionEngine } from "./types.js";
@@ -306,6 +306,47 @@ const EMPLOYEE_HOME_SEED = `# 雇员独立家说明（系统生成，可删除�
 本目录是 cc-deck 雇员会话的独立配置家：用户全局 CLAUDE.md（~/.claude/CLAUDE.md）**不会**在此自动加载——个人全局纪律（自测要求、措辞军规等）如需对 worker 生效，请人工拷贝到本文件。
 团队规则（用户审定的红线）不依赖本文件：随派单自动注入（~/.cc-deck/org/rules.json）。
 `;
+
+/** W-DELIVERCB 线二部署面（用户 1102 拍板）：雇员家 settings.json 的 Stop 钩子种子——
+ * 指向用户家绝对路径 turn-report.mjs（#199 已部署件；绝对路径跨 CLAUDE_CONFIG_DIR 可用）。
+ * 钩子语义：worker 收工即 POST /api/turn-report（回环无 token）→ relay 线二自报交付。
+ * 纪律同 CLAUDE.md 种子：settings.json 已存在=用户地盘不覆盖（只种全新缺席）；脚本
+ * 缺席（用户未部署 #199）不种（防指向不存在的文件）；失败静默不阻断启动。 */
+export function ensureEmployeeHomeStopHook(dataDir: string): boolean {
+  try {
+    const st = resolveEmployeeHome(dataDir);
+    if (!st.enabled || !st.value) return false;
+    const hookPath = join(homedir(), ".claude", "hooks", "turn-report.mjs");
+    if (!existsSync(hookPath)) { console.warn(`[settings] 雇员家 Stop 钩子未种：用户家无 turn-report.mjs（#199 未部署）——线二对雇员缺席`); return false; } // P2-a：静默面留痕
+    const settingsPath = join(st.value, "settings.json");
+    const hookCmd = `node "${hookPath}"`;
+    const mkHook = () => ({ Stop: [{ hooks: [{ type: "command", command: hookCmd }] }] });
+    if (!existsSync(settingsPath)) {
+      mkdirSync(st.value, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify({ hooks: mkHook() }, null, 2) + "\n", "utf-8");
+      console.log(`[settings] 雇员家 Stop 钩子已种子（交付自报线）：${settingsPath}`);
+      return true;
+    }
+    // W-DELIVERCB R2 P2-a（review-w-delivercb-a）：幂等补种——雇员家是 relay 管的配置家
+    //（非用户地盘），settings 已存在但缺 Stop 钩子的存量家 merge 补种（其他键原样保留）；
+    // 已含钩子=no-op 留痕（此前「已存在即静默 return」让存量部署 0 覆盖且不可诊断）
+    try {
+      const cur = JSON.parse(readFileSync(settingsPath, "utf-8")) as { hooks?: { Stop?: { hooks?: { command?: string }[] }[] } };
+      const has = Array.isArray(cur?.hooks?.Stop) && cur.hooks.Stop.some((b) => Array.isArray(b?.hooks) && b.hooks.some((h) => typeof h?.command === "string" && h.command.includes("turn-report.mjs")));
+      if (has) { console.log(`[settings] 雇员家 Stop 钩子在位（幂等跳过）：${settingsPath}`); return false; }
+      const merged = { ...cur, hooks: { ...cur?.hooks, Stop: [...(cur?.hooks?.Stop ?? []), ...mkHook().Stop] } };
+      writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + "\n", "utf-8");
+      console.log(`[settings] 雇员家 Stop 钩子幂等补种（存量 settings 缺钩）：${settingsPath}`);
+      return true;
+    } catch (e) {
+      console.warn(`[settings] 雇员家 Stop 钩子补种失败（settings 解析/写失败，不覆盖）：${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  } catch (e) {
+    console.warn(`[settings] 雇员家 Stop 钩子种子失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
 
 /** 雇员家断链说明种子（启动序一次性调用，index.ts）。开关关/目录不可建/已存在 → 静默
  * 跳过（尽力而为：种子是提示面，写失败不阻断启动）。返回是否新写了种子（测试用）。 */
