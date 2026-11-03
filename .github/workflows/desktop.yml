@@ -1,18 +1,25 @@
 name: desktop
 
+# W-NOVAONLY（用户 1103 拍板）：plain（"CC Deck"）通道退役——本 workflow 收敛为
+# Nova 单通道。历史：W15 双装变体设计=与已装正式版并排不覆盖（独立 productName/
+# identifier/mainBinaryName/updater 清单）；用户装机面全线已是 Nova 后双通道分发
+# 只剩误发风险（1103 事故：PM 误发 plain win exe → tauri.windows.conf.json
+# decorations:true 系统标题栏形态 → 用户顶栏两行误报）。收敛红线：**Nova 已装
+# 用户更新链一秒不能断**——tauri.nova.conf.json 的 endpoint
+# （tauri-latest-nova.json / -test tag 烙 tauri-latest-nova-test.json）零改动；
+# plain 的 tauri-latest.json / tauri-latest-test.json 停发（存量键已清）。
+# tag 门（两 job 前置步）：无 -nova 后缀的 tag 一律 fail-fast——再想出 plain 包
+# 必须显式回滚本门（防误发事故重演的结构闸）。历史 plain tag 重跑场景不再支持。
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       nova:
-        # W15 双装变体（用户拍板硬要求）：CC Deck Nova + 独立 identifier
-        # online.humumu.ccdeck.nova，与已装正式版并排互不覆盖（安装目录/开始菜单/单实例
-        # 锁按 identifier 天然隔离；relay 8787 探测复用——旧版在跑直接连）。默认 false：
-        # 不勾 = 生产配置零改动
-        description: "Nova 双装变体（独立产品名/identifier，updater 指向 nova 专用清单）"
+        # Nova 单通道（plain 退役后唯一变体；default true——dispatch 出包恒 Nova）
+        description: "Nova 变体（单通道唯一形态，plain 已退役）"
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -29,6 +36,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Nova-only tag gate（plain 通道退役门，W-NOVAONLY）
+        # 无 -nova 后缀的 tag = plain 包请求 → fail-fast（1103 误发事故结构闸）。
+        # dispatch（非 tag）不受本门限（inputs.nova 已默认 true 恒走 overlay）
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-nova')
+        run: |
+          echo "::error::tag ${GITHUB_REF_NAME} 无 -nova 后缀——plain 通道已退役（用户 1103 拍板），本 CI 只出 Nova 包。要出包请打 v<ver>-nova[-test.N] tag；确需 plain（回滚决策）请先回滚本门。"
+          exit 1
 
       - uses: actions/setup-node@v4
         with:
@@ -146,7 +161,11 @@ jobs:
         run: |
           CONFIG_ARGS=""
           # nova 变体双入口：dispatch 勾选 / tag 名含 -nova 后缀（test 包走 tag 路径，
-          # inputs 恒空——v0.7.0-test.5-nova 先例，nova 共存包与版本烙印两全）
+          # inputs 恒空——v0.7.0-test.5-nova 先例，nova 共存包与版本烙印两全）。
+          # [W-NOVAONLY] 收敛后 plain 生产路径已全线关门：tag 面=Nova-only gate fail-fast
+          #（上方退役门），dispatch 面=nova 缺省 true——**不勾 nova 是 plain 的唯一显式
+          # 回滚口**（等价「回滚本门」，需有权限者主动为之；出包后 plain 清单也已停发，
+          # 还需手动重铺 KV/ECS 键才能真的分发——双层摩擦即事故闸）
           if [ "${{ inputs.nova }}" = "true" ] || [[ "$GITHUB_REF_NAME" == *-nova ]]; then
             CONFIG_ARGS="--config src-tauri/tauri.nova.conf.json"
             echo "NOVA_SUFFIX=-Nova" >> "$GITHUB_ENV"
@@ -236,6 +255,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Nova-only tag gate（plain 通道退役门，W-NOVAONLY）
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-nova')
+        run: |
+          echo "::error::tag ${GITHUB_REF_NAME} 无 -nova 后缀——plain 通道已退役（用户 1103 拍板），本 CI 只出 Nova 包。"
+          exit 1
 
       - uses: actions/setup-node@v4
         with:
