@@ -238,4 +238,120 @@ ok(watchdogBlock.includes("scheduleCloudReconnect(ctx, ctx.pairBackoffMs)"), "S2
 ok(sd.includes("function scheduleCloudReconnect(ctx, minDelayMs)") && sd.includes("Math.max(ctx.reconnectDelay || CLOUD_RETRY_BASE_MS, minDelayMs || 0)"), "S2 minDelay 语义=Math.max 并入");
 
 console.log(`\n${pass} passed, ${fail} failed`);
+
+// ════════ R3 组（pairfix R3，2026-11-03）：向导门广播化 F2 / 降级不覆写锚 F3 / 建连层断言 F1 / P2 批 ════════
+// 旧壳（index.html 内嵌 script）提取：均衡 <script> 块串接后 blockFrom 同范式抽取。
+const idxHtml = readFileSync(join(root, "web-console", "index.html"), "utf-8");
+const idxJs = (() => {
+  const parts: string[] = [];
+  const re = /<script[^>]*>([\s\S]*?)<\/script>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(idxHtml))) parts.push(m[1]);
+  return parts.join("\n");
+})();
+function idxBlockFrom(needle: string): string {
+  const i = idxJs.indexOf(needle);
+  if (i < 0) return "";
+  const j = idxJs.indexOf("{", i);
+  if (j < 0) return "";
+  let depth = 0;
+  for (let k = j; k < idxJs.length; k++) {
+    if (idxJs[k] === "{") depth++;
+    else if (idxJs[k] === "}") { depth--; if (depth === 0) return idxJs.slice(i, k + 1); }
+  }
+  return "";
+}
+console.log("R3 pairfix：F2 向导门 / F3 降级不覆写 / F1 建连层 / P2 批");
+
+// ---------- W 组（F2）：wizSubmitPair suspectSubmit 四点+同构+负形 ----------
+const wizBlock = idxBlockFrom("function wizSubmitPair()");
+const setSubmitZone = (() => {
+  const i = idxJs.indexOf("const suspectSubmit = !!(");
+  return i >= 0 ? idxJs.slice(i - 200, i + 700) : "";
+})();
+ok(!!wizBlock, "W0 锚定 wizSubmitPair 函数体（旧壳内嵌提取）");
+ok(wizBlock.includes("const suspectSubmit = !!(c && !c.paired && c.rd && c.rd !== BAKED_RELAY.rd)"), "W1① suspectSubmit 中毒指纹判定（向导门）");
+ok(wizBlock.includes('{ rd: "", rk: "", pc: code, bc: true }'), "W1② 广播态 pair（rd 空串凭码找持码者）");
+ok(wizBlock.includes("if (!suspectSubmit && (!src.rd || !src.rk))"), "W1③ 空引用守卫（!suspectSubmit 才要求 rd/rk 齐）");
+ok(wizBlock.includes("suspectSubmit ? { rd: \"\", rk: \"\" } : BAKED_RELAY"), "W1④ src 三态（广播空/记忆/烘焙兜底）");
+ok(!wizBlock.includes("const pair = { rd: src.rd, rk: src.rk, pc: code };") || wizBlock.includes("suspectSubmit ?"), "W2 负形：无裸单播老形态（变异删 suspectSubmit 必红）");
+// 同构锁：向导四点与设置域输码位（submitPairCode 段）逐字同构（③④在本壳同串）
+ok(idxJs.split("const suspectSubmit = !!(c && !c.paired && c.rd && c.rd !== BAKED_RELAY.rd)").length === 3, "W3 同构：向导+设置域两输码位 suspectSubmit 判定逐字同串（两处）");
+ok(idxJs.split('{ rd: "", rk: "", pc: code, bc: true }').length === 3, "W3 同构：两输码位广播态 pair 逐字同串（两处）");
+ok(!!setSubmitZone, "W0b 设置域输码位锚定在（同构对照面）");
+
+// ---------- D 组（F3）：降级不覆写锚（两壳×超窗/裸态分叉）+pair_ack 落库换新 ----------
+const DOWNGRADE_TXT = "relay 可能已换代·请输码重新配对";
+for (const [tag, src, connFn] of [["旧壳", idxJs, "setConn"], ["新壳", sd, "cloudSetConn"]] as const) {
+  const overwin = src.indexOf("R3-P1-F3");
+  ok(overwin >= 0, `D1 ${tag} 超窗降级 R3-F3 标记在`);
+  const owZone = src.slice(overwin - 100, overwin + 900);
+  ok(!owZone.includes("cfg.cloud = {"), `D2 ${tag} 超窗降级不覆写 cfg.cloud（出差假换代家身份保留）`);
+  ok(owZone.includes(DOWNGRADE_TXT), `D3 ${tag} 超窗降级新文案（输码重新配对）`);
+  ok(owZone.includes("ctx.genesisSeenAt = 0"), `D4 ${tag} 降级即清观察钟（P2-2 维持）`);
+  // 裸态覆写保留（新客户端记忆身份建立合法写点）+pairedAnchor 分叉在前
+  const bareIdx = src.indexOf("pick.dev");
+  const forkIdx = src.indexOf("if (pairedAnchor) {");
+  ok(bareIdx >= 0 && forkIdx >= 0 && forkIdx < bareIdx, `D5 ${tag} 裸态 pick 采信保留且 pairedAnchor 分叉在前（真换代/裸态分轨）`);
+  const ackIdx2 = src.indexOf('inner.t === "pair_ack"');
+  const ackZone = ackIdx2 >= 0 ? src.slice(ackIdx2, ackIdx2 + 1200) : "";
+  ok(ackZone.includes("rd: inner.relay_dev") && ackZone.includes("paired: true"), `D6 ${tag} pair_ack 落库写新 rd+paired:true（真换代经输码自然换锚，旧 rd 无残留）`);
+}
+// 行为级镜像：出差景（超窗块 eval + cfg 写探针）——旧壳超窗块
+{
+  const zone = idxJs.slice(idxJs.indexOf("R3-P1-F3") - 300, idxJs.indexOf("R3-P1-F3") + 700);
+  const ifIdx = zone.indexOf("if (Date.now() - ctx.genesisSeenAt >= graceMs)");
+  ok(ifIdx >= 0, "D7 锚定超窗 if 块（旧壳）");
+  if (ifIdx >= 0) {
+    // 配平花括号取整 if 块
+    const j = zone.indexOf("{", ifIdx);
+    let depth = 0, end = -1;
+    for (let k = j; k < zone.length; k++) {
+      if (zone[k] === "{") depth++;
+      else if (zone[k] === "}") { depth--; if (depth === 0) { end = k; break; } }
+    }
+    const block = zone.slice(ifIdx, end + 1);
+    const writes: string[] = [];
+    const cfg = new Proxy({ wsUrl: "wss://b/cloud" }, { set(t: Record<string, unknown>, k: string, v: unknown) { writes.push(k); t[k] = v; return true; } }) as { wsUrl: string };
+    const connCalls: unknown[][] = [];
+    const f = new Function("ctx", "cfg", "setConn", "saveServers", "BAKED_RELAY", "serverBridgeToken", "all", "graceMs", block);
+    f({ genesisSeenAt: Date.now() - 11 * 60_000, pairTimer: 1 }, cfg, (...a: unknown[]) => { connCalls.push(a); return true; }, () => { writes.push("saveServers"); }, { rd: "rl-baked" }, () => "tk", [{ dev: "rl-stranger", rk: "k1" }], 10 * 60_000);
+    ok(writes.length === 0, "D8 出差景行为级：超窗块对 cfg/cloud/saveServers 零写（家身份原样，回家 hit 自动续上）");
+    ok(connCalls.length === 1 && String(connCalls[0][2]).includes(DOWNGRADE_TXT), "D8b 出差景行为级：仅提示输码重新配对（unpaired 态）");
+  }
+}
+
+// ---------- C-R3 组（F1）：建连层断言（peer=null∧pair=null 两传输不炸+disc 发出） ----------
+// 形状：两壳两传输 !pair 空引用守卫四点（d7e2c379 修体）——变异删守卫此组红
+ok(idxJs.split("if (!pair) {").length >= 3 && sd.split("if (!pair) {").length >= 3, "C1 两壳 !pair 空引用守卫在位（onopen+poll 两传输 ≥2 处/壳）");
+ok(idxJs.includes("pair && !pair.rd && !ctx.discTried") && sd.includes("pair && !pair.rd && !ctx.discTried"), "C2 广播态 disc 预取（补 cands 供 ack 试解）两壳在位");
+// 行为级：复用 runOnopen harness（A 组同款）——peer=null∧pair=null（boot 态：无配对记忆+无待配对流）
+{
+  const stubs = mkStubs();
+  try {
+    runOnopen(mkOnopenStubCtx({ pendingPair: null }), null, null, stubs);
+    ok(stubs.calls.discoverRelay.length >= 1, "C3 ws onopen 行为级：peer=null∧pair=null 下 discoverRelay 发出（建连不断链）");
+  } catch (e) {
+    ok(false, `C3 ws onopen 行为级：peer=null∧pair=null 不炸（炸=${e instanceof Error ? e.message : String(e)}）`);
+  }
+}
+// 行为级：poll 传输同款（startPollTransport eval，fetch 不应在此景被调+cloudUuid stub）
+{
+  const discCalls: string[] = [];
+  const f = new Function("ctx", "base", "token", "dev", "pair", "fetch", "setTimeout", "clearTimeout", "uuid", "cloudUuid", "cloudSetConn", "sendCloud", "startCloudPing", "sendPairReq", "startPairWatchdog", "discoverRelay", "cloudPeerOf", "pollLoop", "CLOUD_RETRY_BASE_MS", pollBlock.slice(pollBlock.indexOf("{") + 1, pollBlock.lastIndexOf("}")));
+  const ctx: Record<string, unknown> = { reconnectTimer: 0, pollSid: "", pollBase: "", reconnectDelay: 0, cfg: { id: "c2", name: "云", kind: "cloud", wsUrl: "wss://b/cloud", token: "tk", cloud: { paired: false } }, discTried: false };
+  try {
+    f(ctx, "wss://b/cloud", "tk", "dev-x", undefined, (() => { throw new Error("fetch 不应在此景被调"); }) as unknown as typeof fetch, () => 1, () => {}, () => "u", () => "u2", () => {}, () => {}, () => {}, () => {}, () => {}, (tag: string) => { discCalls.push(tag || "disc"); return true; }, () => null, () => {}, 3000);
+    ok(discCalls.length >= 1, "C4 poll 传输行为级：pair=null 下 discoverRelay 发出+不炸（d7e2c379 守卫行为级）");
+  } catch (e) {
+    ok(false, `C4 poll 传输行为级：pair=null 不炸（炸=${e instanceof Error ? e.message : String(e)}）`);
+  }
+}
+
+// ---------- M 组（P2 批） ----------
+ok(idxJs.includes("检测到未完成配对·建议输码重连") && sd.includes("检测到未完成配对·建议输码重连"), "M1 P2① suspect 中毒文案中性化（两壳同串，自建首跑不再被「记忆异常」恐吓）");
+ok(!idxJs.includes("relay 记忆异常") && !sd.includes("relay 记忆异常"), "M1b 旧文案退役（两壳零残留）");
+ok(idxJs.includes("6_000 * 2 ** (ctx.awayFails - 1), 120_000") && sd.includes("6_000 * 2 ** (ctx.awayFails - 1), 120_000"), "M2 P2③ 退避梯公式两壳同构（第二档 24s 在公式内）");
+
+console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;
