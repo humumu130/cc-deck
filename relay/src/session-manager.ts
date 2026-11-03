@@ -9540,6 +9540,11 @@ ${lines.join("\n")}
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical,
+      // [W-REBOOTTXT R2-P1-B]（1103 双审 B 处方）：external 随增量帧显式携带布尔——重放面
+      // （history.ts UPDATED 消费 external===true）自此真生效：收养型外部会话（CREATED
+      // 缺 external 的坏帧存量）靠后续 UPDATED 帧还原身份，中断分类不再空诺「将自动续跑」。
+      // 消费侧只认 true 不翻 false（external 是身份不是状态）；恒带布尔=帧形态完整
+      external: !!s.state.external,
       // #157 载荷显式带 updated_at：客户端最后活跃时间以它为准（水合帧 ≠ 活动帧，
       // 信 envelope ts 会把重启时刻误当活动时刻）；旧客户端忽略此字段不受影响
       updated_at: s.state.updated_at,

@@ -26,6 +26,10 @@ assert(deriveTitle("   ") === "未命名会话", "空白兜底");
 console.log("compactEvents:");
 const mk = (seq: number, sid: string, type: string, payload: unknown = {}): Envelope =>
   ({ seq, session_id: sid, ts: 1000 + seq, type: type as Envelope["type"], payload });
+// [W-REBOOTTXT R2-P1-A]：重启中断族夹具专用——ts 取当下（mk 缺省 ts=1000+seq 构成
+// 48h 陈会话，会把「诺续/不诺续」断言钉死在错误分支：新鲜会话才诺续，陈会话如实不诺）
+const mkNow = (seq: number, sid: string, type: string, payload: unknown = {}): Envelope =>
+  ({ seq, session_id: sid, ts: Date.now() - 1000 + seq, type: type as Envelope["type"], payload });
 
 const events: Envelope[] = [];
 let seq = 0;
@@ -97,17 +101,42 @@ assert(rs2.state.historical === true, "标记 historical");
 assert(rs2.logs.at(-1)!.text === "服务更新重启，会话已中断", "中断事件入时间线");
 
 // 非终态会话（带 SDK 会话号，可 resume）→ 中性 DONE 而非 ERROR 红条（#52 批）
-const events3 = [mk(1, "s3", "SESSION_CREATED", { cwd: "/x", initial_prompt: "恢复测试", model: "m" }), mk(2, "s3", "SESSION_UPDATED", { status: "WORKING", action_summary: "干活", stats: null, relay_session_id: "sdk-123" })];
+const events3 = [mkNow(1, "s3", "SESSION_CREATED", { cwd: "/x", initial_prompt: "恢复测试", model: "m" }), mkNow(2, "s3", "SESSION_UPDATED", { status: "WORKING", action_summary: "干活", stats: null, relay_session_id: "sdk-123" })];
 const rs3 = reduceHistory(events3).get("s3")!;
 assert(rs3.state.status === "DONE" && rs3.state.done_reason === "服务更新重启，会话已中断" && !rs3.state.last_error, "可恢复标 DONE 中性");
 assert(rs3.state.historical === true, "可恢复也标 historical");
 assert(rs3.logs.at(-1)!.text === "服务更新重启，会话已中断 · 检测到进行中任务，将自动续跑", "可恢复时间线文案（WORKING→自动续跑，#36 同步）");
 
 // 可恢复但非 WORKING（WAITING 半截权限流）→ 指引文案分支（无法自答，人工触发续）
-const events3b = [mk(1, "s3b", "SESSION_CREATED", { cwd: "/x", initial_prompt: "权限中断测试", model: "m" }), mk(2, "s3b", "SESSION_UPDATED", { status: "WAITING", action_summary: "等权限", stats: null, relay_session_id: "sdk-456" })];
+const events3b = [mkNow(1, "s3b", "SESSION_CREATED", { cwd: "/x", initial_prompt: "权限中断测试", model: "m" }), mkNow(2, "s3b", "SESSION_UPDATED", { status: "WAITING", action_summary: "等权限", stats: null, relay_session_id: "sdk-456" })];
 const rs3b = reduceHistory(events3b).get("s3b")!;
 assert(rs3b.state.status === "DONE" && rs3b.state.historical === true, "可恢复 WAITING 也标 DONE+historical");
 assert(rs3b.logs.at(-1)!.text === "服务更新重启，会话已中断 · 发送消息即可继续", "可恢复非 WORKING 时间线文案");
+
+// ---------- W-REBOOTTXT R2-P1-A/P2-2：中断分类三态如实（新鲜诺续/48h 陈不诺/codex 不诺） ----------
+console.log("reboottxt 中断分类三态:");
+{
+  // ① 48h 陈会话（mk 原味夹具=ts 1000+seq）：WORKING 中断也不诺续——stale-48h 轴如实分叉
+  const evStale = [mk(1, "s-stale", "SESSION_CREATED", { cwd: "/x", initial_prompt: "陈会话", model: "m" }), mk(2, "s-stale", "SESSION_UPDATED", { status: "WORKING", action_summary: "陈活", stats: null, relay_session_id: "sdk-stale", updated_at: 1002 })];
+  const rsStale = reduceHistory(evStale).get("s-stale")!;
+  assert(rsStale.state.pre_reboot_status === undefined, "48h 陈 WORKING 中断不打标（stale-48h 拒续轴——如实）");
+  assert(rsStale.logs.at(-1)!.text === "服务更新重启，会话已中断 · 发送消息即可继续", "48h 陈会话文案=发送消息即可继续（不空诺自动续跑）");
+  // ② codex 轴（R2-P2-2）：engine 随帧还原在帧内，codex 中断不诺续（boot 链对 DONE 态 codex 恒拒）
+  const evCdx = [mkNow(1, "s-cdx", "SESSION_CREATED", { cwd: "/x", initial_prompt: "codex 活", model: "m", engine: "codex" }), mkNow(2, "s-cdx", "SESSION_UPDATED", { status: "WORKING", action_summary: "codex 在跑", stats: null, relay_session_id: "thread-cdx-1" })];
+  const rsCdx = reduceHistory(evCdx).get("s-cdx")!;
+  assert(rsCdx.state.engine === "codex", "codex 引擎标记随帧还原（CREATED 载荷）");
+  assert(rsCdx.state.pre_reboot_status === undefined, "codex WORKING 中断不打标（codex-idle 轴——boot 对 DONE 态 codex 恒拒，诺了必落空）");
+  assert(rsCdx.logs.at(-1)!.text === "服务更新重启，会话已中断 · 发送消息即可继续", "codex 中断文案如实（发送消息即可继续）");
+  // ③ 真实帧形态钉死（R2-P3/P1-B）：UPDATED 带 external（emitUpdated R2 后真形态）——收养型身份还原生效
+  const evExt = [mkNow(1, "s-ext", "SESSION_CREATED", { cwd: "/x", initial_prompt: "收养型", model: "m" }), mkNow(2, "s-ext", "SESSION_UPDATED", { status: "WORKING", action_summary: "外部在跑", stats: null, relay_session_id: "sdk-ext", external: true })];
+  const rsExt = reduceHistory(evExt).get("s-ext")!;
+  assert(rsExt.state.external === true, "UPDATED.external=true 重放应用（R2-P1-B 后真帧形态——收养型还原）");
+  assert(rsExt.state.pre_reboot_status === undefined && rsExt.logs.at(-1)!.text.includes("发送消息即可继续"), "收养型外部不诺续（坏帧存量 UPDATED 补身份路径生效）");
+  // ④ 坏帧存量另一态：CREATED 带 external（UPDATED 无）——CREATED 侧还原同样生效
+  const evExt2 = [mkNow(1, "s-ext2", "SESSION_CREATED", { cwd: "/x", initial_prompt: "外建", model: "m", external: true }), mkNow(2, "s-ext2", "SESSION_UPDATED", { status: "WORKING", action_summary: "外跑", stats: null, relay_session_id: "sdk-ext2" })];
+  const rsExt2 = reduceHistory(evExt2).get("s-ext2")!;
+  assert(rsExt2.state.external === true && rsExt2.state.pre_reboot_status === undefined, "CREATED.external 还原+不诺续（两帧任一携带即判外部）");
+}
 
 // ---------- EventBus 持久化 + 预载 ----------
 console.log("EventBus 持久化:");

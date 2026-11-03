@@ -129,18 +129,45 @@ export interface ReplayedSession {
 // 打 pre_reboot_status（boot 自愈链 resumeInterruptedByReboot 消费后即清，纯 boot
 // 瞬态不持久化）；WAITING/其余维持旧文案旧行为（半截权限流 resume 后无法自答，
 // 人工触发续）。独立导出=测试直吃（scripts/test-resume-reboot.ts）。
+// W-REBOOTTXT（1103 用户实锤）：承诺必须真实——autoResumable=false（revive 链注定
+// 拒续的类型，见 rebootAutoResumable）的 WORKING 中断**不打标不诺续**，如实走
+// 「发送消息即可继续」（打了标 boot 链也是空试+落空承诺）。
+export function rebootAutoResumable(st: { external?: SessionState["external"]; org_parked?: SessionState["org_parked"]; pinned?: SessionState["pinned"]; saved?: SessionState["saved"]; relay_session_id?: SessionState["relay_session_id"]; updated_at?: SessionState["updated_at"]; engine?: SessionState["engine"] }): boolean {
+  // 对齐 revive.ts reviveEligible 的拒续轴（口径契约锚：改 reviveEligible 闸时须同步
+  // 此处——勿两套口径漂移）。轴分两档（W-REBOOTTXT R2-P2-1 改口，1103 双审交叉实锤）：
+  //  **重放可判**（本谓词在重放路径真实生效）：external（UPDATED 帧随 R2-P1-B 恒带+
+  //   CREATED/收养前缀兜底）/ no-resume-anchor / stale-48h / codex-idle（engine 随
+  //   CREATED/UPDATED 帧还原在帧内——reviveEligible 对 DONE 态 codex 恒拒 :286，
+  //   中断分类先置 DONE 再走 boot 链=必诺必拒，故 codex 态不诺续）。
+  //  **重放不可判**（本谓词保留判定=纯函数契约完整，但重放路径到达时恒为空值——
+  //   applyPinned（index.ts boot 序）在重放**之后**才翻 saved、rehydrateParkedMembers
+  //   才补 org_parked，两轴重放期结构性判不到）：org-parked / pinned-dormant。
+  //   这两类在重放路径会先诺续后 boot 拒（落空承诺）——诚实缺口如实入回执遗留清单，
+  //   boot 侧挪字段（applyPinned/rehydrate 前移）属另单正交不扩本批。
+  //  运行态闸（retired/group-not-active/resume 互斥窗/熔断冷却）依赖 live 状态与 org
+  //  存储，重放期不可判——boot 链照旧尊重（被拒不消费不清标，残余缺口同遗留清单）。
+  if (st.external) return false;
+  if (!st.relay_session_id) return false;
+  if (st.engine === "codex") return false; // codex-idle 轴（W-REBOOTTXT R2-P2-2）：boot 链对中断标 DONE 态 codex 恒拒——诺了必落空，如实不诺
+  if (st.org_parked) return false; // org_parked=组 id 字符串（真值即挂起；重放路径恒空值——见上注「重放不可判」档）
+  if (st.pinned && st.saved) return false; // pinned-dormant（重放路径 saved 恒空值——同上；Leader 豁免在 #PMRESUME 通道先行清标）
+  if (typeof st.updated_at === "number" && st.updated_at > 0 && Date.now() - st.updated_at > 48 * 3_600_000) return false;
+  return true;
+}
 export function markManagedRebootInterrupted(
   rs: { state: { status: string; done_reason?: string; historical?: boolean; pre_reboot_status?: string }; logs: { ts: number; kind: string; text: string }[] },
   interruptedStatus: string,
+  autoResumable: boolean,
 ): void {
   rs.state.status = "DONE";
   rs.state.done_reason = "服务更新重启，会话已中断";
   rs.state.historical = true;
-  if (interruptedStatus === "WORKING") rs.state.pre_reboot_status = "WORKING"; // #36：boot 自愈链的选人凭据
+  const willAutoResume = interruptedStatus === "WORKING" && autoResumable;
+  if (willAutoResume) rs.state.pre_reboot_status = "WORKING"; // #36：boot 自愈链的选人凭据（只有真会续跑的才打——空试=落空承诺）
   rs.logs.push({
     ts: Date.now(),
     kind: "system",
-    text: interruptedStatus === "WORKING" ? "服务更新重启，会话已中断 · 检测到进行中任务，将自动续跑" : "服务更新重启，会话已中断 · 发送消息即可继续",
+    text: willAutoResume ? "服务更新重启，会话已中断 · 检测到进行中任务，将自动续跑" : "服务更新重启，会话已中断 · 发送消息即可继续",
   });
 }
 
@@ -236,6 +263,12 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
           s.pre_compact_summary = (p as { pre_compact_summary?: string }).pre_compact_summary!;
         }
         if ((p as { relay_session_id?: string }).relay_session_id) s.relay_session_id = (p as { relay_session_id?: string }).relay_session_id!;
+        // W-REBOOTTXT（1103 用户实锤 5e4f4963）：收养型外部身份还原（根数据缺口）——
+        // CREATED 帧缺 external（旧版写入/收养形态）而后续 SESSION_UPDATED 带 external=true
+        //（external 在 MERGE_KEYS 广播面），重放不应用它→boot 中断扫描把外部 CLI 会话误判
+        // 托管、喂「将自动续跑」承诺（revive 链 external 闸必拒=谎）。随帧应用（只认 true
+        // 不翻 false——external 是身份不是状态）。
+        if ((p as { external?: boolean }).external === true) s.external = true;
         if ((p as { permission_mode?: SessionState["permission_mode"] }).permission_mode) s.permission_mode = (p as { permission_mode?: SessionState["permission_mode"] }).permission_mode;
         // W-INJECT：pid 帧回放还原（setExternalCliPid 现随 pid 变更落帧）。cli_pid 在册
         // 才能让下方「外部会话非终态收殓」的活体判定真正走到活分支（保持 WORKING 不标
@@ -344,7 +377,10 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         // boot 自愈链（resumeInterruptedByReboot）据此自动续跑，不再「发送消息即可
         // 继续」干等人；WAITING（权限等待中）不打标——半截权限流 resume 后无法自答，
         // 维持人工触发。提取为 markManagedRebootInterrupted 供测试直吃。
-        markManagedRebootInterrupted(rs, rs.state.status);
+        // W-REBOOTTXT：分类只在「revive 链真会续」时打标+承诺（外部/无锚/codex/48h 陈
+        // ——重放可判轴；挂起/pinned 休眠两轴重放期判不到=先诺后落空的既有诚实缺口，
+        // 见 rebootAutoResumable 头注与回执遗留清单）。
+        markManagedRebootInterrupted(rs, rs.state.status, rebootAutoResumable(rs.state));
       } else {
         rs.state.status = "ERROR";
         rs.state.last_error = "服务更新重启，会话已中断";
