@@ -10,6 +10,11 @@ name: desktop
 # plain 的 tauri-latest.json / tauri-latest-test.json 停发（存量键已清）。
 # tag 门（两 job 前置步）：无 -nova 后缀的 tag 一律 fail-fast——再想出 plain 包
 # 必须显式回滚本门（防误发事故重演的结构闸）。历史 plain tag 重跑场景不再支持。
+# 配置面注记：tauri.windows.conf.json（plain 的 Windows decorations:true 形态）保留
+# 原样不动——CI 门控后已无 plain 消费路径（nova overlay 自带完整 windows 定义覆盖
+# decorations），文件本身即历史形态档案。**勿给它加 $comment 之类注记字段**：Tauri
+# 平台 conf merge 走严格 schema，额外属性直接炸 Windows 构建（test.89-nova CI 实锤
+# `Additional properties are not allowed ('$comment')`，test.90 还原后绿）。
 on:
   push:
     tags: ["v*"]
