@@ -1666,6 +1666,11 @@ function connectLan(ctx) {
           } catch (_) { return null; }
         }
         if (!isHttpPage) return null;
+        // R2-P2（A 审）：浏览器探针仅当页面自身回环 served 才有效——浏览器把 127.0.0.1 解析到
+        // 访问者本机，跨机形态（手机/他机浏览器访问本页）探到的是访问者自己的回环，命中其
+        // 同端口 relay 会把别机 token 灌进本页 cfg（投毒自持，R1 每轮探针放大了该存量面）；
+        // 壳形态走 shellProbe（Rust 直探本机）不受此限
+        if (location.hostname !== "127.0.0.1" && location.hostname !== "localhost") return null;
         const port = location.port || (location.protocol === "https:" ? "443" : "80");
         try {
           const r = await fetch("http://127.0.0.1:" + port + "/local-info", { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined });
@@ -1685,7 +1690,7 @@ function connectLan(ctx) {
         window.__ccDeck005Token = relayToken; // W-NOVAFIX B2：域脚本活读点同步刷新
         try { localStorage.setItem("cc-deck-005-token", relayToken); } catch (_) {}
       }
-      let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后交给 6s 周期自愈）
+      let bootProbeRetried = false; // 首探落空的 2.5s 补试只排一次（其后的持续自愈=每轮重连前探针先行，见 scheduleReconnect [W-LOCALTOKEN]）
       // W-NOVAFIX B1：LAN/桌面形态配对链接与弹窗。桌面壳 location 是 tauri.localhost 不可分享
       // ——用探测结果（local-info 的 lan_ip + port）拼 LAN 可达地址；浏览器形态页面即 relay，
       // location.origin 直用。云形态不走此链（openCloudPairUI 输码）。
@@ -2053,7 +2058,23 @@ function connectLan(ctx) {
         if (context.stopped) return;
         clearTimeout(context.reconnectTimer);
         const jitter = context.reconnectDelay * (0.8 + Math.random() * 0.4); // #143 盲评A-3：±20% 抖动防多端同步重连风暴
-        context.reconnectTimer = setTimeout(() => connectLan(context), jitter);
+        // [W-LOCALTOKEN]（1103 双机 P0）：重连前探针先行——token 失配自愈闭环真化。基线的
+        // 6s 周期自愈（healTimer，#158-批3）真实存在但三重自限（桌面壳限定/15 次≈90s 停表/
+        // online 或 connecting 即自清）——长驻会话越过 heal 窗后 token 漂移，重连链仍零探针：
+        // connectLan 拿陈旧 cfg.token 无限重试=401 循环（embedded-relay.log 十一次 reject
+        // ~6s 退避曲线实证）。本修把探针放进无封顶的重连链：每轮重连都探，命中即刷
+        // cfg.wsUrl/token+localStorage（applyLocalProbe）再连，401 循环当轮自愈（healTimer
+        // 仍在场，双轨并存无冲突）；探针失败照旧连（transport 类故障与 token 无关，不因
+        // 探针失败弃连）。探针 1.5s 超时叠加退避抖动可接受（30s 档抖动上限实为 36s）。
+        context.reconnectTimer = setTimeout(async () => {
+          if (context.stopped) return;
+          try {
+            const probed = await probeLocalRelay();
+            if (probed && context === ctx) applyLocalProbe(probed); // 仅本机 ctx（云 ctx 不经本函数——防御性判同）
+          } catch { /* 探针失败不弃连 */ }
+          if (context.stopped) return; // R2-P1-1（A/B 双审同锤）：await 探针窗（≤1.5s）内停连（pagehide 唯一写点）不复活连接——healTimer await 后复查同款范式（:4541）
+          connectLan(context);
+        }, jitter);
         context.reconnectDelay = Math.min(context.reconnectDelay * 2, 30000);
       }
 
