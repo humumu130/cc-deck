@@ -989,8 +989,20 @@
        footer padding = (100%-900)/2 = 22 + (宽-44-900)/2，恒等（百分比参照同一 containing block）。
        源序：两规则均排 :646/:651 存量之后（#d-session .workspace-footer 同特异度靠源序压制）。
        team 域（.team-conversation-pane 自带 720px 阅读列体系）本批不动。 */
-    .conversation-pane { max-width: 900px; margin-left: auto; margin-right: auto; }
-    #d-session .workspace-footer { padding-left: max(22px, calc((100% - 900px) / 2)); padding-right: max(22px, calc((100% - 900px) / 2)); }
+    /* 居中 v2（用户 1103 装机实锤两件）：列宽 900→max(900px, min(1180px, 68vw))——
+       1180 对齐 WorkBuffy 参考形态（≈窗宽 50% 阅读列：2560 窗≈1200px+），68vw 中窗档
+       （1324~1735 视窗）按比例过渡，max(900px,·) 外壳保证任何窗 ≥900 列=窄窗零回归
+       （构造性退化沿用：中窗加宽、窄窗贴现状 900 满宽，无断点连续）。
+       v2-2 状态栏/审批卡入列（centercol 反方 P2-2 预警用户确认收）：dock 与 agbox 与
+       footer 同为 #d-session 域满宽容器——同表达式 padding calc 入列，地板分别取各自
+       现状值（dock 16px / agbox 20px / footer 22px）窄窗贴现状。对齐数学：pane 左缘 =
+       workspace 列内 auto margin 居中；三容器 padding = calc((100% - COL)/2)，COL 四处
+       同一表达式（vw 处处=视口宽，100% 各容器=同一 workspace 列宽）恒等 ΔL=0；
+       窄窗（列宽 < COL）calc 为负被 max() 地板回收=各容器现状 padding。 */
+    .conversation-pane { max-width: max(900px, min(1180px, 68vw)); margin-left: auto; margin-right: auto; }
+    #d-session .workspace-footer { padding-left: max(22px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); padding-right: max(22px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); }
+    #d-session .session-state-dock { padding-left: max(16px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); padding-right: max(16px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); }
+    #d-session .agbox { padding-left: max(20px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); padding-right: max(20px, calc((100% - max(900px, min(1180px, 68vw))) / 2)); }
     .msg-user-row .bubble.me { margin-bottom: 0; }
     /* #201 VISFIX③b：己方气泡右侧尖角（WorkBuddy 同款小三角，色随气泡底） */
     .bubble.me::after { content: ""; position: absolute; top: 10px; right: -5px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid var(--bubble-me-bg); }
