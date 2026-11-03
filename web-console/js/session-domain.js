@@ -105,7 +105,7 @@
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
                   ackWaiters: new Map(), artFetches: new Map(),
-                  echo: new Map(), // W-PORT-A R-4 发送乐观回显：sid → [{key, text, ts, state:"sending"|"fail"}]（回显对账/超时自撤，见 renderConversation）
+                  echo: new Map(), // W-PORT-A R-4 发送乐观回显：sid → [{key, text, ts, state:"sending"|"fail"|"slow"}]（回显对账/超时自撤；W-ECHOFIX：slow=ack 超时但 WS 在开——「确认超时」非谎报失败）
                   imgUrls: new Map(), // FB14 气泡附图缓存：key="sid/ref" → {state:"loading"|"ready"|"failed", url?}（url=Blob objectURL）
                   hist: { sid: null, list: [], idx: -1, draft: "" },
                   forceScroll: true,
@@ -987,7 +987,11 @@
                     if (eq && eq.length) {
                       const normTxt = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
                       const txt = normTxt(entry.full ?? entry.text ?? "");
-                      const hit = eq.filter((x) => x.state === "sending" && (normTxt(x.text) === txt || txt.startsWith(normTxt(x.text)) || normTxt(x.text).startsWith(txt)));
+                      // W-ECHOFIX（用户 1103 实锤「发送成功却挂未送达」）：对账命中撤 sending
+                      // **与 fail/slow 一并**——真实 user 帧落地=送达铁证，谎报行（ack 超时
+                      // 误标、WS close 边沿误标）不得存活；真失败无同文本真实帧落地，
+                      // fail 行自然维持（展示窗语义不变）——证据即送达，对账即自愈
+                      const hit = eq.filter((x) => (x.state === "sending" || x.state === "fail" || x.state === "slow") && (normTxt(x.text) === txt || txt.startsWith(normTxt(x.text)) || normTxt(x.text).startsWith(txt)));
                       dropEchoKeys(hit.map((x) => x.key));
                       if (UI && sid === S.selected && hit.length) renderConversation();
                     }
@@ -997,7 +1001,7 @@
                     const eq = S.echo.get(sid);
                     if (eq && eq.length) {
                       const frameTs = Number(entry.ts) || Date.now();
-                      dropEchoKeys(eq.filter((x) => x.state === "sending" && x.ts <= frameTs + 500).map((x) => x.key));
+                      dropEchoKeys(eq.filter((x) => (x.state === "sending" || x.state === "slow") && x.ts <= frameTs + 500).map((x) => x.key)); // W-ECHOFIX：slow（超时未证伪）随回合推进自愈；fail 保留展示窗（真失败需可见）——fail 只被同文本真实帧撤
                     }
                   }
                   const out = pushLog(sid, entry);
@@ -3040,7 +3044,7 @@
                     // W-PORT-A R-4：发送乐观回显气泡（时间线权威流之后、wait-card 之前；惰性超时清理同拍）
                     echoSweep(s.session_id);
                     const eqs = S.echo.get(s.session_id) || [];
-                    for (const eq of eqs) desired.push(["echo:" + eq.key, '<div class="msg-user-row msg-echo' + (eq.state === "fail" ? " echo-fail" : "") + '" data-echo-key="' + esc(eq.key) + '"><div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : "发送中…") + "</div></div>"]);
+                    for (const eq of eqs) desired.push(["echo:" + eq.key, '<div class="msg-user-row msg-echo' + (eq.state === "fail" ? " echo-fail" : eq.state === "slow" ? " echo-slow" : "") + '" data-echo-key="' + esc(eq.key) + '"><div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : eq.state === "slow" ? "确认超时…消息可能已送达" : "发送中…") + "</div></div>"]);
                     if (s.status === "DONE" && s._terminal === "interrupted") desired.push(["note:stopped", noteHtml("已停止 · 生成在此中断")]);
                     if (s.status === "ERROR" && s.last_error) desired.push(["note:err", noteHtml("⚠ " + oneLine(s.last_error))]);
                     if (s.status === "ERROR" && s.auth_hint) desired.push(["note:auth", noteHtml("🔑 " + oneLine(s.auth_hint))]); /* #102 批 A：引擎登录态失效指引行 */
@@ -3086,9 +3090,9 @@
                   const eqs = S.echo.get(s.session_id) || [];
                   for (const eq of eqs) {
                     const row = document.createElement("div");
-                    row.className = "msg-user-row msg-echo" + (eq.state === "fail" ? " echo-fail" : "");
+                    row.className = "msg-user-row msg-echo" + (eq.state === "fail" ? " echo-fail" : eq.state === "slow" ? " echo-slow" : "");
                     row.dataset.echoKey = eq.key;
-                    row.innerHTML = '<div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : "发送中…") + "</div></div>";
+                    row.innerHTML = '<div class="bubble me"><div class="ub">' + userMsgHtml(eq.text) + '</div><div class="echo-state">' + (eq.state === "fail" ? "⚠ 未送达" : eq.state === "slow" ? "确认超时…消息可能已送达" : "发送中…") + "</div></div>";
                     pane.appendChild(row);
                   }
                   if (s.status === "DONE" && s._terminal === "interrupted") pane.appendChild(noteNode("已停止 · 生成在此中断"));
@@ -3946,11 +3950,22 @@
                   const i = eq.findIndex((x) => x.state === "sending" && x.text === text);
                   if (i >= 0) { eq[i].state = "fail"; eq[i].ts = Date.now(); if (sidIsSelected(sid)) renderConversation(); }
                 }
+                // W-ECHOFIX 加固：WS 仍开着的纯 ack 超时≠未送达（relay 忙时事件循环卡、
+                // ack 迟于 10s 窗，消息实际多已送达）——降级「确认超时」态（如实陈述不
+                // 确定，不谎报失败）；归宿三：①同文本真实帧→对账撤②回合推进→撤③15s 自撤。
+                // 显式 NACK/断线仍走 markEchoFail（真失败/无法证实，照旧「⚠ 未送达」）。
+                function markEchoSlow(sid, text) {
+                  const eq = S.echo.get(sid);
+                  if (!eq || !eq.length) return;
+                  const i = eq.findIndex((x) => x.state === "sending" && x.text === text);
+                  if (i >= 0) { eq[i].state = "slow"; eq[i].ts = Date.now(); if (sidIsSelected(sid)) renderConversation(); }
+                }
+                const mainWsOpen = () => { const w = window.__ccDeck005MainWs; return !!w && w.readyState === 1; };
                 function echoSweep(sid) { // 惰性清理：sending 30s 无回显 / fail 15s 展示窗 → 自撤
                   const eq = S.echo.get(sid);
                   if (!eq) return false;
                   const now = Date.now();
-                  const keep = eq.filter((x) => now - x.ts < (x.state === "fail" ? 15_000 : 30_000));
+                  const keep = eq.filter((x) => now - x.ts < (x.state === "fail" || x.state === "slow" ? 15_000 : 30_000)); // W-ECHOFIX：slow 展示窗同 fail 15s
                   if (keep.length === eq.length) return false;
                   if (keep.length) S.echo.set(sid, keep); else S.echo.delete(sid);
                   return true;
@@ -3976,7 +3991,9 @@
                       S.echo.set(s.session_id, eq);
                       if (sidIsSelected(s.session_id)) renderConversation();
                     }
-                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) { b2Toast("发送失败: " + v.error); markEchoFail(s.session_id, text); } }; // #150 R3：自发命令失败回执（R2 删无主 toast 后补漏——超时 null/ok:false 才 toast，成功静默；输入框清空维持现状不并入 waiter）+ R-4 失败转未送达
+                    // W-ECHOFIX：ack===null（超时）且 WS 仍开=证据未定 → slow 降级（不谎报
+                    // 未送达、不 toast——确认超时可自愈）；显式 NACK（ok:false）/断线 → fail 原样
+                    const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) { if (ack == null && mainWsOpen()) { markEchoSlow(s.session_id, text); return; } b2Toast("发送失败: " + v.error); markEchoFail(s.session_id, text); } }; // #150 R3：自发命令失败回执 + R-4 失败转未送达
                     const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
                     S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
@@ -5253,7 +5270,7 @@
                         S.echo.set(sid, eq);
                         if (sidIsSelected(sid)) renderConversation();
                       }
-                      const sf = (ack) => { const v = ackVerdict(ack); if (!v.ok) markEchoFail(sid, body); };
+                      const sf = (ack) => { const v = ackVerdict(ack); if (!v.ok) { if (ack == null && mainWsOpen()) { markEchoSlow(sid, body); return; } markEchoFail(sid, body); } }; // W-ECHOFIX：staged 托盘同款分流（超时+WS 开→slow）
                       const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sf(null); } }, 10000);
                       S.ackWaiters.set(id, { res: sf, t: wd2 });
                       S.staged = []; renderTray(); return { sent: true };
