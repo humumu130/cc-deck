@@ -431,7 +431,7 @@
     .session-list { display: flex; flex-direction: column; overflow: hidden; height: calc(100% - 54px); padding-right: 0; }
     .session-list .list-upper { flex: 1 1 auto; min-height: 0; overflow: hidden auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
     .session-list .list-upper.is-empty { flex: 0 0 auto; overflow: visible; } /* #103-B3 会话区空时上段收缩，团队区自然上移 */
-    .queue-group {margin: 12px 3px 6px; color: var(--faint); font: var(--fs-D) var(--mono); letter-spacing: .04em;}
+    .queue-group {margin: 12px 3px 6px; color: var(--faint); font: var(--fs-D) var(--mono); letter-spacing: .06em; word-spacing: 3px; line-height: 1.5; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;} /* visualfix（1104 V-P2-2）：折叠头 chevron/计数与文字粘连+基线上浮——flex 化垂直居中+gap 6+词距（模板「▸文👥N」连排的历史形制，CSS 层最小刀；模板重排归范式统一单） */
     /* #169 追加令1：任务 tab 四组分组标题——无横线分隔，改左侧 3px 状态色条（进行中黄/已完成绿/待验证蓝/待办中性灰）。
        只作用于任务明细列表（detail-panel-list）内的组标题，会话列表/通知中心等其它 queue-group 不动 */
     .detail-panel-list > .queue-group { position: relative; margin: 14px 3px 6px; padding-left: 10px; }
@@ -2021,7 +2021,7 @@
     .mobile-sourcebar .source-switcher { flex: 1; }
     .mobile-sourcebar .source-trigger { width: 100%; justify-content: space-between; min-height: 25px; }
     .mobile-sourcebar .source-menu { top: calc(100% + 5px); right: 0; left: 0; width: auto; }
-    .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); box-shadow: 0 7px 16px var(--panel-shadow); }
+    .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); box-shadow: 0 7px 16px var(--panel-shadow); } /* visualfix R2（V-P1-2 归档）：右距=本行 padding 第二值 14px（≥12px 安全意图）——R1 曾另加 :2019 padding-right:12px 死码（本行简写后至覆盖）已删，双审 B P2-1 */
     .mobile-head h2 {flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: var(--fs-page);}
     .mobile-head h2 small {display: block; overflow: hidden; margin-top: 3px; color: var(--dim); font-size: var(--fs-C); font-weight: 400; text-overflow: ellipsis; white-space: nowrap;}
     #m-detail .mobile-head h2 small { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
@@ -2032,6 +2032,10 @@
     .mobile-nav { display: flex; flex: 0 0 62px; border-top: 1px solid var(--line-soft); background: var(--mobile-nav-bg); box-shadow: 0 -10px 20px var(--rail-shadow); }
     .mobile-nav button {position: relative; flex: 1; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--dim); cursor: pointer; font-size: var(--fs-C); transition: color .18s ease, background .18s ease, border-color .18s ease;}
     .mobile-nav button b { display: block; height: 18px; margin-bottom: 3px; color: var(--text); font-size: 17px; line-height: 18px; }
+    /* visualfix（1104 审查 V-P1-3）：底栏角标锚定——原「团队1」为流内 tag（跟文字后=中心偏图标
+       右 +30px 悬浮两 tab 间，归属不清）。改 absolute 锚图标右上（按钮已 relative）：icon 居中
+       18px → 右缘≈50%+9px，角标左缘取 50%+5px 轻叠图标右肩；小号 10px 胶囊减视觉重量 */
+    .mobile-nav [data-mobile-root] .tag.action { position: absolute; top: 3px; left: calc(50% + 5px); padding: 0 5px; font-size: 10px; line-height: 14px; border-radius: 999px; min-width: 16px; text-align: center; }
     .mobile-nav button b .icon-nav { width: 18px; height: 18px; }
     .mobile-nav button.active { color: var(--text-strong); border-bottom-color: var(--brand); background: linear-gradient(180deg, var(--mobile-active-bg), transparent); }
     .mobile-nav button.active b { color: var(--brand-hover); }
