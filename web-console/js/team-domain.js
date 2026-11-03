@@ -1,8 +1,8 @@
               (() => {
                 const root = document.querySelector("#d-team");
-                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* 1014 用户定版词表 */
+                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* 1014 用户定版词表；boardlife R2：submitted「待审查」→「审查中」（用户 1103 点名「甬道为什么叫待审查」——进行时态与卡面 chip「审查中 · PM」对齐） */
                 // #G3 板卡富模型：父子链折叠态（展开的父卡 id 集；模块级——render 重建存活）
-                const boardExpanded = new Set(); // 1014 用户定版词表：待认领/进行中/待审查/待收单/完成（批4b 改向作废）
+                const boardExpanded = new Set(); // 1014 用户定版词表：待认领/进行中/审查中/待收单/完成（批4b 改向作废；boardlife R2 submitted 改词）
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
                 const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"], ["headcount-trim-first", "编制清理"]]); // [W-SEAT-SEMANTICS] 首裁确认卡标签（缺席时卡面裸显 kind 串）
@@ -275,7 +275,25 @@
                   if (task.owner_session && pendingDispatchSids(project.id).has(task.owner_session)) {
                     ownerBits.push('<span class="tchip disp-pend" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 等待处理</span>');
                   }
-                  ownerBits.push('<span class="tchip owner">' + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>");
+                  // boardlife ②（用户口径「进行中的卡看得到谁在干、点了能跳到他」）：执行者
+                  // chip 升可点——data-team-member-session 复用成员卡消息钮同一委托链（:1587
+                  // closest→selectSessionCard），点 chip 直达执行者会话；无 owner_session（未指派）
+                  // 不挂牌不炸（优雅降级）。有 owner 即可点（claimed 进行中为主用例，其余态跳
+                  // 转同链无害——sid 兜底跳，退休/外部会话由会话域空态兜底）。
+                  ownerBits.push('<span class="tchip owner' + (task.owner_session ? " owner-jump" : "") + '"' + (task.owner_session ? ' data-team-member-session="' + escape(task.owner_session) + '" role="button" tabindex="0" title="直达执行者会话 · ' + escape(dispName) + '"' : "") + '>' + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>");
+                  // boardlife ③（用户口径「审查中的卡看得到谁在审、点了能跳过去」）：submitted
+                  // 态挂处理者 chip——数据源=组内 PM 席位行（members role=pm，建团自动补入
+                  // 先例）；在岗显示「审查中 · PM（昵称/短 sid）」并同链可点跳 PM 会话；无在岗
+                  // PM 灰牌「待指派审查」（不挂牌不炸——数据缺席优雅降级）。
+                  if (laneKey === "submitted") {
+                    const pmRow = members(project).find((m) => String(m && m.role || "").toLowerCase() === "pm" && m.session_id);
+                    if (pmRow) {
+                      const pmName = String(pmRow.nick || "") || shortSid(pmRow.session_id);
+                      ownerBits.push('<span class="tchip reviewer" data-team-member-session="' + escape(pmRow.session_id) + '" role="button" tabindex="0" title="审查中 · 点按直达 PM 会话">审查中 · ' + escape(pmName) + "</span>");
+                    } else {
+                      ownerBits.push('<span class="tchip reviewer-none" title="组内无在岗 PM 席位——过审收割前请指派审查人">待指派审查</span>');
+                    }
+                  }
                   // [W-SEAT-SEMANTICS]（用户 1101 拍板）done 卡时间维度：owner 已离席 → 小灰徽章
                   // 「已离席」（title 带成因三拆详情）；在席不显示（降噪）；旧 relay 无
                   // retired_entries（undefined）同样不显示=等价在席降噪，零破坏

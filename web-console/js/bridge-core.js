@@ -140,6 +140,12 @@
                     if (!sid) return;
                     const card = document.querySelector('#d-session [data-session-card="' + (window.CSS && CSS.escape ? CSS.escape(sid) : sid.replace(/"/g, '\\"')) + '"]');
                     if (card) card.click();
+                    // boardlife R2-P1（A 审）：slim 态兜底——roster worker 会话被瘦身收起
+                    //（t-7e0c6189 slimIsHidden，生产态列表仅剩 PM）DOM 无卡即 toast 返回，
+                    // 板卡执行者/处理者 chip 与成员卡消息钮/通知/artifact 行跳转全部落空。
+                    // 会话在快照（has 口）→ SlimUi.open 直选展开（renderMyList 临时出列）；
+                    // 不在才 toast。单点修全消费面（team-domain 委托链/通知中心/artifact 同愈）。
+                    else if (typeof window.__ccDeck005SlimUi?.open === "function" && window.__ccDeck005SlimUi?.has?.(sid)) window.__ccDeck005SlimUi.open(sid);
                     else toast("来源会话不在当前列表");
                   },
                   openAcceptance(id) {

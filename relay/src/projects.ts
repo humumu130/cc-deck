@@ -1299,6 +1299,11 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
     try { board = loadBoard(g.id, dir); } catch { continue; }
     for (const entry of board.entries) {
       if (entry.status === "done" || !entry.dispatch_id) continue;
+      // boardlife ①协同：复核态保护——submitted/ready_to_install 有自己的确认闭环
+      // （submitted=交付候选待审，boardlife 起 close 翻入；done 出口=过审收割面），
+      // 收敛扫不自动搬（D18「自动搬=碾过复核闸」同款教训；recon #263 先例同口径）。
+      // 豁免机制（hold/人工重开）对新态天然兼容：豁免判据只作用 backlog 强翻分支。
+      if (entry.status === "submitted" || entry.status === "ready_to_install") continue;
       const doneAt = doneAtById.get(entry.dispatch_id);
       if (doneAt === undefined) continue;
       // boardfix 刀2（1103 板面说谎形态 C）：backlog 陈卡强翻分支——原防碾条件
@@ -1320,9 +1325,14 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       if (entry.status === "backlog" && staleMs > 72 * 3600_000) {
         if (entry.hold) { skipped++; continue; }
         const trSeq = entry.transitions || [];
-        let lastDoneIdx = -1;
-        for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && trSeq[i].status === "done") lastDoneIdx = i;
-        const reopened = lastDoneIdx >= 0 && trSeq.slice(lastDoneIdx + 1).some((t) => t && t.status === "backlog");
+        // boardlife 审后修正（review-w-boardlife-a-1103 P1）：判据基点扩「done **或
+        // submitted** 行」——submitted（交付候选）被人工 board-move 退 backlog=审查
+        // 打回铁证（[claimed,submitted,backlog] 无 done 行，原判据漏=72h 后被强翻
+        // done「被否决的活标完成」）；真陈卡（8 卡形态 [claimed] 无候选行）与新建
+        // 陈卡（[backlog] 建卡行）仍不豁免，治愈主路径不挡。
+        let lastSettledIdx = -1;
+        for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && (trSeq[i].status === "done" || trSeq[i].status === "submitted")) lastSettledIdx = i;
+        const reopened = lastSettledIdx >= 0 && trSeq.slice(lastSettledIdx + 1).some((t) => t && t.status === "backlog");
         if (reopened) { skipped++; continue; }
         if (moveEntryByDispatch(g.id, entry.dispatch_id as string, "done", dir)) {
           moved++;

@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { acceptanceClosure, loadAcceptance, saveResult } from "../src/acceptance.js";
-import { loadBoard, setLightConfirmTrusted } from "../src/projects.js";
+import { loadBoard, moveBoardEntry, setLightConfirmTrusted } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 import {
   dispatchEntriesFromDb,
@@ -181,9 +181,14 @@ try {
     const lessonsAfterDep = loadBoard(gid).lessons ?? [];
     assert(depConv[depConv.length - 1]?.status === "done" && String(depConv[depConv.length - 1]?.receipt ?? "").includes("勘察完成"),
       "O3② worker 回合收口 → 台账 done+receipt 留痕（M12-3 生命周期 done 边）");
-    assert(loadBoard(gid).entries.find((e) => e.id === depId)?.status === "done"
+    const depCardO3 = loadBoard(gid).entries.find((e) => e.id === depId);
+    assert(depCardO3?.status === "submitted" && depCardO3?.review_required === true
       && lessonsAfterDep.some((l) => l.source_dispatch_id === depDispatchId && l.text.includes("[派单收口]") && l.tags.includes("派单收口")),
-      "O3③ 收口联动双写：卡自动搬 done（closeOpenDispatches done 边）+lesson 自动回流（M12-4，actor=system）");
+      "O3③ 收口联动双写：卡自动搬 submitted（boardlife：交付=完成候选 review_required 置位——done 出口在过审收割面）+lesson 自动回流（M12-4，actor=system）");
+    // boardlife：依赖过审收割（submitted→done）——computeReady 只认 done，就绪放行前完成审查闭环
+    const depHarvestO4 = moveBoardEntry(gid, depId, "done");
+    assert(depHarvestO4.ok === true && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "done",
+      "O3④ 依赖过审收割 submitted→done（boardlife 编排链投影：审查过了才算真完成）");
 
     // ---------- O4 段③就绪放行：依赖已 done → 带 entry_id 重派认领 O2 卡（beads ready 链；
     //            重派口径=C8⑫「卡已入账不回滚，下轮可带 entry_id 重派」——task{} 键每次建新卡，
@@ -221,6 +226,8 @@ try {
 
     // ---------- O6 段④主卡认领重派+回合收口（重启后链路续走到终态） ----------
     console.log("O6 主卡认领重派+收口");
+    // boardlife 适配：依赖卡已在 O3④ 过审收割（done）——O6 无需重复收割（O3④ 已断言
+    // 终态；此处重复 move 恒过属空断言，review-w-boardlife-a-1103 P3 清理）。
     const baseO6 = created.length;
     const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续", title: "交付主活：全链编排验收", entry_id: mainId, role: "worker" }, "web-1");
     const mainDispatchId2 = (mainAck3.data as { dispatch_id?: string }).dispatch_id ?? "";
@@ -230,10 +237,11 @@ try {
     created[baseO6]?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[baseO6]?.cb.onTurnEnd(true, "结果：主活完成全链绿｜改动文件：main.ts", 100);
     const mainConv = readDispatchLog().filter((e) => e.id === mainDispatchId2);
     const lesson2 = (loadBoard(gid).lessons ?? []).find((l) => l.source_dispatch_id === mainDispatchId2);
+    const mainCardO6 = loadBoard(gid).entries.find((e) => e.id === mainId);
     assert(mainConv[mainConv.length - 1]?.status === "done"
-      && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "done"
+      && mainCardO6?.status === "submitted" && mainCardO6?.review_required === true
       && lesson2 !== undefined && lesson2.text.includes("交付主活"),
-      "O6② 二段收口：台账 done+主卡 done+lesson2 回流（派单→worker→回执→lesson 全链真跑通）");
+      "O6② 二段收口：台账 done+主卡 submitted（boardlife 交付候选——done 出口在过审收割面）+lesson2 回流（派单→worker→回执→lesson 全链真跑通）");
 
     // ---------- O7 段⑤CLI 出单真链路（python3 源件直跑+归因端到端） ----------
     console.log("O7 CLI 出单（--gid/--entry 透传）");
@@ -255,10 +263,11 @@ try {
     assert(saveErr === null, "O8① 收单提交落 history（saveResult=LAN POST /api/acceptance 处理段同函数）");
     const settle = mgr2.settleAcceptanceResult(sheetId); // 重启后的实例跑归因回写（断线不丢能力的续段证明）
     const closureEnd = sheetId !== "" ? acceptanceClosure(sheetId) : null;
-    // 主卡在 O6 worker 收口时已被 moveEntryByDispatch 搬 done（真链路时序：卡终态先于
-    // 用户填单收单）——settle 撞 already-done 幂等分支=终态保护在真链路的自然实证（M12-7）
-    assert(settle.ok === true && settle.reason === "already-done",
-      "O8② 收单全过 → settle 幂等跳过（卡已 done=already-done，终态保护先于验收回写）");
+    // boardlife：主卡 O6 收口后=交付候选 submitted——**用户收单全过=过审**，settle 把
+    // submitted 推 done 正是审查闭环的真实触发口（R3 复核确认迁移；already-done 幂等
+    // 分支留给卡已 done 的重复收单形态——终态保护不变）
+    assert(settle.ok === true && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "done",
+      "O8② 收单全过 → settle 从 submitted 推 done（boardlife：验收=过审触发口）");
     assert(closureEnd?.submitted === true && closureEnd.all_pass === true
       && loadBoard(gid).entries.find((e) => e.id === mainId)?.status === "done",
       "O8③ closure 收口态+归因卡终态 done——立项→派单→worker→回执→验收→lesson 全链闭合");

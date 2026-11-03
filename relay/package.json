@@ -142,7 +142,8 @@
     "test:conn-page-v2": "tsx scripts/test-conn-page-v2.ts",
     "test:console-guardrails": "tsx scripts/test-console-guardrails.ts",
     "test:notify-overhaul": "tsx scripts/test-notify-overhaul.ts",
-    "test:win-font-aa": "tsx scripts/test-win-font-aa.ts"
+    "test:win-font-aa": "tsx scripts/test-win-font-aa.ts",
+    "test:boardlife": "tsx scripts/test-boardlife.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

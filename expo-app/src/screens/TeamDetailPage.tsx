@@ -151,7 +151,7 @@ export function laneColorOf(st: string, mode: "dark" | "light"): string {
   return pair ? pair[mode] : "#55677F";
 }
 // 渲染序（v3 ph-pteamd plane 序）：待收单置顶（用户行动队列——产品三原则②「需 PM
-// 决策的事进一个行动队列」，v3 顺手拍板项）→ 进行中 → 待审查 → 待认领 → 完成。
+// 决策的事进一个行动队列」，v3 顺手拍板项）→ 进行中 → 审查中 → 待认领 → 完成。
 // 词表序（BOARD_LANES）是数据面契约不动；此处只影响详情页渲染序
 export const LANE_RENDER_ORDER: readonly string[] = [
   "ready_to_install", "claimed", "submitted", "backlog", "done",
@@ -324,9 +324,22 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
           {engKnown ? <EngineBadge engine={info!.engine} size="sm" /> : null}
           {r.resolved && info ? (
             <>
-              <View style={styles.tCardChip}>
-                <Text style={styles.tCardChipT} numberOfLines={1}>{info.name}</Text>
-              </View>
+              {/* boardlife ②（用户口径「进行中的卡看得到谁在干、点了能跳到他」）：执行者
+                  chip 可点直达会话（onOpenSession→App openDetail——MTeamTab onOpenSession
+                  同链）；无 owner_session 优雅降级为原静态 chip（点卡展开不动） */}
+              {e.owner_session ? (
+                <Pressable
+                  style={styles.tCardChip}
+                  accessibilityLabel={`直达执行者 ${info.name} 的会话`}
+                  onPress={() => onOpenSession(e.owner_session!)}
+                >
+                  <Text style={styles.tCardChipT} numberOfLines={1}>{info.name}</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.tCardChip}>
+                  <Text style={styles.tCardChipT} numberOfLines={1}>{info.name}</Text>
+                </View>
+              )}
               {info.role && info.role !== "角色未标注" ? (
                 <Text style={styles.tCardOwnerT} numberOfLines={1}>{info.role}</Text>
               ) : null}
@@ -334,6 +347,23 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
           ) : (
             <Text style={[styles.tCardOwnerT, styles.tCardUnass]}>未指派</Text>
           )}
+          {/* boardlife ③（用户口径「审查中的卡看得到谁在审、点了能跳过去」）：submitted 态
+              处理者 chip——组内 PM 席位行（建团自动补入先例）在岗显示并点按直达 PM 会话；
+              无在岗 PM 灰牌「待指派审查」（数据缺席优雅降级） */}
+          {e.status === "submitted" ? (() => {
+            const pmRow = members.find((m) => String(m?.role || "").toLowerCase() === "pm" && m.session_id);
+            if (!pmRow) return <Text style={styles.tCardReviewNone}>待指派审查</Text>;
+            const pmName = String(pmRow.nick || "") || pmRow.session_id.slice(0, 8);
+            return (
+              <Pressable
+                style={[styles.tCardChip, styles.tCardReview]}
+                accessibilityLabel={`审查中，直达 PM ${pmName} 的会话`}
+                onPress={() => onOpenSession(pmRow.session_id)}
+              >
+                <Text style={[styles.tCardChipT, styles.tCardReviewT]} numberOfLines={1}>审查中 · {pmName}</Text>
+              </Pressable>
+            );
+          })() : null}
           <Text style={styles.tCardTime}>{fmtMdHm(e.updated_at)}</Text>
         </View>
         {open ? (
@@ -820,6 +850,10 @@ const makeStyles = (c: ThemeColors) =>
       paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1, overflow: "hidden",
     },
     tCardChipT: { color: c.text, fontSize: 10, fontWeight: "600" },
+    // boardlife ③：submitted 处理者 chip（审查中·PM 可跳/无 PM 灰牌待指派）
+    tCardReview: { borderColor: c.brandA, backgroundColor: c.tintSoft },
+    tCardReviewT: { color: c.brandA },
+    tCardReviewNone: { color: c.faint, fontSize: 10, fontStyle: "italic", borderWidth: 1, borderColor: c.line, borderStyle: "dashed", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
     tCardTime: { color: c.faint, fontSize: 10, marginLeft: "auto", fontVariant: ["tabular-nums"], flexShrink: 0 },
     tRunDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
     tCardX: { marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: c.lineStrong, gap: 2 }, /* #207：同 ListScreen 统一加重 */

@@ -25,6 +25,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SB = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 rmSync(SB("../data/test-brm-org/"), { recursive: true, force: true });
 mkdirSync(SB("../data/test-brm-org/"), { recursive: true });
+// boardlife 随批（review-w-boardlife-b-1103 P2 清点）：boardfix R3 起 tx 域写会撞生产
+// dataDir sqlite 锁（teamvis 同病已修）——补 storage 隔离配方（org-defects 同款）。
+process.env.CCR_STORAGE_READ_MODE = "json";
 process.env.CCR_ORG_DIR = SB("../data/test-brm-org/");
 
 console.log("§P classifyDispatchFailure 纯函数（匹配序 specific→generic）：");

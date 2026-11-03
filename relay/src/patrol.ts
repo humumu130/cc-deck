@@ -173,6 +173,24 @@ export class PatrolModule {
     } catch (e) {
       console.warn(`[patrol] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
+    // boardlife 审后补（review-w-boardlife-b-1103 P1）：submitted 滞留铃——收割口漏斗
+    // 兜底。done 出口=org CLI/HTTP 人工面（web/expo 无搬卡 UI，leader-harvest 纯只读），
+    // PM 漏收一次=submitted 永挂（「板谎报」换「板沉默卡死」更糟）；30min 一拍扫 active
+    // 组 submitted 卡 updated_at 超阈（缺省 24h，CCR_BOARD_SUBMITTED_STALE_MS 可调）推
+    // 收割提醒。push 同文去重=安静卡不刷屏，卡龄进位/新卡才再响。
+    try {
+      const staleMs = Number(process.env.CCR_BOARD_SUBMITTED_STALE_MS) || 24 * 3600_000;
+      const stale: string[] = [];
+      for (const g of listGroups()) {
+        const board = loadBoardFile(g.id);
+        if (!board) continue; // 坏半态板跳过（读失败≠空板）
+        for (const e of board.entries) {
+          if (e.status !== "submitted") continue;
+          if (now - Number(e.updated_at || 0) > staleMs) stale.push(`「${String(e.text || e.id).slice(0, 24)}」（${Math.floor((now - Number(e.updated_at || 0)) / 3600_000)}h）`);
+        }
+      }
+      if (stale.length) this.push("board-submitted-stale", `审查中卡滞留超 ${Math.floor(staleMs / 3600_000)}h：${stale.length} 张待收割——${stale.slice(0, 3).join("、")}`);
+    } catch { /* 尽力而为（铃不是闸） */ }
     // ① worker 帧新鲜度：WORKING 且静默 >40min（压缩期静默合法，排除）
     // #199 B3：盲面双补——①WAITING 久滞（等用户确认超 2h=疑似确认卡丢失/没人管，与
     // WORKING 停滞分列报告）②compacting 挂死（压缩标志 >90min 不落=看门狗状态机卡死，

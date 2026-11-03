@@ -4707,7 +4707,28 @@ export class SessionManager {
       // 交付存疑度更高（收口异常+回执缺失=双疑），done/failed 统一调度
       if (status === "done" || status === "failed") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath); // W-RESTARTDESIGN §三：收口边沿回执闸（带任务书约定路径）
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
+        // boardlife ①（1103 晚实锤：两张在审卡板已 done——R2/R3 复核进行中而板说「完成」）：
+        // worker 交付=完成候选非完成——done 收口翻卡走 R2 内核（请求 done+review_required=true
+        // →落 submitted+设位，机制面 resolveStatusTransition 既有，缺的就是这条链接线）；
+        // 真正 done 留给过审收割（board-move submitted→done 合法迁移/R3 清位）面。boardTo
+        // 显式参（中断打回 backlog 等）与 failed 收口维持原裸设语义；卡已 submitted（需修
+        // 重派再交付）幂等保位只重设资格位；卡已 done/找不到卡回落裸设兜底（老行为）。
+        if (!boardTo && status === "done") {
+          let handled = false;
+          try {
+            const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
+            if (card && card.status === "submitted") {
+              upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true }); // 幂等保位（无 status 不入 transitions 行）
+              handled = true;
+            } else if (card && card.status !== "done") {
+              const r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true }); // R2 内核：claimed/backlog→submitted
+              handled = r.ok;
+            }
+          } catch { /* 读板异常回落裸设 */ }
+          if (!handled) moveEntryByDispatch(e.gid, e.id, "done"); // 兜底：卡 done/缺失/读板失败（老行为；卡 done 时 no-op）
+        } else {
+          moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
+        }
         // M12-4 收口经验自动沉淀（#087 lessons 回流的接线半边——存储与查询 #087 已
         // 落，本单接 closeOpenDispatches done 边）：worker 派单收口 done 时自动回流
         // 一条结构化账（卡文本摘要+收口态+dispatch 锚），**不生成内容性经验**（不总
@@ -8253,9 +8274,25 @@ ${lines.join("\n")}
           const titleKey = rawTitle.replace(/\s+/g, " ").trim().toLowerCase();
           if (titleKey) {
             const board = loadBoard(input.gid);
-            const stale = board.entries
-              .filter((x) => x.status === "backlog" && (x.text || "").replace(/\s+/g, " ").trim().toLowerCase() === titleKey)
-              .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))[0];
+            // boardlife ①协同：需修重派打回——submitted（审查中态，boardlife 起 close 交付翻入）
+            // 与 backlog 同为可接面（审查发现问题 R2/R3 重派=打回重做，submitted→claimed
+            // 走认领分支合法迁移，资格位保留待再交付幂等重设）；claimed 等在途态仍不碰。
+            // boardlife 顺带（PM boardfix 回执 R3 复核补注①）：题名漂移双卡限界——精确等值
+            // miss 后前缀回落（卡文本=题名+短尾缀 ≤12 字，如「【密钥切换重派】」形态，历史
+            // 双卡 t-28943119 即此）；尾缀长度闸防同前缀异任务误接；三护栏（最旧优先/终态
+            // 预检/就绪闸）全沿用。
+            const normText = (s: string) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+            const byOldest = (a: { ts?: number }, b: { ts?: number }) => Number(a.ts || 0) - Number(b.ts || 0);
+            const pool = board.entries.filter((x) => x.status === "backlog" || x.status === "submitted");
+            // boardlife 审后修正（review-w-boardlife-a-1103 P2）：前缀回落短题闸——题名
+            // 归一后 <6 字不回落（「修搜索」前缀可命中「修搜索框抖动 bug」类异任务卡，
+            // 误接=dispatch_id 脱钩+text 覆写；短题区分度不足只走精确等值）。
+            // boardlife 审后修正（review-w-boardlife-b-1103 P2）：回落（第二级）限定
+            // backlog——submitted 等审卡混排最旧优先可被回落劫持=打回重做压掉待审交付
+            // 旁路审查闭环（精确等值保持全 pool：同题续单显式重派本就该接回待审卡）。
+            const allowDrift = titleKey.length >= 6;
+            const stale = pool.filter((x) => normText(x.text) === titleKey).sort(byOldest)[0]
+              ?? (allowDrift ? board.entries.filter((x) => x.status === "backlog" && (() => { const t = normText(x.text); return t.startsWith(titleKey) && t.length - titleKey.length <= 12; })()).sort(byOldest)[0] : undefined);
             if (stale) {
               // boardfix R3-P2-2（A 审 1.2/B 审攻点1）：接卡前验旧单台账终态——未终态
               // （在跑/中断，或台账无该 id 行）不接，回落开新卡（防「claimed 卡被人工

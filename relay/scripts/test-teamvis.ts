@@ -10,6 +10,12 @@ import { join } from "node:path";
 import { appendDispatch } from "../src/org.js";
 import { convergeBoardsWithDispatchLog, loadBoard, upsertBoardEntry } from "../src/projects.js";
 
+// boardlife 随批（boardfix R3 后显性化的存量 flaky）：moveEntryByDispatch 入 withOrgWriteTx
+// sqlite 事务域后，本套件（只隔离 org dir 的老配方）的 converge 搬卡会撞**生产** dataDir
+// sqlite 锁（与活 relay 8787 争库——「database is locked」→首搬失败→「恰好搬 1 张实际 0」
+// 连锁红；boardfix 顶两跑全绿=漏网）。补 org-defects 同款 storage 隔离配方。
+process.env.CCR_STORAGE_READ_MODE = "json";
+
 let pass = 0;
 let fail = 0;
 const ok = (cond: boolean, label: string): void => {

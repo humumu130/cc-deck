@@ -51,7 +51,7 @@ const SLIM_KEEP_ROLE_RE = /^(pm|leader|产品经理|项目经理|领队)$/i;
 const TEAM_LANES: { k: string; label: string }[] = [
   { k: "backlog", label: "待认领" },
   { k: "claimed", label: "进行中" },
-  { k: "submitted", label: "待审查" },
+  { k: "submitted", label: "审查中" }, // boardlife R2：同词跟随
   { k: "ready_to_install", label: "待收单" },
   { k: "done", label: "完成" },
 ];

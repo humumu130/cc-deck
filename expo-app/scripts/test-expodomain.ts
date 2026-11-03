@@ -124,8 +124,8 @@ async function main(): Promise<void> {
   eq(org.tierZh("其他"), "其他", "tierZh 词表外原样透传（不吞不造）");
   eq(org.tierZh(undefined), "", "tierZh 空值防御");
   eq(org.BOARD_LANES.length, 5, "看板五态");
-  eq(org.BOARD_LANES.map((l: [string, string]) => l[1]).join(","), "待认领,进行中,待审查,待收单,完成",
-    "五态词表逐字对齐桌面 lanes（v1 草案「待复核/待装机」作废）");
+  eq(org.BOARD_LANES.map((l: [string, string]) => l[1]).join(","), "待认领,进行中,审查中,待收单,完成",
+    "五态词表逐字对齐桌面 lanes（R2 泳道头改词后连坐 pin——R3；v1 草案「待复核/待装机」作废）");
   eq(org.ORG_CF_KIND_ZH["rule-append"], "铁律", "确认卡 kind 词表含 rule-append（W-RULES1）");
 
   // taskOwnerResolve：owner_session 直绑 / 前缀唯一命中绑 / 歧义零命中不绑
@@ -265,7 +265,7 @@ async function main(): Promise<void> {
   const notifSrc = srcOf("../src/screens/NotifCenterPage.tsx");
   check(notifSrc.includes("<TeamDetailPage") && !notifSrc.includes('from "./OrgZone"'), "验收回跳落点 = TeamDetailPage（GroupModal import 面清零）");
   const appSrc = srcOf("../App.tsx");
-  check(appSrc.includes("badges={{ sessions: pendingCount, team: teamBadge }}"), "团队 tab badge=确认卡数（A1-11）");
+  check(appSrc.includes("badges={tabBadges}") && appSrc.includes("({ sessions: pendingCount, team: teamBadge })"), "团队 tab badge=确认卡数（A1-11——R3 锚跟形：1a11718d 滑屏终章把内联对象提为 tabBadges useMemo，语义链不变）");
   check(appSrc.includes("onNewInDir") && appSrc.includes("onViewSessionsInDir"), "App 接线项目卡两动作");
   // A3-5：状态 tag 退役 + r3 条件渲染
   check(!/function StatusTag/.test(listSrc) && !/<StatusTag/.test(listSrc), "A3-5 状态 tag 退役");
@@ -417,9 +417,13 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   check(!keysP.includes("sec-pending") && !keysP.includes("sec-pinned"), "投影：「待处理/置顶」段头退役（回归②新结构）");
   // W-FB66ALL ⑨（用户 1025：卡片已放团队标签，底部团队卡区=旧设计移除）——
   // 收纳退役全量直列：PM/Leader/worker/pinned 皆直列（归属由卡上团队 chip 承载）
-  check(keysP.includes("t1") && keysP.includes("t2"), "投影：worker 会话直列（⑨收纳退役）");
-  check(keysP.includes("pm1"), "投影：PM 会话直列（KEEP_ROLE 同词表）");
-  check(keysP.includes("pw1") && keysP.indexOf("pw1") < keysP.indexOf("t1"), "投影：置顶 worker 恒前（pinned 池在前）");
+  // R4 定罪跟形（742b81da 前此三锚停在 ⑨ 直列时代（26930639，1025）——7ebff276（用户
+  // 1028 拍板「恢复编制两分收纳」）推翻 ⑨ 时漏改断言：编制内 worker 收进团队 TabBar
+  //（团队域可见=R1 chip/jump 挂牌跳转前提，非「从名册消失」），主列表只留 PM/Leader
+  // 直列+无编制/置顶。与用户口径不冲突：进行中谁在干=团队域承载。
+  check(!keysP.includes("t1") && !keysP.includes("t2"), "投影：编制内 worker 收进团队域（1028 两分收纳拍板——主列表不直列，⑨直列断言随 7ebff276 跟形）");
+  check(keysP.includes("pm1"), "投影：PM 会话直列（SLIM_KEEP_ROLE 词表）");
+  check(keysP.includes("pw1") && keysP.indexOf("pw1") < keysP.indexOf("pm1"), "投影：置顶 worker 恒前（pinned 池在非置顶前——t1/t2 已收编故与 pm1 比序）");
   check(keysP.includes("team-gA") === false, "投影：团队入口卡退役（⑨，dock 旧设计移除）");
   // 件九：「进行中」组取消——非编制卡（WORKING/WAITING/闲置）全部平铺
   check(!keysP.includes("sec-active"), "投影：「进行中」组已取消（件九，状态过滤交筛选档）");
@@ -431,12 +435,12 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
   check(listSrc.includes("s.saved === true && s.status !== \"WORKING\" && s.status !== \"WAITING\""), "休眠判定 saved 单字段（pinned=纯置顶，C-3 拆分落地）");
   // ③ App 滑切 tab：panHandlers 挂 tabPane + 横占优判定 + tabRef 防陈旧
   // W-NOTIFY2 件二跟改：滑切升级为跟手过渡（判定改排除式语义同前：横不占优即放行）
-  check(appSrc.includes("{...swipeTabs.panHandlers}"), "滑切手势挂 tabPane（件六③）");
+  check(appSrc.includes("pagingEnabled") && appSrc.includes("手势本体已全权交原生"), "滑切手势全权交原生 pagingEnabled（1a118d 六修终章：PanResponder 退役 JS 零手势，⑧件六③ panHandlers 锚跟形）");
   check(appSrc.includes("TAB_ORDER") && appSrc.includes('["sessions", "team", "projects", "settings"]'), "滑切序=底栏序");
-  check(appSrc.includes("Math.abs(g.dx) <= Math.abs(g.dy) * 2"), "横占优判定（排除式——垂直滚动零冲突，W-NOTIFY2 跟手版）");
-  check(appSrc.includes("tabRef.current"), "tabRef 镜像防闭包陈旧");
-  check(appSrc.includes("swipePageX.toX") && appSrc.includes("swipePageX.curX"), "双页同相位位移（目标页+当前页视差 0.35）");
-  check(appSrc.includes("prog >= w / 2 || (s.dir === 1 ? g.vx : -g.vx) <= -0.55"), "松手过半/速度判定落位（spring 收尾）");
+  check(appSrc.includes("onMomentumScrollEnd={onPagerSettle}"), "手势协商归原生（横/垂直冲突由 pagingEnabled 原生层裁决——W-NOTIFY2 排除式 JS 判定随 1a118d 退役）");
+  check(appSrc.includes("pagerRef.current?.scrollTo"), "pagerRef 镜像同步（setTab→pageTo scrollTo，tabRef 镜像随 1a118d 换名）");
+  check(appSrc.includes("四页常驻") && appSrc.includes("st.pagerPage"), "四页常驻挂载按 TAB_ORDER 序（原生分页无视差——swipePageX 双页视差链随 1a118d 退役）");
+  check(appSrc.includes("Math.round(e.nativeEvent.contentOffset.x / winW())"), "松手落定=原生翻页动画收尾（onMomentumScrollEnd→Math.round 页序；JS 过半/速度/spring 判定随 1a118d 退役）");
   check(appSrc.includes("swipeOver"), "目标页覆盖层（落位 setTab 接管+清态卸载——保挂载纪律）");
 
   console.log("K. 回归双修（铃铛恒显/分组对齐）+ 件七/件八");

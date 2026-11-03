@@ -1397,7 +1397,7 @@
                 // BOARD_UPDATED 帧跟随（会话域唯一新增消费点）；板缺席=「板未同步」降级文案不伪造
                 // 0/0/0；成员态/水位吃 S.sessions 现成字段。板新鲜度承诺=快照级+帧级跟随，深度实时
                 // 去团队域（域职责不越界）。泳道词表与 team-domain lanes 同源（legacy 归并+五段条）。
-                const TEAM_DRAWER_LANES = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "待审查"], ["ready_to_install", "待收单"], ["done", "完成"]];
+                const TEAM_DRAWER_LANES = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* boardlife R2：与板面 lanes 同词（待审查→审查中） */
                 const TEAM_DRAWER_LEGACY = { todo: "backlog", doing: "claimed" };
                 /** 纯函数拼装模型（单测锚：relay/scripts/test-session-slim.ts 纯函数直跑同范式）。
                  * boardEntries=null=板未同步（旧 relay/未随快照）——概览区走降级，不伪造空板。 */
@@ -1581,7 +1581,7 @@
                   renderMyList(); // 直聊中的 worker 会话临时出列并打标 selected（mo 读到幂等，不重复结算）
                   renderAll();
                 }
-                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）；W-TEAMSNC ①：selectedSid=建团表单取「当前选中会话」任 PM（team-domain pm-led 模板消费）
+                window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected, has: (sid) => S.sessions.has(String(sid || "")) }); // 跨域面：团队域成员卡直开 / 团队 select 清未读（团队域侧调用）；W-TEAMSNC ①：selectedSid=建团表单取「当前选中会话」任 PM（team-domain pm-led 模板消费）；boardlife R2：has=bridge selectSessionCard slim 兜底探测口（DOM 无卡时判会话在快照否——在则 open 直选，不在才 toast）
                 // FB17 标签筛选：会话列表工具行「全部」芯片从死控件接活——点出浮菜单按状态过滤
                 // W-UIPOLISH4 件十三（2026-10-12 用户截图）：加「最近活跃」档（隐藏超时置灰的
                 // 空闲僵尸卡=idleDimmed 同源判定，只显近期有活动的）+「非进行中」档；档位序=

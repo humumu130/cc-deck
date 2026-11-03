@@ -94,9 +94,10 @@ async function main() {
     assert(d1.ok === true, "R1 派发");
     await waitFor(() => readDispatchLog().some((e) => e.id === d1.dispatch_id && e.status === "done"));
     await waitFor(() => !((mgr as unknown as { openDispatches: Map<string, unknown[]> }).openDispatches.get((d1 as { session_id: string }).session_id)?.length));
-    // 收口后卡应 done（常路）——手动退回 backlog 模拟「重派前旧卡滞留」形态
+    // 收口后卡应 submitted（boardlife ①：交付=完成候选——原直翻 done 语义升级，done 出口
+    // 移至过审收割面）——手动退回 backlog 模拟「重派前旧卡滞留」形态
     const cardAfterDone = loadBoard(gid).entries.find((e) => e.dispatch_id === d1.dispatch_id);
-    assert(cardAfterDone?.status === "done", "R1 收口卡翻 done（常路在）");
+    assert(cardAfterDone?.status === "submitted" && cardAfterDone?.review_required === true, `R1 收口卡翻 submitted 审查中（常路在——boardlife 交付候选；实 ${cardAfterDone?.status}/${JSON.stringify(cardAfterDone?.review_required)}）`);
     upsertBoardEntry(gid, { id: cardAfterDone!.id, text: cardAfterDone!.text, status: "backlog" });
     const staleCount = loadBoard(gid).entries.filter((e) => e.text === title1).length;
     assert(staleCount === 1, "陈卡回 backlog（形态 A 场景就位）");
@@ -116,7 +117,7 @@ async function main() {
     //（moveEntryByDispatch 此前不记线=自愈/联动翻面卡内无痕的结构性缺口，R2 已补齐）
     const adoptedT = (adopted.transitions ?? []).map((t) => t.status);
     assert(adoptedT.includes("claimed"), `transitions 记续单认领（claimed 入线——实 ${JSON.stringify(adoptedT)}）`);
-    assert(adoptedT[adoptedT.length - 1] === "done", `transitions 末行 done（R2 收口翻面入线——实 ${JSON.stringify(adoptedT)}）`);
+    assert(adoptedT[adoptedT.length - 1] === "submitted", `transitions 末行 submitted（R2 收口翻面入线——boardlife 交付候选；实 ${JSON.stringify(adoptedT)}）`);
 
     // ============ 刀2：收敛扫 72h 强翻分支 ============
     console.log("刀2 收割翻面（backlog+台账 done>72h 强翻绕防碾）:");
