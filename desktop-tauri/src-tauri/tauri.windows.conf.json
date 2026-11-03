@@ -1,5 +1,4 @@
 {
-  "$comment": "W-NOVAONLY（1103 用户拍板退役）：本文件是 plain（CC Deck）Windows 形态定义（decorations:true 系统标题栏）。plain 通道退役后 CI 已门控不再产出 plain 包（desktop.yml Nova-only tag gate），本文件无消费路径——保留仅作历史形态档案（nova overlay 自带完整 windows 定义并覆盖本文件的 decorations）；删除安全性已核（nova --config 优先于平台 conf merge），如需清理归档另批。",
   "$schema": "https://schema.tauri.app/config/2",
   "app": {
     "windows": [
