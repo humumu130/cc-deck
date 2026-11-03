@@ -980,6 +980,17 @@
     .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
     .message-ai.cont .message-author { display: none; } /* 件九：连续同作者正文去重署名行，正文 37px 基线不动 */
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
+    /* =============== W-CENTERCOL（1103 用户）：大窗阅读列——会话消息居中限宽（WorkBuffy 式） ===============
+       宽窗下对话列 max-width 900px 居中（margin auto），超宽部分全变两侧留白；composer
+       （footer 行）水平 padding 同步 calc，整行与阅读列几何对齐。窄窗零回归是构造性的：
+       可用宽 <900px 时 max-width 不触发（pane 满宽）、calc((100% - 900px)/2) 为负被 max()
+       地板回 22px 现状值——两规则共享同一切换点（workspace 宽 944px = body 内容宽 900px），
+       连续无跳变，故无需也不加 media 断点。对齐数学：pane 左缘 = body padding 22 + (内容宽-900)/2；
+       footer padding = (100%-900)/2 = 22 + (宽-44-900)/2，恒等（百分比参照同一 containing block）。
+       源序：两规则均排 :646/:651 存量之后（#d-session .workspace-footer 同特异度靠源序压制）。
+       team 域（.team-conversation-pane 自带 720px 阅读列体系）本批不动。 */
+    .conversation-pane { max-width: 900px; margin-left: auto; margin-right: auto; }
+    #d-session .workspace-footer { padding-left: max(22px, calc((100% - 900px) / 2)); padding-right: max(22px, calc((100% - 900px) / 2)); }
     .msg-user-row .bubble.me { margin-bottom: 0; }
     /* #201 VISFIX③b：己方气泡右侧尖角（WorkBuddy 同款小三角，色随气泡底） */
     .bubble.me::after { content: ""; position: absolute; top: 10px; right: -5px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid var(--bubble-me-bg); }
