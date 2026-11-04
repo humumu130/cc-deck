@@ -65584,6 +65584,10 @@ var Bridge = class _Bridge {
     this.streamDeltaStop(id2);
     this.pending.delete(id2);
     this.turnStart.delete(id2);
+    this.hookLoopPairs.delete(id2);
+    this.hookLoopFrozenAt.delete(id2);
+    this.pendingDeathAt.delete(id2);
+    for (const k3 of [...this.sysRate.keys()]) if (k3.startsWith(id2 + "|")) this.sysRate.delete(k3);
     this.inputQueue.delete(id2);
     this.flushing.delete(id2);
     this.named.delete(id2);
@@ -66369,6 +66373,9 @@ var Bridge = class _Bridge {
     if (isSandboxCwd(ev2.cwd)) return { decision: "pass" };
     this.noHookIds.delete(this.extId(ev2));
     this.lastHookAt.set(this.extId(ev2), Date.now());
+    this.hookLoopPairs.delete(this.extId(ev2));
+    this.hookLoopFrozenAt.delete(this.extId(ev2));
+    this.pendingDeathAt.delete(this.extId(ev2));
     const decision = await this.dispatch(ev2);
     if (ev2.cli_pid && ev2.cli_pid > 0) {
       const id2 = this.extId(ev2);
@@ -66649,7 +66656,9 @@ var Bridge = class _Bridge {
       const turn = this.turnStart.get(id2) ?? st2.started_at;
       this.turnStart.delete(id2);
       this.mgr.finishExternal(id2, "completed", Date.now() - turn, last);
-      this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u9759\u9ED8\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09");
+      this.noteLoopEvent(id2, "death");
+      const nhGate = this.sysRateGate(id2, "nohook-dead");
+      if (!nhGate.limited) this.mgr.pushExternalLog(id2, "system", `\u8F6C\u5F55\u9759\u9ED8\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09${nhGate.prior > 0 ? `\uFF08\u524D\u5E26\u5DF2\u64AD ${nhGate.prior} \u6B21\u2014\u2014\u9650\u9891\uFF09` : ""}`);
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
     }
   }
@@ -66712,16 +66721,33 @@ var Bridge = class _Bridge {
           this.turnStart.delete(id2);
           this.sweepPendingToTurnEnd(id2);
           this.mgr.finishExternal(id2, "completed", now - turn2, idleSince);
-          this.mgr.pushExternalLog(id2, "system", "CLI \u5DF2\u7A7A\u95F2\uFF08\u8FDB\u7A0B\u72B6\u6001 idle\uFF09\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F");
+          this.noteLoopEvent(id2, "death");
+          const idleGate = this.sysRateGate(id2, "cli-idle-dead");
+          if (!idleGate.limited) this.mgr.pushExternalLog(id2, "system", `CLI \u5DF2\u7A7A\u95F2\uFF08\u8FDB\u7A0B\u72B6\u6001 idle\uFF09\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F${idleGate.prior > 0 ? `\uFF08\u524D\u5E26\u5DF2\u64AD ${idleGate.prior} \u6B21\u2014\u2014\u9650\u9891\uFF09` : ""}`);
           if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
         }
         continue;
+      }
+      if (hooked) {
+        const aliveNow = s.cli_pid ? cliHostAlive(s.cli_pid) : !!this.findAliveCliProcess(id2);
+        const idleLong = !!s.cli_pid && cliSessionIdle(s.cli_pid) && now - idleSince > effWin * 2;
+        if (aliveNow && (!idleLong || this.loopFrozen(id2))) {
+          const gAt = this.deadGrowNoteAt.get(id2) ?? 0;
+          if (now - gAt > 6e5) {
+            if (this.deadGrowNoteAt.size > 200) this.deadGrowNoteAt.clear();
+            this.deadGrowNoteAt.set(id2, now);
+            console.log(`[bridge] idle-sweep \u8DF3\u8FC7\uFF1Asid=${id2.slice(0, 12)} \u9759\u9ED8\u7A97\u6EE1\u4F46\u7EC8\u7AEF\u8FDB\u7A0B\u6D3B\uFF08hook \u5931\u8054\u515C\u5E95\u4E0D\u5224\u6B7B\u2014\u2014hookloop \u52001${this.loopFrozen(id2) ? "\xB7\u4E52\u4E53\u51BB\u7ED3\u4E2D" : ""}\uFF09`);
+          }
+          continue;
+        }
       }
       const turn = this.turnStart.get(id2) ?? s.started_at;
       this.turnStart.delete(id2);
       this.sweepPendingToTurnEnd(id2);
       this.mgr.finishExternal(id2, "completed", now - turn, idleSince);
-      this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u4E0E\u4E8B\u4EF6\u5747\u9759\u9ED8\u8D85\u65F6\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08hook \u5931\u8054\u515C\u5E95\uFF09");
+      this.noteLoopEvent(id2, "death");
+      const deadGate = this.sysRateGate(id2, "hook-dead");
+      if (!deadGate.limited) this.mgr.pushExternalLog(id2, "system", `\u8F6C\u5F55\u4E0E\u4E8B\u4EF6\u5747\u9759\u9ED8\u8D85\u65F6\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08hook \u5931\u8054\u515C\u5E95\uFF09${deadGate.prior > 0 ? `\uFF08\u524D\u5E26\u5DF2\u64AD ${deadGate.prior} \u6B21\u2014\u2014\u9650\u9891\uFF09` : ""}`);
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
     }
   }
@@ -67659,6 +67685,63 @@ var Bridge = class _Bridge {
   trackers = /* @__PURE__ */ new Map();
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   transcriptOffsets = /* @__PURE__ */ new Map();
+  // hookloop（1104 用户实锤 P0·第三对乒乓）：判死↔翻活循环台账（1h 滚动窗对计数）
+  // +冻结时刻 +播报限频带（与 cliflap deadSweepAt/cliStatusAt 家族同精神独立带）
+  hookLoopPairs = /* @__PURE__ */ new Map();
+  // 相邻判死→翻活对时间戳（1h 滚动）
+  hookLoopFrozenAt = /* @__PURE__ */ new Map();
+  // 冻结时刻（1h 内 ≥3 对触发，1h 自然过期）
+  pendingDeathAt = /* @__PURE__ */ new Map();
+  // 最近判死时刻（death→revive 配对用）
+  sysRate = /* @__PURE__ */ new Map();
+  // (id|tag) -> 5min 播报限频带
+  /** 刀2 记账：death/revive 入账；相邻 death→revive（1h 内）配成对，窗内 ≥3 对 →
+   *  冻结静默判定（判死守卫强化+静默翻活抑制）并播告警一次（告警本身只此一条）。 */
+  noteLoopEvent(id2, kind) {
+    const now = Date.now();
+    if (this.pendingDeathAt.size > 200) this.pendingDeathAt.clear();
+    if (kind === "death") {
+      this.pendingDeathAt.set(id2, now);
+      return;
+    }
+    const deathAt = this.pendingDeathAt.get(id2) ?? 0;
+    this.pendingDeathAt.delete(id2);
+    if (!deathAt || now - deathAt > 36e5) return;
+    if (this.hookLoopPairs.size > 200) this.hookLoopPairs.clear();
+    const pairs = (this.hookLoopPairs.get(id2) ?? []).filter((t) => now - t <= 36e5);
+    pairs.push(now);
+    this.hookLoopPairs.set(id2, pairs);
+    if (pairs.length >= 3 && !this.loopFrozen(id2)) {
+      if (this.hookLoopFrozenAt.size > 200) this.hookLoopFrozenAt.clear();
+      this.hookLoopFrozenAt.set(id2, now);
+      this.mgr.pushExternalLog(id2, "system", `\u68C0\u6D4B\u5230\u5224\u6B7B-\u63A5\u7BA1\u5FAA\u73AF\uFF081h \u5185 ${pairs.length} \u5BF9\uFF09\uFF0C\u9759\u9ED8\u5224\u5B9A\u5DF2\u51BB\u7ED3\uFF1A\u4EE5\u7EC8\u7AEF\u8FDB\u7A0B\u4E3A\u51C6\uFF0Chook \u6062\u590D\u6216\u8FDB\u7A0B\u6362\u4EE3\u540E\u81EA\u52A8\u89E3\u51BB`);
+    }
+  }
+  loopFrozen(id2) {
+    const at = this.hookLoopFrozenAt.get(id2);
+    if (at === void 0) return false;
+    if (Date.now() - at >= 36e5) {
+      this.hookLoopFrozenAt.delete(id2);
+      return false;
+    }
+    return true;
+  }
+  /** 刀3 播报限频带：同 (id,tag) 5min 带内静默计数（limited=true 应跳过播报），
+   *  带首播正文；prior=历史已播带数（正文可附提示仍在循环）。 */
+  sysRateGate(id2, tag) {
+    const key = `${id2}|${tag}`;
+    const band = this.sysRate.get(key);
+    const now = Date.now();
+    if (this.sysRate.size > 500) this.sysRate.clear();
+    if (!band || now - band.at > 3e5) {
+      const prior = band?.total ?? 0;
+      this.sysRate.set(key, { at: now, n: 1, total: prior + 1 });
+      return { limited: false, prior };
+    }
+    band.n++;
+    band.total++;
+    return { limited: true, prior: band.n };
+  }
   // #73 外部转录流式快照折叠：同一 message.id 的多行转录 = 同一条逻辑消息的增长
   // 快照（2026-09-19 实测：58 行 assistant 仅 19 个唯一 id，同 id 行文本逐行增长；
   // 个别尾行文本为空的分块 flush 伪影）。按 (sid, msgId, kind) 复用稳定日志 id 让
@@ -67697,10 +67780,21 @@ var Bridge = class _Bridge {
     if (st2.status !== "DONE" && st2.status !== "ERROR") return;
     const alivePid = this.findAliveCliProcess(id2);
     if (!alivePid) return;
+    if (st2.cli_pid && st2.cli_pid !== alivePid) {
+      this.hookLoopPairs.delete(id2);
+      this.hookLoopFrozenAt.delete(id2);
+      this.pendingDeathAt.delete(id2);
+    }
+    if (this.loopFrozen(id2)) {
+      console.log(`[bridge] revive-on-hydrate \u6291\u5236\uFF1Asid=${id2.slice(0, 12)} \u4E52\u4E53\u51BB\u7ED3\u4E2D\uFF08\u9759\u9ED8\u7FFB\u6D3B\u505C\u6446\u2014\u2014hookloop \u52002\uFF09`);
+      return;
+    }
     if (st2.cli_pid !== alivePid) this.mgr.setExternalCliPid(id2, alivePid);
     if (st2.historical) st2.historical = false;
     this.mgr.setExternalStatus(id2, "WORKING", "\u91CD\u542F\u63A5\u7BA1\uFF1A\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C");
-    this.mgr.pushExternalLog(id2, "system", "\u91CD\u542F\u540E\u68C0\u6D4B\u5230\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF0C\u6062\u590D\u4F1A\u8BDD\u63A5\u7BA1\uFF08\u72B6\u6001\u7FFB\u6D3B\uFF0B\u5B9A\u4F4D\u91CD\u7ED1\uFF09");
+    this.noteLoopEvent(id2, "revive");
+    const gate = this.sysRateGate(id2, "revive-takeover");
+    if (!gate.limited) this.mgr.pushExternalLog(id2, "system", `\u91CD\u542F\u540E\u68C0\u6D4B\u5230\u7EC8\u7AEF\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF0C\u6062\u590D\u4F1A\u8BDD\u63A5\u7BA1\uFF08\u72B6\u6001\u7FFB\u6D3B\uFF0B\u5B9A\u4F4D\u91CD\u7ED1\uFF09${gate.prior > 0 ? `\uFF08\u524D\u5E26\u5DF2\u64AD ${gate.prior} \u6B21\u2014\u2014\u9650\u9891\uFF09` : ""}`);
   }
   // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
   pushAssistantTexts(id2, transcriptPath) {
