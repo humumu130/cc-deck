@@ -727,7 +727,7 @@
         const slot = screen.querySelector("[data-team-confirm-slot]");
         if (slot) {
           // #282 MOB sig 跳帧：确认卡内容未变零重建
-          if (confirms.length) { slot.hidden = false; mSigWrite(slot, "cf:" + confirms.length, `<div class="mobile-card primary"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action">确认</span></div><p>${confirms.length} 项待你确认 · 回桌面团队域处理</p><div class="identity-cluster">${sourceBadge()}</div></div>`); }
+          if (confirms.length) { slot.hidden = false; mSigWrite(slot, "cf:" + confirms.length, `<div class="mobile-card primary" data-jump-team-tab="todo" role="button" tabindex="0" title="查看待确认事项"><div class="row"><span class="avatar">${svg("users")}</span><strong>组织确认待处理</strong><span class="tag action mobile-confirm-pill">确认</span></div><p>${confirms.length} 项待你确认 · 点此查看</p><div class="identity-cluster">${sourceBadge()}</div></div>`); } /* W3P-P2-7：整卡=触达热区（可点跳团队待办，≥44px 卡高）；胶囊视觉增高（.mobile-confirm-pill） */
           else { slot.hidden = true; slot.textContent = ""; slot.dataset.mSig = ""; }
         }
         const taskRow = (s) => { const [w, cls] = stTag(s); return `<div class="mobile-task" data-open-detail="${esc(s.session_id)}"><b>${esc(sessionTitle(s))}</b><br><span class="muted">${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</span><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}</div><br><span class="tag ${cls}">${w}</span></div>`; };
@@ -757,7 +757,7 @@
           sums[0].innerHTML = `${svg("chat")} 会话 ${sessions.length}`;
           sums[1].innerHTML = `${svg("users")} 团队 ${projects.length}`;
           sums[2].innerHTML = `${svg("package")} 输出物 ${artifactsN}`;
-          sums[3].textContent = `需行动 ${actN}`;
+          sums[3].innerHTML = `${svg("alert")} 需行动 ${actN}`; /* W3P-P2-2：第四项补图标（alert 三角=需行动语义，与前三项同族同基线——节奏断裂修） */
         }
         const headTag = screen.querySelector(".mobile-head .tag.action");
         if (headTag) { headTag.style.display = actN ? "" : "none"; const n = headTag.querySelector("span"); if (n) n.textContent = String(actN); }
@@ -1001,6 +1001,8 @@
           if (detailSid) renderMobileDetail(detailSid);
           return;
         }
+        const jumpTeam = target.closest("[data-jump-team-tab]");
+        if (jumpTeam) { openMobileRoot("team"); const tb = document.querySelector('#m-team .mobile-detail-tabs [data-team-tab="todo"]'); tb?.click(); return; } /* W3P-P2-7：组织确认卡整卡热区→团队待办；web3p R2-P2-2（A 审）：原选择器 .mobile-team-tabs button 全库 0 匹配=死跳，真锚=index-005.html:139 mobile-detail-tabs 容器 data-team-tab="todo" */
         const openDetail = target.closest("[data-open-detail]");
         if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
       });

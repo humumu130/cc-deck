@@ -3404,3 +3404,24 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
    不支持的环境该行被忽略零副作用（渐进增强）。DOM/滚动/分组计数全保留。 */
 .notifpanel .np-body .nrow { content-visibility: auto; contain-intrinsic-size: auto 46px; }
 .notifpanel .np-body .ngrp { content-visibility: auto; contain-intrinsic-size: auto 26px; }
+
+/* =============== W-WEB3P（1104 视觉补审）：项目页骨架+看板 loading 骨架+错误 toast+确认胶囊 =============== */
+/* P1-1 项目页等待态骨架（无数据时主区占位——连接文案以左栏 banner+顶栏为权威位不再重复） */
+.proj-skel { display: flex; flex-direction: column; gap: 12px; padding: 18px 6px; }
+.proj-skel .skel-line { height: 12px; border-radius: 6px; background: var(--hover); animation: wx3p-skel 1.4s ease-in-out infinite; }
+.proj-skel .skel-line.w40 { width: 40%; } .proj-skel .skel-line.w90 { width: 90%; } .proj-skel .skel-line.w70 { width: 70%; }
+.proj-skel .skel-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 6px; }
+.proj-skel .skel-card { height: 96px; border-radius: var(--radius); background: var(--hover); animation: wx3p-skel 1.4s ease-in-out infinite; }
+.proj-skel .skel-card:nth-child(2) { animation-delay: .18s; } .proj-skel .skel-card:nth-child(3) { animation-delay: .36s; }
+/* P2-4 看板 loading 期泳道骨架（互斥：不显「暂无任务」） */
+.lane-skel { display: flex; flex-direction: column; gap: 8px; padding: 6px 0; }
+.lane-skel i { display: block; height: 46px; border-radius: 10px; background: var(--hover); animation: wx3p-skel 1.4s ease-in-out infinite; }
+.lane-skel i:nth-child(2) { animation-delay: .18s; } .lane-skel i:nth-child(3) { animation-delay: .36s; }
+@keyframes wx3p-skel { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .proj-skel .skel-line, .proj-skel .skel-card, .lane-skel i { animation: none; opacity: .6; } }
+/* P2-5 错误级 toast：警示描边+红系 tint+可点关闭；web3p R2-P2-3（B 审）：可点性门控 .show——
+   基类 :2102 pointer-events:none，原无条件 auto 使已消失 toast 隐形态（opacity:0）吞点击 */
+.toast.toast-error { border-color: var(--error); border-color: color-mix(in srgb, var(--error) 55%, transparent); background: var(--toast-bg-bottom); background: linear-gradient(180deg, color-mix(in srgb, var(--error) 16%, var(--toast-bg-top)), color-mix(in srgb, var(--error) 10%, var(--toast-bg-bottom))); color: var(--text-strong); } /* web3p R2-P3（B 审）：border/background 前置静态兜底（不支持 color-mix 的引擎丢弃后行——blankset B1② 裸奔 30→28 回基线） */
+.toast.toast-error.show { pointer-events: auto; cursor: pointer; } /* 可点关闭仅显形期（.show）——隐形态不吞点击 */
+/* P2-7 手机组织确认卡胶囊：视觉增高（热区=整卡可点 ≥44px，见 mobile.js data-jump-team-tab） */
+.mobile-card .tag.action.mobile-confirm-pill { min-height: 24px; display: inline-flex; align-items: center; padding: 2px 9px; }

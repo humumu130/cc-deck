@@ -26,9 +26,10 @@
                 const entities = (items) => [...new Map((Array.isArray(items) ? items : []).filter((item) => item && typeof item.id === "string" && item.id).map((item) => [item.id, item])).values()];
                 // UIPOLISH3 件四②：底部常驻栏废除，反馈行走 toast（B4 在场）——原 [data-team-feedback]
                 // 常驻 footer 随栏退役；toast() 原 fallback=feedback 会互递归，故 fallback 改 console
-                const toast = (text) => {
-                  if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast(text);
-                  else console.info("[team] " + text);
+                const toast = (text, kind) => {
+                  // web3p R2-P1（B 审）：转发 kind——:1188 详情失败 error 级曾在此被吞（⚠/红样式/可关闭全失效）
+                  if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast(text, kind);
+                  else console.info("[team] " + text + (kind === "error" ? " [error]" : ""));
                 };
                 const feedback = toast;
                 // #260 锚点格式闸（宽松）：/ 开头、Windows 盘符 [a-zA-Z]:[\\/]、UNC \\\\server\\share
@@ -405,7 +406,10 @@
                   const tasks = entities(board?.entries);
                   const loading = state.loads.get(project?.id);
                   // W-NOVAFIX B5：空态分档——projectsEmpty 见域顶定义（render/boardMarkup 共用）
-                  const empty = !project ? projectsEmpty() : board ? tasks.length ? "" : "任务板暂无任务" : loading === "loading" ? "正在加载任务板…" : loading && loading !== "ready" ? loading : "尚未取得任务板，请接入详情命令通道或点击刷新详情。";
+                  // W3P-P2-4：加载/空态互斥——board 已载（含空）不再出顶部空态条（五泳道
+                  // 「暂无任务」即空态唯一表达，废除同屏双信号）；loading/未取得才出条。
+                  const empty = !project ? projectsEmpty() : board ? "" : loading === "loading" ? "正在加载任务板…" : loading && loading !== "ready" ? loading : "尚未取得任务板，请接入详情命令通道或点击刷新详情。";
+                  const laneLoading = !board && loading === "loading"; // W3P-P2-4：loading 期泳道给骨架不显「暂无任务」（防「正在加载+已空」并存）
                   // 件八：派单回执收敛行（同 dispatch_id 取末行）→ claimed 卡运行中/排队区分
                   const dispatchStatus = new Map((state.receipts.get(project?.id) || []).map((r) => [r && r.id, r && r.status]).filter(([id, st]) => id && typeof st === "string"));
                   const boardCounts = new Map(lanes.map(([status]) => [status, tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status).length]));
@@ -469,7 +473,7 @@
                     }
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + (body || '<div class="lane-empty">暂无任务</div>') + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数） */
+                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + (body || (laneLoading ? '<div class="lane-skel" aria-hidden="true"><i></i><i></i><i></i></div>' : '<div class="lane-empty">暂无任务</div>')) + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架 */
                     // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
                     // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
                     // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
@@ -1077,7 +1081,15 @@
                   // 「暂无待确认事项」banner 占一截），有单才出现
                   const confirmCards = count ? state.confirms.map((confirm) => {
                     const owner = state.projects?.find((item) => item.id === confirm.payload?.gid);
-                    return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + escape(confirmKinds.get(confirm.kind) || confirm.kind) + " · " + escape(confirm.title) + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div><p>" + escape(confirm.reason) + (owner ? " · " + escape(owner.name || owner.id) : "") + '</p><div class="inspector-copy">' + escape(JSON.stringify(confirm.payload || {})) + "</div>" + decisionButtons(confirm) + "</div>";
+                    // W3P-P1-2（1104 视觉补审）：空值兜底——标题缺项不再悬空分隔点（parts 过滤后
+                    // join）；reason/owner 双空不渲染空 <p>；payload 空对象/无键不渲染裸 {} 行
+                    //（原始 JSON 序列化禁直入 DOM——有载荷时才显示摘要行）。
+                    const cfTitle = [confirmKinds.get(confirm.kind) || confirm.kind, confirm.title].filter((x) => typeof x === "string" && x.trim()).map(escape).join(" · ");
+                    const cfReason = typeof confirm.reason === "string" && confirm.reason.trim() ? escape(confirm.reason) : "";
+                    const cfMeta = [cfReason, owner ? escape(owner.name || owner.id) : ""].filter(Boolean).join(" · ");
+                    const cfPayloadKeys = confirm.payload && typeof confirm.payload === "object" ? Object.keys(confirm.payload).filter((k) => confirm.payload[k] !== undefined && confirm.payload[k] !== null && confirm.payload[k] !== "") : [];
+                    const cfPayloadLine = cfPayloadKeys.length ? '<div class="inspector-copy">' + escape(JSON.stringify(confirm.payload)) + "</div>" : "";
+                    return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + cfTitle + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div>" + (cfMeta ? "<p>" + cfMeta + "</p>" : "") + cfPayloadLine + decisionButtons(confirm) + "</div>";
                   }).join("") : "";
                   tSigWrite(query("[data-team-confirms]"), "cf:" + tSigOf(confirmCards), count ? confirmCards : banner("暂无待确认事项")); // #282 三批 M2
                   // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
@@ -1174,7 +1186,7 @@
                     if (!detail(gid, ack.data)) throw new Error("项目详情回执缺少匹配的 group / board / receipts");
                     return true;
                   } catch (error) {
-                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) { state.loads.set(gid, "详情加载失败：" + String(error?.message || error)); feedback(state.loads.get(gid)); render(); }
+                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) { const raw = String(error?.message || error); state.loads.set(gid, "详情加载失败：" + raw); console.warn("[team] 详情加载失败（原文）:", raw); feedback("详情加载失败，请重试", "error"); render(); } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
                     return false;
                   }
                 }
