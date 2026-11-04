@@ -392,7 +392,14 @@ export function importDispatchLesson(
 
   const current = { schemaVersion };
   const cpLog = obsLog.lines !== null
-    ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount })
+    // dispatchappend（t-a5e9f79e，P0·1105 实产 relay 振荡）：append-only 增量续读——
+    // 原严格匹配（mtime/lineCount 任变即 null）下派单台账每次 append（org.ts 写口
+    // flag:"a" 纯追加）→lineCount 变→失效→replay 清 dispatch+lesson 两域全量重灌
+    // （生产 1.1MB/3k+ 行，运行期每 append 一次烧一次=振荡）。对照 events 段 F2
+    // （sqlitefix-R1，checkpoint.ts appendOnly 分支）：行数纯增长=前缀不变（唯一写者
+    // append 模式铁证）→旧 offset 仍有效，续读增量；行数缩减（compact/截断）=前缀
+    // 已变→null→replay 兜底。mtime 变不杀（append 必变）。
+    ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }, { appendOnly: true })
     : null;
   const cpBoards = readCheckpoint(port, sources.boardsDir, { ...current, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count });
 
