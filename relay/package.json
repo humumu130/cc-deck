@@ -150,7 +150,8 @@
     "test:boardlife": "tsx scripts/test-boardlife.ts",
 
 "test:watchagent": "tsx scripts/test-watchagent.ts",
-    "test:planlane": "tsx scripts/test-planlane.ts"
+    "test:planlane": "tsx scripts/test-planlane.ts",
+"test:halfconn": "node --import tsx/esm ../expo-app/scripts/test-halfconn.mts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

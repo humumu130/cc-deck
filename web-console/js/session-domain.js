@@ -124,7 +124,21 @@
                 const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
                 function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
                 function uuid() { return (crypto.randomUUID && crypto.randomUUID()) || ("c" + Date.now() + "-" + Math.random().toString(16).slice(2)); }
-                function b2Toast(msg, ms) { const t = $id("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400); }
+                function b2Toast(msg, ms, action) { // halfconn：可选 action={label,fn}——toast 内嵌动作钮（「立即重连」等），点击执行并收口；既有 (msg,ms) 调用方零改动
+                  const t = $id("toast"); if (!t) return;
+                  t.textContent = "";
+                  t.append(document.createTextNode(msg));
+                  if (action && typeof action.fn === "function") {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.style.cssText = "margin-left:10px;padding:1px 10px;border:1px solid rgba(255,255,255,.45);border-radius:99px;background:transparent;color:inherit;font-size:12px;cursor:pointer;flex:none";
+                    b.textContent = action.label || "重连";
+                    b.addEventListener("click", () => { try { action.fn(); } catch {} t.classList.remove("show"); });
+                    t.append(b);
+                  }
+                  t.classList.add("show");
+                  clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400);
+                }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
                 // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息标记表——与 expo-app/src/auto-msg.ts
@@ -538,29 +552,93 @@
                 }
 
                 // ---------- B2 数据通道（#150 R2 并轨：退役自开 WS 与重连/握手超时，改订阅地基帧总线） ----------
-                function failB2Flights() { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
-                  for (const v of S.ackWaiters.values()) { clearTimeout(v.t); try { v.res(null); } catch {} }
-                  S.ackWaiters.clear();
+                // halfconn R1（P2③·双审）：command_id → 发送源（"lan"|"cloud"|null=受理中未发出）
+                // ——failB2Flights 按源收割判据；sendCmd 两条路径（真发出/自愈受理）落账，
+                // waiter 结算点（ACK/超时）与收割点同步清账防泄漏（声明在 _halfconnInFlight
+                // 之后=行为级测试提取段内，test-halfconn T2/T5 harness 同段可跑）
+                function failB2Flights(source) { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
+                  // halfconn R1（P2③）：按源收割——他源断链不清本源飞行（多源并行时云掉线
+                  // 不误杀 LAN 在途）；src=null（自愈受理中未发出）不收割：等恢复照发，防
+                  // 「未达」假阴+用户重发+原重试后续真发出=真重复（relay 幂等锚管不到异 id）。
+                  // 无 source（旧调用面兜底）保持全清语义。
+                  for (const [id, v] of S.ackWaiters.entries()) {
+                    const src = _cmdSrc.get(id) ?? null;
+                    if (source && (src === null || src !== source)) continue;
+                    clearTimeout(v.t); try { v.res(null); } catch {}
+                    S.ackWaiters.delete(id); _cmdSrc.delete(id);
+                  }
                 }
+                // halfconn R1（验收 3 探针配套·__ccDeck005SourceState 同族只读/观测口）：
+                // 抖动窗重复探针据此验证「他源 close 不清本源 waiter」——真实 failB2Flights
+                // 经真实帧总线 close 事件驱动（:732 订阅链），add 只做 waiter 播种（探针/测试专用）
+                window.__ccDeck005B2FlightProbe = {
+                  add: (id, src) => {
+                    S.ackWaiters.set(id, { res: () => {}, t: setTimeout(() => {}, 1 << 30) });
+                    _cmdSrc.set(id, src ?? null);
+                  },
+                  state: () => ({ waiters: [...S.ackWaiters.keys()], cmdSrc: Object.fromEntries(_cmdSrc) }),
+                };
 
+                // halfconn（#38 族四现·1104 用户实锤「收得到发不出」）：发送路由失配自愈重试。
+                // 失配两类语义（RouteWs 的 null 混叠，源表更新路径账本见 settings-domain RouteWs 注释）：
+                // ①源表查无 sid——relay 重启后 resume 快路径无 SNAPSHOT，源表停在旧集合
+                // ②会话在册但源通道 not ready（云 status≠online / LAN ws≠OPEN——重连窗口）
+                // 自愈序：触发 __ccDeck005ResyncSource（①强制全量 SNAPSHOT 重建源表；②重连链
+                // 在途，回 online 后仍快路径的死角由每拍 re-drive 兜住——resync 内部 5s 节流），
+                // 500ms 轮询重评 RouteWs，7s 窗内恢复即真发出（command_id 预生成复用——与首发
+                // 同 id，relay 幂等去重）。受理即返回 command_id：调用方 ackWaiters/echo 生命周期
+                // 照常。halfconn R1（P3-B1 收口）：窗 8s→7s——须短于最短调用方 waiter 超时
+                //（commandAck 8s），真发出严格先于 waiter 到期，同刻竞态（先判未达后送达→
+                // 手动重发真重复）消除；窗尽静默放弃（超时收割已给用户反馈）。
+                let _halfconnInFlight = 0; // 并发自愈上限：链路级故障多命令同时失配不风暴
+                const _cmdSrc = new Map(); // halfconn R1（P2③）：飞行命令→源账（见上方 failB2Flights 注释；声明置此=测试提取段内）
+                function halfconnRetrySend(type, payload) {
+                  if (!window.__ccDeck005ResyncSource || !window.__ccDeck005RouteWs || _halfconnInFlight >= 3) return null;
+                  const cmdId = uuid();
+                  _halfconnInFlight++;
+                  const release = () => { _halfconnInFlight = Math.max(0, _halfconnInFlight - 1); };
+                  const startedAt = Date.now();
+                  const timer = setInterval(() => {
+                    const w = window.__ccDeck005RouteWs(payload);
+                    if (w && w.readyState === 1) {
+                      clearInterval(timer); release();
+                      try { w.send(JSON.stringify({ command_id: cmdId, type, payload, ts: Date.now() })); } catch {} // 发送异常：调用方超时收割
+                      return;
+                    }
+                    try { window.__ccDeck005ResyncSource(payload); } catch {} // 云回 online 后快路径源表仍旧的死角：持续 re-drive
+                    if (Date.now() - startedAt >= 7000) { clearInterval(timer); release(); }
+                  }, 500);
+                  return cmdId;
+                }
                 function sendCmd(type, payload, wsOverride) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）；W-PORT-A R-2：wsOverride=新建弹窗显式目标源通道（云源创建走云 shim，最高优先）
                   const w = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs);
                   if (!w || w.readyState !== 1) {
                     // T10：路由器显式拒发（null——两源表+桥都查不到该会话）≠ 连接断——分开设文案，
                     // 「会话不存在」类误导性错投报错从根上消除
                     const sidMiss = !wsOverride && w === null && payload && typeof payload.session_id === "string";
-                    b2Toast(sidMiss ? "会话不在已连接的源上（可能已删除或所属源离线）" : "relay 未连接，命令未发送");
+                    // halfconn：带会话的失配（查无/通道断）先自愈受理（8s 窗自动重发），不再一步死 toast
+                    if (!wsOverride && payload && typeof payload.session_id === "string") {
+                      const retried = halfconnRetrySend(type, payload);
+                      if (retried) {
+                        _cmdSrc.set(retried, null); // halfconn R1（P2③）：受理中未发出=src null——断链收割跳过（等恢复照发）
+                        b2Toast(w === null ? "会话源待同步 · 恢复后自动发送" : "连接恢复后自动发送", 3200);
+                        return retried;
+                      }
+                    }
+                    b2Toast(sidMiss ? "会话不在已连接的源上" : "relay 未连接，命令未发送", sidMiss ? 5000 : 2400,
+                      sidMiss ? { label: "立即重连", fn: () => { try { window.__ccDeck005ResyncSource && window.__ccDeck005ResyncSource(payload); } catch {} } } : null);
                     return null;
                   }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
                   w.send(JSON.stringify(cmd));
+                  _cmdSrc.set(cmd.command_id, wsOverride ? null : (window.__ccDeck005LastRouteSource || null)); // halfconn R1（P2③）：飞行源落账（wsOverride=显式目标源不可判→null 免误收割）
                   return cmd.command_id;
                 }
                 function commandAck(type, payload, timeoutMs = 8000) {
                   return new Promise((resolve) => {
                     const id = sendCmd(type, payload);
                     if (!id) { resolve(null); return; }
-                    const t = setTimeout(() => { S.ackWaiters.delete(id); resolve(null); }, timeoutMs);
+                    const t = setTimeout(() => { S.ackWaiters.delete(id); _cmdSrc.delete(id); resolve(null); }, timeoutMs);
                     S.ackWaiters.set(id, { res: resolve, t });
                   });
                 }
@@ -678,7 +756,7 @@
                 window.__ccDeck005Frames.subscribe((ev) => {
                   if (ev.kind === "ws") {
                     S.status = ev.state === "open" ? "online" : "offline"; // 原 onopen/onclose 同款映射（列表 data-connection 语义不变；connecting 归 offline 同旧握手期）
-                    if (ev.state === "close") failB2Flights();
+                    if (ev.state === "close") failB2Flights(ev.source); // halfconn R1（P2③）：按源收割——他源断链/受理中不清（防幽灵重发真重复）
                     return;
                   }
                   if (ev.kind === "frame" && window.__ccDeck005FrameAllowed(ev)) handleFrame(ev.frame, ev.source); // W-WINPAIR-R2：按视角门控（aggregate 放行全部+merge）
@@ -1023,7 +1101,7 @@
                 function onAck(ack) {
                   if (!ack || typeof ack.command_id !== "string") return;
                   const w = S.ackWaiters.get(ack.command_id);
-                  if (w) { S.ackWaiters.delete(ack.command_id); clearTimeout(w.t); w.res(ack); return; }
+                  if (w) { S.ackWaiters.delete(ack.command_id); _cmdSrc.delete(ack.command_id); clearTimeout(w.t); w.res(ack); return; }
                   const af = S.artFetches.get(ack.command_id);
                   if (af) {
                     if (ack.ok === false) { failArt(ack.command_id, new Error(ack.error || "拉取失败")); return; }
@@ -4023,7 +4101,7 @@
                     // W-ECHOFIX：ack===null（超时）且 WS 仍开=证据未定 → slow 降级（不谎报
                     // 未送达、不 toast——确认超时可自愈）；显式 NACK（ok:false）/断线 → fail 原样
                     const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) { if (ack == null && mainWsOpen()) { markEchoSlow(s.session_id, text); return; } b2Toast("发送失败: " + v.error); markEchoFail(s.session_id, text); } }; // #150 R3：自发命令失败回执 + R-4 失败转未送达
-                    const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
+                    const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); _cmdSrc.delete(id); sendFail(null); } }, 10000);
                     S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
                     slashHide(); // W-SLASH：程序清空不发 input 事件，浮层显式收起
@@ -4526,7 +4604,7 @@
                   // #368：创建已受理即记忆本次 cwd，下次新建预填；B10 历史目录列表同步 MRU
                   if (cwd) pushCreateCwd(cwd);
                   closeCreatePop();
-                  const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
+                  const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); _cmdSrc.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
                     clearTimeout(wd);
                     if (ack && ack.ok === false && ack.needs_auth) { b2Toast("引擎未登录，未创建会话——登录引导已弹出", 5000); if (window.__ccDeck005LoginCard && eng && eng !== "auto") window.__ccDeck005LoginCard.open(eng); } // #102 批 B：fail-fast 拒绝自动弹登录卡（relay 拦截时已同步 kick，此处幂等兜底）
@@ -5328,7 +5406,7 @@
                         if (sidIsSelected(sid)) renderConversation();
                       }
                       const sf = (ack) => { const v = ackVerdict(ack); if (!v.ok) { if (ack == null && mainWsOpen()) { markEchoSlow(sid, body); return; } markEchoFail(sid, body); } }; // W-ECHOFIX：staged 托盘同款分流（超时+WS 开→slow）
-                      const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sf(null); } }, 10000);
+                      const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); _cmdSrc.delete(id); sf(null); } }, 10000);
                       S.ackWaiters.set(id, { res: sf, t: wd2 });
                       S.staged = []; renderTray(); return { sent: true };
                     }
