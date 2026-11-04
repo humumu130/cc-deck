@@ -606,6 +606,12 @@ if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
     reportPath: join(cfg.dataDir, "patrol-report.md"),
     enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
   }).start();
+  // W-PRBACKFLOW：PR 评论回流（Trigger→Subscription 直达交付 worker，DS 末跳）——独立
+  // 5min 档（不占 patrol 周期位），档位挂 patrol 族（autoTierOf 单点：off=零研判/
+  // observe=干跑记账/auto=投递，见 pr-comment-trigger.ts）；与 patrol 同实例化闸
+  //（巡查关=回流关——同族联动，CCR_PR_COMMENT=0 应急停）。周期消费面在
+  // SessionManager.runPrCommentCycleOnce（notifyConfirm/noteSubFanout/PM 回落在手边）。
+  if (process.env.CCR_PR_COMMENT !== "0") mgr.startPrCommentWatch();
 }
 // W-WATCHAGENT 巡查员喂料（与 patrol 同开关域：巡查关=喂料关——无报告即无料，联动
 // 语义一致；独立应急停 CCR_WATCH_FEED=0）。零在册巡查员=哑然审计（上岗后首轮全量补投）。

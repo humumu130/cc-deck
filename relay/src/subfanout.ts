@@ -11,8 +11,13 @@
 import { readDispatchLogFile, type DispatchEntry } from "./org.js";
 
 /** 在途态白名单（与 org.ts 活单口径同源：closeHungDispatchRows / appendDispatch
- * 拒重派扫描都按 dispatched|running|queued 三态——改词表两处同步） */
-const ACTIVE_STATUSES: ReadonlySet<string> = new Set(["dispatched", "running", "queued"]);
+ * 拒重派扫描都按 dispatched|running|queued 三态——改词表两处同步）。
+ * W-PRBACKFLOW（期一末跳）+ "in_review"：审查期=订阅续期——交付者仍是对口承接人，
+ * PR 评论/确认/审查意见直达（不回落 PM 分诊跳）。注：in_review 由 prreview 批
+ * （a557e151）引入，其未收编基线上该值恒不出现=零行为变化；活单扫描面
+ * （closeHungDispatchRows 等）**不含** in_review（审查期不重收口不阻新单——两词表
+ * 语义分立，本处是订阅面而非活单面）。 */
+const ACTIVE_STATUSES: ReadonlySet<string> = new Set(["dispatched", "running", "queued", "in_review"]);
 
 export interface SubFanTarget {
   /** 归属单全 id（审计关联用，勿截断） */
