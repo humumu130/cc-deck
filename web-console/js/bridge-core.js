@@ -214,6 +214,10 @@
                   bridge.homedir = typeof p.homedir === "string" ? p.homedir : "";
                   bridge.snapshot = p;
                   bridge.hasSnapshot = true;
+                  // bootfast2（移交§三）：boot 相位记账——listen 先起后数据渐进加载，
+                  // banner 文案随相位（loading→「已连接，数据加载中」；ready→常态清空）
+                  bridge.bootPhase = payload && payload.boot && typeof payload.boot.phase === "string" ? payload.boot.phase : null;
+                  bridge.bootLoaded = payload && payload.boot && typeof payload.boot.loaded === "number" ? payload.boot.loaded : 0;
                   const version = typeof p.schema_version === "number" ? p.schema_version : 0;
                   if (version >= 1) bridge.notifyAckUnsupported = false;
                 }
@@ -307,6 +311,11 @@
                       bridge.sessions.set(frame.session_id, { ...frame.payload, session_id: frame.session_id, started_at: frame.ts, updated_at: frame.ts, status: frame.payload.status || "WORKING", relay_channel: evSource === "cloud" ? "cloud" : "lan" });
                       changed = true;
                     }
+                  } else if (frame.type === "BOOT_PHASE") {
+                    // bootfast2-r1 P1-3：data-ready 相位翻转帧（markBootDataReady 广播）——
+                    // loading 期连入的端不再需要重连，banner「已连接，数据加载中」就地清位
+                    const bp = frame.payload || {};
+                    if (typeof bp.phase === "string") { bridge.bootPhase = bp.phase; bridge.bootLoaded = typeof bp.loaded === "number" ? bp.loaded : (bridge.bootLoaded || 0); changed = true; }
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
                     if (session && frame.payload && typeof frame.payload === "object") {
@@ -809,7 +818,8 @@
                   if (waiting && !hasData) {
                     els.queue.dataset.b2qSig = ""; // #282 三批 N2：降级分支清签（回数据态不误跳帧）
                     if (els.body) els.body.dataset.b2lSig = "";
-                    els.queue.replaceChildren(bannerNode(waiting));
+                    const bootBanner = bridge.bootPhase === "loading" && bridge.connection === "online" ? "已连接，数据加载中（" + (bridge.bootLoaded || 0) + " 会话已到——relay 启动渐进同步）" : waiting;
+                    els.queue.replaceChildren(bannerNode(bootBanner));
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                     window.__ccDeck005SetWindowbarHint?.("project", waiting);

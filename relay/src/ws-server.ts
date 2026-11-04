@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
+import { bootMark, bootDone } from "./boot-time.js"; // W-BOOTFAST：listen 打点+boot 分解汇总
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
 import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
@@ -557,6 +558,7 @@ export function startServer(
   mgr.liveFrontends = () =>
     [...wss.clients].some((c) => c.readyState === WebSocket.OPEN && !(c as ClientWs).pairing) ||
     !!opts.cloudHasPhones?.();
+  let bridgeBootScanned = false; // bootfast2 刀④：booting 空挡守卫位（runBootScan 完成置 true）
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
@@ -574,6 +576,12 @@ export function startServer(
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "POST" && url.pathname === "/bridge/hook") {
+      // bootfast2（移交刀④）：booting 空挡守卫——listen 先起后 hook 可能早于 boot 扫描
+      // 到达（收养/自愈未完，early hook 会把状态写进未收养形态）——503 让 hook 端重试
+      if (!bridgeBootScanned) {
+        res.writeHead(503, { "content-type": "application/json", "retry-after": "1" }).end(JSON.stringify({ ok: false, error: "relay booting" }));
+        return;
+      }
       void handleBridgeHook(req, res, bridge, cfg);
       return;
     }
@@ -1345,7 +1353,7 @@ export function startServer(
           // 打标时序竞态漏标=用户 1016/1021 两报根因）。旧客户端 session.relay_source
           // 客户端打标有 `|| srcTag`/`if (!s.relay_source)` 守卫=自带字段自动优先，
           // 向前兼容零改
-          sessions: withRelaySource(mgr.snapshot(), opts.relayName?.()),
+          sessions: (() => { const sessionsArr = withRelaySource(mgr.snapshot(), opts.relayName?.()); (globalThis as any).__bootSnapSessions = sessionsArr; return sessionsArr; })(),
           // conn-page-v2 件③：客户端台账随快照（设置页「客户端」模块渲染源；旧端
           // 无消费面零影响——端上以字段存在性判能力）
           relay_devices: listDevices(cfg.dataDir, new Set([...onlineDeviceIds.values()])),
@@ -1353,6 +1361,9 @@ export function startServer(
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
+          // bootfast2（移交§三）：boot 相位——listen 先起后数据渐进加载期端上可感
+          //（「已连接，数据加载中」替代「relay 未启动」空屏）；loaded=当前会话数
+          boot: { phase: mgr.bootDataReady ? ("ready" as const) : ("loading" as const), loaded: ((globalThis as any).__bootSnapSessions as unknown[] | undefined)?.length ?? 0 }, // P2-1：复用上 sessions 数组（snapshot() 全量 clone 成本×2 根除）
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
@@ -1544,7 +1555,18 @@ export function startServer(
     console.error(`[relay] server error: ${err.message}`);
     process.exit(1);
   });
-  server.listen(cfg.port, opts.onReady);
+  server.listen(cfg.port, () => {
+    // W-BOOTFAST：listen=HTTP 可用时刻（硬指标①终点）——boot 分解汇总在此出 stdout 一行
+    bootMark("listen");
+    bootDone();
+    opts.onReady?.();
+    // bootfast2（移交刀④）：扫描族在 listen 后首轮跑（构造器已零扫描——runBootScan
+    // 单口承载 pid 三源/自愈/孤儿/引擎+两 timer；setTimeout(0) 让 listen 回调先完）
+    setTimeout(() => {
+      try { bridge.runBootScan(); } catch (e) { console.warn(`[bridge] boot 扫描族失败: ${e instanceof Error ? e.message : String(e)}`); }
+      bridgeBootScanned = true;
+    }, 0);
+  });
 
   return {
     port: cfg.port,

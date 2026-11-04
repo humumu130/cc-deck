@@ -1,3 +1,4 @@
+import { bootMark, bootDone } from "./boot-time.js"; // W-BOOTFAST：boot 分段打点（首行锚定 t0）
 import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
 import { networkInterfaces, homedir, hostname, tmpdir } from "node:os";
@@ -297,6 +298,7 @@ if (cliArgs.has("--stop")) {
 //（read-mode.ts viaReadMode），这里 boot 即探测：降级发生时横幅必出现在启动日志最前
 //（不等首个读入口触发）；正常路径零输出、零行为变化（mac sqlite 档照常）。
 probeSqliteDriverAtBoot();
+bootMark("probe-sqlite");
 
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");
@@ -321,6 +323,7 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 // reduceHistory 的等价合并；41MB 级 events 下消除 prior 全量数组驻留与重复 parse，
 // 等价契约由 test-history-stream.ts 锁死）
 const boot = await bootReplayFile(persistPath);
+bootMark("replay-events");
 const kept = boot.kept;
 if (boot.compacted) rewriteFile(persistPath, kept); // 启动时压缩
 // #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
@@ -382,144 +385,17 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
 }
 
 const bus = new EventBus({ preload: kept, persistPath });
+bootMark("bus-ctor"); // W-BOOTFAST 细分：EventBus preload 索引 vs SessionManager 构造
 const mgr = new SessionManager(bus, cfg);
-// W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
-// 守「死了没人投递」的死角（SESSION_ERROR/派单失败触发）。CCR_NO_ACTIVATOR=1 逃生阀。
-attachAgentActivator(bus, mgr);
-const adopted = mgr.adopt(replayed);
+bootMark("bus+mgr-ctor"); // bootfast2-r1 P2-2：同行双调合并残留已清
 
-// 重放会重写历史状态（非终态→ERROR、清 waiting_request），但重连客户端走
-// last_seq 补发拿不到 SNAPSHOT——为每个收养会话广播一次当前状态，补发路径也能收敛。
-// #53 手动命名的会话随帧带 title：已连接端本地缓存的可能还是压缩回放前的旧名，
-// 不带就只有新载入页面（SNAPSHOT）能拿到恢复后的名字
-for (const s of mgr.snapshot()) {
-  bus.emit(s.session_id, "SESSION_UPDATED", {
-    status: s.status,
-    action_summary: s.action_summary,
-    stats: { ...s.stats },
-    ...(s.usage ? { usage: s.usage } : {}),
-    ...(s.title_locked ? { title: s.title, title_locked: true } : {}),
-  });
-}
-
-// #49 置顶会话休眠登记（2026-09-09 用户拍板：开机不自动 resume）：pinned-sessions.json
-// 清单内会话只标 saved（可见不可操作、卡片「已保存」），用户点卡发 COMMAND_RESUME_SESSION
-// 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
-const pinned = mgr.applyPinned();
-
-// #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
-// 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
-// 条目摘掉（events 压缩挤掉 CREATED → 内存无此会话 → 文件条目被清），锚才是权威，
-// ensureLeader 把休眠卡重建并重新入 pinned。除首建带上岗引导 spawn 一次外零 spawn
-//（首建即 spawn，见 org.ts 引导注释）；org 目录不可用时只横幅点名，不阻断 relay
-// 其余功能（下次启动重试）
-const leader = mgr.ensureLeader();
-
-const decisionNotify = new DecisionNotificationWatcher({
-  dataDir: cfg.dataDir,
-  listConfirms,
-  snapshotSessions: () => mgr.snapshot(),
-  leaderSessionId: () => mgr.getLeaderSessionId(),
-  notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
-  // [W-AWAITUSER]（1104 用户令）：源③验收单入扫描 + 用户推送腿（USER_NOTE 全端弹
-  // 系统通知——同 /api/notify mode=confirm 通道，patrol.sh:4 先例；同 key 滞留超
-  // 阈值只推一次，限频锚 user_pushed_at 持久在 watcher 台账）
-  listAcceptances: () => listAcceptances(),
-  userPush: (text) => mgr.emitUserNote(text),
-});
-decisionNotify.start();
-// [W-AWAITUSER] 聚合清单 60s 兜底轮：验收登记是 CLI 直写磁盘的 out-of-band 写面
-//（无事件可挂），值变才发=静默零帧（帧驱动挂点见 session-manager 各 refresh 调用）
-mgr.startPendingUserActionsTick();
-
-// #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍
-// parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + 下方
-// autoReviveManaged 的豁免失效）。必须在 autoReviveManaged（5s 延迟）之前按组状态
-// 反推补标；零 spawn，纯标记复原
-const parkedRehydrated = mgr.rehydrateParkedMembers();
-
-// #26 M3 挂起自动化：两周无活动的在办组 → Leader 主动建议暂缓（确认卡，用户点头
-// 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
-mgr.startStaleScan();
-
-// P0 编制膨胀根修（2026-10-15 用户实锤「编制膨胀 65 席」）：①boot 首轮裁剪——
-// 保留命名角色/会话存活/24h 内有活动，其余泛 worker 出编制（不删会话，复拉走
-// member-add；面板团队数即时收敛）；②裁剪定时（CCR_ORG_TRIM_HOURS 缺省 6h，0=关，
-// CCR_NO_HEADCOUNT_TRIM=1 全停）；③派单排队队列重启回灌（触顶全忙排队不扩编，
-// 有空闲即接续）。首轮裁剪在收养广播之后跑，报告落 org/headcount-trim-report.json
-try {
-  const trim = mgr.trimHeadcounts({ auto: true }); // [W-SEAT-SEMANTICS] boot 轮=auto（每 gid 首裁走确认卡闸）
-  if (trim.data.totalTrimmed > 0) {
-    console.log(`[headcount-trim] boot 首轮：裁减 ${trim.data.totalTrimmed} 席（${trim.data.groups.map((g) => `${g.name} ${g.before}→${g.after}`).join("；")}），清单见 org/headcount-trim-report.json`);
-  }
-} catch (e) {
-  console.warn(`[headcount-trim] boot 首轮失败（下轮定时重试）: ${e instanceof Error ? e.message : String(e)}`);
-}
-mgr.startHeadcountTrim();
-// W-RESTARTDESIGN F2 钉死顺序：adopt(:311)→applyPinned(:330)→ledger 回灌→reload
-// ——saved（pin 休眠）会话照灌（flushResumeBacklog 恢复时消费）；失败只 warn 队列按空
-try {
-  mgr.loadRestartLedgerOnBoot();
-} catch (e) {
-  console.warn(`[restart-ledger] boot 回灌失败（账面按空，未投递通知面丢失本轮）: ${e instanceof Error ? e.message : String(e)}`);
-}
-try {
-  mgr.reloadDispatchQueue();
-} catch (e) {
-  console.warn(`[dispatch-queue] 重启回灌失败（队列按空处理）: ${e instanceof Error ? e.message : String(e)}`);
-}
-try {
-  // W-GATEFIX：90s 回执闸的重启兜底——触发窗内重启丢的定时器由此补跑（TTL 10min）
-  const n = mgr.recoverPendingReceiptChecks();
-  if (n > 0) console.log(`[receipt-gate] boot 补跑 ${n} 个到期回执核对`);
-} catch (e) {
-  console.warn(`[receipt-gate] boot 补跑失败（pending 账保留，下轮重启再试）: ${e instanceof Error ? e.message : String(e)}`);
-}
-
-// W-EXPP1 角色经验回流 P1（2026-10-10）：① 旧 lessons 内容性条目一次性迁移——先迁后
-// 切（REL 建-2）：报错只 warn 不阻断启动，旧域数据原样冻结（停灌不删），下次启动按
-// source lesson id 幂等重跑；② GC 机械档调度挂载（双轨触发+启动补跑+饱和降频，tick
-// 内自检 plugin-config experience 总开关）。CCR_EXP_GC_DISABLE=1 全停（测试/沙盒缝，
-// 与 WATCHDOG_DISABLE 约定同型）
-try {
-  const mig = migrateLessonsToExperience();
-  if (mig.migrated > 0 || mig.errors.length > 0) {
-    console.log(`[experience] 旧 lessons 迁移：入迁 ${mig.migrated}，跳过 ${mig.skipped_auto + mig.skipped_dup}${mig.errors.length ? `，异常 ${mig.errors.length} 条（见 warn）` : ""}`);
-    for (const err of mig.errors) console.warn(`[experience] 迁移异常: ${err}`);
-  }
-} catch (e) {
-  console.warn(`[experience] 旧 lessons 迁移失败（旧域原样保留，下次启动重试）: ${e instanceof Error ? e.message : String(e)}`);
-}
-if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
-
-// #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
-// 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）
-setTimeout(() => {
-  try {
-    mgr.autoReviveManaged();
-  } catch {}
-  // #PMRESUME（用户 1102 实锤×3）：值守席位先行——PM 中断续跑/空闲温床，先于 #36 跑
-  // （席位通道清 pre_reboot_status 防 #36 双拉；席位豁免 pinned-dormant 闸的实锤见
-  // revive.ts resumeLeaderAfterReboot 头注）
-  try {
-    mgr.resumeLeaderAfterReboot();
-  } catch {}
-  // #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话自动续跑（与 autoRevive
-  // 待办驱动互补——状态信号选人；CCR_RESUME_ON_REBOOT=0 逃生阀）
-  try {
-    mgr.resumeInterruptedByReboot();
-  } catch {}
-  // #102 批 C：重启后为 needs_auth 态会话挂登录兜底重探（pane 早没了——登录就绪
-  // 后自动恢复三面；探测≠拉活不受 CCR_NO_AUTOREVIVE 阀控）
-  try {
-    mgr.scanNeedsAuthSessions();
-  } catch {}
-  try {
-    const n = mgr.drainTurnSpool(); /* #199 C：断电窗外报补账（回放 turn-spool） */
-    if (n > 0) console.log(`[chain2] turn-spool drain ${n} 条`);
-  } catch {}
-}, 5_000).unref?.();
-
+// ---------- bootfast2（1104 移交刀①③）：listen 先起 + 中段后台化 ----------
+// 原序：中段（adopt/pinned/leader/notify/...共 20+ 步，实测三大头 78%）全跑完才
+// startServer——用户 1-2min「relay 未启动」。新序：闭包声明（引用语义后填充）+
+// startServer 前移到 mgr 构造后（listen ≤2s），全部数据步进后台段（booting 期
+// SNAPSHOT boot.phase=loading 端上可感）。顺序敏感约束（W-RESTARTDESIGN F2
+// adopt→pinned→ledger 回灌→reload；ensureLeader 后于 pinned；parked 先于 autoRevive）
+// 在后台段内保持原相对序。
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
 // 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
 let lanAuthNonces: Map<string, number> | null = null;
@@ -534,111 +410,18 @@ const pairCodes = createPairingCodes();
 // #272：读写收编 settings.ts 单源模块（effectiveRelayName 现算——setRelayName 改名后
 // SNAPSHOT/reconcile 免重启带新名）；此处仅保留注入闭包形态
 const relayNameOf = (dataDir: string): string => effectiveRelayName(dataDir);
-if (cfg.cloudUrls.length) {
-  cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
-  mgr.setCloud(cloudIdentity);
-  mgr.setPairIssuer((o) => pairCodes.issue(o));
-  mgr.setLoginGranter((dev, pk, name) => {
-    for (const c of cloudClients) c.grantLogin(dev, pk, name);
-    return true;
-  });
-  // 0.4.4 跨网回传：两遍扫描——先试目标持活跃连接（hello 在线）的桥（必发必达），
-  // 再回落 sighting 桥（近期见过信标，发送后靠桥 ROUTE_MISS 兜底）；防 sighting 桥
-  // 排前遮蔽真正连着目标页的桥
-  mgr.setImportPusher((dev, pk, payload) => {
-    for (const c of cloudClients) if (c.hasActiveDev(dev) && c.pushImportTo(dev, pk, payload)) return true;
-    for (const c of cloudClients) if (!c.hasActiveDev(dev) && c.pushImportTo(dev, pk, payload)) return true;
-    return false;
-  });
-  // 议题①踢除执行器：先移除 peers（写穿落盘），再各桥发明文 pair_nack 令其立即
-  // 停止重连 + 停发下行——多桥场景设备连着哪座桥都能收到失联通知
-  mgr.setPeerKicker((dev) => {
-    cloudIdentity?.removePeer(dev);
-    for (const c of cloudClients) c.kickPeer(dev);
-  });
-  if (cfg.cloudToken) {
-    for (const url of cfg.cloudUrls) {
-      // #117：云通道 SNAPSHOT 同样下发 lan_hint/relay_name（与 ws-server 直连快照同
-      // 源）——此前只给了直连路径，云通道手机永远收不到 LAN 提示（角标恒☁️）
-      const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url, {
-        lanHint: () => {
-          const ip = detectLanIp(networkInterfaces());
-          return ip ? `${ip}:${cfg.port}` : "";
-        },
-        relayName: () => relayNameOf(cfg.dataDir),
-      });
-      cloudClients.push(c);
-      c.start();
-    }
-  }
-  // X1 多机编排：xmsg 传输面装配（跨桥聚合——多桥并行时发送/回执逐桥全发，对端
-  // msg_id seen 幂等去重；发现逐桥尝试。策略面在 xmsg 控制器，密钥只在本层）
-  mgr.setXmsgTransport({
-    myDev: () => cloudIdentity!.relayDev,
-    myTenant: () => {
-      try { return cloudIdentity!.loadTenantCred()?.tenant ?? null; } catch { return null; }
-    },
-    send: (dev, inner, theirPubkey) => {
-      let any = false;
-      for (const c of cloudClients) any = c.xmsgSend(dev, inner as unknown as Record<string, unknown>, theirPubkey) || any;
-      return any;
-    },
-    ack: (dev, theirPubkey, inner) => {
-      let any = false;
-      for (const c of cloudClients) any = c.xmsgAck(dev, theirPubkey, inner as unknown as Record<string, unknown>) || any;
-      return any;
-    },
-    discover: async (dev) => {
-      for (const c of cloudClients) {
-        const pk = await c.xmsgDiscover(dev);
-        if (pk) return pk;
-      }
-      return null;
-    },
-  });
-}
-
-// 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）
-// pairCodes 仅云桥启用时下发（无云桥时配对码无处消费，领了也白领）
-// #175 验收单云通道回流（公司网提交走 CF Worker→KV，relay 每 60s 拉回+通知）
-startAcceptanceCloudPoll(cfg, mgr, bus);
-// W-PATROL 巡检哨兵（内置定时模块）：30min 全巡（worker 帧新鲜度/看板漂移）+ 5min 轻探针
-// （磁盘/dataDir 可写/事件循环漂移）。开关=plugin-config 第十键 patrol（默认开）+
-// CCR_PATROL=0 应急停；异常经 notifyDone 推用户（/api/notify 绿框同通道）。
-// 自愈（kickstart 自拉）由壳负责，本模块只报告不动进程。
-if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
-  // W-WATCHAGENT：预载先于 start——用户拍板过的 patrol overrides 注入 env，PatrolModule
-  // start() 读周期（CCR_PATROL_LIGHT_MS/FULL_MS 缓存值）时同吃到（✓ 后重启生效的载体）
-  preloadPatrolOverrides(cfg.dataDir);
-  new PatrolModule(mgr, {
-    dataDir: cfg.dataDir,
-    reportPath: join(cfg.dataDir, "patrol-report.md"),
-    enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
-  }).start();
-  // W-PRBACKFLOW：PR 评论回流（Trigger→Subscription 直达交付 worker，DS 末跳）——独立
-  // 5min 档（不占 patrol 周期位），档位挂 patrol 族（autoTierOf 单点：off=零研判/
-  // observe=干跑记账/auto=投递，见 pr-comment-trigger.ts）；与 patrol 同实例化闸
-  //（巡查关=回流关——同族联动，CCR_PR_COMMENT=0 应急停）。周期消费面在
-  // SessionManager.runPrCommentCycleOnce（notifyConfirm/noteSubFanout/PM 回落在手边）。
-  if (process.env.CCR_PR_COMMENT !== "0") mgr.startPrCommentWatch();
-}
-// W-WATCHAGENT 巡查员喂料（与 patrol 同开关域：巡查关=喂料关——无报告即无料，联动
-// 语义一致；独立应急停 CCR_WATCH_FEED=0）。零在册巡查员=哑然审计（上岗后首轮全量补投）。
-if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
-  new WatchFeedModule(mgr, {
-    dataDir: cfg.dataDir,
-    reportPath: join(cfg.dataDir, "patrol-report.md"),
-    enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
-  }).start();
-}
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
-  ...(cloudClients.length ? { pairCodes } : {}),
+  pairCodes, // bootfast2：恒传（云桥后台段起——pairCodes.issue 引用语义恒可用）
   // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
   // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
-  ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
-  ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
+  // bootfast2-r1 P1-4（A 审）：spread 守卫是急切求值——startServer 前移后 cloudIdentity
+  // 尚未构造（云桥块在后台段），`cloudIdentity ? {...} : {}` 求值恒空=两 opt 永不注册
+  //（relay_dev/wan_dev 停发，#95/#134 合并链断）。改恒展开+闭包内判空（ws-server 侧
+  // `?.() ?? ""` 空值守卫既有，空值即不下发——语义与旧序等价）。
+  cloudRelayDev: () => cloudIdentity?.relayDev ?? "",
+  cloudWanDev: () => cloudIdentity?.wanDev ?? "",
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
   // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
   relayName: () => relayNameOf(cfg.dataDir),
@@ -712,8 +495,270 @@ startServer(bus, mgr, cfg, {
     } catch {} // 模块内部已吞写失败，这里只防未预期异常影响启动
   },
 });
+// 简启动行（listen 即打——不依赖后台段数据；详情行随后台段完成打）
+console.log("CC Deck Relay 已启动（HTTP 先行——数据加载中）");
+console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）｜端口: ${cfg.port}`);
 
-console.log("CC Deck Relay 已启动");
+// ---------- bootfast2 刀③：boot 后台段（数据渐进——完成处 data-ready）----------
+// bootfast2-r1 P1-2/P2-5（A 审）：yieldLoop=真事件循环让出（setImmediate）——async IIFE
+// 无 await=同步跑完，listen 回调被数据步阻塞到全部就绪（实测 HTTP 5.2~6.3s）。每个重步
+// 后让一次：listening 回调/HTTP/WS 在数据加载期即服务（A 审 V2 单 yield 实证 listen 即达
+// 627~822ms；多 yield=窗口更稳）。尾部 .catch（P2-5）：后台段任一未捕获异常兜底打印
+// +data-ready 置位，免 unhandled rejection 全进程崩（listen 后崩比修前「listen 前崩」更险）。
+const yieldLoop = () => new Promise<void>((r) => setImmediate(r));
+void (async () => {
+  await yieldLoop(); // 进段先让一轮——listen 事件最早期可达
+  // 刀②：mgr 构造器迁出的确认单对账（adopt 前完成——#018-R1FIX1 P2-5 语义锚）
+  try { mgr.reconcileOrphanConfirmsOnBoot(); } catch (e) { console.warn(`[orphan-confirms] boot 对账失败: ${e instanceof Error ? e.message : String(e)}`); }
+  await yieldLoop();
+  // bootfast2：pending 聚合基线首算（ctor 占位迁出——黑盒 1.4s sqlite 首建随此后移）
+  try { mgr.refreshPendingUserActionsBaseline(); } catch { /* 基线按空，帧驱动自愈 */ }
+
+// W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
+// 守「死了没人投递」的死角（SESSION_ERROR/派单失败触发）。CCR_NO_ACTIVATOR=1 逃生阀。
+attachAgentActivator(bus, mgr);
+const adopted = mgr.adopt(replayed);
+
+// 重放会重写历史状态（非终态→ERROR、清 waiting_request），但重连客户端走
+// last_seq 补发拿不到 SNAPSHOT——为每个收养会话广播一次当前状态，补发路径也能收敛。
+// #53 手动命名的会话随帧带 title：已连接端本地缓存的可能还是压缩回放前的旧名，
+// 不带就只有新载入页面（SNAPSHOT）能拿到恢复后的名字
+for (const s of mgr.snapshot()) {
+  bus.emit(s.session_id, "SESSION_UPDATED", {
+    status: s.status,
+    action_summary: s.action_summary,
+    stats: { ...s.stats },
+    ...(s.usage ? { usage: s.usage } : {}),
+    ...(s.title_locked ? { title: s.title, title_locked: true } : {}),
+  });
+}
+
+// #49 置顶会话休眠登记（2026-09-09 用户拍板：开机不自动 resume）：pinned-sessions.json
+// 清单内会话只标 saved（可见不可操作、卡片「已保存」），用户点卡发 COMMAND_RESUME_SESSION
+// 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
+const pinned = mgr.applyPinned();
+bootMark("adopt+broadcast");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
+
+// #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
+// 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
+// 条目摘掉（events 压缩挤掉 CREATED → 内存无此会话 → 文件条目被清），锚才是权威，
+// ensureLeader 把休眠卡重建并重新入 pinned。除首建带上岗引导 spawn 一次外零 spawn
+//（首建即 spawn，见 org.ts 引导注释）；org 目录不可用时只横幅点名，不阻断 relay
+// 其余功能（下次启动重试）
+const leader = mgr.ensureLeader();
+bootMark("pinned+leader");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
+
+const decisionNotify = new DecisionNotificationWatcher({
+  dataDir: cfg.dataDir,
+  listConfirms,
+  snapshotSessions: () => mgr.snapshot(),
+  leaderSessionId: () => mgr.getLeaderSessionId(),
+  notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
+  // [W-AWAITUSER]（1104 用户令）：源③验收单入扫描 + 用户推送腿（USER_NOTE 全端弹
+  // 系统通知——同 /api/notify mode=confirm 通道，patrol.sh:4 先例；同 key 滞留超
+  // 阈值只推一次，限频锚 user_pushed_at 持久在 watcher 台账）
+  listAcceptances: () => listAcceptances(),
+  userPush: (text) => mgr.emitUserNote(text),
+});
+decisionNotify.start();
+// [W-AWAITUSER] 聚合清单 60s 兜底轮：验收登记是 CLI 直写磁盘的 out-of-band 写面
+//（无事件可挂），值变才发=静默零帧（帧驱动挂点见 session-manager 各 refresh 调用）
+mgr.startPendingUserActionsTick();
+
+// #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍
+// parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + 下方
+// autoReviveManaged 的豁免失效）。必须在 autoReviveManaged（5s 延迟）之前按组状态
+// 反推补标；零 spawn，纯标记复原
+const parkedRehydrated = mgr.rehydrateParkedMembers();
+
+// #26 M3 挂起自动化：两周无活动的在办组 → Leader 主动建议暂缓（确认卡，用户点头
+// 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
+mgr.startStaleScan();
+
+// P0 编制膨胀根修（2026-10-15 用户实锤「编制膨胀 65 席」）：①boot 首轮裁剪——
+// 保留命名角色/会话存活/24h 内有活动，其余泛 worker 出编制（不删会话，复拉走
+// member-add；面板团队数即时收敛）；②裁剪定时（CCR_ORG_TRIM_HOURS 缺省 6h，0=关，
+// CCR_NO_HEADCOUNT_TRIM=1 全停）；③派单排队队列重启回灌（触顶全忙排队不扩编，
+// 有空闲即接续）。首轮裁剪在收养广播之后跑，报告落 org/headcount-trim-report.json
+try {
+  const trim = mgr.trimHeadcounts({ auto: true }); // [W-SEAT-SEMANTICS] boot 轮=auto（每 gid 首裁走确认卡闸）
+  if (trim.data.totalTrimmed > 0) {
+    console.log(`[headcount-trim] boot 首轮：裁减 ${trim.data.totalTrimmed} 席（${trim.data.groups.map((g) => `${g.name} ${g.before}→${g.after}`).join("；")}），清单见 org/headcount-trim-report.json`);
+  }
+} catch (e) {
+  console.warn(`[headcount-trim] boot 首轮失败（下轮定时重试）: ${e instanceof Error ? e.message : String(e)}`);
+}
+mgr.startHeadcountTrim();
+bootMark("notify+parked+trim");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
+// W-RESTARTDESIGN F2 钉死顺序：adopt(:311)→applyPinned(:330)→ledger 回灌→reload
+// ——saved（pin 休眠）会话照灌（flushResumeBacklog 恢复时消费）；失败只 warn 队列按空
+try {
+  mgr.loadRestartLedgerOnBoot();
+} catch (e) {
+  console.warn(`[restart-ledger] boot 回灌失败（账面按空，未投递通知面丢失本轮）: ${e instanceof Error ? e.message : String(e)}`);
+}
+try {
+  mgr.reloadDispatchQueue();
+} catch (e) {
+  console.warn(`[dispatch-queue] 重启回灌失败（队列按空处理）: ${e instanceof Error ? e.message : String(e)}`);
+}
+try {
+  // W-GATEFIX：90s 回执闸的重启兜底——触发窗内重启丢的定时器由此补跑（TTL 10min）
+  const n = mgr.recoverPendingReceiptChecks();
+  if (n > 0) console.log(`[receipt-gate] boot 补跑 ${n} 个到期回执核对`);
+} catch (e) {
+  console.warn(`[receipt-gate] boot 补跑失败（pending 账保留，下轮重启再试）: ${e instanceof Error ? e.message : String(e)}`);
+}
+
+// W-EXPP1 角色经验回流 P1（2026-10-10）：① 旧 lessons 内容性条目一次性迁移——先迁后
+// 切（REL 建-2）：报错只 warn 不阻断启动，旧域数据原样冻结（停灌不删），下次启动按
+// source lesson id 幂等重跑；② GC 机械档调度挂载（双轨触发+启动补跑+饱和降频，tick
+// 内自检 plugin-config experience 总开关）。CCR_EXP_GC_DISABLE=1 全停（测试/沙盒缝，
+// 与 WATCHDOG_DISABLE 约定同型）
+try {
+  const mig = migrateLessonsToExperience();
+  if (mig.migrated > 0 || mig.errors.length > 0) {
+    console.log(`[experience] 旧 lessons 迁移：入迁 ${mig.migrated}，跳过 ${mig.skipped_auto + mig.skipped_dup}${mig.errors.length ? `，异常 ${mig.errors.length} 条（见 warn）` : ""}`);
+    for (const err of mig.errors) console.warn(`[experience] 迁移异常: ${err}`);
+  }
+} catch (e) {
+  console.warn(`[experience] 旧 lessons 迁移失败（旧域原样保留，下次启动重试）: ${e instanceof Error ? e.message : String(e)}`);
+}
+if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
+
+// #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
+// 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）
+setTimeout(() => {
+  try {
+    mgr.autoReviveManaged();
+  } catch {}
+  // #PMRESUME（用户 1102 实锤×3）：值守席位先行——PM 中断续跑/空闲温床，先于 #36 跑
+  // （席位通道清 pre_reboot_status 防 #36 双拉；席位豁免 pinned-dormant 闸的实锤见
+  // revive.ts resumeLeaderAfterReboot 头注）
+  try {
+    mgr.resumeLeaderAfterReboot();
+  } catch {}
+  // #36 重启自愈（用户 1101 实锤）：中断前 WORKING 的托管会话自动续跑（与 autoRevive
+  // 待办驱动互补——状态信号选人；CCR_RESUME_ON_REBOOT=0 逃生阀）
+  try {
+    mgr.resumeInterruptedByReboot();
+  } catch {}
+  // #102 批 C：重启后为 needs_auth 态会话挂登录兜底重探（pane 早没了——登录就绪
+  // 后自动恢复三面；探测≠拉活不受 CCR_NO_AUTOREVIVE 阀控）
+  try {
+    mgr.scanNeedsAuthSessions();
+  } catch {}
+  try {
+    const n = mgr.drainTurnSpool(); /* #199 C：断电窗外报补账（回放 turn-spool） */
+    if (n > 0) console.log(`[chain2] turn-spool drain ${n} 条`);
+  } catch {}
+}, 5_000).unref?.();
+
+if (cfg.cloudUrls.length) {
+  cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
+  mgr.setCloud(cloudIdentity);
+  mgr.setPairIssuer((o) => pairCodes.issue(o));
+  mgr.setLoginGranter((dev, pk, name) => {
+    for (const c of cloudClients) c.grantLogin(dev, pk, name);
+    return true;
+  });
+  // 0.4.4 跨网回传：两遍扫描——先试目标持活跃连接（hello 在线）的桥（必发必达），
+  // 再回落 sighting 桥（近期见过信标，发送后靠桥 ROUTE_MISS 兜底）；防 sighting 桥
+  // 排前遮蔽真正连着目标页的桥
+  mgr.setImportPusher((dev, pk, payload) => {
+    for (const c of cloudClients) if (c.hasActiveDev(dev) && c.pushImportTo(dev, pk, payload)) return true;
+    for (const c of cloudClients) if (!c.hasActiveDev(dev) && c.pushImportTo(dev, pk, payload)) return true;
+    return false;
+  });
+  // 议题①踢除执行器：先移除 peers（写穿落盘），再各桥发明文 pair_nack 令其立即
+  // 停止重连 + 停发下行——多桥场景设备连着哪座桥都能收到失联通知
+  mgr.setPeerKicker((dev) => {
+    cloudIdentity?.removePeer(dev);
+    for (const c of cloudClients) c.kickPeer(dev);
+  });
+  if (cfg.cloudToken) {
+    for (const url of cfg.cloudUrls) {
+      // #117：云通道 SNAPSHOT 同样下发 lan_hint/relay_name（与 ws-server 直连快照同
+      // 源）——此前只给了直连路径，云通道手机永远收不到 LAN 提示（角标恒☁️）
+      const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url, {
+        lanHint: () => {
+          const ip = detectLanIp(networkInterfaces());
+          return ip ? `${ip}:${cfg.port}` : "";
+        },
+        relayName: () => relayNameOf(cfg.dataDir),
+      });
+      cloudClients.push(c);
+      c.start();
+    }
+  }
+  // X1 多机编排：xmsg 传输面装配（跨桥聚合——多桥并行时发送/回执逐桥全发，对端
+  // msg_id seen 幂等去重；发现逐桥尝试。策略面在 xmsg 控制器，密钥只在本层）
+  mgr.setXmsgTransport({
+    myDev: () => cloudIdentity!.relayDev,
+    myTenant: () => {
+      try { return cloudIdentity!.loadTenantCred()?.tenant ?? null; } catch { return null; }
+    },
+    send: (dev, inner, theirPubkey) => {
+      let any = false;
+      for (const c of cloudClients) any = c.xmsgSend(dev, inner as unknown as Record<string, unknown>, theirPubkey) || any;
+      return any;
+    },
+    ack: (dev, theirPubkey, inner) => {
+      let any = false;
+      for (const c of cloudClients) any = c.xmsgAck(dev, theirPubkey, inner as unknown as Record<string, unknown>) || any;
+      return any;
+    },
+    discover: async (dev) => {
+      for (const c of cloudClients) {
+        const pk = await c.xmsgDiscover(dev);
+        if (pk) return pk;
+      }
+      return null;
+    },
+  });
+}
+
+// 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）
+// pairCodes 仅云桥启用时下发（无云桥时配对码无处消费，领了也白领）
+// #175 验收单云通道回流（公司网提交走 CF Worker→KV，relay 每 60s 拉回+通知）
+startAcceptanceCloudPoll(cfg, mgr, bus);
+bootMark("cloud+backfill");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
+// W-PATROL 巡检哨兵（内置定时模块）：30min 全巡（worker 帧新鲜度/看板漂移）+ 5min 轻探针
+// （磁盘/dataDir 可写/事件循环漂移）。开关=plugin-config 第十键 patrol（默认开）+
+// CCR_PATROL=0 应急停；异常经 notifyDone 推用户（/api/notify 绿框同通道）。
+// 自愈（kickstart 自拉）由壳负责，本模块只报告不动进程。
+if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+  // W-WATCHAGENT：预载先于 start——用户拍板过的 patrol overrides 注入 env，PatrolModule
+  // start() 读周期（CCR_PATROL_LIGHT_MS/FULL_MS 缓存值）时同吃到（✓ 后重启生效的载体）
+  preloadPatrolOverrides(cfg.dataDir);
+  new PatrolModule(mgr, {
+    dataDir: cfg.dataDir,
+    reportPath: join(cfg.dataDir, "patrol-report.md"),
+    enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
+  }).start();
+  // W-PRBACKFLOW：PR 评论回流（Trigger→Subscription 直达交付 worker，DS 末跳）——独立
+  // 5min 档（不占 patrol 周期位），档位挂 patrol 族（autoTierOf 单点：off=零研判/
+  // observe=干跑记账/auto=投递，见 pr-comment-trigger.ts）；与 patrol 同实例化闸
+  //（巡查关=回流关——同族联动，CCR_PR_COMMENT=0 应急停）。周期消费面在
+  // SessionManager.runPrCommentCycleOnce（notifyConfirm/noteSubFanout/PM 回落在手边）。
+  if (process.env.CCR_PR_COMMENT !== "0") mgr.startPrCommentWatch();
+}
+// W-WATCHAGENT 巡查员喂料（与 patrol 同开关域：巡查关=喂料关——无报告即无料，联动
+// 语义一致；独立应急停 CCR_WATCH_FEED=0）。零在册巡查员=哑然审计（上岗后首轮全量补投）。
+if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+  new WatchFeedModule(mgr, {
+    dataDir: cfg.dataDir,
+    reportPath: join(cfg.dataDir, "patrol-report.md"),
+    enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
+  }).start();
+}
+bootMark("patrol+watchfeed");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
+  console.log("CC Deck Relay 已启动");
 // F7（2026-10-19）：启动行带 pid+运行模式——embedded-relay.log 排障对表（ps/launchd 比对）
 // 与「这段日志是哪个进程写的」一眼可判；时间戳由内嵌包装器统一加
 console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）`);
@@ -758,3 +803,12 @@ if (process.env.CC_DECK_DAEMON === "1") {
     }
   }
 }
+
+  mgr.markBootDataReady(); // bootfast2：SNAPSHOT boot.phase→ready（端上启动屏切换）
+  bootMark("data-ready"); // bootfast2：后台段完成（完整数据就绪——boot-time 分解终点）
+  bootDone(); // bootfast2-r1：数据段全量分解出口——listen 行只含前置段（IIFE 让出后数据段在 listen 后），本行打全链（bridge-* 段序「在 orphan-confirms 后且仅一遍」的断言面）
+})().catch((e) => {
+  // bootfast2-r1 P2-5：后台段异常兜底——打印+置 ready（banner 不悬死；进程不退）
+  console.error(`[boot] 后台段异常（兜底置 data-ready）: ${e instanceof Error ? e.stack || e.message : String(e)}`);
+  try { mgr.markBootDataReady(); } catch {}
+});

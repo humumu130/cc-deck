@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process"; // C-MODE-B2 模块7：同锚差异块 git log（超时 3s 静默降级）
+import { bootMark } from "./boot-time.js"; // W-BOOTFAST：构造器细分打点
 import { notificationsListOf } from "./decision-ledger-projection.js";
 import { pendingUserActionsOf, type PendingUserAction } from "./pending-user-actions.js"; // [W-AWAITUSER] 三源聚合单口（源登记注释锚在该件文件头）
 import { readTitleOverrides } from "./title-derive.js";
@@ -901,6 +902,7 @@ export class SessionManager {
     private bus: EventBus,
     cfg: RelayConfig,
   ) {
+    bootMark("ctor-enter"); // bootfast2：ctor 入口针（字段初始化器已跑——与 ctor-notifications 间为 ctor 体）
     this.cfg = cfg;
     // S3-P4 组锚豁免注入（relfix-s 续作，幂等）：org 底座不能 import projects（环），
     // 组锚判定经注册口注入——appendDispatch 幂等咽喉遇组锚跳过（组内并行合法：组锚
@@ -918,10 +920,18 @@ export class SessionManager {
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
     this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
+    bootMark("ctor-notifications"); // W-BOOTFAST：构造器细分（大账还原）
     // [W-AWAITUSER] 聚合投影基线（loadNotifications 同款：boot 静默锚定，防空基线
     // 首帧误发——首个订阅者到达前的 transient 本就无人收，锚定只为口径一致）
-    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
-    this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
+    // bootfast2（黑盒 1.4s 定罪）：pendingUserActionsList() 现算触 org 读族（listAcceptances/
+    // listConfirms→viaReadMode→ensureStore **sqlite 首建/导入**——listen 前最大暗段）。
+    // 修=ctor 占位空基线+boot 后台段首算（refreshPendingUserActionsBaseline）——
+    // W-AWAITUSER 防误发语义保持：loading 相位端上不消费 pending 聚合（SNAPSHOT
+    // boot.phase=loading 端上启动屏态），data-ready 前首算完成。
+    this.pendingUserActionsJson = "[]";
+    // bootfast2（1104 移交刀②）：reconcileOrphanConfirms 移出构造器→boot 后台段首跑
+    //（mgr.adopt 前由 index 显式调——构造器纯小文件读化；原 bootMark("ctor-orphan-confirms")
+    // 随迁 index 后台段）。#018-R1FIX1 P2-5 语义不变：adopt（消费确认单投影）前完成对账。
     // #279 野生会话纳管：boot 自愈 RULES.md 镜像（写库点已随 saveRules 刷新，此处
     // 兜底镜像丢失/漂移——失败自吞，镜像非关键路径）
     try { writeRulesMirror(); } catch { /* 尽力而为 */ }
@@ -1677,6 +1687,29 @@ export class SessionManager {
   // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
   //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
   //，跨域误指无法在数据层比对——不硬造，以「非空才对账」收窄误收口窗口
+  /** bootfast2：pending 聚合基线首算（index 后台段首调——ctor 占位迁出） */
+  refreshPendingUserActionsBaseline(): void {
+    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
+  }
+
+  /** bootfast2（1104 移交§三）：boot 数据就绪 flag——SNAPSHOT boot.phase 消费
+   *（index 后台段 data-ready 处置 true；端上「已连接，数据加载中」判定源）。 */
+  bootDataReady = false;
+  markBootDataReady(): void {
+    this.bootDataReady = true;
+    // bootfast2-r1 P1-3（A 审）：data-ready 广播——loading 期连入的端只在该次 SNAPSHOT
+    // 见 phase=loading，此后无帧则 banner 永久滞留。BOOT_PHASE transient 帧全端直达
+    //（EVENT/SESSION_UPDATED 同转发链；云通道 transient 转发同构），端上清 banner。
+    try { this.bus.emitTransient("BOOT_PHASE", { phase: "ready", loaded: this.snapshot().length, ts: Date.now() }); } catch { /* 广播尽力而为 */ }
+  }
+
+  /** bootfast2（刀②公开化）：boot 后台段首跑（index.ts 后台段 adopt 前调）——
+   * 构造器瘦身迁出，语义锚 #018-R1FIX1 P2-5 不变。 */
+  reconcileOrphanConfirmsOnBoot(): void {
+    bootMark("orphan-confirms"); // W-BOOTFAST：随迁打点（原 ctor 内位）
+    this.reconcileOrphanConfirms();
+  }
+
   private reconcileOrphanConfirms(): void {
     const known = this.readConfirmsForReconcile();
     if (!known) return;

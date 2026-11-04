@@ -661,6 +661,7 @@ export interface PendingUserActionsUpdatedPayload {
 
 export type EventType =
   | "SESSION_CREATED"
+  | "BOOT_PHASE" // bootfast2-r1 P1-3：boot 相位翻转帧（loading→ready 全端广播——banner 复位）
   // W-CMDIMPL ③（#216）：发版编排事件（PROGRESS 段落级节流进持久流；DONE/FAILED 终态）
   | "RELEASE_PROGRESS"
   | "RELEASE_DONE"
