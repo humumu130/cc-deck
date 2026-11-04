@@ -1682,6 +1682,14 @@
     .task-title .tchip.prio-p0, .task-title .tchip.prio-p1 { flex: none; padding: 1px 6px; border-radius: 5px; font-size: var(--fs-micro); font-weight: 700; letter-spacing: .4px; }
     .task-title .tchip.prio-p0 { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); }
     .task-title .tchip.prio-p1 { background: color-mix(in srgb, var(--st-working) 18%, transparent); color: var(--st-working); }
+    /* prchip（1104 用户问）：PR 徽章 chip——审查期 PR 可见可直达；CI 点色轴=既有
+       变量零新色（绿 --done / 红 --error / 灰 --faint），hover 同 owner-jump 惯例 */
+    .task-title .tchip.pr-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid transparent; border-radius: 5px; background: var(--bg1); color: var(--card-sub); font-size: var(--fs-micro); font-weight: 600; letter-spacing: .3px; cursor: pointer; }
+    .task-title .tchip.pr-chip:hover, .task-title .tchip.pr-chip:focus-visible { border-color: var(--border-strong); color: var(--brand); }
+    .task-title .tchip.pr-chip .pr-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .task-title .tchip.pr-chip .pr-dot.ok { background: var(--done); }
+    .task-title .tchip.pr-chip .pr-dot.bad { background: var(--error); }
+    .task-title .tchip.pr-chip .pr-dot.mid { background: var(--faint); }
     /* 审查 B-P1-1：优先级条改顶部 2.5px——左缘被 data-stripe ::before（3px 不透明
        定位伪元素）整段遮挡（原左缘条不可见）；顶部无竞争元素，P1 色与 claimed 泳道
        条同 token 的撞色面也随位置分离消解 */

@@ -150,7 +150,8 @@
     "test:boardlife": "tsx scripts/test-boardlife.ts",
 
 "test:watchagent": "tsx scripts/test-watchagent.ts",
-    "test:planlane": "tsx scripts/test-planlane.ts"
+    "test:planlane": "tsx scripts/test-planlane.ts",
+    "test:prchip": "tsx scripts/test-prchip.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

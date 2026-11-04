@@ -34,6 +34,11 @@ export const BOARD_PRIORITIES = ["P0", "P1", "P2"] as const;
 // 本文件不 import 防依赖面扩散——两处改动需同步，同步责任在本注释。
 // zero_output=S1 零产出闸收口侧结构判定值，不经文本分类器）
 export const FAILURE_REASONS = ["network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled", "zero_output"] as const;
+// prchip（1104 用户问）：PR 徽章状态词表——卡面 PR chip 的 CI 点数据源。权威=本文件
+// （BOARD_ENTRY_STATUSES 同款单点）；端上（web team-domain/RN kb.ts）无共享层走注释锚
+// 同步。ci_green/ci_red=上报方带的红绿快照值；open/merged=PR 生命周期；ci_unknown=
+// 有 PR 但 CI 状态未明（缺省兜底）。relay 不主动查 GitHub（快照值语义）
+export const PR_STATES = ["open", "merged", "ci_green", "ci_red", "ci_unknown"] as const;
 
 // ---------- 基础校验原语 ----------
 
@@ -134,6 +139,8 @@ export const BOARD_ENTRY_SCHEMA: Record<string, { type: "string" | "number" | "b
   parent_id: { type: "string" }, // #G3：父子链（坏引用渲染层孤儿容错，depends_on 同口径不炸）
   wakeup_at: { type: "number" }, // M2a 板卡唤醒（到点 patrol 触发后消费清空；毫秒时戳）
   hold: { type: "object" }, // W-ORG-DEFECTS 件3：held 扣留位（{reason, since}，分支细查）
+  pr_url: { type: "string" }, // prchip：PR 链接（orgAction pr-report 落值；缺失=无 PR 不渲 chip）
+  pr_state: { type: "enum", enumTable: PR_STATES }, // prchip：PR 状态快照（词表 PR_STATES）
 };
 
 /** DispatchEntry（org.ts:316；stage/stage_detail 为 T1-STAGE 增量字段——先行入 schema） */
@@ -171,6 +178,8 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   /** M1 run 机器留档：终态行自动回填的 run 目录名（dispatch-runs/<id>；读侧宽容透传） */
   run_ref: { type: "string" },
   trigger_key: { type: "string" }, // domstep1（域图 I2 入口幂等）：Trigger 键（trigger-key.ts 单点生成；旧行缺省宽容）
+  pr_url: { type: "string" }, // prchip：PR 互审链交付上报（orgAction pr-report 写入，快照值）
+  pr_state: { type: "enum", enumTable: PR_STATES }, // prchip：PR 状态快照（词表 PR_STATES）
 };
 
 // ---------- reducer 门面 ----------

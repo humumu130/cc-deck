@@ -480,6 +480,13 @@ export interface DispatchEntry {
    *  任务书快照/事件切片/终态 stats，见 dispatch-run-archive.ts）。审计行/drill/
    *  queued-only 不归档不带键；读侧（导入器/回读链）宽容透传。 */
   run_ref?: string;
+  /** prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 互审链交付上报——worker
+   *  交付开 PR / PM 收割时经 orgAction pr-report 写入（台账快照值，relay 不主动查
+   *  GitHub）。pr_url=https PR 地址；pr_state=PR_STATES 词表（open/merged/ci_green/
+   *  ci_red/ci_unknown——CI 红绿由上报方带）。旧行缺省 undefined=无 PR（端上不渲
+   *  chip）。板卡同名字段经 orgAction 联动落值，本字段为审计面对账锚。 */
+  pr_url?: string;
+  pr_state?: string;
 }
 
 // S3-P4 组锚豁免谓词（relfix-s 续作）：org 底座 import projects 会环（projects →
