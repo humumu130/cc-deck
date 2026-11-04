@@ -1551,6 +1551,10 @@
     #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; height: 100%; }
     /* V8R 看板总览区（原型 .ov）：无头行、prog 矩形分段（8px/radius 4/段间 2px 画布分隔线）、
        图例方 chip（panel 底+line 边+radius 6）——原型 ovleg 语言 */
+    /* boardfresh（1104 用户令·板面说谎第三现）：龄戳行+离线横幅——复用既有灰轴（faint/dim/line）零新色 */
+    #d-team .board-fresh { padding: 6px 18px 0; color: var(--faint); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    #d-team .board-fresh .board-fresh-stale { color: var(--dim); }
+    #d-team .board-offline { padding: 5px 10px; margin: 0 18px 8px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--hover); color: var(--dim); font-size: var(--fs-B); }
     #d-team .board-overview { flex: 0 0 auto; padding: 14px 18px 12px; border-bottom: 0; }
     #d-team .board-overview-head { display: none; } /* V8R：重头行退役（markup 已停产出，样式兜底） */
     #d-team .board-progress { display: flex; height: 8px; gap: 2px; margin-top: 0; overflow: hidden; border-radius: 4px; background: var(--bg1); }

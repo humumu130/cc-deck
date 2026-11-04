@@ -110,6 +110,9 @@ export interface SourceConn {
   projects: ProjectGroup[] | null;
   orgConfirms: OrgConfirm[];
   boards: Map<string, ProjectBoard>;
+  // boardfresh（1104 用户令·板面说谎第三现）：板数据最近落地时刻（帧/resyncBoard ack
+  // 两写点；板不随 SNAPSHOT 走所以无快照写点）——端上「数据是几点的」可感知锚
+  boardFreshAt: Map<string, number>;
   leaderSessionId: string; // #240 W-LEADERHIDE：组织锚 Leader 会话 id（SNAPSHOT.leader_session_id，空串=无锚/旧 relay）——列表滤 Leader 卡
   // W-EXPP2 经验域（SNAPSHOT.experience 覆盖式锚定 + EXPERIENCE_UPDATED 帧双载）：
   // null = 旧 relay 不支持（orgZone 经验分节不渲染）；experienceEnabled=false=总开关
@@ -1067,6 +1070,7 @@ class RelayStore {
         orgConfirms: [],
         leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT 覆盖式更新（空串=未收到/无锚/旧 relay）
         boards: new Map(),
+      boardFreshAt: new Map(),
         experiences: null, // W-EXPP2 SNAPSHOT 覆盖式锚定（null = 旧 relay 无经验域）
         experienceEnabled: true, // 缺省开（第七键缺省 true；SNAPSHOT.experience_enabled 收敛）
         rules: null, // W-RULES2 同款覆盖式锚定（null = 旧 relay 无铁律域）
@@ -2482,7 +2486,7 @@ class RelayStore {
           const valid = snapBoards.filter((b): b is ProjectBoard => !!b && typeof (b as ProjectBoard).gid === "string" && Array.isArray((b as ProjectBoard).entries));
           const gids = new Set(valid.map((b) => b.gid));
           for (const gid of [...conn.boards.keys()]) if (!gids.has(gid)) conn.boards.delete(gid); // 覆盖式=断连窗口内删板/散团也追平
-          for (const b of valid) { conn.boards.set(b.gid, b); conn.anchoredBoards.add(b.gid); }
+          for (const b of valid) { conn.boards.set(b.gid, b); conn.boardFreshAt.set(b.gid, Date.now()); conn.anchoredBoards.add(b.gid); } // boardfresh B-P2：快照板落地=龄戳第三写点（B 审锚）
         } else {
           conn.anchoredBoards.clear();
         }
@@ -2912,9 +2916,25 @@ class RelayStore {
         );
         if (eff.board) {
           conn.boards.set(eff.board.gid, eff.board);
+          conn.boardFreshAt.set(eff.board.gid, Date.now()); // boardfresh：帧落地记戳
           if (eff.anchor) conn.anchoredBoards.add(eff.board.gid);
         }
         if (eff.resyncGid) this.resyncBoard(conn, eff.resyncGid);
+        break;
+      }
+      // boardfresh 治本：板摘要对账（resume 快路径补发——断连窗瞬态板变更补不到的
+      // 根治）。失配 gid → resyncBoard 重拉（既有通道）；公式=ws-server fnv1a 同式
+      case "BOARDS_DIGEST": {
+        const list = (msg.payload as { boards?: unknown }).boards;
+        if (!Array.isArray(list)) break;
+        const fnv = (str: string): number => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+        for (const d of list as Array<{ gid?: unknown; n?: unknown; rev?: unknown }>) {
+          if (!d || typeof d.gid !== "string") continue;
+          const local = conn.boards.get(d.gid);
+          if (!local) continue; // 未拉过——进组时自然拉
+          const rev = fnv((local.entries ?? []).map((e) => `${e.id}:${e.status ?? ""}`).sort().join("|"));
+          if (rev !== d.rev || local.entries.length !== d.n) this.resyncBoard(conn, d.gid);
+        }
         break;
       }
       // #212 记住规则变更推送（瞬态 seq:0）：删规则后 relay 全量重发——覆盖式更新，
@@ -3244,6 +3264,26 @@ class RelayStore {
   // 未回期间再收 drop 帧不重复发（send 的 ACK 机制保证回调恒达——成功/失败/超时收摊，
   // Set 必清理；send 立即失败（未连/排队满）时同步放行防抖位）。失败不锚定——后继
   // delta 继续丢弃+重拉，防抖挡频率，不自旋
+  // boardfresh：最近在看板的（源,组）——AppState active 强刷的落点（TeamDetailPage 挂载记）
+  lastBoard: { sourceId: string; gid: string } | null = null;
+  private boardFreshLastAt = 0; // 三时机强刷 5s 节流（帧本身即新鲜，强刷兜底防抖）
+  /** boardfresh 三时机强刷公开口：走既有 resyncBoard（COMMAND_PROJECT_DETAIL 拉取
+   *  通道，in-flight 防抖内含）——禁新建旁路协议；离线/未连不空转 */
+  refreshBoard(reason: string): void {
+    const lb = this.lastBoard;
+    if (!lb) return;
+    const conn = this.conns.get(lb.sourceId);
+    if (!conn || conn.state !== "online") return; // 在线才强刷（离线走重连 SNAPSHOT 链）
+    const now = Date.now();
+    if (now - this.boardFreshLastAt < 5000) return;
+    this.boardFreshLastAt = now;
+    this.resyncBoard(conn, lb.gid);
+    console.log("[store] boardfresh 强刷：" + reason);
+  }
+  /** boardfresh：板龄戳读口（TeamDetailPage 板头行消费——store 私有 conn 的公开读） */
+  boardFreshOf(sourceId: string, gid: string): number {
+    return this.conns.get(sourceId)?.boardFreshAt.get(gid) ?? 0;
+  }
   private resyncBoard(conn: SourceConn, gid: string) {
     if (conn.boardResync.has(gid)) return;
     conn.boardResync.add(gid);
@@ -3253,6 +3293,7 @@ class RelayStore {
       const b = r?.board;
       if (b && Array.isArray(b.entries)) {
         conn.boards.set(gid, b); // ack 全量 = 覆盖式消费（现状口径原样）
+        conn.boardFreshAt.set(gid, Date.now()); // boardfresh：detail ack 落地记戳
         conn.anchoredBoards.add(gid); // 基线确立
       }
       // 失败/无板：不锚定——后继 delta 帧继续 drop+重拉（防抖挡频率）

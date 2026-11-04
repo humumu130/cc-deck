@@ -22,7 +22,7 @@ import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
 import { listDevices, touchDevice } from "./devices.js"; // conn-page-v2 件③：连接设备台账（relay_devices 数据源）
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
-import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
+import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
 import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸
 import { ReleaseModule } from "./release.js"; // W-CMDIMPL ③：发版编排
@@ -44,6 +44,39 @@ import { SNAPSHOT_SCHEMA_VERSION, type BridgeEvent, type Command, type CommandAc
 function withRelaySource(sessions: ReturnType<SessionManager["snapshot"]>, relayName: string | undefined): ReturnType<SessionManager["snapshot"]> {
   if (!relayName) return sessions;
   return sessions.map((s) => ({ ...s, relay_source: s.relay_source ?? relayName }));
+}
+
+/** 板摘要 FNV-1a 32 位核（boardfresh 双端对账公式锚——web team-domain/RN store 同式）：
+ *  rev = fnv1a(entries.map(`${id}:${status}`).sort().join("|"))；有序防抖动，O(n) 单遍。 */
+export function fnv1a(str: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** boardfresh（1104 用户令·板面说谎第三现·治本）：板内容摘要帧——resume 快路径
+ *  （last_seq 在缓冲内→跳过 SNAPSHOT）补发 SESSIONS_RECONCILE 但 BOARD_UPDATED 是
+ *  瞬态帧不进缓冲，断连窗口内的板变更（尤其 harvest 文件直写兜底路零帧场景）端上
+ *  永远补不到（公司端板冻死 11:30 两小时实锤）。摘要=per-gid {n, rev}（KB 级载荷，
+ *  与 detail ack 同源 loadBoard（viaReadMode 投影——R1-F3：sqlite 档不分叉），
+ *  亦不受 SNAPSHOT 板全量守卫限）；端上对账失配即发
+ *  COMMAND_PROJECT_DETAIL 重拉（既有通道）。seq:0 瞬态同 SESSIONS_RECONCILE 语义：
+ *  不进缓冲、每次 resume 现算现发、天然幂等。LAN 快路径与云桥 resumePhone/resumeWan
+ *  三出口共用。 */
+export function buildBoardsDigest(): { seq: number; type: string; payload: { boards: Array<{ gid: string; n: number; rev: number }> } } | null {
+  const out: Array<{ gid: string; n: number; rev: number }> = [];
+  for (const g of listGroups()) {
+    // boardfresh R1-F3（B 审）：与 detail ack 同源 loadBoard()——viaReadMode 投影
+    //（sqlite 档 boardTaskEntriesFromDb）——原 loadBoardFile 直读 JSON 在 sqlite 档
+    // 与 ack 投影形状分叉 → rev 恒假失配 → 每轮 resume 永久重拉（对账自喂养）
+    const b = loadBoard(g.id);
+    if (!b || !Array.isArray(b.entries)) continue;
+    out.push({ gid: g.id, n: b.entries.length, rev: fnv1a(b.entries.map((e) => `${e.id}:${e.status ?? ""}`).sort().join("|")) });
+  }
+  return out.length ? { seq: 0, type: "BOARDS_DIGEST", payload: { boards: out } } : null;
 }
 
 /** #265 增量续传对账帧（瞬态）：last_seq 快路径只补漏事件，不建「哪些会话还活着」
@@ -1235,6 +1268,9 @@ export function startServer(
       for (const env of replay) ws.send(JSON.stringify(env));
       // #265 增量续传对账：快路径无 SNAPSHOT，补发 SESSIONS_RECONCILE 清集合外陈旧卡
       ws.send(JSON.stringify(buildSessionsReconcile(mgr, opts.relayName?.())));
+      // boardfresh 治本：板摘要对账（BOARD_UPDATED 瞬态不进缓冲，断连窗板变更补不到）
+      const bd = buildBoardsDigest();
+      if (bd) ws.send(JSON.stringify(bd));
     } else {
       // #408 大帧根治：日志不再全量内联（随历史膨胀，实测 3 会话即 0.63MiB，规模
       // 上去必撞 CF 桥 1MiB 单帧硬限），改预算装配（每会话最近 K 条 + 总字节上限，

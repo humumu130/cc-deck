@@ -199,6 +199,18 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     if (!store.orgDetail(srcId, gid, setDetail)) setDetail(null);
   }, [srcId, gid]);
   useEffect(() => fetchDetail(), [fetchDetail]);
+  // boardfresh（1104 用户令）：进页即记「最近在看板的（源,组）」——AppState active
+  // 强刷落点（进页本身已拉=时机③天然）；60s 龄戳时钟（停板页无渲染时「数据可能
+  // 过期」灰字自己浮现）
+  useEffect(() => {
+    store.lastBoard = { sourceId: srcId, gid };
+    return () => { if (store.lastBoard && store.lastBoard.gid === gid && store.lastBoard.sourceId === srcId) store.lastBoard = null; };
+  }, [srcId, gid]);
+  const [freshTick, setFreshTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setFreshTick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   const src = useMemo(() => snap.sources.find((x) => x.id === srcId), [snap.sources, srcId]);
   // 状态行优先取源快照实时值（PROJECTS_UPDATED 即时反映），拉取结果兜底
@@ -481,6 +493,13 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     !g ? "该团队不在最新快照中（可能已结项或源已断开）"
     : !board ? (detail === undefined ? "正在加载任务板…" : detail === null ? "详情拉取失败（源可能已断开或 relay 版本过旧），可点右上刷新重试" : "尚未取得任务板，点右上刷新重试")
     : !ents.length ? "任务板暂无任务" : null;
+  // boardfresh：板龄戳+离线横幅数据（freshTick 触发重算——「数据可能过期」自浮现）
+  void freshTick;
+  const freshAt = store.boardFreshOf(srcId, gid);
+  const freshLabel = freshAt
+    ? "更新于 " + new Date(freshAt).toTimeString().slice(0, 5) + (Date.now() - freshAt > 600_000 ? " · 数据可能过期" : "")
+    : "";
+  const offlineNote = !snap.connected && src ? "离线——显示的是 " + (freshAt ? new Date(freshAt).toTimeString().slice(0, 5) + " 的快照" : "旧数据（无龄戳）") : "";
   // 五色总览条数据（W-MV8A v3 .prog/.ovleg）：各泳道计数比例
   const laneShares = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -627,6 +646,8 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
                 <Text style={styles.empty}>{boardEmpty}</Text>
               ) : (
                 <View style={styles.board} onLayout={(e) => { boardYRef.current = e.nativeEvent.layout.y; }}>
+                  {offlineNote ? <Text style={styles.freshNote}>{offlineNote}</Text> : null}
+                  {freshLabel ? <Text style={styles.freshStamp}>{freshLabel}</Text> : null}
                   {!boardEmpty && g?.tier !== "轻立项" && laneShares.length ? (
                     <View style={styles.ovBox}>
                       <View style={styles.ovProg}>
@@ -806,6 +827,8 @@ const makeStyles = (c: ThemeColors) =>
     // 看板（B2 + W-MV8A v3 plane/ov 语言）
     board: { gap: 4 },
     // 五色总览条（v3 .ovpit）：分段比例条 + 图例 chip 行（点 chip 跳泳道锚）
+    freshNote: { marginBottom: 6, paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderColor: c.line, borderRadius: 7, backgroundColor: c.hover, color: c.dim, fontSize: 11, alignSelf: "flex-start" }, // boardfresh 离线横幅（复用灰轴）
+    freshStamp: { marginBottom: 4, color: c.faint, fontSize: 10, fontVariant: ["tabular-nums"] }, // boardfresh 龄戳行
     ovBox: { gap: 0, marginBottom: 8 },
     ovProg: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2 },
     ovLeg: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 7 },

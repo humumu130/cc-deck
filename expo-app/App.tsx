@@ -1004,6 +1004,9 @@ function Shell() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
       appState.current = st;
+      // boardfresh（1104 用户令·板面说谎第三现）：回前台=强刷时机①——后台期帧断流，
+      // 板缓存停在离开时刻，回来看板必须主动拉新（5s 节流在 store 侧，离线不空转）
+      if (st === "active") store.refreshBoard("appstate-active");
       // #114 回前台连接分诊已收口到 store 构造器的 onForeground（按 conn 实时
       // 状态逐源体检/清退避/立即重试）：此处旧的 resumeProbe+resetBackoff+
       // connect 会双重派发（白耗一轮 LAN 探测/桥拆建），且 snap.connected 是
