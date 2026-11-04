@@ -54,6 +54,11 @@ const num = (v: string | undefined, d: number): number => {
 
 export class PatrolModule {
   private lightTimer: NodeJS.Timeout | null = null;
+  /** R1-P0 两拍确认跨拍状态：上拍孤儿候选集（entryId） */
+  private reconFlagged = new Set<string>();
+  /** R1-P2-1 审计/告警签名去重（同判定不重发） */
+  private reconLastSig = "";
+  private reconLastMismatch = "";
   private fullTimer: NodeJS.Timeout | null = null;
   // 去重账本：key → 上次告警文本（onset-only）
   private lastAlerts = new Map<string, string>();
@@ -236,40 +241,6 @@ export class PatrolModule {
       console.warn(`[patrol] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
     // [W-BOARDRECON]（1104 第三现「工作中 5 沃克 vs 进行中 8 卡」）：三方对账器——
-    // claimed 卡 × owner 会话活跃 × dispatch 台账。档位 CCR_BOARDRECON_MODE=observe
-    //（缺省——首跑研判清单+审计+通知不动板，PM 过目后切 auto）/auto（孤儿/漏网卡
-    // 真归位 backlog 可重派）。同文去重（onset-only）不刷屏。
-    try {
-      const mode = process.env.CCR_BOARDRECON_MODE === "auto" ? "auto" : "observe";
-      const boards: Array<{ gid: string; board: NonNullable<ReturnType<typeof loadBoardFile>> }> = [];
-      for (const g of listGroups()) {
-        if (g.status !== "active") continue;
-        const b = loadBoardFile(g.id);
-        if (b) boards.push({ gid: g.id, board: b });
-      }
-      const r = reconcileBoardCards({ boards, sessions: this.mgr.snapshot(), dispatchLog: readDispatchLog() });
-      if (r.actions.length) {
-        const lines = r.actions.slice(0, 8).map((a) => `${a.entryId}「${a.text}」${a.reason}：${a.detail}`);
-        this.mgr.emitChainAudit("board-recon", `三方对账（${mode}）：${r.actions.length} 张 claimed 卡待归位——${lines.join("；").slice(0, 400)}`);
-        if (mode === "auto") {
-          let moved = 0;
-          for (const a of r.actions) {
-            const b = boards.find((x) => x.gid === a.gid)?.board;
-            const e = b?.entries.find((x) => x.id === a.entryId);
-            if (e && e.status === "claimed") {
-              upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${new Date().toLocaleDateString("zh-CN")}] ${a.reason} 归位可重派：${a.detail}` });
-              moved++;
-            }
-          }
-          this.push("board-recon", `三方对账（auto）：${moved}/${r.actions.length} 张孤儿/漏网卡归位 backlog 可重派`);
-        } else {
-          this.push("board-recon", `三方对账（observe）：${r.actions.length} 张 claimed 卡待归位（孤儿/台账终态漏网/滞留无进展）——清单在审计流，PM 过目后 CCR_BOARDRECON_MODE=auto 生效`);
-        }
-      }
-      if (r.mismatch) this.push("board-consistency", `账实不符告警：${r.mismatch}`);
-    } catch (e) {
-      console.warn(`[patrol] 三方对账失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
-    }
     // observe3 R1 P2⑥ 下半：patrol 族 off 而 converge 档仍活时，converge 段跑完即退——
     // 后续 worker 帧新鲜度/看板漂移/演练/对账皆 patrol 族面，off 不执行
     if (autoTierOf("patrol") === "off") { this.appendReport("full: patrol off（仅 converge 段运行）"); return; }
@@ -313,6 +284,53 @@ export class PatrolModule {
       // #92 W-NOTIFY2 D：40min 无帧自动升级——可操作通知（点跳会话卡）替代纯文本
       // 推送（notifyDone 只兜底到首个 external，丢面大）；stableKey 同键幂等，恢复
       // resolve 面不变。首卡 actionable 跳转，severity=waiting 提级
+    // [W-BOARDRECON R1]（1104 第三现；R1 按 A 审返修）：三方对账器——claimed 卡 ×
+    // owner 会话活跃（多源判死+两拍确认）× dispatch 台账 running 行。R1-P1-3：档位
+    // 挂 autoTierOf("boardrecon") 单点（原私有 env 绕过=审查打回项；块移到 patrol off
+    // 早退后——patrol=off 对账不跑）；缺省 observe（PM 过目干跑清单后 config
+    // autoBoardrecon 切）。R1-P1-2：终态收殓归 recon（本件只管孤儿/滞留/告警）。
+    try {
+      const mode = autoTierOf("boardrecon");
+      const boards: Array<{ gid: string; board: NonNullable<ReturnType<typeof loadBoardFile>> }> = [];
+      for (const g of listGroups()) {
+        if (g.status !== "active") continue;
+        const b = loadBoardFile(g.id);
+        if (b && !b.frozen) boards.push({ gid: g.id, board: b }); // R1-P2-3：frozen 板豁免（人工意图——converge hold 同口径）
+      }
+      const sessions = this.mgr.snapshot().map((x) => ({ session_id: x.session_id, done_reason: x.done_reason ?? null, status: x.status, cli_pid: x.cli_pid ?? null, last_active_at: x.updated_at ?? 0 }));
+      const dispatchLog = readDispatchLog(undefined, 20_000); // R1-P2-4：台账窗 20k（converge 教训）
+      const flagNow = new Set<string>();
+      const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow });
+      this.reconFlagged = flagNow; // 两拍确认跨拍状态推进（候选标记→下拍复核）
+      const sig = r.actions.map((a) => a.entryId + a.reason).sort().join("|") + (r.mismatch ?? "");
+      if (r.actions.length && sig !== this.reconLastSig) { // R1-P2-1 审计签名去重
+        this.reconLastSig = sig;
+        const lines2 = r.actions.slice(0, 8).map((a) => `${a.entryId}「${a.text}」${a.reason}：${a.detail}`);
+        this.mgr.emitChainAudit("board-recon", `三方对账（${mode}）：${r.actions.length} 张判定——${lines2.join("；").slice(0, 400)}`);
+        if (mode === "auto") {
+          let moved = 0;
+          for (const a of r.actions) {
+            if (a.advisory) continue; // R1-P1-1：owner 活跃（长任务静默）只提醒不搬
+            const b = boards.find((x) => x.gid === a.gid)?.board;
+            const e = b?.entries.find((x) => x.id === a.entryId);
+            if (e && e.status === "claimed") {
+              const up = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${new Date().toLocaleDateString("zh-CN")}] ${a.reason} 归位可重派：${a.detail}` });
+              if (up.ok) moved++; // R1-P2-3：核返回——拒写不计数
+            }
+          }
+          this.push("board-recon", `三方对账（auto）：${moved} 张孤儿卡归位（advisory ${r.actions.filter((a) => a.advisory).length} 条 owner 活跃仅提醒）`);
+        } else {
+          this.wouldDo("boardrecon", "归位孤儿卡", `${r.actions.filter((a) => !a.advisory).length} 张候选（两拍确认+旁证聚合后）——干跑不执行`);
+          this.push("board-recon", `三方对账（observe）：${r.actions.length} 张判定（孤儿候选/滞留提醒）——清单在审计流，PM 过目后 config autoBoardrecon=auto 生效`);
+        }
+      }
+      if (r.mismatch && r.mismatch !== this.reconLastMismatch) { // R1-P2-1 告警去重
+        this.reconLastMismatch = r.mismatch;
+        this.push("board-recon", `账实不符告警：${r.mismatch}`);
+      }
+    } catch (e) {
+      console.warn(`[patrol] 三方对账失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
+    }
       const first = stale[0];
       if (first) {
         // observe3 R1 P1-1（面③）：stale-escalate 绕 push 直写通知账（actionable 面更重）
