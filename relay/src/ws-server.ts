@@ -272,6 +272,7 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
       if (sig !== lastSig) {
         lastSig = sig;
         emitAcceptancesUpdated(bus);
+        mgr.refreshPendingUserActions(); // [W-AWAITUSER] 源③挂点：云回流/新登记签名对账边聚合清单收敛
       }
     } catch { /* 汇总失败跳过本拍广播 */ }
   };
@@ -549,6 +550,13 @@ export function startServer(
   // onlineDeviceIds=活连接设备集（SNAPSHOT.online 标注源；close 即离线）
   const connUa = new WeakMap<WebSocket, string>();
   const onlineDeviceIds = new Map<WebSocket, string>();
+  // awaituser R1（A 审 P1-1）：全端在线判定口注回 mgr——emitUserNote 投递真值回报用
+  //（零端在线 return false，decision-notify 不记 user_pushed_at 下轮重推）。与下方
+  // hasClients 同源同表达式（wss OPEN 非 pairing ∨ 云手机 active；#316 口径）——两处
+  // 字面并列是防漂移注锚：改判定式必须两处一起改。
+  mgr.liveFrontends = () =>
+    [...wss.clients].some((c) => c.readyState === WebSocket.OPEN && !(c as ClientWs).pairing) ||
+    !!opts.cloudHasPhones?.();
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
@@ -1133,6 +1141,7 @@ export function startServer(
           mgr.settleAcceptanceResult(id); // M12-7 收单归因回写（幂等，与云回流同口径）
           // #184 状态即时广播：LAN 提交落盘即推（云回流走 poll tick 的签名对账）
           emitAcceptancesUpdated(bus);
+          mgr.refreshPendingUserActions(); // [W-AWAITUSER] 源③挂点：回填即出聚合清单（帧驱动减项）
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
@@ -1369,6 +1378,9 @@ export function startServer(
           // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
           // 下发——端上以字段存在性判断能力）
           notifications: mgr.notificationsList(),
+          // [W-AWAITUSER] 待拍板三源聚合清单（mgr.pendingUserActionsList() 单口构建
+          // ——cloud-client 云通道快照同键同步，#117 教训；空数组也下发=能力位）
+          pending_user_actions: mgr.pendingUserActionsList(),
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr.employeeHomeState(),

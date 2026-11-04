@@ -73,14 +73,32 @@
                 // W-WINPAIR-R8②：时间戳单位归一——acceptance/confirm 的 created_at 是秒级
                 // （bin/acceptance 契约，W-NQA F6 同族），按毫秒解析会显 1970-01-2x；<1e11 视作秒 ×1000
                 const normTs = (v) => { const n = Number(v) || 0; return n > 0 && n < 1e11 ? n * 1000 : n; };
+                // [W-AWAITUSER]（1104 用户令）待拍板匹配器：行是否在 relay 聚合清单
+                //（pending_user_actions 单源权威——端上不拼三源）。null=旧 relay 能力缺席，
+                // 恒 false=排序与 chip 降级为现状。waiting 按 sessionId 配对（聚合 entity_id
+                // =会话 id）；confirm/acceptance 按 entityId/source.id
+                function userPendingIndex() {
+                  if (!Array.isArray(bridge.pendingUserActions)) return null;
+                  const set = new Set();
+                  for (const p of bridge.pendingUserActions) {
+                    if (p && typeof p.kind === "string" && typeof p.entity_id === "string") set.add(p.kind + ":" + p.entity_id);
+                  }
+                  return set;
+                }
+                const isUserPending = (set, kind, entityId) => !!(set && kind && entityId && set.has(kind + ":" + entityId));
                 function buildRows() {
                   const rows = [];
+                  const pending = userPendingIndex();
                   for (const n of bridge.notifications) {
                     if (flight.has(n.key) || dismissedNotifyKeys.has(n.key)) continue;
                     const session = sessionOf(n);
+                    const entityId = n.kind === "waiting"
+                      ? (n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "")
+                      : (n.sourceContext && typeof n.sourceContext.entityId === "string" ? n.sourceContext.entityId : "");
                     rows.push({
                       synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: normTs(n.created_at),
                       unresolved: !doneOf(n), active: !doneOf(n) && n.actionable === true, actionable: n.actionable === true,
+                      userPending: isUserPending(pending, n.kind, entityId) && !doneOf(n),
                       source: n, engine: session ? session.engine : "", sessionTitle: session ? (session.title || session.initial_prompt || "") : "",
                       sessionId: n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "",
                       segment: n.sourceContext && typeof n.sourceContext.segment === "string" ? n.sourceContext.segment : "",
@@ -90,16 +108,19 @@
                     if (dismissedNotifyKeys.has("confirm:" + confirm.id)) continue;
                     const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOf(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
                     if (covered) continue;
-                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, userPending: isUserPending(pending, "org-confirm", confirm.id), source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
                   }
                   const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
                   if (!hasAcceptanceChannel) {
                     for (const acceptance of bridge.accepts) {
                       if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
-                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
+                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, userPending: isUserPending(pending, "acceptance", acceptance.id), source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
                     }
                   }
-                  rows.sort((a, b) => Number(b.active) - Number(a.active) || b.ts - a.ts);
+                  // [W-AWAITUSER] 待拍板顶格：扩同一排序器（需人优先 active 键之前加
+                  // userPending 键——不造第二排序器、不改三分组结构，observe3
+                  //「需你行动组首位」锚不动；组内待拍板行置顶，其余按原序）
+                  rows.sort((a, b) => Number(b.userPending === true) - Number(a.userPending === true) || Number(b.active) - Number(a.active) || b.ts - a.ts);
                   return rows;
                 }
 
@@ -144,7 +165,7 @@
                   // clamp2+tooltip / L3 摘要+内联操作）+右侧 act/× 列；» 引导符退役
                   return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
+                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
                     + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + (act ? '<span class="act-slot">' + act + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪 */
                     + x + "</div>";
                 }
@@ -205,7 +226,9 @@
                   const dynamicRows0 = rows.filter((r) => !r.unresolved);
                   const sig = rows.map((r) => r.key + ":" + (r.isNew ? 1 : 0) + ":" + (r.active ? 1 : 0) + ":" + (r.unresolved ? 1 : 0)).join("|")
                     + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length
-                    + (dynamicCollapsed ? "#dyn-collapsed" : "#dyn-open"); // observe3：折叠态入签名（切换必重渲）
+                    + (dynamicCollapsed ? "#dyn-collapsed" : "#dyn-open") // observe3：折叠态入签名（切换必重渲）
+                    // [W-AWAITUSER] userPending 位入签名（顶格/chip 变化必重渲）
+                    + "#au:" + rows.filter((r) => r.userPending).map((r) => r.key).join(",");
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）

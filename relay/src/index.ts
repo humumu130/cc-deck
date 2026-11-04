@@ -29,6 +29,7 @@ import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 import { orgDir } from "./org.js";
 import { listConfirms } from "./projects.js";
+import { listAcceptances } from "./acceptance.js"; // [W-AWAITUSER] 推送扫描源③（watcher listAcceptances）
 // W-EXPP1 角色经验回流 P1：迁移器与 GC 调度（store 纯 fs 无环；test/沙盒隔离靠 CCR_ORG_DIR）
 import { migrateLessonsToExperience, startExperienceGc } from "./experience.js";
 import { DecisionNotificationWatcher } from "./decision-notify.js";
@@ -420,8 +421,16 @@ const decisionNotify = new DecisionNotificationWatcher({
   snapshotSessions: () => mgr.snapshot(),
   leaderSessionId: () => mgr.getLeaderSessionId(),
   notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
+  // [W-AWAITUSER]（1104 用户令）：源③验收单入扫描 + 用户推送腿（USER_NOTE 全端弹
+  // 系统通知——同 /api/notify mode=confirm 通道，patrol.sh:4 先例；同 key 滞留超
+  // 阈值只推一次，限频锚 user_pushed_at 持久在 watcher 台账）
+  listAcceptances: () => listAcceptances(),
+  userPush: (text) => mgr.emitUserNote(text),
 });
 decisionNotify.start();
+// [W-AWAITUSER] 聚合清单 60s 兜底轮：验收登记是 CLI 直写磁盘的 out-of-band 写面
+//（无事件可挂），值变才发=静默零帧（帧驱动挂点见 session-manager 各 refresh 调用）
+mgr.startPendingUserActionsTick();
 
 // #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍
 // parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + 下方
