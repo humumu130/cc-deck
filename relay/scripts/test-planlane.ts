@@ -177,13 +177,16 @@ async function main() {
         { id: "t-208449c6", text: "[规划]上下文引用图：链式召回 MVP 后评估", status: "backlog", ts: 13, updated_at: 13 },
         { id: "t-normal", text: "普通缓做卡（无前缀）", status: "backlog", ts: 14, updated_at: 14 },
         { id: "t-claimed-plan", text: "[规划]已在途的前缀卡（不迁）", status: "claimed", ts: 15, updated_at: 15 },
+        // planlane R1（A 审 P1 反例）：派单退单卡两形态——dispatch 建卡退单（键在）/曾认领史（键已清）
+        { id: "t-retreat-did", text: "[规划]退单卡（dispatch_id 在——不迁）", status: "backlog", dispatch_id: "d-retreat-1", ts: 16, updated_at: 16, transitions: [{ status: "claimed", ts: 15 }, { status: "backlog", ts: 16 }] },
+        { id: "t-retreat-hist", text: "[规划]退单卡（claimed 史在键已清——不迁）", status: "backlog", ts: 17, updated_at: 17, transitions: [{ status: "claimed", ts: 14 }, { status: "backlog", ts: 17 }] },
       ],
       frozen: false,
       updated_at: 16,
     }, null, 2) + "\n");
     const bm = loadBoard("g-mig");
-    assert(j(bm.entries.filter((e) => e.text.startsWith("[规划]") && e.status === "backlog").map((e) => e.id)) === j([]),
-      "四张 [规划] backlog 卡全迁 planned（读入即迁移）");
+    assert(j(bm.entries.filter((e) => e.text.startsWith("[规划]") && e.status === "backlog" && !e.dispatch_id && !(e.transitions ?? []).some((t) => t && t.status === "claimed")).map((e) => e.id)) === j([]),
+      "四张存量 [规划] backlog 卡全迁 planned（读入即迁移；filter 排除 R1 退单反例两卡）");
     assert(j(bm.entries.filter((e) => e.status === "planned").map((e) => e.id)) === j(["t-7291b8a9", "t-d39d1411", "t-196c327a", "t-208449c6"]),
       "迁移集合=四张前缀卡（账面证据：id 逐一在生产板上实存）");
     assert(bm.entries.every((e) => !e.text.includes("[规划]") || e.text.startsWith("[规划]")), "前缀文字保留（不动卡文本）");
@@ -191,9 +194,21 @@ async function main() {
     assert(bm.entries.find((e) => e.id === "t-claimed-plan")?.status === "claimed", "非 backlog 前缀卡不迁（claimed 保持）");
     assert(existsSync(`${migPath}.pre-planlane.json`), "冷备份 .pre-planlane.json 在场");
     const backup = JSON.parse(readFileSync(`${migPath}.pre-planlane.json`, "utf-8")) as { entries: { status: string }[] };
-    assert(backup.entries.filter((e) => e.status === "backlog").length === 5, "备份内容=迁移前原文（5 张 backlog）");
+    assert(backup.entries.filter((e) => e.status === "backlog").length === 7, "备份内容=迁移前原文（5 存量+2 退单反例=7 张 backlog——退单卡不迁留在 backlog）");
     const onDisk = JSON.parse(readFileSync(migPath, "utf-8")) as { entries: { id: string; status: string; transitions?: { status: string }[] }[] };
     assert(onDisk.entries.find((e) => e.id === "t-7291b8a9")?.transitions?.at(-1)?.status === "planned", "迁移 transitions 追加 planned 行（留痕）");
+    // planlane R1 反例（A 审 P1 验收 1）：派单退单卡读板不迁 planned——四路自愈面（退出认领/
+    // closeHung 白名单/值守/重派）依赖卡在派单域态位，带 dispatch_id/claimed 史的卡永不入规划面
+    const rd1 = onDisk.entries.find((e) => e.id === "t-retreat-did");
+    const rd2 = onDisk.entries.find((e) => e.id === "t-retreat-hist");
+    assert(rd1?.status === "backlog" && rd2?.status === "backlog", `退单卡不迁 planned（实 ${rd1?.status}/${rd2?.status}——dispatch_id 在/claimed 史两排除各钉一张）`);
+    assert(!(rd1?.transitions ?? []).some((t) => t.status === "planned") && !(rd2?.transitions ?? []).some((t) => t.status === "planned"), "退单卡 transitions 零 planned（形态=claimed→backlog 原样，等重派/对账不走规划面）");
+    // planlane R1（A 审 P2①）：planned 卡 upsert{done, review_required:true} 拒收——R2 改道
+    // submitted 侧门已堵（出口只有排产/废弃，错误信息指路）
+    const rr1 = upsertBoardEntry("g-mig", { id: "t-7291b8a9", text: "[规划]投机执行：observe 档跑稳后上（预算帽+丢弃纪律）", status: "done", review_required: true });
+    assert(rr1.ok === false && String((rr1 as { error?: string }).error || "").includes("侧门"), `planned 卡 done+rr=true 拒收（实 ${JSON.stringify(rr1).slice(0, 90)}——R2 改道 submitted 侧门已堵；废弃=done 不带 rr 仍放行）`);
+    const rr2 = upsertBoardEntry("g-mig", { id: "t-7291b8a9", text: "[规划]投机执行：observe 档跑稳后上（预算帽+丢弃纪律）", status: "done", note: "废弃：不再评估" });
+    assert(rr2.ok === true && loadBoard("g-mig").entries.find((e) => e.id === "t-7291b8a9")?.status === "done", "废弃出口②保留（planned+done 无 rr=放行——与 S4 既有废弃断言同口径）");
     const before = readFileSync(migPath, "utf-8");
     loadBoard("g-mig");
     assert(readFileSync(migPath, "utf-8") === before, "幂等重跑零写（迁后 status=planned 不再命中规则）");
@@ -262,7 +277,7 @@ async function main() {
     const conv = convergeBoardsWithDispatchLog();
     const guardAfter = loadBoard(gid).entries.find((e) => e.id === String(okEntry(cGuard)?.id ?? ""));
     assert(guardAfter?.status === "planned", "planned 卡带台账 done 超 72h 仍零位移（收敛扫跳过规划态）");
-    assert(conv.moved === 0 || conv.moved >= 0, `收敛扫正常返回（moved=${conv.moved}，skipped=${conv.skipped}）`);
+    assert(conv.moved === 0, `收敛扫对 planned 卡零动作（moved=${conv.moved}——原恒真断言拆真：本沙盒此刻无可搬卡，moved 必须恰为 0；guard 卡 planned 态已由上行钉死）`); // planlane R1（A 审 P2②）：`|| conv.moved >= 0` 恒真注水拆除
 
     // ============ S7 sqlite v10 迁移 ============
     console.log("S7 sqlite v10（task.status CHECK 扩 planned）:");

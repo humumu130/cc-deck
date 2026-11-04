@@ -916,6 +916,14 @@ function migratePlanningCards(gid: string, board: ProjectBoard, dir?: string): P
   for (const e of board.entries) {
     if (e.status !== "backlog" || !e.text?.startsWith("[规划]")) continue;
     if ((e.transitions ?? []).some((t) => t && t.status === "planned")) continue; // 进过规划面：此后 backlog=排产结果，不碾
+    // planlane R1 返修（A 审 P1，review-w-planlane-a-1104）：派单退单卡排除——经
+    // dispatch 建卡的 [规划] 卡（claimed+dispatch_id）被退单 claimed→backlog 后，
+    // 原判据下次读板即吞入 planned（transitions=[claimed,backlog,planned] 沙盒复现）
+    // ——卡带 dispatch_id 进 planned 态=failed 单退出认领/closeHung 白名单/值守/重派
+    // 四路自愈面全失明。两排除：带 dispatch_id（派单联动键在）+transitions 含
+    // claimed 史（经认领过——派单域的卡永不入规划面，退单回 backlog 等重派/对账）。
+    if (e.dispatch_id) continue;
+    if ((e.transitions ?? []).some((t) => t && t.status === "claimed")) continue;
     e.status = "planned";
     if (!e.transitions) e.transitions = [];
     if (e.transitions[e.transitions.length - 1]?.status !== "planned") e.transitions.push({ status: "planned", ts: now });
@@ -1111,6 +1119,12 @@ function resolveStatusTransition(
     return { ok: false, error: "submitted 仅由完成候选且 review_required=1 生成（先为卡设 review_required）" };
   }
   if (to === "done") {
+    // planlane R1 返修（A 审 P2①）：planned 卡堵 R2 改道侧门——原分支会把
+    // upsert{done, review_required:true} 改道落 submitted（planned→submitted 无交付
+    // 事实=撒谎，可恢复但无 UI 路径）。只堵 rr=true 改道；**废弃出口②保留**
+    //（planned+done 不带 rr=废弃放行直 done——原交付口径，测试「废弃：planned→done
+    // 带 note 放行」钉死）；排产=先搬 backlog/claimed 走派单交付。
+    if (e.status === "planned" && rrInput === true) return { ok: false, error: "planned 卡不可走完成候选（R2 改道 submitted 侧门已堵，planlane R1）——废弃=upsert done 不带 review_required；排产=先搬 backlog/claimed" };
     if (e.status !== "submitted" && rrInput === true) return { ok: true, status: "submitted", review_required: true };
     return { ok: true, status: "done", review_required: false };
   }
