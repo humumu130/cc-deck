@@ -1070,6 +1070,11 @@ export function startServer(
             // 的 HTTP/WS 面）——hold=流程扣留位写面（PM 工具/通知一键破锁），非决议类
             //（无确认卡语义；破锁动作有 hold-release 审计帧全链可查）。
             "board-hold", "board-release",
+            // W-PRREVIEW（期一④ PR 互审，1104 拍板）：review-route=互审员路由**只读查询**
+            //（零派发零台账，同 chain 信任级）；review-ledger=PR 审查期台账段行写面
+            //（leader-harvest PM 工具调用，log-append 同级审计行——非决议类：审查/收割
+            // 决议仍留 PM 与用户端，本动作只记时序）。HTTP+WS 同权（orgAction 单漏斗）。
+            "review-route", "review-ledger",
             // W-WATCHAGENT R1（1104 用户令）：巡查阈值调整建议——恒出确认卡（零直写：
             // HTTP 面剥 direct，巡查员/PM/CLI 提案统一「建议+人批」，决议走用户端
             // confirm-decide；词表+值域闸在 orgAction case 内）。非决议类（本动作自身

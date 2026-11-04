@@ -407,7 +407,14 @@ export type DispatchTier = "咨询" | "随手办" | "轻立项" | "正经立项"
 // 有 idle 名额/空闲 worker 时由 drainDispatchQueue 接续（不自动扩编）。消费面天然
 // 兼容：closeHungDispatchRows/开放单过滤都白名单 running|dispatched，queued 不会被
 // 重启断档补记误收口；端上未知状态原样显示（宽容惯例）
-export type DispatchStatus = "dispatched" | "running" | "done" | "failed" | "queued";
+// "in_review"（W-PRREVIEW 期一④，1104 拍板 PR 互审）：worker 交付开 PR 后的审查期
+// 段行状态——原单链 done→in_review→done（orgAction review-ledger 追加；readDispatchLog
+// 同 id 末行收敛，端上未知状态原样显示=queued 同款宽容惯例）。活单白名单
+//（closeOpenDispatches/closeHungDispatchRows/开放单过滤=dispatched|running|queued）
+// 不含 in_review：审查期不重收口、不阻组内新单。sqlite 投影为冻结四态表
+//（storage/schema.ts dispatch CHECK），in_review 行导入落 loss 不阻断——queued 先例
+// 同款（ndjson 审计面权威）。
+export type DispatchStatus = "dispatched" | "running" | "done" | "failed" | "queued" | "in_review";
 // #G5 失败分类学：分类器在 dispatch-retry.ts（org.ts 无环依赖该模块只做类型+咽喉调用）
 import { classifyDispatchFailure, DISPATCH_FAILURE_REASONS, type DispatchFailureReason } from "./dispatch-retry.js";
 export { DISPATCH_FAILURE_REASONS };
