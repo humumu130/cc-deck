@@ -124,7 +124,21 @@
                 const cssEsc = (v) => String(v).replace(/["\\]/g, "\\$&");
                 function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
                 function uuid() { return (crypto.randomUUID && crypto.randomUUID()) || ("c" + Date.now() + "-" + Math.random().toString(16).slice(2)); }
-                function b2Toast(msg, ms) { const t = $id("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400); }
+                function b2Toast(msg, ms, action) { // halfconn：可选 action={label,fn}——toast 内嵌动作钮（「立即重连」等），点击执行并收口；既有 (msg,ms) 调用方零改动
+                  const t = $id("toast"); if (!t) return;
+                  t.textContent = "";
+                  t.append(document.createTextNode(msg));
+                  if (action && typeof action.fn === "function") {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.style.cssText = "margin-left:10px;padding:1px 10px;border:1px solid rgba(255,255,255,.45);border-radius:99px;background:transparent;color:inherit;font-size:12px;cursor:pointer;flex:none";
+                    b.textContent = action.label || "重连";
+                    b.addEventListener("click", () => { try { action.fn(); } catch {} t.classList.remove("show"); });
+                    t.append(b);
+                  }
+                  t.classList.add("show");
+                  clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400);
+                }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
                 // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息标记表——与 expo-app/src/auto-msg.ts
@@ -538,29 +552,93 @@
                 }
 
                 // ---------- B2 数据通道（#150 R2 并轨：退役自开 WS 与重连/握手超时，改订阅地基帧总线） ----------
-                function failB2Flights() { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
-                  for (const v of S.ackWaiters.values()) { clearTimeout(v.t); try { v.res(null); } catch {} }
-                  S.ackWaiters.clear();
+                // halfconn R1（P2③·双审）：command_id → 发送源（"lan"|"cloud"|null=受理中未发出）
+                // ——failB2Flights 按源收割判据；sendCmd 两条路径（真发出/自愈受理）落账，
+                // waiter 结算点（ACK/超时）与收割点同步清账防泄漏（声明在 _halfconnInFlight
+                // 之后=行为级测试提取段内，test-halfconn T2/T5 harness 同段可跑）
+                function failB2Flights(source) { // 原自持连接 onclose 的 fail-fast 逻辑提取（#143 盲评R-1 语义保持：断线飞行命令立即判未达，fail 不 toast，命令按未达处理）
+                  // halfconn R1（P2③）：按源收割——他源断链不清本源飞行（多源并行时云掉线
+                  // 不误杀 LAN 在途）；src=null（自愈受理中未发出）不收割：等恢复照发，防
+                  // 「未达」假阴+用户重发+原重试后续真发出=真重复（relay 幂等锚管不到异 id）。
+                  // 无 source（旧调用面兜底）保持全清语义。
+                  for (const [id, v] of S.ackWaiters.entries()) {
+                    const src = _cmdSrc.get(id) ?? null;
+                    if (source && (src === null || src !== source)) continue;
+                    clearTimeout(v.t); try { v.res(null); } catch {}
+                    S.ackWaiters.delete(id); _cmdSrc.delete(id);
+                  }
                 }
+                // halfconn R1（验收 3 探针配套·__ccDeck005SourceState 同族只读/观测口）：
+                // 抖动窗重复探针据此验证「他源 close 不清本源 waiter」——真实 failB2Flights
+                // 经真实帧总线 close 事件驱动（:732 订阅链），add 只做 waiter 播种（探针/测试专用）
+                window.__ccDeck005B2FlightProbe = {
+                  add: (id, src) => {
+                    S.ackWaiters.set(id, { res: () => {}, t: setTimeout(() => {}, 1 << 30) });
+                    _cmdSrc.set(id, src ?? null);
+                  },
+                  state: () => ({ waiters: [...S.ackWaiters.keys()], cmdSrc: Object.fromEntries(_cmdSrc) }),
+                };
 
+                // halfconn（#38 族四现·1104 用户实锤「收得到发不出」）：发送路由失配自愈重试。
+                // 失配两类语义（RouteWs 的 null 混叠，源表更新路径账本见 settings-domain RouteWs 注释）：
+                // ①源表查无 sid——relay 重启后 resume 快路径无 SNAPSHOT，源表停在旧集合
+                // ②会话在册但源通道 not ready（云 status≠online / LAN ws≠OPEN——重连窗口）
+                // 自愈序：触发 __ccDeck005ResyncSource（①强制全量 SNAPSHOT 重建源表；②重连链
+                // 在途，回 online 后仍快路径的死角由每拍 re-drive 兜住——resync 内部 5s 节流），
+                // 500ms 轮询重评 RouteWs，7s 窗内恢复即真发出（command_id 预生成复用——与首发
+                // 同 id，relay 幂等去重）。受理即返回 command_id：调用方 ackWaiters/echo 生命周期
+                // 照常。halfconn R1（P3-B1 收口）：窗 8s→7s——须短于最短调用方 waiter 超时
+                //（commandAck 8s），真发出严格先于 waiter 到期，同刻竞态（先判未达后送达→
+                // 手动重发真重复）消除；窗尽静默放弃（超时收割已给用户反馈）。
+                let _halfconnInFlight = 0; // 并发自愈上限：链路级故障多命令同时失配不风暴
+                const _cmdSrc = new Map(); // halfconn R1（P2③）：飞行命令→源账（见上方 failB2Flights 注释；声明置此=测试提取段内）
+                function halfconnRetrySend(type, payload) {
+                  if (!window.__ccDeck005ResyncSource || !window.__ccDeck005RouteWs || _halfconnInFlight >= 3) return null;
+                  const cmdId = uuid();
+                  _halfconnInFlight++;
+                  const release = () => { _halfconnInFlight = Math.max(0, _halfconnInFlight - 1); };
+                  const startedAt = Date.now();
+                  const timer = setInterval(() => {
+                    const w = window.__ccDeck005RouteWs(payload);
+                    if (w && w.readyState === 1) {
+                      clearInterval(timer); release();
+                      try { w.send(JSON.stringify({ command_id: cmdId, type, payload, ts: Date.now() })); } catch {} // 发送异常：调用方超时收割
+                      return;
+                    }
+                    try { window.__ccDeck005ResyncSource(payload); } catch {} // 云回 online 后快路径源表仍旧的死角：持续 re-drive
+                    if (Date.now() - startedAt >= 7000) { clearInterval(timer); release(); }
+                  }, 500);
+                  return cmdId;
+                }
                 function sendCmd(type, payload, wsOverride) { // #150 R2 并轨：命令改走地基主连接（全页唯一 WS），ACK 经总线回 onAck 结算；W-WINPAIR-R7①：带会话的命令按会话源路由（聚合下远程会话走云链）；W-PORT-A R-2：wsOverride=新建弹窗显式目标源通道（云源创建走云 shim，最高优先）
                   const w = wsOverride || (window.__ccDeck005RouteWs ? window.__ccDeck005RouteWs(payload) : window.__ccDeck005MainWs);
                   if (!w || w.readyState !== 1) {
                     // T10：路由器显式拒发（null——两源表+桥都查不到该会话）≠ 连接断——分开设文案，
                     // 「会话不存在」类误导性错投报错从根上消除
                     const sidMiss = !wsOverride && w === null && payload && typeof payload.session_id === "string";
-                    b2Toast(sidMiss ? "会话不在已连接的源上（可能已删除或所属源离线）" : "relay 未连接，命令未发送");
+                    // halfconn：带会话的失配（查无/通道断）先自愈受理（8s 窗自动重发），不再一步死 toast
+                    if (!wsOverride && payload && typeof payload.session_id === "string") {
+                      const retried = halfconnRetrySend(type, payload);
+                      if (retried) {
+                        _cmdSrc.set(retried, null); // halfconn R1（P2③）：受理中未发出=src null——断链收割跳过（等恢复照发）
+                        b2Toast(w === null ? "会话源待同步 · 恢复后自动发送" : "连接恢复后自动发送", 3200);
+                        return retried;
+                      }
+                    }
+                    b2Toast(sidMiss ? "会话不在已连接的源上" : "relay 未连接，命令未发送", sidMiss ? 5000 : 2400,
+                      sidMiss ? { label: "立即重连", fn: () => { try { window.__ccDeck005ResyncSource && window.__ccDeck005ResyncSource(payload); } catch {} } } : null);
                     return null;
                   }
                   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
                   w.send(JSON.stringify(cmd));
+                  _cmdSrc.set(cmd.command_id, wsOverride ? null : (window.__ccDeck005LastRouteSource || null)); // halfconn R1（P2③）：飞行源落账（wsOverride=显式目标源不可判→null 免误收割）
                   return cmd.command_id;
                 }
                 function commandAck(type, payload, timeoutMs = 8000) {
                   return new Promise((resolve) => {
                     const id = sendCmd(type, payload);
                     if (!id) { resolve(null); return; }
-                    const t = setTimeout(() => { S.ackWaiters.delete(id); resolve(null); }, timeoutMs);
+                    const t = setTimeout(() => { S.ackWaiters.delete(id); _cmdSrc.delete(id); resolve(null); }, timeoutMs);
                     S.ackWaiters.set(id, { res: resolve, t });
                   });
                 }
@@ -678,7 +756,7 @@
                 window.__ccDeck005Frames.subscribe((ev) => {
                   if (ev.kind === "ws") {
                     S.status = ev.state === "open" ? "online" : "offline"; // 原 onopen/onclose 同款映射（列表 data-connection 语义不变；connecting 归 offline 同旧握手期）
-                    if (ev.state === "close") failB2Flights();
+                    if (ev.state === "close") failB2Flights(ev.source); // halfconn R1（P2③）：按源收割——他源断链/受理中不清（防幽灵重发真重复）
                     return;
                   }
                   if (ev.kind === "frame" && window.__ccDeck005FrameAllowed(ev)) handleFrame(ev.frame, ev.source); // W-WINPAIR-R2：按视角门控（aggregate 放行全部+merge）
@@ -1023,7 +1101,7 @@
                 function onAck(ack) {
                   if (!ack || typeof ack.command_id !== "string") return;
                   const w = S.ackWaiters.get(ack.command_id);
-                  if (w) { S.ackWaiters.delete(ack.command_id); clearTimeout(w.t); w.res(ack); return; }
+                  if (w) { S.ackWaiters.delete(ack.command_id); _cmdSrc.delete(ack.command_id); clearTimeout(w.t); w.res(ack); return; }
                   const af = S.artFetches.get(ack.command_id);
                   if (af) {
                     if (ack.ok === false) { failArt(ack.command_id, new Error(ack.error || "拉取失败")); return; }
@@ -1183,6 +1261,10 @@
                     pinned: session.pinned === true,
                     pmStandby: session.pm_standby === true && status !== "working", // #287 值守 PM 待命态（快照派生）：替代 DONE 假死；UI 反馈批 1029 件A：pm_standby 只随 SNAPSHOT 派生（实时帧不带、MERGE_KEYS 不收），PM 开工翻 working 后陈标残留=「干活中却显待命」矛盾——闸口收非 working 态（干活期由状态点/秒计时表达，起手窗走 #291 待开工语义，闲置 DONE 恒待命）
                     standby: status === "working" && !isRealWorking(session), // #291 帧分类判活：接单未开工/挂起（灰呼吸点+待开工标，不占在跑计数）
+                    // [W-AWAITUSER]（1104 用户令）：等用户拍板位——WAITING 且带 waiting_request
+                    //（含 AskUserQuestion 四问/权限问询/仅通知形态）。「等你拍板」chip + 列表临时
+                    // 浮顶的数据位；判定走会话帧自身状态（不依赖聚合键——旧 relay 同样生效）
+                    awaitUser: status === "waiting" && !!session.waiting_request,
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
                     idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
                   };
@@ -1316,7 +1398,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
                 // [W-RETIRED] 退休成员会话判定（renderMyList 主列表排除/归档组收集、筛选计数三处共用）——
                 // 名单来自 SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧（relay 判定源=
                 // org 两本账：非 archived 组路由在册而编制外）。null=旧 relay 零过滤兼容
@@ -1397,7 +1479,7 @@
                 // BOARD_UPDATED 帧跟随（会话域唯一新增消费点）；板缺席=「板未同步」降级文案不伪造
                 // 0/0/0；成员态/水位吃 S.sessions 现成字段。板新鲜度承诺=快照级+帧级跟随，深度实时
                 // 去团队域（域职责不越界）。泳道词表与 team-domain lanes 同源（legacy 归并+五段条）。
-                const TEAM_DRAWER_LANES = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* boardlife R2：与板面 lanes 同词（待审查→审查中） */
+                const TEAM_DRAWER_LANES = [["planned", "规划中"], ["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* boardlife R2：与板面 lanes 同词（待审查→审查中）；planlane 加 planned 最前（同 team-domain lanes 词表锚） */
                 const TEAM_DRAWER_LEGACY = { todo: "backlog", doing: "claimed" };
                 /** 纯函数拼装模型（单测锚：relay/scripts/test-session-slim.ts 纯函数直跑同范式）。
                  * boardEntries=null=板未同步（旧 relay/未随快照）——概览区走降级，不伪造空板。 */
@@ -1419,7 +1501,7 @@
                   const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
                   const entries = Array.isArray(boardEntries) ? boardEntries : null;
                   const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
-                  const activeN = lanes ? lanes.slice(0, 4).reduce((n, l) => n + l.n, 0) : null; // 在办=四未完泳道合计（done 除外）
+                  const activeN = lanes ? lanes.filter((l) => l.k !== "done").reduce((n, l) => n + l.n, 0) : null; // 在办=未完泳道合计（done 除外；planlane 起五道——slice(0,4) 位数假设废，按 k 过滤）
                   const keyTasks = entries ? entries.filter((e) => e && e.gate && e.gate.reason).slice(0, 3) : [];
                   const arts = roster.flatMap((r) => r.arts.map((a) => ({ path: String(a.path || ""), last_at: Number(a.last_at || 0), sid: r.sid, who: r.nick || r.title.slice(0, 8) }))).sort((a, b) => b.last_at - a.last_at);
                   return { gid: team ? String(team.id || "") : "", name: team ? String(team.name || "") : "", rosterN: members.length, running, roster, lanes, activeN, keyTasks, artsCount: arts.length, recentArts: arts.slice(0, 3) };
@@ -1770,7 +1852,14 @@
                   // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
                   // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
                   const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
+                  // [W-AWAITUSER]（1104 用户令）等用户拍板临时浮顶：WAITING×waiting_request
+                  //（含 AskUserQuestion/权限问询/仅通知形态）的会话卡浮到列表最顶（压过置顶
+                  // ——等用户=阻塞链最上游，1104 实锤正是没人注意）。「临时」语义：排序是
+                  // 每帧从 live 态派生的，不写任何持久位——处理完（状态翻走/请求消）自然
+                  // 回落原位（置顶/recency 原序），用户手动排序记忆（pin 标记+时间序）零破坏
+                  const awaitingUser = (x) => x.status === "WAITING" && !!x.waiting_request;
                   const sessions = liveNonRetired.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x) && !remoteHiddenHas(x.session_id)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                    const au = Number(awaitingUser(b)) - Number(awaitingUser(a)); if (au) return au; // [W-AWAITUSER] 等拍板浮顶 > 置顶 > 活跃 recency
                     const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
@@ -1809,8 +1898,12 @@
                   // 同创按名稳定序）；无成员团队不出组（筛选/搜索滤空同口径——团队组跟随过滤，不绕过）。
                   // 地基 renderSessionList 不做团队分组（transient 首屏、ctx 无 projects 字段，见回执）
                   const isActive = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
-                  const pinnedPool = sessions.filter((x) => x.pinned === true); // 已按置顶+recency 排
-                  const unpinned = sessions.filter((x) => x.pinned !== true);
+                  // [W-AWAITUSER] 等拍板池平铺最顶（置顶池之上）：排序比较器的 au 层只管池内
+                  // 序，两段式布局按 pinned 切池会把置顶卡再抬上来——等用户=阻塞链最上游，
+                  // 渲染分段同样先抽先赢（与置顶池同款无分组头平铺；处理完自然回落置顶/自然位）
+                  const awaitPool = sessions.filter((x) => awaitingUser(x)); // 已按 au>pin>recency 排
+                  const pinnedPool = sessions.filter((x) => x.pinned === true && !awaitingUser(x)); // 已按置顶+recency 排
+                  const unpinned = sessions.filter((x) => x.pinned !== true && !awaitingUser(x));
                   // #103 两段式重排（2026-10-14 用户拍板）：UIPOLISH3 件二的 team:{gid} 成员
                   // 会话组整链退役——编制内直列会话（置顶/选中中的 worker、PM/Leader）与外部
                   // 会话一律平铺进上段「置顶+普通统一段」（团队组默认折叠反而藏卡；团队呈现
@@ -1820,6 +1913,7 @@
                   // _slimHiddenIds 两记账，放行语义不变）。
                   const activeMarkup = unpinned.filter(isActive).map((x) => myCardMarkup(myCardItem(x))).join(""); // 不再按 reason 重排
                   const idleMarkup = unpinned.filter((x) => !isActive(x)).map((x) => myCardMarkup(myCardItem(x))).join("");
+                  const awaitMarkup = awaitPool.map((x) => myCardMarkup(myCardItem(x))).join(""); // [W-AWAITUSER] 等拍板池（临时浮顶层）
                   // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
                   // 加头=降格成可折叠组）。恒在 DOM（不参与折叠记账）
                   const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
@@ -1858,7 +1952,7 @@
                   // W-TEAMCHIP2 ②拼装：单段平铺（置顶+活跃+闲置，.list-upper 独占滚动）——
                   // #103 两段式下段 dock 已随本批退役
                   const tpl = document.createElement("template");
-                  tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup;
+                  tpl.innerHTML = awaitMarkup + pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup; // [W-AWAITUSER] 等拍板池恒最顶（临时浮顶，处理完该层自然消失）
                   mountUpper(tpl.content);
                 }
 
@@ -4007,7 +4101,7 @@
                     // W-ECHOFIX：ack===null（超时）且 WS 仍开=证据未定 → slow 降级（不谎报
                     // 未送达、不 toast——确认超时可自愈）；显式 NACK（ok:false）/断线 → fail 原样
                     const sendFail = (ack) => { const v = ackVerdict(ack); if (!v.ok) { if (ack == null && mainWsOpen()) { markEchoSlow(s.session_id, text); return; } b2Toast("发送失败: " + v.error); markEchoFail(s.session_id, text); } }; // #150 R3：自发命令失败回执 + R-4 失败转未送达
-                    const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sendFail(null); } }, 10000);
+                    const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); _cmdSrc.delete(id); sendFail(null); } }, 10000);
                     S.ackWaiters.set(id, { res: sendFail, t: wd });
                     UI.input.value = "";
                     slashHide(); // W-SLASH：程序清空不发 input 事件，浮层显式收起
@@ -4510,7 +4604,7 @@
                   // #368：创建已受理即记忆本次 cwd，下次新建预填；B10 历史目录列表同步 MRU
                   if (cwd) pushCreateCwd(cwd);
                   closeCreatePop();
-                  const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
+                  const wd = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); _cmdSrc.delete(id); b2Toast("新建会话 10s 无回执，可能未送达（目标源或已离线）"); } }, 10000);
                   S.ackWaiters.set(id, { res: (ack) => {
                     clearTimeout(wd);
                     if (ack && ack.ok === false && ack.needs_auth) { b2Toast("引擎未登录，未创建会话——登录引导已弹出", 5000); if (window.__ccDeck005LoginCard && eng && eng !== "auto") window.__ccDeck005LoginCard.open(eng); } // #102 批 B：fail-fast 拒绝自动弹登录卡（relay 拦截时已同步 kick，此处幂等兜底）
@@ -5312,7 +5406,7 @@
                         if (sidIsSelected(sid)) renderConversation();
                       }
                       const sf = (ack) => { const v = ackVerdict(ack); if (!v.ok) { if (ack == null && mainWsOpen()) { markEchoSlow(sid, body); return; } markEchoFail(sid, body); } }; // W-ECHOFIX：staged 托盘同款分流（超时+WS 开→slow）
-                      const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); sf(null); } }, 10000);
+                      const wd2 = setTimeout(() => { if (S.ackWaiters.has(id)) { S.ackWaiters.delete(id); _cmdSrc.delete(id); sf(null); } }, 10000);
                       S.ackWaiters.set(id, { res: sf, t: wd2 });
                       S.staged = []; renderTray(); return { sent: true };
                     }

@@ -22,6 +22,9 @@
                 const dismissedNotifyKeys = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
                 let lastRows = [];
                 let lastRenderSig = ""; // #282 签名跳帧（等待/降级分支置空防回跳脏数据） // FB18：清除动作要行信息（synth/actionable），渲染期留账
+                // observe3（1104 用户令·注意力经济学）：动态组（已处理/已读=健康态）默认折叠
+                // ——「健康态零占位」纪律；组头可点开合（会话内记忆，不持久化——重开面板回默认收起）。
+                let dynamicCollapsed = true;
                 // #B3-17 新通知入场动画：仅首见行挂 .enter（首帧存量不动画，防整列闪烁）
                 const seenNotifyKeys = new Set();
                 let notifySeenInit = false;
@@ -70,14 +73,32 @@
                 // W-WINPAIR-R8②：时间戳单位归一——acceptance/confirm 的 created_at 是秒级
                 // （bin/acceptance 契约，W-NQA F6 同族），按毫秒解析会显 1970-01-2x；<1e11 视作秒 ×1000
                 const normTs = (v) => { const n = Number(v) || 0; return n > 0 && n < 1e11 ? n * 1000 : n; };
+                // [W-AWAITUSER]（1104 用户令）待拍板匹配器：行是否在 relay 聚合清单
+                //（pending_user_actions 单源权威——端上不拼三源）。null=旧 relay 能力缺席，
+                // 恒 false=排序与 chip 降级为现状。waiting 按 sessionId 配对（聚合 entity_id
+                // =会话 id）；confirm/acceptance 按 entityId/source.id
+                function userPendingIndex() {
+                  if (!Array.isArray(bridge.pendingUserActions)) return null;
+                  const set = new Set();
+                  for (const p of bridge.pendingUserActions) {
+                    if (p && typeof p.kind === "string" && typeof p.entity_id === "string") set.add(p.kind + ":" + p.entity_id);
+                  }
+                  return set;
+                }
+                const isUserPending = (set, kind, entityId) => !!(set && kind && entityId && set.has(kind + ":" + entityId));
                 function buildRows() {
                   const rows = [];
+                  const pending = userPendingIndex();
                   for (const n of bridge.notifications) {
                     if (flight.has(n.key) || dismissedNotifyKeys.has(n.key)) continue;
                     const session = sessionOf(n);
+                    const entityId = n.kind === "waiting"
+                      ? (n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "")
+                      : (n.sourceContext && typeof n.sourceContext.entityId === "string" ? n.sourceContext.entityId : "");
                     rows.push({
                       synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: normTs(n.created_at),
                       unresolved: !doneOf(n), active: !doneOf(n) && n.actionable === true, actionable: n.actionable === true,
+                      userPending: isUserPending(pending, n.kind, entityId) && !doneOf(n),
                       source: n, engine: session ? session.engine : "", sessionTitle: session ? (session.title || session.initial_prompt || "") : "",
                       sessionId: n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "",
                       segment: n.sourceContext && typeof n.sourceContext.segment === "string" ? n.sourceContext.segment : "",
@@ -87,16 +108,19 @@
                     if (dismissedNotifyKeys.has("confirm:" + confirm.id)) continue;
                     const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOf(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
                     if (covered) continue;
-                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, userPending: isUserPending(pending, "org-confirm", confirm.id), source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
                   }
                   const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
                   if (!hasAcceptanceChannel) {
                     for (const acceptance of bridge.accepts) {
                       if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
-                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
+                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, userPending: isUserPending(pending, "acceptance", acceptance.id), source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
                     }
                   }
-                  rows.sort((a, b) => Number(b.active) - Number(a.active) || b.ts - a.ts);
+                  // [W-AWAITUSER] 待拍板顶格：扩同一排序器（需人优先 active 键之前加
+                  // userPending 键——不造第二排序器、不改三分组结构，observe3
+                  //「需你行动组首位」锚不动；组内待拍板行置顶，其余按原序）
+                  rows.sort((a, b) => Number(b.userPending === true) - Number(a.userPending === true) || Number(b.active) - Number(a.active) || b.ts - a.ts);
                   return rows;
                 }
 
@@ -141,7 +165,7 @@
                   // clamp2+tooltip / L3 摘要+内联操作）+右侧 act/× 列；» 引导符退役
                   return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
+                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
                     + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + (act ? '<span class="act-slot">' + act + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪 */
                     + x + "</div>";
                 }
@@ -201,7 +225,10 @@
                   const attentionRows0 = rows.filter((r) => !r.active && r.unresolved);
                   const dynamicRows0 = rows.filter((r) => !r.unresolved);
                   const sig = rows.map((r) => r.key + ":" + (r.isNew ? 1 : 0) + ":" + (r.active ? 1 : 0) + ":" + (r.unresolved ? 1 : 0)).join("|")
-                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length;
+                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length
+                    + (dynamicCollapsed ? "#dyn-collapsed" : "#dyn-open") // observe3：折叠态入签名（切换必重渲）
+                    // [W-AWAITUSER] userPending 位入签名（顶格/chip 变化必重渲）
+                    + "#au:" + rows.filter((r) => r.userPending).map((r) => r.key).join(",");
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
@@ -226,18 +253,19 @@
                   // p2-batch2 修（notify 审 P2-组清空越组）：grpClear 带组别（y=注意/n=动态）
                   // ——旧版两组合用 "soft" 调 clearSoftNotifications（清全部非 active=点「注意」
                   // 把「动态」也清了）；本版按组精确清
-                  const group = (label, dot, items, grpClear) => items.length
-                    ? '<div class="ngrp" data-notify-grp="' + (dot === "r" ? "r" : dot) + '"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
+                  const group = (label, dot, items, grpClear, collapsible) => items.length
+                    ? '<div class="ngrp' + (collapsible ? " ngrp-fold" : "") + '"' + (collapsible ? ' data-notify-grp-toggle="1" role="button" tabindex="0" title="展开/收起已处理动态"' : "") + ' data-notify-grp="' + (dot === "r" ? "r" : dot) + '"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
+                      + '<span class="caret">' + (collapsible ? (dynamicCollapsed ? "▸" : "▾") : "") + '</span>'
                       + '<span class="cnt">' + items.length + "</span>"
-                      + (grpClear ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
-                      + "</div>" + items.map(rowMarkup).join("")
+                      + (grpClear && (!collapsible || !dynamicCollapsed) ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
+                      + "</div>" + (collapsible && dynamicCollapsed ? "" : items.map(rowMarkup).join(""))
                     : "";
                   if (rows.length) {
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
                     const flatHtml = group("需你行动", "r", actionRows, "")
                       + group("注意", "y", attentionRows, "y")
-                      + group("动态", "n", dynamicRows, "n");
+                      + group("动态", "n", dynamicRows, "n", true); // observe3：健康态默认折叠零占位，组头点开
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
@@ -427,8 +455,14 @@
                   const target = event.target;
                   if (target.closest("[data-notify-mask]")) { closePanel(); return; } // B2 点外收起（遮罩命中层；面板内 mousedown 不达遮罩=不穿透）
                   if (target.closest("[data-notify-close]")) { closePanel(); return; } // 头部 ×（三路径共享退场）
+                  // observe3 R1 P1-2（A 审 DOM 探针实证）：清空钮判定必须**先于**折叠开合——
+                  // 清空钮渲染在携带 data-notify-grp-toggle 的组头内，closest 沿祖先链上行
+                  // 必先命中组头（「button 自带 target」是错误断言），先判 toggle=清空钮
+                  // 永远走开合分支=死路。钮自带 data-notify-grp-clear 先命中即清空。
                   const grpClear = target.closest("[data-notify-grp-clear]");
                   if (grpClear) { clearGroupNotifications(grpClear.dataset.notifyGrpClear === "y" ? "y" : "n"); return; } // p2-batch2：按组精确清（y=注意/n=动态）
+                  const grpToggle = target.closest("[data-notify-grp-toggle]");
+                  if (grpToggle) { dynamicCollapsed = !dynamicCollapsed; render(); return; } // observe3：健康态折叠开合（组头空白区点击）
                   const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
                   if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");

@@ -581,7 +581,7 @@ function connectLan(ctx) {
     if (msg.type === "COMMAND_ACK") Team.onAck(msg.payload || msg); // #143 Leader 接线（B3-C4）：ACK 消费；#150 R1 不再 return——ACK 同帧进总线，桥侧 ackWaiters 在总线结算
     else {
       if (msg.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
-      onEvent(ctx, msg);
+      onEvent(ctx, msg); // halfconn：_lastFrameAt 刷新内聚于 onEvent（地基帧统一入口）
     }
     window.__ccDeck005Frames.emit({ kind: "frame", frame: msg, source: "lan" }); // #150 R1 帧总线：地基唯一持连，原始帧（含 COMMAND_ACK）统一 fan-out，域脚本不再各自分接；W-WINPAIR-R2 带 source 标记（订阅方按视角门控）
   };
@@ -664,6 +664,25 @@ function connectLan(ctx) {
       document.querySelectorAll("[data-source-conn]").forEach((el) => {
         el.innerHTML = SOURCE_CONN_SVG; /* 用户 1102：桌面壳也用电脑图标（状态色随 sourceDotClass） */
       });
+      // halfconn 徽标诚实（1104 用户实锤「显示未连接但消息还在到」）：视角源下行近期
+      // （45s，盖 relay 20s 心跳两拍）仍有帧 = 链路半通（重连窗/HTTP 轮询降级/桥中转抖动），
+      // 徽标显「重连中」而非「未连接」——状态面不再说谎（上行通不通由发送路径自愈兜底）
+      const RECONNECT_GRACE_MS = 45000;
+      function sourceDownstreamAlive() {
+        const c = viewSource() === "cloud" ? cloudCtx : ctx;
+        return !!(c && c._lastFrameAt && Date.now() - c._lastFrameAt < RECONNECT_GRACE_MS);
+      }
+      // halfconn：帧到达驱动的徽标重渲（节流 2s）——半连接窗口内（offline + 帧仍在到）
+      // 胶囊从「未连接」翻「重连中」只靠连接事件刷不到，帧面补一拍（rAF 合帧）
+      let _badgeRefreshAt = 0;
+      function scheduleConnBadgeRefresh() {
+        if (Date.now() - _badgeRefreshAt < 2000) return;
+        _badgeRefreshAt = Date.now();
+        requestAnimationFrame(() => { try { refreshSourceSwitchers(); } catch {} });
+      }
+      // halfconn R1（A审 P1-① 补）：45s 到期反向翻转（重连中→未连接）无帧事件可依——
+      // 秒针拍（下方 1s interval）检测 alive 态位变化驱动一刷（转发到该 interval 内执行）
+      let _halfconnAliveSeen;
       function refreshSourceSwitchers() {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
@@ -696,7 +715,7 @@ function connectLan(ctx) {
               el.append(document.createTextNode(name));
               const note = document.createElement("span");
               note.className = "src-conn-note";
-              note.textContent = " · 未连接";
+              note.textContent = sourceDownstreamAlive() ? " · 重连中" : " · 未连接"; // halfconn 徽标诚实：下行仍活不谎报未连接
               el.append(note);
             } else { el.textContent = name; }
           });
@@ -3449,14 +3468,49 @@ function connectLan(ctx) {
         onEvent(c, { type: "SNAPSHOT", payload: payload && typeof payload === "object" ? payload : { sessions: [] } });
         window.__ccDeck005Frames.emit({ kind: "frame", source, frame: { type: "SNAPSHOT", payload } });
       };
+      // halfconn R1（P1-① 探针配套·IngestSnapshot 同族注入口）：增量帧直进地基 onEvent——
+      // 不走 SNAPSHOT 分支的 refresh 旁路（双审定罪探针③原证据窄化正是该旁路掩盖死码），
+      // 探针③据此注入 SESSION_LOG 等增量帧型实证「帧驱动徽标重渲」接线。仅测试/探针消费。
+      window.__ccDeck005IngestFrame = (source, message) => {
+        const c = source === "cloud" ? cloudCtx : ctx;
+        onEvent(c, message && typeof message === "object" ? message : { type: "SESSION_LOG", payload: [] });
+      };
       // W-WINPAIR-R7①：聚合发送按会话源路由（test.21 核心闭环）——命令 payload 带会话 id 时查
       // 所属源定通道：云源会话走云 shim 密封上行（本机 relay 查无此会话=「会话不存在」根修），
       // 本机会话走 LAN socket；不带会话的命令维持视角通道。ACK 按 command_id 从总线结算不锚 socket
+      //
+      // 【halfconn 源集合更新路径账本（1104 用户实锤「收得到发不出」）——新增写路径必须挂同步】
+      // 路由查的三张表及其全部写口（读点即下方 RouteWs / detectSourceOfSid）：
+      // ① SNAPSHOT 整替：地基 onEvent（ctx/cloudCtx.sessions 重建）+ B4 applySnapshot 整替
+      // ② SESSION_CREATED 建卡：B4 handleFrame + B2 onSessionCreated（relay 运行期新建会话；
+      //    relay 重启收养会话只广播 SESSION_UPDATED（relay/src/index.ts 收养循环），不走此路）
+      // ③ SESSIONS_RECONCILE 清卡：B2 onReconcile——只清不建（清多余死卡方向）
+      // ④ 显式 clear：删源（deleteCloudServer）/ 切源（activateCloudServer）/ 换址（submitAddServer）
+      // ⑤ resume 快路径不重建：relay 侧 last_seq 在缓冲内只补发增量+RECONCILE 不发 SNAPSHOT
+      //    （ws-server.ts 快路径 / cloud-client.ts resumePhone）——源表停在重连前集合
+      // 半连接组合：⑤的旧集合 + ②缺失（收养广播 SESSION_UPDATED 对未持卡三处静默丢——
+      // B4 SESSION_MERGE_TYPES miss 不建卡 / B2 onSessionUpdated `if (!s) return`）+ 下行
+      // SESSION_LOG 不查卡（pushLog 对未知 sid 也建 timeline）=「收得到发不出」。
+      // 自愈单点：__ccDeck005ResyncSource（紧邻下方）——发送路由 miss 时强制全量重建①。
       window.__ccDeck005RouteWs = (payload) => {
+        // halfconn R1（P2③·双审）：本次路由的源标记（lan|cloud|null=拒发/未路由）——
+        // failB2Flights 按源收割的判据（B2 sendCmd 返回后同步读取）。入口置 null，
+        // 命中分支返回前赋值；拒发路径保持 null=「未发出」不被断链收割。
+        window.__ccDeck005LastRouteSource = null;
         const sid = payload && typeof payload === "object" ? String(payload.session_id || payload.sid || "") : "";
-        if (!sid) return window.__ccDeck005MainWs || ctx.ws;
-        if (cloudCtx.sessions.has(sid)) return cloudCtx.status === "online" ? cloudCmdShim : null;
-        if (ctx.sessions.has(sid)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+        if (!sid) { window.__ccDeck005LastRouteSource = "lan"; return window.__ccDeck005MainWs || ctx.ws; }
+        if (cloudCtx.sessions.has(sid)) {
+          // halfconn R1（P2③）：null 返回不清源标记（入口已置 null）——failB2Flights 据此
+          // 只收割「真发出过且源已知」的飞行，拒发/未就绪不被断链收割
+          if (cloudCtx.status !== "online") return null;
+          window.__ccDeck005LastRouteSource = "cloud";
+          return cloudCmdShim;
+        }
+        if (ctx.sessions.has(sid)) {
+          if (!ctx.ws || ctx.ws.readyState !== 1) return null;
+          window.__ccDeck005LastRouteSource = "lan";
+          return ctx.ws;
+        }
         // T10 根修：聚合视图桥兜底泛化——地基链 onEvent 只锚 SNAPSHOT（增量帧不进 ctx.sessions），
         // SNAPSHOT 之后新建的会话只有 B4 桥实时持有；旧版桥 SESSION_CREATED 建卡无源标 → 本分支
         // miss → 盲投视角通道（云视角=云 shim）→ 云 relay 查无此会话报「会话不存在: <完整id>」
@@ -3469,11 +3523,77 @@ function connectLan(ctx) {
         // relay_channel（channel="lan" 的卡仍 bsCloud=true）——SNAPSHOT merge 的 relay_source 打标
         // 就地污染 payload 对象（onEvent 先于总线 emit），桥浅拷贝常态带入，同名即误投云 shim。
         const bsCloud = !!(bs && (bs.relay_channel ? bs.relay_channel === "cloud" : (bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source))));
-        if (bsCloud) return cloudCtx.status === "online" ? cloudCmdShim : null;
-        if (bs && (bs.relay_channel === "lan" || bs.relay_source)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+        if (bsCloud) {
+          if (cloudCtx.status !== "online") return null;
+          window.__ccDeck005LastRouteSource = "cloud";
+          return cloudCmdShim;
+        }
+        if (bs && (bs.relay_channel === "lan" || bs.relay_source)) {
+          if (!ctx.ws || ctx.ws.readyState !== 1) return null;
+          window.__ccDeck005LastRouteSource = "lan";
+          return ctx.ws;
+        }
         // 两源表 + 桥都查不到：拒发——会话可能已删/所属源离线，盲投视角通道只会产出误导性的
         // 「会话不存在: <id>」（错投报错带完整 id，排查被带偏），明确拒发让端上给可操作提示
         return null;
+      };
+      // halfconn（#38 族四现·1104 用户实锤）：sid→源判定（resyncSource 的目标选择）——
+      // 与 RouteWs 同序同据（源表→桥→通道字段→名字比对），只读不写
+      function detectSourceOfSid(sid) {
+        if (cloudCtx.sessions.has(sid)) return "cloud";
+        if (ctx.sessions.has(sid)) return "lan";
+        const bs = window.__ccDeck005B4 && window.__ccDeck005B4.sessions.get(sid);
+        if (bs) {
+          if (bs.relay_channel === "cloud") return "cloud";
+          if (bs.relay_channel === "lan") return "lan";
+          if (bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source)) return "cloud";
+          if (bs.relay_source) return "lan";
+        }
+        return null; // 三表全 miss：源不可判定，调用方双源齐试（幂等无害）
+      }
+      // halfconn 源重同步单点——发送路由失配（①查无 sid/②源通道 not ready）时的自愈动作：
+      // 云链 = ping last_seq=0（relay resumePhone(0) 语义 = 无视缓冲直接全量 SNAPSHOT，源表
+      //   整替重建；云桥在线即生效，离线时自动重连链已有、本调用自然空转）
+      // LAN = 临时 ws 不带 last_seq 拉一帧 SNAPSHOT 喂地基（1013 件9 先例：relay 判新客户端
+      //   推全量；主连接零扰动——不断在途 ACK）。
+      // 幂等去重：单源 5s 窗（源级节流，多命令同时失配不风暴）。B2 sendCmd / sidMiss toast
+      // 动作钮双消费（自动重试路径 + 用户手动点击）。
+      let _lanResyncAt = 0, _lanResyncBusy = false, _cloudResyncAt = 0;
+      function lanResyncOnce() {
+        if (_lanResyncBusy || Date.now() - _lanResyncAt < 5000) return;
+        const url = ctx.cfg && ctx.cfg.wsUrl;
+        if (!url || !ctx.cfg.token) return; // 未配置态无从重同步
+        _lanResyncBusy = true; _lanResyncAt = Date.now();
+        const done = () => { _lanResyncBusy = false; };
+        try {
+          const w = new WebSocket(url + "?token=" + encodeURIComponent(ctx.cfg.token)); // 同 connectLan 鉴权同构；不带 last_seq = relay 判新客户端推全量
+          const kill = setTimeout(() => { try { w.close(); } catch {} done(); }, 4000);
+          w.onmessage = (ev) => {
+            let msg = null;
+            try { msg = JSON.parse(ev.data); } catch { return; }
+            if (!msg || msg.type !== "SNAPSHOT") return;
+            clearTimeout(kill);
+            try { w.close(); } catch {}
+            done();
+            onEvent(ctx, msg); // 源表整替（账本①写口）
+            window.__ccDeck005Frames.emit({ kind: "frame", frame: msg, source: "lan" }); // 总线 fan-out：B4/B2/团队域全量重渲（与 refreshAllData 同套路）
+          };
+          w.onerror = () => { clearTimeout(kill); done(); };
+          w.onclose = () => { clearTimeout(kill); done(); };
+        } catch { done(); }
+      }
+      function cloudResyncOnce() {
+        if (Date.now() - _cloudResyncAt < 5000) return;
+        _cloudResyncAt = Date.now();
+        if (cloudCtx.status !== "online") return; // 离线窗口：自动重连链在职，ping 无处可去
+        try { sendCloud(cloudCtx, { t: "ping", last_seq: 0 }); } catch {} // resumePhone(0)=强制全量 SNAPSHOT
+      }
+      window.__ccDeck005ResyncSource = (payload) => {
+        const sid = payload && typeof payload === "object" ? String(payload.session_id || payload.sid || "") : "";
+        const src = sid ? detectSourceOfSid(sid) : null;
+        if (src === "lan" || src === null) lanResyncOnce();
+        if (src === "cloud" || src === null) cloudResyncOnce();
+        return src;
       };
       // W-PORT-A R-2：目标源显式通道（新建弹窗「创建到」行消费）——cloud=云 shim（在线才有），
       // local=LAN socket。与 RouteWs（按会话归属路由）互补：CREATE 类无 session_id 的命令按显式选择走。
@@ -3720,7 +3840,12 @@ function connectLan(ctx) {
         return n && n !== "云桥" ? n : (hostOf(entry && entry.wsUrl) || "云桥");
       }
       function sdelSubLine(s, isCur, paired) {
-        if (isCur) return (cloudCtx.statusText || "未连接") + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "");
+        if (isCur) {
+          // halfconn 徽标诚实：云链离线但下行帧仍在到（重连窗/轮询降级）= 半连接，显「重连中」
+          const halfAlive = cloudCtx.status !== "online" && cloudCtx._lastFrameAt && Date.now() - cloudCtx._lastFrameAt < RECONNECT_GRACE_MS;
+          const base = halfAlive ? "重连中" : (cloudCtx.statusText || "未连接");
+          return base + (cloudCtx.transport === "poll" ? " · HTTP 轮询" : "");
+        }
         return s.wsUrl ? hostOf(s.wsUrl) : "未配置"; // 视觉审查①：副行只留地址，配对状态统一交给右侧 tag（不做双份）
       }
       function sdelServerRows(mobile) {
@@ -4056,6 +4181,8 @@ function connectLan(ctx) {
       };
 
       function onEvent(context, message) {
+        context._lastFrameAt = Date.now(); // halfconn（#38 族四现）：地基帧统一入口刷最近帧时刻（LAN onmessage / 云 onCloudText / IngestSnapshot 注入三路全覆盖——徽标诚实判定与云 #259 看门狗共用锚）
+        scheduleConnBadgeRefresh(); // halfconn R1（P1-①·双审定罪死码）：帧驱动徽标重渲接线——增量帧窗（SESSION_LOG 等，恰是「显示未连接但消息还在到」用户实锤形态）不触发 SNAPSHOT/连接事件旁路，胶囊翻转只能靠这里；函数自带 2s 节流+rAF 零风暴
         // #143 Leader 接线：团队域帧（SNAPSHOT 团队字段/三事件）；W-WINPAIR-R2：并行多源下团队域跟
         // 视角源走（cloud 视角吃云帧的团队字段，local/aggregate 吃本机——两源 SNAPSHOT 不互相覆盖团队域）。
         // W-WINPAIR-R3 补：视角错位的 SNAPSHOT 不丢——每源自存完整 payload，setSourceView 切换时
@@ -4654,6 +4781,13 @@ function connectLan(ctx) {
         } catch (_) {}
       }, 5000);
       setInterval(() => {
+        // halfconn R1（A审 P1-① 补）：45s 窗尽/窗内跨越的徽标反向翻转（重连中→未连接
+        // 或对侧）无帧可依——秒针拍检测 sourceDownstreamAlive 态位变化，变即刷
+        //（scheduleConnBadgeRefresh 自带 2s 节流；常态零态变=零重渲）
+        try {
+          const alive = sourceDownstreamAlive();
+          if (alive !== _halfconnAliveSeen) { _halfconnAliveSeen = alive; scheduleConnBadgeRefresh(); }
+        } catch {}
         if (sessionList.dataset.b2Owned === "1") return; // #143 盲评A-2：B2 自有走秒定时器，双写互覆盖让位
         sessionList.querySelectorAll(".queue-card").forEach((card) => {
           const session = ctx.sessions.get(card.dataset.sessionCard);

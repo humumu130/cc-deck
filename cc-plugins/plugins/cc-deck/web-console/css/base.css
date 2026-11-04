@@ -1560,6 +1560,7 @@
     #d-team .board-progress { display: flex; height: 8px; gap: 2px; margin-top: 0; overflow: hidden; border-radius: 4px; background: var(--bg1); }
     #d-team .board-progress i { display: block; flex: 0 0 auto; min-width: 2px; height: 100%; transition: width .2s ease; } /* t25fix #7：段间分隔改 gap 露底实现（border-left 会占段宽，窄窗小段被分隔线吃掉=「遮挡」观感）；有任务的段 min-width 2px 保底可见（全灰=0 宽段堆叠观感之一） */
     #d-team .board-progress .backlog { background: var(--p-backlog); }
+    #d-team .board-progress .planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
     #d-team .board-progress .claimed { background: var(--p-claimed); }
     #d-team .board-progress .submitted { background: var(--p-submitted); }
     #d-team .board-progress .ready_to_install { background: var(--p-ready); }
@@ -1681,6 +1682,14 @@
     .task-title .tchip.prio-p0, .task-title .tchip.prio-p1 { flex: none; padding: 1px 6px; border-radius: 5px; font-size: var(--fs-micro); font-weight: 700; letter-spacing: .4px; }
     .task-title .tchip.prio-p0 { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); }
     .task-title .tchip.prio-p1 { background: color-mix(in srgb, var(--st-working) 18%, transparent); color: var(--st-working); }
+    /* prchip（1104 用户问）：PR 徽章 chip——审查期 PR 可见可直达；CI 点色轴=既有
+       变量零新色（绿 --done / 红 --error / 灰 --faint），hover 同 owner-jump 惯例 */
+    .task-title .tchip.pr-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid transparent; border-radius: 5px; background: var(--bg1); color: var(--card-sub); font-size: var(--fs-micro); font-weight: 600; letter-spacing: .3px; cursor: pointer; }
+    .task-title .tchip.pr-chip:hover, .task-title .tchip.pr-chip:focus-visible { border-color: var(--border-strong); color: var(--brand); }
+    .task-title .tchip.pr-chip .pr-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .task-title .tchip.pr-chip .pr-dot.ok { background: var(--done); }
+    .task-title .tchip.pr-chip .pr-dot.bad { background: var(--error); }
+    .task-title .tchip.pr-chip .pr-dot.mid { background: var(--faint); }
     /* 审查 B-P1-1：优先级条改顶部 2.5px——左缘被 data-stripe ::before（3px 不透明
        定位伪元素）整段遮挡（原左缘条不可见）；顶部无竞争元素，P1 色与 claimed 泳道
        条同 token 的撞色面也随位置分离消解 */
@@ -1711,6 +1720,7 @@
     #d-team .task-card.task-done { opacity: .45; }
     #d-team .task-card.task-done .task-title strong { color: var(--text); font-weight: 500; }
     #d-team .task-flag { margin-top: 5px; color: var(--error); font-size: var(--fs-C); }
+    #d-team .task-planacts { display: flex; align-items: center; gap: 6px; margin-top: 6px; } /* planlane：planned 卡操作行（排产/废弃，.tag 动作钮惯例） */
     #d-team .boardfoot { flex: 0 0 auto; margin: 0 18px; padding: 8px 0 10px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: var(--fs-C); line-height: 1.7; }
     /* lane-subhead 退役兜底（markup 已停产出；防历史快照/旧缓存渲染残留） */
     #d-team .lane-subhead { display: none; }
@@ -1757,6 +1767,15 @@
     .activity-row .act-consume { display: inline-block; width: 7px; height: 7px; border-radius: 4px; background: var(--faint); margin: 0 5px 0 1px; vertical-align: middle; }
     .activity-row .act-consume.consumed { background: var(--done); }
     .tag.dispatched-flag { color: var(--working); border-color: var(--brand-line); background: var(--brand-soft); flex: none; }
+    /* [W-AWAITUSER] 等你拍板 chip（会话卡）：橙=待动作既有语义（.tag.action 同轴，
+       描边强调一级——等拍板是比「处理」CTA 更具体的行动指向），flex none 防挤压标题 */
+    .tag.awaitu-flag { color: var(--brand-strong); border-color: var(--brand-line); background: var(--action-bg); flex: none; font-weight: 600; }
+    /* [W-AWAITUSER] 团队域检查器「等你拍板」入口行：整行热区（W3P-P2-7 整卡触达同款
+       ≥44px 心智），左标签+右计数+› 引导；hover 提亮（settings-row 同族语言） */
+    .awaitu-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 10px; margin: 0 0 6px; border: 1px solid var(--tag-border); border-radius: 8px; background: var(--tag-bg); color: var(--text); font: inherit; font-size: var(--fs-C); text-align: left; cursor: pointer; }
+    .awaitu-row:hover { border-color: var(--brand-line); background: var(--action-bg); }
+    .awaitu-row strong { flex: 1; min-width: 0; font-weight: 600; }
+    .awaitu-row .chev { color: var(--faint); flex: none; }
         #d-team .activity-row .act-glyph { flex: none; width: auto; height: auto; margin: 0; border: 0; background: none; box-shadow: none; color: var(--st-closed); font: var(--fs-C)/1.5 var(--mono); }
     #d-team .activity-row .act-consume { flex: none; width: 7px; height: 7px; margin: 0 5px 0 1px; border-radius: 50%; background: var(--faint); display: inline-block; vertical-align: middle; } /* W-DISPVIS B4：注入/消费两态点——灰=已注入未消费 */
     #d-team .activity-row .act-consume.consumed { background: var(--done); } /* 绿=已消费（CLI 已真实吃下——同 id 末行到达 running/done/failed） */
@@ -2705,6 +2724,7 @@
     .team-drawer .lane-bar { display: flex; gap: 2px; height: 7px; margin: 2px 2px 5px; border-radius: 4px; overflow: hidden; }
     .team-drawer .lane-bar i { min-width: 2px; border-radius: 1px; } /* 段宽走内联 flex-grow（team-domain board-progress 同语汇） */
     .team-drawer .lane-bar i.backlog { background: var(--p-backlog); }
+    .team-drawer .lane-bar i.planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
     .team-drawer .lane-bar i.claimed { background: var(--p-claimed); }
     .team-drawer .lane-bar i.submitted { background: var(--p-submitted); }
     .team-drawer .lane-bar i.ready_to_install { background: var(--p-ready); }
@@ -2945,6 +2965,11 @@
       border-bottom: 1px solid var(--line-soft);
       border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent);
     }
+    /* observe3（1104 注意力经济学）：动态组（健康态）默认折叠——组头可点开合，caret 复用
+       既有折叠头字符语言（▸/▾），零新色零新 token */
+    .ngrp.ngrp-fold { cursor: pointer; user-select: none; }
+    .ngrp.ngrp-fold:hover .caret { color: var(--text); }
+    .ngrp .caret { font-size: 10px; color: var(--faint); line-height: 1; }
     .ngrp .cnt {
       font-variant-numeric: tabular-nums; font-weight: 600; font-size: 11px; line-height: 16px;
       color: var(--dim); background: var(--hover); border-radius: 9px; padding: 0 7px;
@@ -2985,6 +3010,15 @@
     .nbadge-acceptance { color: #6EE7B7; background: rgba(52, 211, 153, .14); border: 1px solid rgba(52, 211, 153, .24); }
     .nbadge-system { color: #CBD5E1; background: rgba(148, 163, 184, .14); border: 1px solid rgba(148, 163, 184, .24); }
     .nbadge-alarm { color: #FCA5A5; background: rgba(248, 113, 113, .14); border: 1px solid rgba(248, 113, 113, .24); }
+    /* [W-AWAITUSER] 等你拍板 chip：橙=待动作既有语义色轴（与 nbadge-waiting 同
+       amber 族，禁新色纪律），实底 dot 脉冲一行内唯一动效——「等你拍板」与
+       kind badge 并列（kind 说来源，chip 说紧急度） */
+    .awaitu-chip { color: #FBBF24; background: rgba(245, 158, 11, .18); border: 1px solid rgba(245, 158, 11, .38); gap: 5px; }
+    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; animation: awaitu-pulse 2.2s ease-in-out infinite; }
+    @keyframes awaitu-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    html[data-theme="light"] .awaitu-chip { color: #B45309; }
+    html[data-theme="light"] .awaitu-chip .awaitu-dot { background: #B45309; }
+    @media (prefers-reduced-motion: reduce) { .awaitu-chip .awaitu-dot { animation: none; } }
     html[data-theme="light"] .nbadge-waiting { color: #B45309; } html[data-theme="light"] .nbadge-confirm { color: #7C3AED; }
     html[data-theme="light"] .nbadge-dispatch { color: #2563EB; } html[data-theme="light"] .nbadge-acceptance { color: #059669; }
     html[data-theme="light"] .nbadge-system { color: #64748B; } html[data-theme="light"] .nbadge-alarm { color: #DC2626; }
