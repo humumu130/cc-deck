@@ -70863,6 +70863,23 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
   const webRoot = webRootCandidates.find((p) => p && existsSync39(join59(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
+  const readVer = (p, re) => {
+    try {
+      const m = readFileSync50(p, "utf-8").match(re);
+      return m?.[1] ?? "";
+    } catch {
+      return "";
+    }
+  };
+  const ver005 = readVer(join59(webRoot, "web-console", "index-005.html"), /__ccDeck005Version\s*=\s*"([^"]+)"/);
+  const verLegacy = readVer(join59(webRoot, "web-console", "index.html"), /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
+  const verRelay = process.env.CCR_RELAY_VERSION ?? "";
+  if (ver005 && verLegacy && ver005 !== verLegacy) {
+    console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
+  }
+  if (verRelay && (ver005 && ver005 !== verRelay || verLegacy && verLegacy !== verRelay)) {
+    console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1Arelay=${verRelay} \u4E0E console \u4E0D\u4E00\u81F4\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014relay.mjs \u4E0E web-console \u975E\u540C\u6279\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
+  }
   const consoleHtml005 = join59(webRoot, "web-console", "index-005.html");
   const naclJs = join59(webRoot, "web-console", "nacl.js");
   const qrJs = join59(webRoot, "web-console", "qr.js");
@@ -71094,7 +71111,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
     }
     if (req.method === "GET" && url.pathname === "/health") {
-      res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+      res.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005, consoleLegacy: verLegacy } })
+      );
       return;
     }
     if (req.method === "GET" && url.pathname === "/local-info") {
@@ -71102,7 +71121,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
       const origin = (req.headers.origin ?? "").trim();
       const ips = localIps();
-      const hostTrusted = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      const hostTrusted = (h) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || ips.has(h);
       let allowOrigin = "";
       if (origin) {
         try {
@@ -71151,7 +71170,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const origin = (req.headers.origin ?? "").trim();
       const ips = localIps();
-      const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || ips.has(h);
       let acao = "";
       if (origin) {
         try {
@@ -71842,7 +71861,7 @@ async function handlePluginConfig(req, res) {
   const url = new URL(req.url ?? "/", "http://localhost");
   const origin = (req.headers.origin ?? "").trim();
   const ips = localIps();
-  const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+  const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || ips.has(h);
   let acao = "";
   if (origin) {
     try {
