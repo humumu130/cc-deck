@@ -680,6 +680,9 @@ function connectLan(ctx) {
         _badgeRefreshAt = Date.now();
         requestAnimationFrame(() => { try { refreshSourceSwitchers(); } catch {} });
       }
+      // halfconn R1（A审 P1-① 补）：45s 到期反向翻转（重连中→未连接）无帧事件可依——
+      // 秒针拍（下方 1s interval）检测 alive 态位变化驱动一刷（转发到该 interval 内执行）
+      let _halfconnAliveSeen;
       function refreshSourceSwitchers() {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
@@ -3465,6 +3468,13 @@ function connectLan(ctx) {
         onEvent(c, { type: "SNAPSHOT", payload: payload && typeof payload === "object" ? payload : { sessions: [] } });
         window.__ccDeck005Frames.emit({ kind: "frame", source, frame: { type: "SNAPSHOT", payload } });
       };
+      // halfconn R1（P1-① 探针配套·IngestSnapshot 同族注入口）：增量帧直进地基 onEvent——
+      // 不走 SNAPSHOT 分支的 refresh 旁路（双审定罪探针③原证据窄化正是该旁路掩盖死码），
+      // 探针③据此注入 SESSION_LOG 等增量帧型实证「帧驱动徽标重渲」接线。仅测试/探针消费。
+      window.__ccDeck005IngestFrame = (source, message) => {
+        const c = source === "cloud" ? cloudCtx : ctx;
+        onEvent(c, message && typeof message === "object" ? message : { type: "SESSION_LOG", payload: [] });
+      };
       // W-WINPAIR-R7①：聚合发送按会话源路由（test.21 核心闭环）——命令 payload 带会话 id 时查
       // 所属源定通道：云源会话走云 shim 密封上行（本机 relay 查无此会话=「会话不存在」根修），
       // 本机会话走 LAN socket；不带会话的命令维持视角通道。ACK 按 command_id 从总线结算不锚 socket
@@ -3483,10 +3493,24 @@ function connectLan(ctx) {
       // SESSION_LOG 不查卡（pushLog 对未知 sid 也建 timeline）=「收得到发不出」。
       // 自愈单点：__ccDeck005ResyncSource（紧邻下方）——发送路由 miss 时强制全量重建①。
       window.__ccDeck005RouteWs = (payload) => {
+        // halfconn R1（P2③·双审）：本次路由的源标记（lan|cloud|null=拒发/未路由）——
+        // failB2Flights 按源收割的判据（B2 sendCmd 返回后同步读取）。入口置 null，
+        // 命中分支返回前赋值；拒发路径保持 null=「未发出」不被断链收割。
+        window.__ccDeck005LastRouteSource = null;
         const sid = payload && typeof payload === "object" ? String(payload.session_id || payload.sid || "") : "";
-        if (!sid) return window.__ccDeck005MainWs || ctx.ws;
-        if (cloudCtx.sessions.has(sid)) return cloudCtx.status === "online" ? cloudCmdShim : null;
-        if (ctx.sessions.has(sid)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+        if (!sid) { window.__ccDeck005LastRouteSource = "lan"; return window.__ccDeck005MainWs || ctx.ws; }
+        if (cloudCtx.sessions.has(sid)) {
+          // halfconn R1（P2③）：null 返回不清源标记（入口已置 null）——failB2Flights 据此
+          // 只收割「真发出过且源已知」的飞行，拒发/未就绪不被断链收割
+          if (cloudCtx.status !== "online") return null;
+          window.__ccDeck005LastRouteSource = "cloud";
+          return cloudCmdShim;
+        }
+        if (ctx.sessions.has(sid)) {
+          if (!ctx.ws || ctx.ws.readyState !== 1) return null;
+          window.__ccDeck005LastRouteSource = "lan";
+          return ctx.ws;
+        }
         // T10 根修：聚合视图桥兜底泛化——地基链 onEvent 只锚 SNAPSHOT（增量帧不进 ctx.sessions），
         // SNAPSHOT 之后新建的会话只有 B4 桥实时持有；旧版桥 SESSION_CREATED 建卡无源标 → 本分支
         // miss → 盲投视角通道（云视角=云 shim）→ 云 relay 查无此会话报「会话不存在: <完整id>」
@@ -3499,8 +3523,16 @@ function connectLan(ctx) {
         // relay_channel（channel="lan" 的卡仍 bsCloud=true）——SNAPSHOT merge 的 relay_source 打标
         // 就地污染 payload 对象（onEvent 先于总线 emit），桥浅拷贝常态带入，同名即误投云 shim。
         const bsCloud = !!(bs && (bs.relay_channel ? bs.relay_channel === "cloud" : (bs.relay_source && cloudCtx.hasSnapshot && String(cloudCtx.relayName || "") === String(bs.relay_source))));
-        if (bsCloud) return cloudCtx.status === "online" ? cloudCmdShim : null;
-        if (bs && (bs.relay_channel === "lan" || bs.relay_source)) return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+        if (bsCloud) {
+          if (cloudCtx.status !== "online") return null;
+          window.__ccDeck005LastRouteSource = "cloud";
+          return cloudCmdShim;
+        }
+        if (bs && (bs.relay_channel === "lan" || bs.relay_source)) {
+          if (!ctx.ws || ctx.ws.readyState !== 1) return null;
+          window.__ccDeck005LastRouteSource = "lan";
+          return ctx.ws;
+        }
         // 两源表 + 桥都查不到：拒发——会话可能已删/所属源离线，盲投视角通道只会产出误导性的
         // 「会话不存在: <id>」（错投报错带完整 id，排查被带偏），明确拒发让端上给可操作提示
         return null;
@@ -4150,6 +4182,7 @@ function connectLan(ctx) {
 
       function onEvent(context, message) {
         context._lastFrameAt = Date.now(); // halfconn（#38 族四现）：地基帧统一入口刷最近帧时刻（LAN onmessage / 云 onCloudText / IngestSnapshot 注入三路全覆盖——徽标诚实判定与云 #259 看门狗共用锚）
+        scheduleConnBadgeRefresh(); // halfconn R1（P1-①·双审定罪死码）：帧驱动徽标重渲接线——增量帧窗（SESSION_LOG 等，恰是「显示未连接但消息还在到」用户实锤形态）不触发 SNAPSHOT/连接事件旁路，胶囊翻转只能靠这里；函数自带 2s 节流+rAF 零风暴
         // #143 Leader 接线：团队域帧（SNAPSHOT 团队字段/三事件）；W-WINPAIR-R2：并行多源下团队域跟
         // 视角源走（cloud 视角吃云帧的团队字段，local/aggregate 吃本机——两源 SNAPSHOT 不互相覆盖团队域）。
         // W-WINPAIR-R3 补：视角错位的 SNAPSHOT 不丢——每源自存完整 payload，setSourceView 切换时
@@ -4748,6 +4781,13 @@ function connectLan(ctx) {
         } catch (_) {}
       }, 5000);
       setInterval(() => {
+        // halfconn R1（A审 P1-① 补）：45s 窗尽/窗内跨越的徽标反向翻转（重连中→未连接
+        // 或对侧）无帧可依——秒针拍检测 sourceDownstreamAlive 态位变化，变即刷
+        //（scheduleConnBadgeRefresh 自带 2s 节流；常态零态变=零重渲）
+        try {
+          const alive = sourceDownstreamAlive();
+          if (alive !== _halfconnAliveSeen) { _halfconnAliveSeen = alive; scheduleConnBadgeRefresh(); }
+        } catch {}
         if (sessionList.dataset.b2Owned === "1") return; // #143 盲评A-2：B2 自有走秒定时器，双写互覆盖让位
         sessionList.querySelectorAll(".queue-card").forEach((card) => {
           const session = ctx.sessions.get(card.dataset.sessionCard);

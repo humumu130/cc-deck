@@ -53,16 +53,27 @@ const t2 = await badgeNote();
 ok(!t2.includes("未连接") && !t2.includes("重连中"), "② 在线 → 胶囊纯源名（无状态 note）", t2);
 await shot("02-online");
 
-// ---------- 状态③：半连接（下行帧刚到 + 链路断）→ 胶囊显「· 重连中」（本批新行为） ----------
-// 序：先再喂一帧（刷 _lastFrameAt——IngestSnapshot 走 onEvent 统一入口），**后**断链——
-// 「下行仍活、上行已断」正是 1104 用户实锤「显示未连接但消息还在到」的注入形态
-await ev(`window.__ccDeck005IngestSnapshot("lan", ${JSON.stringify(snap.payload)})`);
-await wait(120);
+// ---------- 状态③（R1 重构·增量帧复现序）：断链→45s 到期→增量帧到达 ----------
+// 双审定罪：原③用 IngestSnapshot（SNAPSHOT 帧）注入——走 onEvent SNAPSHOT 分支自带
+// refresh 旁路，掩盖帧驱动重渲死码（P1-①）。R1 复现序三段（全程无 SNAPSHOT 注入）：
+// ③a 断链瞬间（帧龄新鲜）→ 重连中（canonical B 类，close 事件重渲——旧为恰对）
+// ③b 45s 窗尽 → 未连接（到期反向翻转：无帧事件可依，R1 秒针 alive 态位检测驱动）
+// ③c 增量帧（SESSION_LOG）经 IngestFrame/onEvent 通用入口到达 → 重连中
+//（P1-① 接线实证：只刷 _lastFrameAt+scheduleConnBadgeRefresh，SNAPSHOT 旁路禁用）
 await ev(`window.__ccDeck005Frames.emit({ kind: "ws", state: "close", source: "lan" })`);
 await wait(400);
-const t3 = await badgeNote();
-ok(t3.includes("重连中"), "③ 半连接（断链但下行帧 45s 窗内仍活）→「· 重连中」（徽标诚实核心断言）", t3);
+const t3a = await badgeNote();
+ok(t3a.includes("重连中"), "③a 断链但帧龄新鲜 →「· 重连中」（canonical B 类保持——close 事件重渲）", t3a);
 await shot("03-halfconn-reconnecting");
+await wait(46_000); // 45s 窗尽 + 秒针拍检测窗
+const t3b = await badgeNote();
+ok(t3b.includes("未连接"), "③b 45s 窗尽到期 → 反向翻「· 未连接」（R1：到期翻转无帧可依，秒针 alive 态位检测驱动——不无限乐观）", t3b);
+await shot("03b-halfconn-expired");
+await ev(`window.__ccDeck005IngestFrame("lan", ${JSON.stringify({ type: "SESSION_LOG", session_id: "hc-s1", payload: [{ role: "assistant", text: "增量帧仍在到（半连接实锤形态——SNAPSHOT 旁路禁用）" }] })})`);
+await wait(2600); // scheduleConnBadgeRefresh 2s 节流 + rAF
+const t3c = await badgeNote();
+ok(t3c.includes("重连中"), "③c 先离线后帧到（增量帧·复现序=用户实锤形态）→「· 重连中」（P1-① 帧驱动接线实证）", t3c);
+await shot("03c-halfconn-frame-driven");
 
 // ---------- 附：sendCmd 失配自愈链 headless 实证（受理→resync→恢复发出，真实 RouteWs） ----------
 // 注入形态：三表清空（IngestSnapshot 空快照整替源表）→ 会话卡仍在 S.sessions（保留）→
@@ -96,6 +107,28 @@ await ev(`window.__ccDeck005IngestSnapshot("lan", ${JSON.stringify(snap.payload)
 await wait(120);
 const stAfter = JSON.parse(await ev(`JSON.stringify(window.__ccDeck005SourceState())`));
 ok(stAfter.lanSessions >= 2, "④d SNAPSHOT 重达后源表重建（lanSessions=" + stAfter.lanSessions + "≥2——自愈闭环：失配→resync→源表重建→路由可命中）");
+
+// ---------- ⑤ 抖动窗重复探针（R1·P2③·验收 3）：源过滤——他源 close 不清本源 waiter ----------
+// 真实链路：frames 总线 close 事件（带 source）→ B2 订阅 → failB2Flights(ev.source)
+// 按源收割；B2FlightProbe 只做 waiter 播种与观测（__ccDeck005SourceState 同族口）
+const p5a = await ev(`(() => {
+  const P = window.__ccDeck005B2FlightProbe; if (!P) return "NO-PROBE";
+  P.add("jit-lan", "lan"); P.add("jit-cloud", "cloud"); P.add("jit-acc", null);
+  return JSON.stringify(P.state());
+})()`);
+ok(p5a !== "NO-PROBE" && JSON.parse(p5a).waiters.length === 3, "⑤a 飞行播种：本源(lan)/他源(cloud)/受理中(null) 三 waiter 在册", p5a);
+await ev(`window.__ccDeck005Frames.emit({ kind: "ws", state: "close", source: "cloud" })`);
+await wait(300);
+const s5b = JSON.parse(await ev(`JSON.stringify(window.__ccDeck005B2FlightProbe.state())`));
+ok(!s5b.waiters.includes("jit-cloud") && s5b.waiters.includes("jit-lan") && s5b.waiters.includes("jit-acc"),
+  "⑤b 他源（cloud）close：仅清他源——本源 lan 与受理中保留（抖动窗幽灵重发源头封死）", JSON.stringify(s5b.waiters));
+await ev(`window.__ccDeck005Frames.emit({ kind: "ws", state: "open", source: "cloud" })`);
+await wait(150);
+await ev(`window.__ccDeck005Frames.emit({ kind: "ws", state: "close", source: "lan" })`);
+await wait(300);
+const s5c = JSON.parse(await ev(`JSON.stringify(window.__ccDeck005B2FlightProbe.state())`));
+ok(!s5c.waiters.includes("jit-lan") && s5c.waiters.includes("jit-acc"),
+  "⑤c 本源（lan）close：清本源；受理中（null）永不被 close 清（等恢复照发）", JSON.stringify(s5c.waiters));
 
 console.log("");
 console.log(fail === 0 ? `PASS ${pass}（halfconn 徽标诚实三态对照+自愈链闭环）` : `FAIL ${pass}`);

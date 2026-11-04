@@ -90,6 +90,10 @@ export interface SourceConn {
   // 原因等），连上即清。UI 据此给诊断文案，而非一律引导输码
   failNote: string | null;
   lastSeq: number;
+  // halfconn R1（P2①·A审）：LAN 强制全量重同步竞态闸——forceFullResync 置位后到
+  // SNAPSHOT 到达前，close 握手期间在途帧的 lastSeq 回填被抑制（防旧 seq 抬回→重连
+  // URL 带高 last_seq→relay 快路径→全量重建落空）；SNAPSHOT 装配拍解除
+  resyncArmed?: boolean;
   activitySeq: Map<string, number>;
   models: string[];    // #388 该源 SNAPSHOT.models 携带的可用模型清单
   platform: string;    // SNAPSHOT.platform（relay 本机平台，旧 relay 无字段 = ""）
@@ -1201,10 +1205,15 @@ class RelayStore {
     this.conns.delete(id);
   }
 
-  // 断开即静默清空该源在途命令：结果靠重连快照对账，残留 timer 只会在
-  // 离线窗口误报「未确认」、甚至把重发打到新连接上
+  // 断开即清空该源在途命令。halfconn R1（P2①·双审）：原「在途命令由各自超时兜底」
+  // 注释不实——timer 已清无人回调（fetchArtifact 自带 90s 外全部悬置），改为逐项
+  // onAck 收口；已发出的命令可能实际送达（ACK 随断链丢），措辞按「结果未知」不谎报
+  // 失败，重连快照对账语义保留；残留 timer 只会在离线窗口误报、甚至把重发打到新连接上
   private clearPendingCmds(conn: SourceConn) {
-    for (const p of conn.pendingCmds.values()) clearTimeout(p.timer);
+    for (const p of conn.pendingCmds.values()) {
+      clearTimeout(p.timer);
+      try { p.onAck?.({ ok: false, err: "连接断开，命令结果未知（可能已送达，重连后对账）" }); } catch { /* 回调异常不阻清场 */ }
+    }
     conn.pendingCmds.clear();
   }
 
@@ -1980,7 +1989,9 @@ class RelayStore {
       return;
     }
     const env = msg as Envelope;
-    if (env.seq !== undefined) conn.lastSeq = Math.max(conn.lastSeq, env.seq);
+    // halfconn R1（P2①）：resyncArmed 期间不回填——close 握手窗内到达的在途帧不把旧
+    // seq 抬回 lastSeq（抬回=重连 URL 带 last_seq→快路径→强制全量落空），SNAPSHOT 到达解除
+    if (env.seq !== undefined && !conn.resyncArmed) conn.lastSeq = Math.max(conn.lastSeq, env.seq);
     this.onEvent(conn, env);
     // 流式日志走合帧通知；其余事件（状态/快照/汇报等）照常即时通知——
     // 即时 emit 同时会把窗口内积着的流式块一并冲出（会话切换天然 flush）
@@ -2552,6 +2563,7 @@ class RelayStore {
           this.sidIndex.set(s.session_id, conn);
         }
         conn.lastSeq = Math.max(conn.lastSeq, msg.seq);
+        if (conn.resyncArmed) conn.resyncArmed = false; // halfconn R1（P2①）：强制全量重达到达——回填抑制闸解除（此后增量帧恢复 lastSeq 推进）
         this.recoverTaskDone(snapshot.sessions);
         this.drainHalfconn(); // halfconn：SNAPSHOT 装配后 sidIndex 已整替重建——A 类自愈队列重路由重发
         break;
@@ -3176,7 +3188,7 @@ class RelayStore {
     // 用户错（会话真删了也在此时如实报，不再回落活动源——回落会把命令发给另一台服务器）
     if (sid && !this.sidIndex.has(sid)) {
       const ac = this.activeConn();
-      if (ac && this.enqueueHalfconn(type, payload, cmdId || uuid(), sid, onAck, "会话不存在，命令未发送")) {
+      if (ac && this.enqueueHalfconn(type, payload, cmdId || uuid(), sid, onAck, "会话不存在，命令未发送", sourceId)) {
         this.forceFullResync(ac);
         return true;
       }
@@ -3190,7 +3202,7 @@ class RelayStore {
     // halfconn B 类：源在册但 ws 未 OPEN（重连窗/后台冻结恢复中）——自动重连链已在途，
     // 挂自愈队列等 OPEN drain 重发（command_id 复用）；窗尽才报「未连接」
     if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN) {
-      if (conn && this.enqueueHalfconn(type, payload, cmdId || uuid(), sid, onAck, "未连接，命令未发送")) return true;
+      if (conn && this.enqueueHalfconn(type, payload, cmdId || uuid(), sid, onAck, "未连接，命令未发送", conn.id)) return true; // halfconn R1（P1-②）：B 类入队带本源 id——drain 按源投递不丢源
       this.emit({ lastErrorCmd: "未连接，命令未发送" });
       return false;
     }
@@ -3255,13 +3267,21 @@ class RelayStore {
   // ④ 连接关闭/删源/重路由清缓存（onclose delete / destroyConn / 帧路由换源）
   // ⑤ resume 快路径不重建（relay 侧 last_seq 在缓冲内只补发增量无 SNAPSHOT）——
   //    本队列 A 类自愈兜底：lastSeq=0 强制全量重建①
-  private halfconnQueue: Array<{ type: string; payload: Record<string, unknown>; cmdId: string; sid: string | null; onAck?: PendingCmd["onAck"]; at: number; giveUp: string }> = [];
+  private halfconnQueue: Array<{ type: string; payload: Record<string, unknown>; cmdId: string; sid: string | null; sourceId?: string; onAck?: PendingCmd["onAck"]; at: number; giveUp: string }> = [];
 
   // 强制全量重同步：云源不断链（ping last_seq=0 即强制全量 SNAPSHOT——relay
   // resumePhone(0) 语义，在途 ACK 不扰）；LAN 源断链重连（URL 不带 last_seq →
-  // relay 判新客户端推全量；fastRetry 秒级回连，在途命令由各自超时兜底——
-  // 重建源表的收益大于瞬断代价，A 类本就是「发不出」的罕见态）
+  // relay 判新客户端推全量；fastRetry 秒级回连，在途命令经 clearPendingCmds 逐项
+  // onAck 收口——halfconn R1 后「各自超时兜底」旧注释不实已改；重建源表的收益大于
+  // 瞬断代价，A 类本就是「发不出」的罕见态）
+  // halfconn R1（P2①·双审）：per-source 5s 节流（对齐 web resync 单点口径）——A 类
+  // 风暴（多条并发失配=每条各触发一次）不再 N 次全量快照过 CF 桥+N 次全量 UI 重建；
+  // 节流窗内已有一次在途全量，SNAPSHOT 整替源表覆盖面相同
+  private resyncGateAt = new Map<string, number>();
   private forceFullResync(conn: SourceConn) {
+    const gateAt = this.resyncGateAt.get(conn.id) ?? 0;
+    if (Date.now() - gateAt < 5000) return;
+    this.resyncGateAt.set(conn.id, Date.now());
     conn.lastSeq = 0; // 下次 hello/URL 均不带旧 seq → relay 推全量 SNAPSHOT
     if (conn.channel === "cloud" && conn.ws && conn.ws.readyState === WebSocket.OPEN && conn.cloudCfg && this.devKeys) {
       try {
@@ -3270,13 +3290,19 @@ class RelayStore {
       } catch { /* 发送异常：落到断链重连 */ }
     }
     if (conn.ws) {
+      // halfconn R1（P2①）：LAN 断链竞态闸——close 握手期间在途帧的 lastSeq 回填被
+      // 抑制（resyncArmed），重连 URL 必不带旧 last_seq=全量重建必发生；SNAPSHOT 到达解除
+      conn.resyncArmed = true;
       try { conn.ws.close(); } catch {} // 走既有 onclose → scheduleReconnect 链
     }
   }
 
-  private enqueueHalfconn(type: string, payload: Record<string, unknown>, cmdId: string, sid: string | null, onAck: PendingCmd["onAck"], giveUp: string): boolean {
+  private enqueueHalfconn(type: string, payload: Record<string, unknown>, cmdId: string, sid: string | null, onAck: PendingCmd["onAck"], giveUp: string, sourceId?: string): boolean {
     if (this.halfconnQueue.length >= 8) return false; // 风暴闸：链路级故障多命令同挂不失控
-    this.halfconnQueue.push({ type, payload, cmdId, sid, ...(onAck ? { onAck } : {}), at: Date.now(), giveUp });
+    // halfconn R1（P1-②·双审）：队列项带 sourceId——无 sid 的源寻址命令（orgConfirm/
+    // watchGrant/notificationAck 类）入队不丢源，drain 按源投递（原丢源=多源下恒路由
+    // activeConn=误投他 relay，relay NACK 兜底不跨服但用户决议按失败收场）
+    this.halfconnQueue.push({ type, payload, cmdId, sid, ...(onAck ? { onAck } : {}), ...(sourceId ? { sourceId } : {}), at: Date.now(), giveUp });
     setTimeout(() => this.drainHalfconn(), 8100); // 窗尽兜底收割（连接事件不来也要收口）
     return true;
   }
@@ -3286,9 +3312,22 @@ class RelayStore {
     const now = Date.now();
     const keep: typeof this.halfconnQueue = [];
     for (const it of this.halfconnQueue) {
-      const conn = (it.sid ? this.sidIndex.get(it.sid) : undefined) ?? this.activeConn();
+      // halfconn R1（P1-②·双审）：解析序 sidIndex → 队列 sourceId →（sid 与 sourceId
+      // 皆空才许活动源兜底）。sid 在册但重同步后仍 miss=会话真删/源属他人——不回落
+      // activeConn（#294 废弃路径：回落=把命令发给另一台服务器），留队至窗尽 giveUp
+      // 如实报；sourceId 在场按源投递（B 类源回线即达本源）
+      const conn =
+        (it.sid ? this.sidIndex.get(it.sid) : undefined) ??
+        (it.sourceId ? this.conns.get(it.sourceId) : undefined) ??
+        (it.sid || it.sourceId ? undefined : this.activeConn());
       if (conn && conn.ws && conn.ws.readyState === WebSocket.OPEN && this.dispatchCmd(conn, { command_id: it.cmdId, type: it.type, payload: it.payload, ts: Date.now() }, it.sid, it.onAck)) continue; // 已发出：ACK 生命周期归 pendingCmds
-      if (now - it.at >= 8000) { this.emit({ lastErrorCmd: it.giveUp }); continue; } // 窗尽：原用户错如实报
+      if (now - it.at >= 8000) {
+        // halfconn R1（P2②·双审）：窗尽回调 onAck（结果语义契约——onAck 在场的错误由
+        // 调用方回调接管展示，不叠全局 emit）；无 onAck 保持全局 lastErrorCmd
+        if (it.onAck) it.onAck({ ok: false, err: it.giveUp });
+        else this.emit({ lastErrorCmd: it.giveUp });
+        continue;
+      }
       keep.push(it);
     }
     this.halfconnQueue = keep;

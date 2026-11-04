@@ -144,7 +144,8 @@
     "test:console-guardrails": "tsx scripts/test-console-guardrails.ts",
     "test:notify-overhaul": "tsx scripts/test-notify-overhaul.ts",
     "test:win-font-aa": "tsx scripts/test-win-font-aa.ts",
-    "test:boardlife": "tsx scripts/test-boardlife.ts"
+    "test:boardlife": "tsx scripts/test-boardlife.ts",
+    "test:halfconn": "node --import tsx/esm ../expo-app/scripts/test-halfconn.mts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
