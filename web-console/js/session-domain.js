@@ -1482,6 +1482,17 @@
                     mask.addEventListener("click", () => { if (S.drawerGid) slimToggleDrawer(S.drawerGid); });
                     drawer.before(mask);
                   } else if (!needMask && mask) mask.remove();
+                  // drawers（1104 用户②）：docked 开态点外收起——透明捕获层（不压暗，抽屉是
+                  // 工作区一部分）；点击即收不透传（一次点击只用来收，防误触主区按钮——#21
+                  // pair-pop-backdrop 先例同语义）。overlay 态已有 drawer-mask 全遮罩，不双挂。
+                  let outside = screen.querySelector(".drawer-outside");
+                  const needOutside = !overlay && !!S.drawerGid;
+                  if (needOutside && !outside) {
+                    outside = document.createElement("div");
+                    outside.className = "drawer-outside";
+                    outside.addEventListener("click", () => { if (S.drawerGid) slimToggleDrawer(S.drawerGid); });
+                    drawer.before(outside);
+                  } else if (!needOutside && outside) outside.remove();
                   syncDrawerMutex();
                 }
                 // W-TEAMCHIP2 ③：抽屉×第三列互斥（docked 形态）。重叠面实况——检查器「团队成员」
@@ -4695,6 +4706,34 @@
                   // 无此监听则 S.selected 不再跟随（原只观察 childList）。走秒改 textContent 不触发。
                   mo.observe(UI.sessionList, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
+                  // drawers（1104 用户②）：ESC 收侧栏——抽屉优先（视觉上层），再检查器。
+                  // 仅桌面台在视时响应（手机端 expo 侧不在本单；通知弹层等自有 ESC 链不受影响——
+                  // 本监听只收 drawer/inspector 两个侧栏，到达时若抽屉开着即收并 return）
+                  UI.section.addEventListener("keydown", (ev) => {
+                    if (ev.key !== "Escape") return;
+                    if (S.drawerGid) { ev.stopPropagation(); slimToggleDrawer(S.drawerGid); return; }
+                    const insp = UI.section.querySelector(".inspector");
+                    if (insp && !insp.classList.contains("collapsed") && !UI.section.classList.contains("inspector-collapsed")) {
+                      UI.section.classList.add("inspector-collapsed");
+                      insp.classList.add("collapsed"); // 类直切同互斥链口径：不碰 settings 域 localStorage 记忆
+                    }
+                  });
+                  // drawers（1104 用户②）：检查器点外收起——会话域内点击落在检查器/抽屉/功能钮
+                  // 之外且无文本选区时收检查器（点击透传不拦截：用户点哪是哪，顺带收侧栏——
+                  // 与抽屉捕获层「点击即收不透传」相反：检查器常开态不能挡主区操作）。
+                  // 类直切不走 setInspectorCollapsed（settings 域私有）——不写 localStorage：
+                  // 点外收=临时收起，刷新还原用户既定展开态（「记忆行为不变」红线）
+                  UI.section.addEventListener("click", (ev) => {
+                    const t = ev.target;
+                    if (!t || !t.closest) return;
+                    const insp = UI.section.querySelector(".inspector");
+                    if (!insp || insp.classList.contains("collapsed") || UI.section.classList.contains("inspector-collapsed")) return;
+                    if (t.closest(".inspector, [data-slim-drawer], .drawer-mask, .drawer-outside, [data-inspector-toggle], .inspector-expand, .team-chip, [data-slim-drawer-toggle], .inspector-resizer, .workspace-footer, .mobile-frame")) return;
+                    const sel = window.getSelection && window.getSelection();
+                    if (sel && !sel.isCollapsed) return; // 拖选文本不算「点外面」
+                    UI.section.classList.add("inspector-collapsed");
+                    insp.classList.add("collapsed");
+                  });
                   // [t-7e0c6189] 键盘可达：团队入口卡/成员胶囊/第四列卡（role=button）Enter/Space 走点击链
                   // W-TEAMSNC ②④：团队 chip（button）原生键盘可达免委托；roster 行（role=button）+跳域钮并入本链
                   UI.section.addEventListener("keydown", (ev) => {

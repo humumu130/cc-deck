@@ -879,7 +879,11 @@
     .inspector-toggle:hover { background: transparent; background: color-mix(in srgb, var(--surface2) 88%, transparent); box-shadow: -3px 0 10px var(--panel-shadow); }
     /* W-TOPBAR ①：收起=完全隐藏（零残留——原 42px 竖条残在第三列边缘遮内容，用户点名退役）；
        展开入口外移到第三列右缘贴边把手（见 initInspectors） */
-    .inspector.collapsed { display: none; }
+    /* drawers（1104 用户③）：检查器开收动画——原 display:none 硬切无过渡。浮层化
+       （W-NOVAUI ③ absolute right:0）不占位，主区无 reflow，纯位移安全；与 drawer
+       同 .22s 曲线档（全局动画统一）。reduced-motion 段见 drawer 块下方同款降级 */
+    .inspector { transform: translateX(0); visibility: visible; transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s; }
+    .inspector.collapsed { transform: translateX(100%); visibility: hidden; transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s linear .22s; display: block; }
     /* FB6 检查器外扩：左沿拖拽调宽（260-640px 夹紧；宽度与折叠态按屏记忆） */
     .inspector-resizer { position: absolute; left: -3px; top: 0; bottom: 0; z-index: 5; width: 7px; cursor: col-resize; }
     .inspector-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
@@ -2674,11 +2678,13 @@
        overlay（<1360px，.drawer-overlay 类挂 #d-session）：贴屏右缘盖检查器+半透明遮罩 */
     .team-drawer { position: absolute; top: 0; bottom: 0; right: var(--inspector-w, 320px); z-index: 3; display: flex; flex-direction: column; width: 296px; background: var(--queue-deep); border-left: 1px solid var(--line); box-shadow: -5px 0 18px var(--panel-shadow); visibility: hidden; transform: translateX(14px); transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s linear .22s; }
     .team-drawer.open { visibility: visible; transform: none; transition: transform .22s cubic-bezier(.4, .9, .3, 1), visibility 0s; }
-    .desktop-screen.inspector-collapsed .team-drawer { right: 20px; }
+    .desktop-screen.inspector-collapsed .team-drawer { right: 0; } /* drawers（1104 用户①）：互斥收起态贴死屏右缘 0 缝（原 right:20px 给 inspector-expand 把手让位=全高 20px 缝，把手仅 72px 高上下皆空）；把手 z-index:6 叠抽屉上层可点 */
+    .inspector-expand { z-index: 6; } /* drawers：抽屉 right:0 后把手（右缘 20px 带）与抽屉右缘重叠——提层恒可点（原 z:auto 在 drawer z:3 之下会被盖） */
     .desktop-screen.drawer-overlay .team-drawer { right: 0; z-index: 5; } /* overlay 态：贴屏右缘盖检查器 */
     .drawer-mask { position: absolute; inset: 0; z-index: 4; background: color-mix(in srgb, var(--bg0) 55%, transparent); } /* 仅 overlay+开态挂载（syncDrawerOverlay 单口增删）；配色 pair-pop-backdrop 同款 token */
+    .drawer-outside { position: absolute; inset: 0; z-index: 2; background: transparent; } /* drawers（1104 用户②）：docked 开态点外收起捕获层——透明不压暗（抽屉是工作区一部分）；低于 drawer z:3，点击即收不透传（防误触主区按钮——一次点击只用来收，#21 pair-pop 先例同语义） */
     .team-drawer[hidden] { display: none; } /* 首帧兜底（接管前 hidden 态不占位；JS 接管后恒 false） */
-    @media (prefers-reduced-motion: reduce) { .team-drawer { transition: opacity .12s linear, visibility 0s linear .12s; transform: none; opacity: 0; } .team-drawer.open { opacity: 1; transition: opacity .12s linear, visibility 0s; } }
+    @media (prefers-reduced-motion: reduce) { .team-drawer { transition: opacity .12s linear, visibility 0s linear .12s; transform: none; opacity: 0; } .team-drawer.open { opacity: 1; transition: opacity .12s linear, visibility 0s; } .inspector { transition: opacity .12s linear, visibility 0s linear .12s; transform: none; opacity: 1; } .inspector.collapsed { transform: none; opacity: 0; transition: opacity .12s linear, visibility 0s linear .12s; } } /* drawers：检查器滑出降级同 drawer 档（位移退役改淡入出） */
     .team-drawer .drawer-head { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
     .team-drawer .drawer-head .d-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-size: 12.5px; font-weight: 650; }
     .team-drawer .drawer-head .d-cnt { flex: none; color: var(--faint); font: var(--fs-B) var(--mono); }
