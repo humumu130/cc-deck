@@ -549,6 +549,13 @@ export function startServer(
   // onlineDeviceIds=活连接设备集（SNAPSHOT.online 标注源；close 即离线）
   const connUa = new WeakMap<WebSocket, string>();
   const onlineDeviceIds = new Map<WebSocket, string>();
+  // awaituser R1（A 审 P1-1）：全端在线判定口注回 mgr——emitUserNote 投递真值回报用
+  //（零端在线 return false，decision-notify 不记 user_pushed_at 下轮重推）。与下方
+  // hasClients 同源同表达式（wss OPEN 非 pairing ∨ 云手机 active；#316 口径）——两处
+  // 字面并列是防漂移注锚：改判定式必须两处一起改。
+  mgr.liveFrontends = () =>
+    [...wss.clients].some((c) => c.readyState === WebSocket.OPEN && !(c as ClientWs).pairing) ||
+    !!opts.cloudHasPhones?.();
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,

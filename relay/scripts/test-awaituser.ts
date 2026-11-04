@@ -232,6 +232,7 @@ async function integrationTests(): Promise<void> {
       "B① onWaiting → 聚合帧即时带 waiting 项（帧驱动不等轮询）");
     assert(mgr.pendingUserActionsList().length === 1, "B② pendingUserActionsList 与帧同源（单口一致）");
 
+
     // B③ 同请求重放：onWaiting 路径会重置 waiting_started_at（session-manager 既有
     // 语义：滞留起点刷新）→ 聚合项 created_at 合法变化，帧为「同 key 覆盖式替换」
     //（非新增条目）——与通知账的 stableKey 防重是两层（账防重/清单值变即发）
@@ -261,6 +262,29 @@ async function integrationTests(): Promise<void> {
       "B⑥ 确认卡决议 → 聚合帧减项");
 
     // ---------- C 验收单源（CLI 直写盘 → refresh 挂点） ----------
+    // awaituser R1（A 审 P2① 验收 2）：外部 CLI 三挂点帧驱动——增/减项不再等 60s 兜底轮
+    {
+      const mgrX = mgr as unknown as {
+        setExternalWaiting(id: string, payload: unknown): void;
+        emitWaitingResolved(id: string, requestId: string, decision: string, by: string): void;
+        setExternalStatus(id: string, status: string, summary: string): void;
+      };
+      let before = frames.length;
+      mgrX.setExternalWaiting(sid, { request_id: "req-ext-1", tool_name: "Bash", input_summary: "外部 CLI 等待", suggestions: [] }); // 挂点②
+      assert(frames.length === before + 1 && frames[frames.length - 1].some((x) => x.kind === "waiting" && x.entity_id === sid),
+        "B②b setExternalWaiting → 聚合帧即时增项（外部入等帧驱动——不再等 60s 轮）");
+      before = frames.length;
+      mgrX.emitWaitingResolved(sid, "req-ext-1", "allow", "u"); // 挂点③：等待解除即时减项
+      assert(frames.length === before + 1 && !frames[frames.length - 1].some((x) => x.kind === "waiting" && x.entity_id === sid),
+        "B②a emitWaitingResolved → 聚合帧即时减项（外部解除帧驱动）");
+      before = frames.length;
+      mgrX.setExternalWaiting(sid, { request_id: "req-ext-2", tool_name: "Bash", input_summary: "外部 CLI 等待二", suggestions: [] });
+      mgrX.setExternalStatus(sid, "WORKING", "外部状态切走等待消解"); // 挂点①（造项+切走：净效果=减项帧链）
+      assert(frames.length > before && !frames[frames.length - 1].some((x) => x.kind === "waiting" && x.entity_id === sid),
+        "B②c setExternalStatus 非 WAITING → 聚合帧即时减项（外部状态切换帧驱动）");
+      mgrX.emitWaitingResolved(sid, "req-ext-2", "deny", "u"); // 清场（幂等）
+    }
+
     console.log("C 验收单源:");
     const accDir = join(DATA, "acceptances");
     mkdirSync(accDir, { recursive: true });
@@ -358,6 +382,46 @@ function watcherTests(): void {
   assert(pushed.length === 3 && ledgerAfter.notifications.find((n) => n.kind === "acceptance")?.resolved_at !== undefined,
     `D⑨ 回填→acceptance 账 resolved 且零新推（账行数 ${ledgerBefore}→${ledgerAfter.notifications.filter((n) => n.kind === "acceptance").length}）`);
   w.stop(); w2.stop(); w3.stop(); w4.stop(); w5.stop();
+  // awaituser R1（A 审 P1-1 验收 1）：零端在线注入 → emitUserNote false → 不记锚 →
+  // 端恢复后同 key 重推成功（时序证据）。恒真禁用——全部走实值断言。
+  {
+    const pushedX: string[] = [];
+    let online = false; // 零端在线（推送时刻）
+    const lx = join(DATA, "r1-zero-online.json");
+    const mkX = () => new DecisionNotificationWatcher({
+      ledgerPath: lx, dataDir: DATA,
+      listConfirms: () => [], snapshotSessions: () => [], leaderSessionId: () => null,
+      notify: () => true, now: () => now.v, intervalMs: 9_999_999, waitMin: 10,
+      listAcceptances: () => [acc],
+      // 真值接线：online=false 模拟 mgr.emitUserNote 的 liveFrontends()=false（零端在线）
+      userPush: (t) => { if (!online) return false; pushedX.push(t); return true; },
+    });
+    const wx = mkX();
+    wx.scan();
+    const led0 = readDecisionNotificationLedger(lx).notifications.find((n) => n.kind === "acceptance");
+    assert(pushedX.length === 0 && led0?.user_pushed_at === undefined, `D⑩ 零端在线=未投出不记锚（pushed=${pushedX.length}，锚=${JSON.stringify(led0?.user_pushed_at)}——契约「false=未投出不记 user_pushed_at」复活）`);
+    online = true; // 端恢复
+    wx.scan();
+    const led1 = readDecisionNotificationLedger(lx).notifications.find((n) => n.kind === "acceptance");
+    assert(pushedX.length === 1 && led1?.user_pushed_at === now.v, `D⑪ 端恢复后同 key 重推成功并记锚（pushed=${pushedX.length}，锚=${led1?.user_pushed_at}）`);
+    wx.scan();
+    assert(pushedX.length === 1, `D⑫ 记锚后重扫不重推（限频恢复——pushed=${pushedX.length}）`);
+    wx.stop();
+  }
+  // emitUserNote 单元（mgr 直测：liveFrontends 注入面——ws-server 装配真值的同源行为）
+  {
+    const bus2 = new EventBus({ persistPath: join(DATA, "ev-r1.ndjson") });
+    const cfg2: RelayConfig = { port: 8811, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null };
+    const mgr2 = new SessionManager(bus2, cfg2);
+    let fired = 0;
+    bus2.subscribe((env) => { if (env.type === "USER_NOTE") fired++; });
+    mgr2.liveFrontends = () => false;
+    assert(mgr2.emitUserNote("零在线测试") === false && fired === 0, "U① liveFrontends=false → 不发帧 return false（零端在线真值）");
+    mgr2.liveFrontends = () => true;
+    assert(mgr2.emitUserNote("有端在线测试") === true && fired === 1, "U② liveFrontends=true → 发帧 return true");
+    (mgr2 as unknown as { liveFrontends?: () => boolean }).liveFrontends = undefined;
+    assert(mgr2.emitUserNote("未注入兼容测试") === true && fired === 2, "U③ 未注入=旧语义恒 true（测试/独立装配兼容面）");
+  }
 }
 
 // ---------- F 静态锁（源锚断言——observe3 D 族同款范式） ----------

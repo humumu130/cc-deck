@@ -2049,6 +2049,7 @@ export class SessionManager {
     const summaryChanged = s.state.action_summary !== summary;
     s.state.status = status;
     s.state.action_summary = summary;
+    this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点（awaituser R1 P2①）：外部 CLI 状态切换帧驱动——WAITING 增项/出清减项实时入出聚合清单，不再等 60s 兜底轮
     if (status !== "WAITING") s.state.waiting_started_at = undefined;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = at ?? Date.now();
@@ -2161,6 +2162,10 @@ export class SessionManager {
     return true;
   }
 
+  /** awaituser R1（A 审 P1-1）：全端在线判定口（ws-server 装配注回——wss OPEN 非
+   * pairing ∨ 云手机 active）；缺席=按旧语义恒可投（测试/独立装配兼容）。 */
+  liveFrontends?: () => boolean;
+
   /** [W-AWAITUSER] 用户推送通道（/api/notify mode=confirm→USER_NOTE 的进程内同源腿，
    * patrol.sh:4 先例的常驻化）：待拍板项滞留超阈值时 DecisionNotificationWatcher 调本
    * 方法推用户。与 notifyConfirm 的差别：不注入会话 todo、不落通知账——推送的事项本体
@@ -2168,6 +2173,13 @@ export class SessionManager {
    * （手机端 App.tsx USER_NOTE 消费本批接入；旧壳 index.html:5230 既有消费不变）。 */
   emitUserNote(text: string): boolean {
     if (!text.trim()) return false;
+    // awaituser R1（A 审 P1-1）：投递真值回报——ws-server 装配时把全端在线判定口
+    //（wss OPEN 非 pairing ∨ 云手机 active，#316 hasClients 同源）注回 liveFrontends：
+    // 零端在线=不投出 return false（USER_NOTE 是 seq:0 瞬态不补发，推送时刻不在线=
+    // 永久吞没；且 watcher 不记 user_pushed_at——decision-notify 契约「false=未投出
+    // 不记锚下轮重试」复活，1104「没人盯」主场景端恢复后同 key 重推）。未注入
+    //（测试/独立装配形态）=保持旧 true（总线监听者在即投，兼容既有套件）。
+    if (this.liveFrontends && !this.liveFrontends()) return false;
     this.bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
     return true;
   }
@@ -2653,6 +2665,7 @@ export class SessionManager {
     this.transition(s.state.session_id, "WAITING", "ext-waiting"); /* W-SMIMPL③ 直写收口 */
     s.state.waiting_request = payload;
     s.state.waiting_started_at = at;
+    this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点（awaituser R1 P2①）：外部等待项入等帧驱动——同 :1567 内部面口径
     s.state.updated_at = at;
     this.bus.emit(id, "SESSION_WAITING", payload);
   }
@@ -9638,6 +9651,7 @@ ${lines.join("\n")}
     if (!s) return;
     this.transition(s.state.session_id, "WORKING", "wait-resolve"); /* W-SMIMPL③ 直写收口 */
     s.state.waiting_request = undefined;
+    this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点（awaituser R1 P2①）：等待解除帧驱动减项——同 :1571 内部面口径
     s.state.waiting_started_at = undefined;
     s.state.updated_at = Date.now();
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });

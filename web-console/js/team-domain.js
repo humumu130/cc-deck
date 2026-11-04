@@ -1129,7 +1129,11 @@
                         const auRow = (label, n, jump, title, extra) => n
                           ? '<button type="button" class="awaitu-row" data-awaitu-jump="' + jump + '"' + (extra || "") + ' title="' + escape(title) + '"><strong>' + escape(label) + '</strong><span class="tag action">' + n + " 项</span><span class=\"chev\">›</span></button>"
                           : "";
-                        const firstAcc = byKind("acceptance")[0];
+                        // awaituser R1（A 审 P2②）：relay 清单 created_at 降序（最新在前），
+                        // byKind[0] 实开最新而文案「最早一张」名实不符——取法修正为升序首张
+                        //（挂得最久最该先回填，FIFO 合文案；不改 relay 总序——聚合清单
+                        // 「最新优先」是展示语义）。二选一注明：弃文案改「最新」案。
+                        const firstAcc = [...byKind("acceptance")].sort((a, b) => (a.created_at || 0) - (b.created_at || 0))[0];
                         const auRowsHtml = auRow("组织确认卡", cfN, "confirm", "去团队看板下的「待你确认」区决议")
                           + auRow("等你输入的会话", wN, "session", "去会话列表——等你拍板的会话已浮顶带角标")
                           + auRow("待回填验收单", accN, "acceptance", "打开最早一张待填验收单", firstAcc && typeof firstAcc.entity_id === "string" ? ' data-awaitu-acc="' + escape(firstAcc.entity_id) + '"' : "");

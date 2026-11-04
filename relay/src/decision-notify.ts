@@ -176,7 +176,11 @@ export interface DecisionNotificationWatcherOptions {
    * （旧接线/部分测试形态兼容），聚合清单面不受影响（那是 pending-user-actions 单口）。 */
   listAcceptances?: () => AcceptanceSummary[];
   /** [W-AWAITUSER] 用户推送通道（USER_NOTE 全端弹系统通知；index 接线=
-   * mgr.emitUserNote）。返回 false=未投出，不记 user_pushed_at 下轮重试。 */
+   * mgr.emitUserNote）。返回 false=未投出，不记 user_pushed_at 下轮重试——
+   * R1（A审P1-1）起契约真兑现：emitUserNote 按在线端真值回报（mgr.liveFrontends，
+   * ws-server 注回：wss OPEN 非 pairing ∨ 云手机 active），零端在线=false——
+   * USER_NOTE 是 seq:0 瞬态不补发，推送时刻不在线若记锚=永久吞没（1104「没人
+   * 盯」形态），不记锚=端恢复后同 key 下轮扫描重推。 */
   userPush?: (text: string) => boolean;
   now?: () => number;
 }
