@@ -2091,6 +2091,17 @@ export class SessionManager {
   private stableKeyHint(text: string): string {
     return String(text).replace(/\s+/g, "").slice(0, 6) || "note";
   }
+
+  /** W-SUBFANOUT（架构升级期一①）：订阅直通审计条目——直通≠不留账（DS 账本纪律）。
+   * 送达留痕=notifyConfirm 既有 user-note 账（直通调用即落）；此处只记「跳过 PM
+   * 分诊」这一跳本身+dispatch 关联，activity 组 info 级不弹不打扰（审计面，非打扰面）。 */
+  noteSubFanout(targetSid: string, fan: { dispatchId: string; status: string }, text: string): void {
+    this.upsertNotification("system", `subfanout-${fan.dispatchId.slice(0, 8)}-${this.stableKeyHint(text)}`, targetSid.slice(0, 8), {
+      title: "订阅直通（跳过 PM 分诊）",
+      body: `[直通] dispatch ${fan.dispatchId.slice(0, 8)}（${fan.status}）→ worker ${targetSid.slice(0, 12)}：${text.slice(0, 120)}`,
+      severity: "info", group: "activity", actionable: false, sessionId: targetSid, domain: "session", returnPath: "/",
+    });
+  }
   notifyConfirm(sessionId: string, text: string): boolean {
     const s = this.sessions.get(sessionId);
     if (!s) return false;

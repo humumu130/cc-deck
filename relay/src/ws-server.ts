@@ -24,6 +24,7 @@ import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
 import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
+import { subFanTarget } from "./subfanout.js"; // W-SUBFANOUT：订阅直通判定单点（架构升级期一①）
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸
 import { ReleaseModule } from "./release.js"; // W-CMDIMPL ③：发版编排
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
@@ -1629,6 +1630,29 @@ async function handleNotify(
     if (p.mode === "confirm") {
       const text = typeof p.text === "string" ? p.text.trim().slice(0, 120) : "";
       if (!text) { res.writeHead(400).end('{"error":"text 不能为空"}'); return; }
+      // W-SUBFANOUT（架构升级期一①，DS Subscription fan-out 对位）：订阅直通——
+      // dispatch 在途（dispatched/running/queued）时，面向该任务的确认/审查意见按
+      // dispatch_id→session_id 直投承接会话（台账权威），1 跳直达不过 PM 分诊；
+      // 终态/无归属/直通目标不在册 → 回落下方既有分诊路径（PM 分诊不删）。判定单点
+      // =subFanTarget（下位改路由只动一处）。直通≠不留账：notifyConfirm 送达痕 +
+      // noteSubFanout 审计痕（通知账）双落。
+      const fan = subFanTarget(p.dispatch_id);
+      if (fan) {
+        const sessions0 = mgr.snapshot();
+        // session_id 兼容裸 CLI id：外部会话 relay id = "ext-"+<cli_sid>（#448 同款口径）
+        const hit =
+          sessions0.find((s) => s.session_id === fan.sessionId) ??
+          sessions0.find((s) => s.session_id === "ext-" + fan.sessionId);
+        if (hit) {
+          mgr.notifyConfirm(hit.session_id, text);
+          mgr.noteSubFanout(hit.session_id, fan, text);
+          // 切换日志一句话可观测（回落路径不打——默认路径不值得噪音）
+          console.log(`[subfanout] dispatch ${fan.dispatchId.slice(0, 8)}（${fan.status}）在途，待确认消息直通 worker ${hit.session_id.slice(0, 12)}（跳过 PM 分诊）`);
+          res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", subfanout: true, dispatch_id: fan.dispatchId, session_id: hit.session_id }));
+          return;
+        }
+        console.log(`[subfanout] dispatch ${fan.dispatchId.slice(0, 8)} 在途但承接会话 ${fan.sessionId.slice(0, 12)} 不在册，回落 PM 分诊`);
+      }
       const sessions = mgr.snapshot();
       // session_id 兼容裸 CLI id：外部会话 relay id = "ext-"+<cli_sid>（#448 守卫 hook 直传裸 sid）
       const target =
