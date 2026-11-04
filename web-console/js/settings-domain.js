@@ -1935,25 +1935,29 @@ function connectLan(ctx) {
       }
 
 // [W-LINKQUALITY]（1104 用户实锤×N）段①端侧遥测：断连/重连事件本地记（断连时 ws 已死
-// 无法即时上行——补报是唯一可靠通道），重连成功后 2.5s 批量 POST /api/telemetry/link
-//（token 同源）；上报失败留队列下次再试。attempts 计数供「重连中（已尝试 N 次）」反馈。
+// 无法即时上行——补报是唯一可靠通道）。R1（A审 P0/P1-1）补报改 **ws 帧上行**
+// （COMMAND_TELEMETRY_LINK）：不再 POST /api/telemetry/link——原链读全仓零写点的幽灵键
+// ccd_cfg（恒早退=web 两段全形态死）且 CF worker 无 /api/* 反代（云形态恒 404）；帧通道
+// 一处修通 web-lan/web-cloud（LAN ws 直发/云桥密封 shim 同命令面）。at-least-once 发送+
+// 服务端事件指纹去重（重发不双记账）。attempts 计数供「重连中（已尝试 N 次）」反馈。
 const linkQ = (() => {
   const q = [];
   const st = { lan: { openAt: 0, dropAt: 0, attempts: 0 }, cloud: { openAt: 0, dropAt: 0, attempts: 0 } };
-  const httpBase = () => {
-    try {
-      const cfg = JSON.parse(localStorage.getItem("ccd_cfg") || "{}");
-      return { base: String(cfg.wsUrl || "").replace(/^ws/, "http").replace(/\/ws$/, ""), token: String(cfg.token || "") };
-    } catch { return { base: "", token: "" }; }
-  };
   function note(src, ev) { q.push(Object.assign({ ts: Date.now(), src }, ev)); if (q.length > 300) q.splice(0, q.length - 300); }
+  // 帧上行通道（R1）：按事件 src 分流——web-lan→ctx.ws、web-cloud→cloudCmdShim（密封）；
+  // 两源可能指向不同 relay，各记各账。通道未开=留队列（周期拍/下次 onOpen 再试）
+  const frameOf = (dest) => {
+    if (dest === "cloud") return (typeof cloudCmdShim !== "undefined" && cloudCtx.status === "online") ? cloudCmdShim : null;
+    return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+  };
+  function take(dest, n) { const out = []; for (let i = 0; i < q.length && out.length < n;) { if (q[i].src === "web-" + dest) out.push(q.splice(i, 1)[0]); else i += 1; } return out; }
   return {
     onOpen(chain) {
       const s = st[chain]; const now = Date.now();
       if (s.dropAt > 0) note("web-" + chain, { kind: "reconnect", downtimeMs: now - s.dropAt, attempts: Math.max(1, s.attempts) });
       else note("web-" + chain, { kind: "connect" });
       s.openAt = now; s.dropAt = 0; s.attempts = 0;
-      setTimeout(() => { void this.flush(); }, 2500);
+      setTimeout(() => { try { linkQ.flush(); } catch {} }, 2500);
     },
     onDrop(chain, reason, code) {
       const s = st[chain];
@@ -1962,47 +1966,69 @@ const linkQ = (() => {
       s.attempts += 1;
     },
     attempts(chain) { return st[chain].attempts; },
-    async flush() {
-      if (!q.length) return;
-      const { base, token } = httpBase();
-      if (!base || !token) return;
-      const batch = q.splice(0, 100);
-      try {
-        const r = await fetch(base + "/api/telemetry/link?token=" + encodeURIComponent(token), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ events: batch }) });
-        if (!r.ok) q.unshift(...batch);
-      } catch { q.unshift(...batch); }
-    },
+    flush: linkQFlush, // 逃逸导出（onOpen 闭包 this 脆弱——具名函数单口，周期/可见性拍共用）
   };
+  function linkQFlush() {
+    for (const dest of ["lan", "cloud"]) {
+      const w = frameOf(dest);
+      if (!w || !q.some((e) => e.src === "web-" + dest)) continue;
+      // 整队分批（R1·P2③：原单次 100 条+唯一触发 onOpen=长断连积压滞留；现 200/批×4 拍清，
+      // 服务端单批 200 截同口径）——fire-and-forget：发送失败 unshift 回队，下次拍重试
+      for (let guard = 0; guard < 4; guard += 1) {
+        const batch = take(dest, 200);
+        if (!batch.length) break;
+        try { w.send(JSON.stringify({ command_id: "lq-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8), type: "COMMAND_TELEMETRY_LINK", payload: { events: batch }, ts: Date.now() })); }
+        catch { q.unshift(...batch); break; }
+      }
+    }
+  }
 })();
+// R1·P2③：flush 触发补——onOpen 单次 → +30s 周期拍 + 可见性拍（长断连积压不再滞留）
+setInterval(() => { try { linkQ.flush(); } catch {} }, 30_000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { try { linkQ.flush(); } catch {} } });
 
 // [W-LINKQUALITY] 诊断卡渲染：linkqCard（index.html 骨架）——近 24h 断连/重连 P50·P95
 // 分段摘要。惰性拉取（卡片可见时一次性+点击强刷；6s 陈旧窗）；无数据如实「暂无事件」。
 (function wireLinkqCard() {
   let at = 0, busy = false;
-  const httpBase2 = () => {
-    try {
-      const cfg = JSON.parse(localStorage.getItem("ccd_cfg") || "{}");
-      return { base: String(cfg.wsUrl || "").replace(/^ws/, "http").replace(/\/ws$/, ""), token: String(cfg.token || "") };
-    } catch { return { base: "", token: "" }; }
-  };
   const fmt = (ms) => ms == null ? "—" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms");
+  // R1（A审 P0）：取数同改 ws 帧命令（get:"summary"→ack.data 回 LinkSummary）——原链读
+  // 幽灵键 ccd_cfg+HTTP GET（云形态 CF 无 /api/* 恒死）；帧通道 LAN 优先云兜底，ack 按
+  // command_id 从帧总线结算（与 B2 ackWaiters 同观测面），4s 超时兜底
+  function linkqSummaryFrame() {
+    if (ctx.ws && ctx.ws.readyState === 1) return ctx.ws;
+    if (typeof cloudCmdShim !== "undefined" && cloudCtx.status === "online") return cloudCmdShim;
+    return null;
+  }
   async function fill(force) {
     const el = document.getElementById("linkqSummary");
     if (!el || busy) return;
     if (!force && Date.now() - at < 6000) return;
     busy = true;
     try {
-      const { base, token } = httpBase2();
-      if (!base || !token) { el.textContent = "未连接本机 relay"; return; }
-      const r = await fetch(base + "/api/telemetry/link?token=" + encodeURIComponent(token), { cache: "no-store" });
-      if (!r.ok) { el.textContent = "拉取失败（" + r.status + "）"; return; }
-      const j = await r.json();
+      const w = linkqSummaryFrame();
+      if (!w) { el.textContent = "未连接任何源"; return; }
+      const cid = "lqsum-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      const j = await new Promise((resolve) => {
+        let off = () => {};
+        off = window.__ccDeck005Frames.subscribe((ev) => {
+          const f = ev && ev.frame;
+          if (!f || f.type !== "COMMAND_ACK" || f.command_id !== cid) return;
+          off(); clearTimeout(t); resolve(f);
+        });
+        const t = setTimeout(() => { off(); resolve(null); }, 4000);
+        try { w.send(JSON.stringify({ command_id: cid, type: "COMMAND_TELEMETRY_LINK", payload: { get: "summary" }, ts: Date.now() })); }
+        catch { off(); clearTimeout(t); resolve(null); }
+      });
+      if (!j) { el.textContent = "拉取失败（超时）"; return; }
+      if (!j.ok) { el.textContent = "拉取失败（" + (j.error || "relay 拒绝") + "）"; return; }
       at = Date.now();
-      const bySrc = j && typeof j.dropsBySrc === "object" && j.dropsBySrc ? j.dropsBySrc : {};
+      const d = (j && typeof j.data === "object" && j.data) ? j.data : {};
+      const bySrc = typeof d.dropsBySrc === "object" && d.dropsBySrc ? d.dropsBySrc : {};
       const srcKeys = Object.keys(bySrc);
-      const drops = Number(j && j.drops) || srcKeys.reduce((n, k) => n + (Number(bySrc[k]) || 0), 0);
-      if (!drops && !Number(j && j.reconnects)) { el.textContent = "暂无事件（哨已布）"; return; }
-      el.textContent = "断连 " + drops + " 次 · 重连 P50 " + fmt(j && j.reconnectP50Ms) + " / P95 " + fmt(j && j.reconnectP95Ms) + (j && j.avgAttempts != null ? " · 均试 " + j.avgAttempts + " 次" : "");
+      const drops = Number(d.drops) || srcKeys.reduce((n, k) => n + (Number(bySrc[k]) || 0), 0);
+      if (!drops && !Number(d.reconnects)) { el.textContent = "暂无事件（哨已布）"; return; }
+      el.textContent = "断连 " + drops + " 次 · 重连 P50 " + fmt(d.reconnectP50Ms) + " / P95 " + fmt(d.reconnectP95Ms) + (d.avgAttempts != null ? " · 均试 " + d.avgAttempts + " 次" : "");
       const SEG_ZH = { bridge: "桥段（家 Mac↔CF）", "web-lan": "桌面·本机源", "web-cloud": "桌面·云桥源", rn: "手机" };
       el.title = srcKeys.map((k) => (SEG_ZH[k] || k) + "：断 " + (Number(bySrc[k]) || 0) + " 次").join("\n") || "分段数据待积累";
     } catch { el.textContent = "拉取失败"; }

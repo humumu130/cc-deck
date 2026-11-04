@@ -443,42 +443,35 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 60_000;
 
 // [W-LINKQUALITY]（1104 用户实锤×N）RN 段遥测：断连/重连事件本地记（recordConnEvent
-// 统一断因口挂点），恢复后延迟批量补报 POST /api/telemetry/link（src="rn"；断连时 ws
-// 已死无法即时上行——补报唯一可靠通道；失败留队列下次再试，容量 300 截旧）。
+// 统一断因口挂点）。R1（A审 P0/P1-1/P1-2）：补报不再 POST /api/telemetry/link（云通道
+// entry.wsUrl 常为家 LAN 地址/蜂窝不可达+纯云条目 token 空=恒早退）——改由 store 经该
+// 通道 ws 帧（COMMAND_TELEMETRY_LINK，云路 dispatchCmd 密封）上行，onAck 失败回队；
+// attempts/dropAt 按通道分键（LAN/云各自计时，跨通道不再污染 downtimeMs/attempts）。
+type LinkqEvent = { ts: number; src: "rn"; channel: "lan" | "cloud"; kind: string; reason?: string; code?: number; downtimeMs?: number; attempts?: number; connectedMs?: number };
 const linkqRn = (() => {
-  const q: Array<{ ts: number; src: "rn"; kind: string; reason?: string; code?: number; downtimeMs?: number; attempts?: number; connectedMs?: number }> = [];
-  const st = { openAt: 0, dropAt: 0, attempts: 0 };
-  const note = (ev: Partial<{ kind: string; reason: string; code: number; downtimeMs: number; attempts: number; connectedMs: number }>) => {
-    q.push({ ts: Date.now(), src: "rn", ...ev } as never);
+  const q: LinkqEvent[] = [];
+  const st = { lan: { openAt: 0, dropAt: 0, attempts: 0 }, cloud: { openAt: 0, dropAt: 0, attempts: 0 } };
+  const note = (ch: "lan" | "cloud", ev: Partial<LinkqEvent>) => {
+    q.push({ ts: Date.now(), src: "rn", channel: ch, ...ev } as LinkqEvent);
     if (q.length > 300) q.splice(0, q.length - 300);
   };
   return {
-    onOpen(wsUrl?: string, token?: string) {
-      const now = Date.now();
-      if (st.dropAt > 0) note({ kind: "reconnect", downtimeMs: now - st.dropAt, attempts: Math.max(1, st.attempts) });
-      else note({ kind: "connect" });
-      st.openAt = now; st.dropAt = 0; st.attempts = 0;
-      setTimeout(() => { void this.flush(wsUrl, token); }, 2500);
+    onOpen(ch: "lan" | "cloud") {
+      const s = st[ch]; const now = Date.now();
+      if (s.dropAt > 0) note(ch, { kind: "reconnect", downtimeMs: now - s.dropAt, attempts: Math.max(1, s.attempts) });
+      else note(ch, { kind: "connect" });
+      s.openAt = now; s.dropAt = 0; s.attempts = 0;
     },
-    onDrop(reason: string) {
-      const now = Date.now();
-      if (st.openAt > 0) { note({ kind: "drop", reason: reason.slice(0, 100), connectedMs: now - st.openAt }); st.openAt = 0; }
-      if (st.dropAt === 0) st.dropAt = now;
-      st.attempts += 1;
+    onDrop(ch: "lan" | "cloud", reason: string) {
+      const s = st[ch]; const now = Date.now();
+      if (s.openAt > 0) { note(ch, { kind: "drop", reason: reason.slice(0, 100), connectedMs: now - s.openAt }); s.openAt = 0; }
+      if (s.dropAt === 0) s.dropAt = now;
+      s.attempts += 1;
     },
-    async flush(wsUrl?: string, token?: string) {
-      if (!q.length || !wsUrl || !token) return;
-      const base = String(wsUrl).replace(/^ws/, "http").replace(/\/ws$/, "");
-      if (!base) return;
-      const batch = q.splice(0, 100);
-      try {
-        const r = await fetch(base + "/api/telemetry/link?token=" + encodeURIComponent(String(token)), {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ events: batch }),
-        });
-        if (!r.ok) q.unshift(...batch);
-      } catch { q.unshift(...batch); /* 留队列下次再试 */ }
-    },
+    attempts(ch: "lan" | "cloud") { return st[ch].attempts; },
+    take(n: number): LinkqEvent[] { return q.splice(0, n); },
+    restore(batch: LinkqEvent[]) { q.unshift(...batch); if (q.length > 300) q.splice(0, q.length - 300); },
+    pending(): number { return q.length; },
   };
 })();
 
@@ -547,6 +540,7 @@ class RelayStore {
   onPairedDevice: ((p: { dev: string; name: string }) => void) | null = null;
 
   constructor() {
+    this.startLinkqTick(); // [W-LINKQUALITY-R1] P2③：补报周期拍（30s——onOpen 单次触发之外，长断连积压不清滞留）
     // #114 后台恢复秒连：store 级 AppState→onForeground。App.tsx 既有监听（#90）有
     // 三个盲区：①聚合模式 connect() 被「任一源在线=connected」挡住，卡死源的长退避
     // 无人清；②resetBackoff 只改字段，已排定的长退避 timer 不取消照跑；③监听闭包
@@ -1493,6 +1487,8 @@ class RelayStore {
     conn.stateText = null;
     conn.failNote = null;
     this.emit();
+    try { linkqRn.onOpen("lan"); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY-R1]（A审 P1-2）LAN 通道恢复也记账——原仅 openCloud 挂点=RN LAN 闪断只有 drop 无 reconnect
+    setTimeout(() => { try { this.flushLinkq(conn); } catch { /* 尽力而为 */ } }, 2500);
     this.drainHalfconn(); // halfconn：LAN 源回在线——自愈队列重路由重发（B 类等的就是这一拍）
     this.startHb(conn, ws);
     ws.onclose = () => {
@@ -1572,7 +1568,8 @@ class RelayStore {
       opened = true;
       conn.reconnectDelay = RECONNECT_BASE_MS;
       conn.fastRetry = true;
-      try { linkqRn.onOpen(conn.cfg?.wsUrl, conn.cfg?.token); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY] RN 段恢复（downtime+attempts 随补报上行）
+      try { linkqRn.onOpen("cloud"); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY] RN 段恢复（downtime+attempts 随补报上行；R1 通道分键+帧上行）
+      setTimeout(() => { try { this.flushLinkq(conn); } catch { /* 尽力而为 */ } }, 2500);
       // #33 假在线修正：桥 ws 开门 ≠ relay 在线（手机云通道连的是桥，relay 关机时
       // 桥照样开门）。真在线 = 收到 relay 首帧（SNAPSHOT/pong，onMessage 置位）；
       // 开门态标 connecting + 「等待电脑端响应」，用户不再看到关机电脑「在线」
@@ -1807,7 +1804,7 @@ class RelayStore {
       conn.connEvents.push({ ts: Date.now(), kind, detail: detail.slice(0, 120) });
       if (conn.connEvents.length > 20) conn.connEvents.splice(0, conn.connEvents.length - 20);
     } catch { /* 台账尽力而为 */ }
-    try { linkqRn.onDrop(kind + ": " + detail); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY] RN 段 drop（五类断因统一口）
+    try { linkqRn.onDrop(conn.channel === "cloud" ? "cloud" : "lan", kind + ": " + detail); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY] RN 段 drop（五类断因统一口；R1 按通道分键防跨通道污染）
   }
   // conn-stability：关于页只读口——聚合/单源各自取 connEvents 尾 N 条（跨 conns 按时刻排）
   recentConnEvents(n = 3): Array<{ ts: number; kind: string; detail: string; durMs?: number }> {
@@ -3352,6 +3349,27 @@ class RelayStore {
     }
   }
 
+  // [W-LINKQUALITY-R1]（A审 P0/P1-1）：RN 补报帧上行——经 conn 的 ws 发 COMMAND_TELEMETRY_LINK
+  //（dispatchCmd 云路密封/超时重发同 id），onAck ok 即确认（事件已 take 出队）；失败/超时回队
+  // at-least-once，服务端事件指纹去重兜底（重发不双记账）。整队分批 200×4 拍（长断连积压不清滞留）
+  private flushLinkq(conn: SourceConn) {
+    if (!conn.ws || conn.ws.readyState !== WebSocket.OPEN) return;
+    for (let guard = 0; guard < 4 && linkqRn.pending() > 0; guard += 1) {
+      const batch = linkqRn.take(200);
+      if (!batch.length) return;
+      const cmdId = "lq-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      const ok = this.dispatchCmd(conn, { command_id: cmdId, type: "COMMAND_TELEMETRY_LINK", payload: { events: batch } as Record<string, unknown>, ts: Date.now() }, null,
+        (r) => { if (!r.ok) linkqRn.restore(batch); });
+      if (!ok) { linkqRn.restore(batch); return; }
+    }
+  }
+  private linkqTimer: ReturnType<typeof setInterval> | null = null;
+  private startLinkqTick() {
+    if (this.linkqTimer) return;
+    this.linkqTimer = setInterval(() => {
+      try { for (const c of this.conns.values()) { if (c.ws && c.ws.readyState === WebSocket.OPEN) { this.flushLinkq(c); if (linkqRn.pending() === 0) break; } } } catch { /* 尽力而为 */ }
+    }, 30_000); // RN timer 为 number 无 unref（relay 侧同款拍；App 生命周期内常驻）
+  }
   private enqueueHalfconn(type: string, payload: Record<string, unknown>, cmdId: string, sid: string | null, onAck: PendingCmd["onAck"], giveUp: string, sourceId?: string): boolean {
     if (this.halfconnQueue.length >= 8) return false; // 风暴闸：链路级故障多命令同挂不失控
     // halfconn R1（P1-②·双审）：队列项带 sourceId——无 sid 的源寻址命令（orgConfirm/
