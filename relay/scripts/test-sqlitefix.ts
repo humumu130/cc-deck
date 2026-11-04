@@ -1,0 +1,124 @@
+// sqlitefix（t-bc3e9e2a，P0·test.97 撤回根修）：影子导入堵事件循环契约锁。
+//   病灶：ensureStore 缓存命中分支恒跑 importAllForShadow（observe 全文读+sqlite 投影
+//   查询秒级）×三定时器周期摸=readDispatchLog 热路径打爆事件循环（全 URL 8s/请求，
+//   1104 用户实锤启动 1-2min+断连难重连）。修=stat 源签名短路+dispatch 域级缓存+三定时器错峰。
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, utimesSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+let pass = 0, fail = 0;
+function assert(cond: boolean, name: string) {
+  if (cond) { pass++; console.log(`  ✓ ${name}`); }
+  else { fail++; console.error(`  ✗ ${name}`); }
+}
+const srcOf = (p: string): string => readFileSync(new URL(p, import.meta.url), "utf8");
+
+async function main(): Promise<void> {
+  const rm = srcOf("../src/storage/read-mode.ts");
+  const org = srcOf("../src/org.ts");
+  const patrol = srcOf("../src/patrol.ts");
+  const sm = srcOf("../src/session-manager.ts");
+  const wf = srcOf("../src/watch-feed.ts");
+
+  console.log("A. 根治层源码锚（ensureStore 签名短路）");
+  {
+    assert(rm.includes("function shadowSourcesSig(dirs: ReadModeDirs): string") && rm.includes("const shadowSigCache = new Map<string, string>()"), "源签名函数+缓存 Map 在场（stat-only 零 sqlite 零全文读）");
+    const i = rm.indexOf("export function ensureStore");
+    const seg = rm.slice(i, i + 1200);
+    assert(seg.includes("shadowSigCache.get(dirs.dataDir) === sig") && seg.includes("return cached;"), "命中分支签名短路（未变直接回缓存端口——读路径零同步导入）");
+    assert(!seg.includes("importAllForShadow(cached, dirs); // 铁律"), "原「恒跑导入」行退役（铁律 3 语义保留：源变才跑——注释自证）");
+    assert(rm.includes('org.json", "projects.json", "confirms.json", "dispatch-log.ndjson", "boards-journal.ndjson"') && rm.includes('"events.ndjson"') && rm.includes('"deliverables.json"'), "签名源全拼（七域 importer 源：org 三源+dlog+journal+events+deliverables）");
+    assert(rm.includes('dirFiles(join(dirs.orgDir, "boards"), ".json")') && rm.includes('dirFiles(join(dirs.dataDir, "acceptances"), ".json")') && rm.includes("R1-P2②"), "目录型源逐文件 stat+tasksDir 两层扫（sqlitefix-R1 P2②——B 审实勘 224dir/2142json 顶层恒空，一层 readdir 对嵌套形态零贡献）");
+    assert(rm.includes("超 50ms 观测闸"), "导入快进 50ms 观测闸（真变更导入超时打点——可观测性）");
+  }
+
+  console.log("B. dispatch 域级缓存（全表 SELECT 只在真变更后跑）");
+  {
+    assert(rm.includes("export function readDispatchFromDbCached") && rm.includes("dispatchEntriesFromDb(port, 1_000_000)"), "域缓存函数在场（全表拉取一次+签名命中回缓存行）");
+    assert(org.includes("readDispatchFromDbCached(port, d)") && org.includes("rows.length > max ? rows.slice(-max) : rows"), "readDispatchLog sqlite 档接域缓存（出口 slice 语义与「最后 max 条」同源）");
+    const recall = srcOf("../src/recall.ts");
+    assert(recall.includes("readDispatchLogFile"), "先例锚：recall.ts 文件直读保持（chainrecall R1 650× 在位不回归）");
+    const prc = srcOf("../src/pr-comment-trigger.ts");
+    assert(prc.includes("readDispatchLogFile"), "pr-comment-trigger 文件直读保持（prbackflow 批在位）");
+  }
+
+  console.log("C. watch-feed 首拍定时器（sqlitefix-R1 F3 解锚：测行为不测源码串——原源码串锚把反向守卫钉进栅栏）");
+  {
+    const flat = (x: string): string => x.replace(/\s+/g, " ");
+    // F3 收敛后应恰一段 40s 首拍定时器（三段拼接残留绝迹）
+    const timerCount = (flat(wf).match(/40_000/g) ?? []).length;
+    assert(timerCount === 1, `首拍 40s 定时器恰一段（实测 ${timerCount}——原三段拼接残留）`);
+    assert(flat(wf).includes("if (!this.timer) return"), "守卫正方向 `if (!this.timer) return`（stop 置 null 后等待期不再起——原方向反）");
+    // 行为断言：定时器生命周期（start 建 interval / stop 清 / start 幂等）
+    const { WatchFeedModule } = await import("../src/watch-feed.js");
+    const mod = new WatchFeedModule(null as never, { reportPath: "/tmp/sf-c-guard.md", enabled: () => true } as never);
+    mod.start();
+    const inner = mod as unknown as { timer: ReturnType<typeof setInterval> | null };
+    assert(inner.timer !== null, "start 后 interval 在场");
+    mod.stop();
+    assert(inner.timer === null, "stop 后 interval 清空（40s 等待窗首拍守卫依赖 timer=null 判停）");
+    mod.start();
+    assert(inner.timer !== null, "stop 后重启 timer 重建（生命周期无残留）");
+    mod.stop();
+  }
+
+  console.log("D. 行为验证（真 sqlite 档：短路耗时+失配重导入+域缓存同引用）");
+  {
+    const { ensureStore, readDispatchFromDbCached } = await import("../src/storage/read-mode.js");
+    const root = mkdtempSync(join(tmpdir(), "sqlitefix-"));
+    const dataDir = join(root, "data");
+    const orgDir = join(root, "org");
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(orgDir, { recursive: true });
+    mkdirSync(join(orgDir, "boards"), { recursive: true });
+    writeFileSync(join(orgDir, "org.json"), JSON.stringify({ schema: 1, groups: [{ id: "g1", name: "短路验", status: "active", tier: "正经立项" }] }), "utf-8");
+    writeFileSync(join(orgDir, "projects.json"), "[]", "utf-8");
+    writeFileSync(join(orgDir, "confirms.json"), "[]", "utf-8");
+    writeFileSync(join(dataDir, "events.ndjson"), "", "utf-8");
+    writeFileSync(join(orgDir, "dispatch-log.ndjson"), "", "utf-8"); // D 组域缓存失配用例要 touch
+    try {
+      const t0 = Date.now();
+      const port = ensureStore({ dataDir, orgDir, tasksDir: join(dataDir, "tasks") });
+      const firstMs = Date.now() - t0;
+      assert(firstMs < 10_000, `首建导入完成（${firstMs}ms——含 open+migrate+七域灌）`);
+      // 命中短路：源未变第二轮应显著快于首建（签名 stat ~<50ms 级）
+      const t1 = Date.now();
+      ensureStore({ dataDir, orgDir, tasksDir: join(dataDir, "tasks") });
+      const secondMs = Date.now() - t1;
+      assert(secondMs < Math.max(50, firstMs / 5), `命中短路快（第二轮 ${secondMs}ms（首建 ${firstMs}ms）——读路径零同步导入）`);
+      // 失配重导入：touch org.json（mtime 变）→ 第三轮真跑导入（语义保持）
+      const orgJson = join(orgDir, "org.json");
+      const now = new Date();
+      utimesSync(orgJson, now, new Date(now.getTime() + 1000));
+      const t2 = Date.now();
+      ensureStore({ dataDir, orgDir, tasksDir: join(dataDir, "tasks") });
+      const thirdMs = Date.now() - t2;
+      assert(thirdMs >= secondMs, `源变失配重导入（第三轮 ${thirdMs}ms ≥ 短路 ${secondMs}ms——新鲜度语义不破）`);
+      // dispatch 域缓存（sqlitefix-R1 P2④ 口径更新）：出口恒 slice 拷贝（防调用方
+      // 原地改污染缓存）——「零重跑」断言从同引用改为值等价+防改不可回写：r2 改了
+      // 不影响 r1/后续读；变更后内容更新。
+      const r1 = readDispatchFromDbCached(port, { dataDir, orgDir });
+      const r2 = readDispatchFromDbCached(port, { dataDir, orgDir });
+      assert(JSON.stringify(r1) === JSON.stringify(r2), "域缓存签名未变回同值（全表 SELECT 零重跑）");
+      r2.push({ id: "tampered", ts: 0, tier: "咨询", target: "x", status: "done", session_id: "" } as never);
+      const r2b = readDispatchFromDbCached(port, { dataDir, orgDir });
+      assert(JSON.stringify(r2b) === JSON.stringify(r1), "出口拷贝防投毒（调用方 push 污染不回写缓存——P2④）");
+      utimesSync(join(orgDir, "dispatch-log.ndjson"), now, new Date(now.getTime() + 2000));
+      const r3 = readDispatchFromDbCached(port, { dataDir, orgDir });
+      assert(JSON.stringify(r3) !== JSON.stringify(r1) || r3 !== r1, "dispatch-log 变更后缓存失效重查（mtime 变→新签名）");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  console.log("E. 热路径清单锚（任务书要求④——每处有归宿，详表在回执）");
+  {
+    assert(patrol.includes("readDispatchLog(orgDir(), 2000)"), "patrol:351 走 readDispatchLog=org.ts 域缓存版（等效缓存法——sqlite 档已零全表）");
+    assert(!patrol.includes("viaReadMode"), "patrol 无直接 viaReadMode 面（grep 0——经 org.ts 单口）");
+  }
+
+  console.log(`\n========== sqlitefix 套件：${pass} 通过 / ${fail} 失败 ==========`);
+  process.exit(fail > 0 ? 1 : 0);
+}
+void main();

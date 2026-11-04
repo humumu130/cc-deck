@@ -14,7 +14,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
 import { archiveDispatchTerminal } from "./dispatch-run-archive.js"; // M1 run 留档终态钩子（模块无环：只依赖 node/config/artifacts）
-import { viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
+import { readDispatchFromDbCached, resolveDirs, viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
 import { writeDispatchToDb } from "./storage/write-dispatch.js"; // #292 cutover 批1 v2：append 后同步落库
 import { atomicWriteJson } from "./fs-safe.js";
 import { applyOrgChange } from "./org-schema.js";
@@ -575,9 +575,16 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
 // M11-G1 读入口接线（三档；dispatch 域 sqlite 投影=D2 段链收敛行，target 经 member 归因
 // 映射值域变化——已知有损映射面备案 read-mode.ts 头注；session-manager 三处消费全经此原点）。
 export function readDispatchLog(dir?: string, max = 500): DispatchEntry[] {
+  // sqlitefix（P0·1104 用户实锤/test.97 撤回根修）：sqlite 档换 readDispatchFromDbCached
+  //（域签缓存——dispatch-log+org 三源 stat 未变回缓存行，全表 SELECT 只在真变更后跑；
+  // 出口 slice 语义与原「返回最后 max 条」同源）。json 档文件直读原样（本就轻）。
   return viaReadMode("dispatch", {
     json: () => readDispatchLogFile(dir, max),
-    sqlite: (port) => dispatchEntriesFromDb(port, max),
+    sqlite: (port) => {
+      const d = resolveDirs({ orgDir: dir });
+      const rows = readDispatchFromDbCached(port, d);
+      return rows.length > max ? rows.slice(-max) : rows;
+    },
     dirs: { orgDir: dir },
   });
 }

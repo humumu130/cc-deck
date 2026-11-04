@@ -245,12 +245,29 @@ export class WatchFeedModule {
     const raw = process.env.CCR_WATCH_FEED_MS;
     const n = Number(raw);
     const interval = raw && Number.isFinite(n) && n > 0 ? n : (this.opts.intervalMs ?? DEFAULT_INTERVAL_MS);
-    this.timer = setInterval(() => {
-      try { this.tick(); } catch (e) {
-        console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
-      }
-    }, interval);
+    // sqlitefix-R1（F3·A/B 双审）：首拍 40s **单段**（原三段 setTimeout 拼接残留=同拍
+    // 双跑 tick+stop 后幽灵拍——两审定罪）。守卫方向 `if (!this.timer) return`：等待期
+    // 被 stop（timer=null）即不再起；运行态到达（timer 已赋值）照跑 tickGuarded（带
+    // ticking 重入门）。错峰语义=仅首拍相位偏移（稳态共振由签名短路根治，patrol.ts:85
+    // 注释同口径订正）。
+    setTimeout(() => {
+      if (!this.timer) return; // 等待期被 stop 即不再起（stop 置 null——方向曾写反）
+      void this.tickGuarded();
+    }, 40_000).unref?.();
+    this.timer = setInterval(() => { void this.tickGuarded(); }, interval);
     this.timer.unref?.();
+  }
+
+  private ticking = false;
+  private async tickGuarded(): Promise<void> {
+    if (this.ticking) { console.log("[watch-feed] 上轮 tick 未收尾，本轮跳过（sqlitefix 重入门）"); return; }
+    this.ticking = true;
+    const t0 = Date.now();
+    try { await this.tick(); } catch (e) {
+      console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
+    } finally { this.ticking = false; }
+    const ms = Date.now() - t0;
+    if (ms > 50) console.warn(`[watch-feed] tick ${ms}ms（超 50ms 预算观测闸——sqlitefix 打点）`);
   }
 
   stop(): void {
