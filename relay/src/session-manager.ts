@@ -16,7 +16,7 @@ import { dispatchTriggerKey, findInFlightByTriggerKey } from "./trigger-key.js";
 import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Report 六态（回执落账枚举位——散文本 waiting 不认）
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
-  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setDispatchClosedHook, setPmOverride, writeOrgAnchor,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
@@ -95,6 +95,7 @@ import type { EmployeeHomeSettingsPayload
 import { cronTasksKey, readCronTasks } from "./cron.js";
 // W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排缺陷 P0 批）：worktree 互斥锁底座 + 审计词表
 import { claimWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther } from "./dispatch-lock.js";
+import { worktreeDirty } from "./worktree-gc.js"; // W-TREEGC：收口清锁守卫（脏树不清锁防裸奔）
 // W-DELIVERCB（用户 1102 拍板）：沃克交付 Callback 三线机制——去重账+文案（纯 fs 模块）
 import { amendFailedReport, appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js"; // domstep1r1：amendFailedReport=failed 六态修正行单点（P2-A③）
 import type { ChainAuditAction } from "./types.js";
@@ -925,6 +926,17 @@ export class SessionManager {
     // 通知账）。单回调槽后注册覆盖——生产单 manager 进程假设内成立（多 manager
     // 仅测试形态，后建者接管产生登记）
     setConfirmCreatedHook((c) => this.recordOrgConfirmNotification(c));
+    // W-TREEGC 关单防线（1104 夜双事故）：终态 done/failed 落账零回执=「交付物失踪」
+    // ——notifyLeaderSystem 升级回流 PM（域不变量 I4 副作用先存后做对位：关单前
+    // 交付证据先在）。drill 演练行豁免。
+    setDispatchClosedHook((e) => {
+      if (e.drill === true) return;
+      if (!e.receipt || !e.receipt.trim()) {
+        this.notifyLeaderSystem(
+          `dispatch ${e.id.slice(0, 8)}（${(e.title ?? "").slice(0, 30) || "无题"}）${e.status === "done" ? "done" : "failed"} 关单但零回执——交付物失踪（W-TREEGC 关单防线）：核对 worktree 隔离区/git 分支/PR 后人工收口`,
+        );
+      }
+    });
     // W-EXPP2：经验库 GC 轮收口回调（单槽，experience.ts notifyGcRound 递出）——
     // 广播增量 + 淘汰/合并非零时发 GC 轮摘要通知（D1-4「经验整理：淘汰 N、合并 M，
     // 均可恢复」走既有通知流）。注册在构造器：startExperienceGc 定时器晚于 mgr 建立
@@ -5242,9 +5254,25 @@ ${lines.join("\n")}
     // W-ORG-DEFECTS 件2：收口清 worktree 锁——该单持有的 .cc-deck-lock 随终态释放
     //（worker「退出收尾清锁」的机制面；leader-harvest 收尾/2h 过期为另两路兜底）。
     // 尽力而为：CCR_WT_ROOT 扫描失败不阻断收口主路径。
+    // W-TREEGC（1104 夜双事故）锁释放守卫：被清锁的树若**脏（未提交改动在树）**，
+    // 清锁=树裸奔（事故链：relay 重启误关单→清锁→22:1x 树被外部清理物理删除，
+    // chain-audit 3096/3098 铁证）——脏树不清锁（留 2h 锁=占位牌），挂
+    // 「交付物失踪」告警回流 PM（域不变量 I4：副作用先存后做）；中断型收口
+    //（receipt 带「回合中断」）与收割链收口（receipt 带「结果：」）以外的一律视为
+    // 无交付证据，同样守卫。
     try {
-      const cleared = scanClearWorktreeLocks(e.id);
+      const guarded: string[] = [];
+      const cleared = scanClearWorktreeLocks(e.id, undefined, (d) => {
+        // 守卫谓词：脏树不清锁（未提交改动在树）——锁留守=树占位牌防裸奔
+        if (worktreeDirty(d)) { guarded.push(d); return true; }
+        return false;
+      });
       if (cleared.length) this.emitChainAudit("dispatch-close", `worktree 锁随收口释放: ${cleared.map((d) => d.split("/").pop()).join(",")}`);
+      if (guarded.length) {
+        for (const d of guarded) this.emitChainAudit("wt-guard", `脏树不清锁（未提交改动在树，锁留守 48h 防裸奔）：${d}——收口单 ${e.id.slice(0, 8)}（${truncate(receipt, 40)}）`);
+        // 交付物失踪告警：中断/无交付收口 × 脏树 = 稿件悬空（任务书改动④）
+        this.notifyLeaderSystem(`[交付物失踪] 单 ${e.id.slice(0, 8)} ${status}（${truncate(receipt, 40)}）但 worktree ${guarded.map((d) => d.split("/").pop()).join(",")} 有未提交改动——锁已留守，48h 内可从 ${guarded.join(", ")} 抢救（W-TREEGC）`);
+      }
     } catch { /* 尽力而为 */ }
     this.emitChainAudit("dispatch-close", `id=${e.id.slice(0, 8)} status=${status} worker=${workerSessionId.slice(0, 12)} receipt=${truncate(receipt, 60)}`); /* #92 W-NOTIFY2 C：回执收口入审计流（通知面全链既有——transient/decision-ledger/upsert/failed 单注入 PM） */
     this.bus.emitTransient("DISPATCH_DONE", {
