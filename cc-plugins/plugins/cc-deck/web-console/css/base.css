@@ -18,10 +18,10 @@
        投影规则已撤（:1545 区）；背景维持 --rail 融合形态 */
     /* ===== W-STATUSBAR-OVERHAUL（1101 用户令·三路审查合并）：bar 分层+状态语义+克制规范 =====
        三路收敛诊断「没状态/没层次/没规范」落地：bar 底色提亮一档+hairline 收口（禁阴影）；
-       高度 34→40px 8pt 栅格；全 bar 唯一彩色=胶囊状态点（绿 #3FB950/琥珀 #F59E0B）；
+       高度 34→40px（1101 8pt 栅格）→36px（1104 用户拍板收一档，主流带对齐弃栅格论：VS Code 35/Chrome 40；:24 唯一落点）；全 bar 唯一彩色=胶囊状态点（绿 #3FB950/琥珀 #F59E0B）；
        图标同族 16px/stroke1.5/round；「CC Deck」标题退役（app 名在 Dock/关于页，第三次出现零信息）。
        注意：本段新增规则只写在雷前区（文件尾部 @media reduce 未闭合地雷 3207 仍在，append=被吞）。 */
-    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; background: var(--windowbar-bg); border-bottom: 1px solid var(--windowbar-line); }
+    .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; background: var(--windowbar-bg); border-bottom: 1px solid var(--windowbar-line); } /* 1104 用户拍板 40→36；子元素 28 热区不动（VS Code 35/Chrome 40 主流带内）；唯一落点——全仓 windowbar 高度无第二落点（media/紧凑/print 零变体），下位改档只动本行 */
     .windowbar { --windowbar-bg: var(--rail); --windowbar-line: var(--line-soft); /* 用户 1102 拍板：顶栏与侧边导航栏同色（分层突兀回改） */ --windowbar-ink: rgba(255, 255, 255, 0.55); --windowbar-trigger-line: rgba(255, 255, 255, 0.12); --windowbar-hover: rgba(255, 255, 255, 0.06); --windowbar-active: rgba(255, 255, 255, 0.10); --windowbar-dot-ok: #3FB950; --windowbar-dot-warn: #F59E0B; --windowbar-dot-idle: rgba(255, 255, 255, 0.28); }
     html[data-theme="light"] .windowbar { --windowbar-bg: var(--rail); --windowbar-line: var(--line-soft); --windowbar-ink: #71717A; --windowbar-trigger-line: rgba(0, 0, 0, 0.12); --windowbar-hover: rgba(0, 0, 0, 0.05); --windowbar-active: rgba(0, 0, 0, 0.09); --windowbar-dot-idle: rgba(0, 0, 0, 0.25); } /* 浅色 zinc-50/zinc-500 档 */
     /* W-UIFIX A（2026-10-11 test.11 真机反馈「比其他软件小多了」）：9px→12px 对齐 macOS
@@ -1551,6 +1551,10 @@
     #d-team .workspace-body > .workspace-pane.board-pane.active { display: flex; flex-direction: column; height: 100%; }
     /* V8R 看板总览区（原型 .ov）：无头行、prog 矩形分段（8px/radius 4/段间 2px 画布分隔线）、
        图例方 chip（panel 底+line 边+radius 6）——原型 ovleg 语言 */
+    /* boardfresh（1104 用户令·板面说谎第三现）：龄戳行+离线横幅——复用既有灰轴（faint/dim/line）零新色 */
+    #d-team .board-fresh { padding: 6px 18px 0; color: var(--faint); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+    #d-team .board-fresh .board-fresh-stale { color: var(--dim); }
+    #d-team .board-offline { padding: 5px 10px; margin: 0 18px 8px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--hover); color: var(--dim); font-size: var(--fs-B); }
     #d-team .board-overview { flex: 0 0 auto; padding: 14px 18px 12px; border-bottom: 0; }
     #d-team .board-overview-head { display: none; } /* V8R：重头行退役（markup 已停产出，样式兜底） */
     #d-team .board-progress { display: flex; height: 8px; gap: 2px; margin-top: 0; overflow: hidden; border-radius: 4px; background: var(--bg1); }

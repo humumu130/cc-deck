@@ -69115,6 +69115,23 @@ function withRelaySource(sessions, relayName) {
   if (!relayName) return sessions;
   return sessions.map((s) => ({ ...s, relay_source: s.relay_source ?? relayName }));
 }
+function fnv1a(str2) {
+  let h = 2166136261;
+  for (let i = 0; i < str2.length; i++) {
+    h ^= str2.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function buildBoardsDigest() {
+  const out = [];
+  for (const g2 of listGroups()) {
+    const b = loadBoard(g2.id);
+    if (!b || !Array.isArray(b.entries)) continue;
+    out.push({ gid: g2.id, n: b.entries.length, rev: fnv1a(b.entries.map((e) => `${e.id}:${e.status ?? ""}`).sort().join("|")) });
+  }
+  return out.length ? { seq: 0, type: "BOARDS_DIGEST", payload: { boards: out } } : null;
+}
 function buildSessionsReconcile(mgr2, relayName) {
   return {
     seq: 0,
@@ -70126,6 +70143,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) ws2.send(JSON.stringify(env));
       ws2.send(JSON.stringify(buildSessionsReconcile(mgr2, opts.relayName?.())));
+      const bd2 = buildBoardsDigest();
+      if (bd2) ws2.send(JSON.stringify(bd2));
     } else {
       const snapLogs = mgr2.buildSnapshotLogs(SNAPSHOT_LOGS_LAN.budgetBytes, SNAPSHOT_LOGS_LAN.perSessionCap);
       const snapshot = {
@@ -71437,6 +71456,8 @@ var CloudClient = class {
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendSealed(dev, env);
       this.sendSealed(dev, buildSessionsReconcile(this.mgr, this.extra?.relayName?.()));
+      const bd2 = buildBoardsDigest();
+      if (bd2) this.sendSealed(dev, bd2);
       return;
     }
     const snapSeq = this.bus.lastSeq();
@@ -71916,6 +71937,8 @@ var CloudClient = class {
     if (replay && replay.length <= REPLAY_FAST_MAX) {
       for (const env of replay) this.sendWan(dev, env);
       this.sendWan(dev, buildSessionsReconcile(this.mgr, this.extra?.relayName?.()));
+      const bdw = buildBoardsDigest();
+      if (bdw) this.sendWan(dev, bdw);
       return;
     }
     const snapSeq = this.bus.lastSeq();

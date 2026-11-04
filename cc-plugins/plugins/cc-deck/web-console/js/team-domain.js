@@ -17,7 +17,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined }; // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined, boardFreshAt: new Map(), _freshLastAt: 0 }; /* boardfresh（1104 用户令·板面说谎第三现）：boardFreshAt=per-gid 板数据最近落地时刻（detail ack/SNAPSHOT.boards/BOARD_UPDATED 三写点）；_freshLastAt=强刷节流（5s） */ // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -490,7 +490,13 @@
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   // V8R boardfoot（原型 .boardfoot）：口径脚注——自验点语义 + 操作指引
                   const boardFoot = '<div class="boardfoot">板面实时同步 · 断线自动补齐 · 卡面 ✓✗○ = AI 自验进度，最终验收以确认卡为准 · 新建任务走来源会话派单</div>';
-                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + boardOverview + '<div class="board">' + columns + "</div>" + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
+                  // boardfresh（1104 用户令）：龄戳+离线横幅——「这数据是几点的」可感知
+                  const fmtHM = (ts) => { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+                  const freshAt = state.boardFreshAt.get(project?.id) || 0;
+                  const staleMs = Date.now() - freshAt;
+                  const freshHtml = freshAt ? '<div class="board-fresh" data-board-fresh="' + escape(project?.id || "") + '">更新于 ' + fmtHM(freshAt) + (staleMs > 600_000 ? ' <span class="board-fresh-stale">· 数据可能过期</span>' : "") + "</div>" : "";
+                  const offlineHtml = !state.online ? '<div class="board-offline">离线——显示的是 ' + (freshAt ? fmtHM(freshAt) + " 的快照" : "旧数据（无龄戳）") + "</div>" : "";
+                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + offlineHtml + boardOverview + freshHtml + '<div class="board">' + columns + "</div>" + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
                 }
                 function activityMarkup(project, opts = {}) {
                   // W-ACTIVITY3（#116，1015 拍板）：视觉基准=v3 原型活动页（feedwrap/.fi 轻列表
@@ -1159,6 +1165,7 @@
                     ? Object.assign({}, data.group, item.__relay_source !== undefined ? { __relay_source: item.__relay_source } : null)
                     : item);
                   state.boards.set(gid, data.board);
+                  state.boardFreshAt.set(gid, Date.now()); // boardfresh：detail ack 落地=龄戳写点①
                   state.receipts.set(gid, entities(data.receipts).sort((first, second) => (Number(second.ts) || 0) - (Number(first.ts) || 0)).slice(0, 30));
                   // W-DISPVIS C2：组内排队单存本（dispatch_queue 能力位——旧 relay 缺省不
                   // 标角标，端上零副作用）。跨域借道：B2 会话域闭包读不到本域 state——挂
@@ -1233,6 +1240,8 @@
                   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
                   state.epoch += 1;
                   state.boards.clear(); state.receipts.clear(); state.loads.clear(); state.flights.clear(); state.accepted.clear();
+                  state.boardFreshAt.clear(); // boardfresh：换代清龄戳（旧板已无效——重拉后重记）
+                  state._freshLastAt = 0; // boardfresh 时机②：SNAPSHOT 落地=重连成功确证（每次连接全量带板）——清节流让下方选中组重拉必发
                   state.source = context?.relayName || payload.relay_name || "当前来源";
                   state.sessions = new Map((Array.isArray(payload.sessions) ? payload.sessions : []).filter((session) => session && typeof session.session_id === "string").map((session) => [session.session_id, session]));
                   // [W-SEAT-SEMANTICS] 离席富化面锚定（能力位=Map 在场；缺席=旧 relay——板卡
@@ -1248,7 +1257,7 @@
                   // W-RULES2 铁律域锚定（experience 同款口径）
                   updateRules(payload.rules);
                   state.rulesEnabled = payload.rules_enabled !== false;
-                  for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) state.boards.set(board.gid, board);
+                  for (const board of Array.isArray(payload.boards) ? payload.boards : []) if (board && state.projects?.some((item) => item.id === board.gid) && Array.isArray(board.entries)) { state.boards.set(board.gid, board); state.boardFreshAt.set(board.gid, Date.now()); } // boardfresh：SNAPSHOT 板直落=龄戳写点②
                   // 件十八：receipts 过滤与 relay project-detail 同口径放宽——anchor 匹配 ∪ sid ∈ 编制
                   if (Array.isArray(payload.receipts)) for (const project of state.projects || []) {
                     const memberSids2 = new Set((Array.isArray(project.headcount) ? project.headcount : []).map((h) => h && h.session_id));
@@ -1276,7 +1285,23 @@
                   if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(mergePartition(state.confirms, payload.pending, context && context.relayName, confirmKeyOf)); render(); return true; }
                   // #283 同理：board 全量形态（board.gid+entries 在场）即权威覆盖，delta
                   // 并载不影响（本 case 只取 board.entries 全量）；gid 门控=并集含该组
-                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); state.boardFreshAt.set(payload.gid, Date.now()); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  // boardfresh 治本：板摘要对账（resume 快路径补发——瞬态板变更断连窗补不到的根治）。
+                  // 失配 gid → requestDetail force 重拉（既有通道）；缺席 gid 本地保留（板组可能已删，
+                  // 下次 SNAPSHOT 清）。公式=ws-server fnv1a 同式（`${id}:${status}` 有序 join 后 FNV-1a 32）
+                  if (message?.type === "BOARDS_DIGEST" && Array.isArray(payload?.boards)) {
+                    const fnv = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+                    let mismatch = [];
+                    for (const d of payload.boards) {
+                      if (!d || typeof d.gid !== "string") continue;
+                      const local = state.boards.get(d.gid);
+                      if (!local) continue; // 本地无板（未拉过）——不强行拉（进组时自然拉）
+                      const rev = fnv((Array.isArray(local.entries) ? local.entries : []).map((e) => e.id + ":" + (e.status ?? "")).sort().join("|"));
+                      if (rev !== d.rev || (local.entries?.length ?? 0) !== d.n) mismatch.push(d.gid);
+                    }
+                    if (mismatch.length) { console.info("[team] boardfresh 对账失配 " + mismatch.length + " 组，重拉：" + mismatch.join(",")); for (const gid of mismatch) void requestDetail(gid, true); }
+                    return true;
+                  } // boardfresh：帧落地=龄戳写点③
                   // W-EXPP2 经验域帧：帧双载恒带 entries 全量 → 覆盖式消费（未锚定=experiences
                   // null 时同帧即锚定——SNAPSHOT 先行兜底过，此处权威刷新）；expArm/expForm 保持
                   if (message?.type === "EXPERIENCE_UPDATED" && Array.isArray(payload?.entries)) { updateExperiences(payload.entries); render(); return true; }
@@ -1599,6 +1624,40 @@
                   document.addEventListener("ccdeck-005-refresh", () => {
                     if (state.selected) void requestDetail(state.selected, true);
                   });
+                  // ---------- boardfresh（1104 用户令·板面说谎第三现）：三时机强刷+龄戳 ----------
+                  // 服务端已验清白（板唯一事实源全终态+SNAPSHOT 全量带板+512KB 守卫未触发），
+                  // 病灶=端上断连/云桥腿断时无感渲染旧缓存。三时机（回前台/重连落地/切看板 tab）
+                  // 主动拉新——走既有 requestDetail force 通道（1013 件9 同口），禁新建旁路。
+                  // 5s 节流：三时机与 BOARD_UPDATED 帧叠加防抖（帧本身即新鲜，强刷只为兜底）。
+                  function refreshBoardFresh(reason) {
+                    if (!state.command || !state.online) return; // 离线不空转（恢复连接走 SNAPSHOT 落地时机）
+                    const now = Date.now();
+                    if (now - state._freshLastAt < 5000) return;
+                    state._freshLastAt = now;
+                    if (state.selected) void requestDetail(state.selected, true);
+                    console.info("[team] boardfresh 强刷：" + reason);
+                  }
+                  // 时机①web：visibilitychange visible（回前台——云桥僵死期间页面冻结无渲染，
+                  // 回前台必查一次）
+                  document.addEventListener("visibilitychange", () => {
+                    if (document.visibilityState === "visible") refreshBoardFresh("visibility-visible");
+                  });
+                  // 龄戳自检（60s）：页面停在看板无渲染时「>10min 数据可能过期」灰字自己浮现——
+                  // 不整板重渲（只改 .board-fresh 行文本），冻结态用户也能看到数据龄在涨
+                  setInterval(() => {
+                    const el = root.querySelector("[data-board-fresh]");
+                    if (!el) return;
+                    const gid = el.getAttribute("data-board-fresh");
+                    const at = state.boardFreshAt.get(gid) || 0;
+                    if (!at) return;
+                    const d = new Date(at);
+                    el.innerHTML = "更新于 " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + (Date.now() - at > 600_000 ? ' <span class="board-fresh-stale">· 数据可能过期</span>' : "");
+                  }, 60_000);
+                  // 时机③：切看板 tab（segment-bar 第 2 钮=看板，地基管 active/pane，此处只挂强刷钩）
+                  root.addEventListener("click", (event) => {
+                    const segBtn = event.target && event.target.closest ? event.target.closest(".segment-bar button") : null;
+                    if (segBtn && [...root.querySelectorAll(".segment-bar button")].indexOf(segBtn) === 1) refreshBoardFresh("tab-看板");
+                  }, true);
                   root.addEventListener("click", (event) => {
                     // FB4 团域新建：真表单（团队名/锚点/档位/成员多选），不再代理会话域新建会话弹窗
                     const newSession = event.target.closest("[data-team-new-session]");
