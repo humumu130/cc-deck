@@ -806,6 +806,7 @@ if (process.env.CC_DECK_DAEMON === "1") {
 
   mgr.markBootDataReady(); // bootfast2：SNAPSHOT boot.phase→ready（端上启动屏切换）
   bootMark("data-ready"); // bootfast2：后台段完成（完整数据就绪——boot-time 分解终点）
+  bootDone(); // bootfast2-r1：数据段全量分解出口——listen 行只含前置段（IIFE 让出后数据段在 listen 后），本行打全链（bridge-* 段序「在 orphan-confirms 后且仅一遍」的断言面）
 })().catch((e) => {
   // bootfast2-r1 P2-5：后台段异常兜底——打印+置 ready（banner 不悬死；进程不退）
   console.error(`[boot] 后台段异常（兜底置 data-ready）: ${e instanceof Error ? e.stack || e.message : String(e)}`);
