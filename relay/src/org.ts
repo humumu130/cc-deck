@@ -239,6 +239,20 @@ export const ORG_CLAUDE_MD_X0_SECTION = `${ORG_CLAUDE_MD_X0_MARKER}（2026-10-29
   原 PM 会话死亡自动移交。
 `;
 
+// chainrecall MVP（2026-11-04，架构升级期二）：PM 工具箱使用说明——「见 recall:<id>」
+// 链式取回代替贴全文（上下文当缓存管）。按标记幂等追加（M2/M2P1/RULES/X0 同机制）。
+export const ORG_CLAUDE_MD_RECALL_MARKER = "## 链式召回（recall）";
+export const ORG_CLAUDE_MD_RECALL_SECTION = `${ORG_CLAUDE_MD_RECALL_MARKER}（2026-11-04 起，chainrecall MVP）
+
+- 派单任务书「已知现状」长背景可写「见 recall:<id>」代替贴全文——worker 端按 id 取回，
+  省字数不省事实（链式取回代替复制）。
+- 四类 id 直查（会话 session_id / 板卡 t-xxx / 派单 dispatch_id / 回执 w-*.md）：
+  \`curl "http://127.0.0.1:8787/api/recall?id=<id>&token=<token>"\`（port/token 同 org CLI
+  口径；只读零写账）。返回 {id, kind, 摘要≤80字, 关联:[{id,kind,摘要≤40字}]}；
+  加 &hop=2 展开第二跳（如 板卡→派单→回执）。
+- leader-dispatch 加 \`--recall <id[,id...]>\` 可在任务书自动生成「关联对象索引」节。
+`;
+
 // ---------- X0 件6：PM 值守 override（org/duty.json，纯 fs 底座） ----------
 // 「org pm claim」写入的值守位钉选：dutyTargetId 优先消费（pid 探活，死会话自动
 // 忽略+清档=「启动检测旧 PM 死→自动转活/置空」的运行时形态）。独立小文件不并入
@@ -306,7 +320,7 @@ export function clearPmOverride(dir?: string): void {
 export function ensureOrgClaudeMd(dir?: string): "created" | "exists" | "upgraded" {
   const p = orgFilePath("CLAUDE.md", dir);
   if (!existsSync(p)) {
-    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION + "\n" + ORG_CLAUDE_MD_RULES_SECTION + "\n" + ORG_CLAUDE_MD_X0_SECTION, "utf-8");
+    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION + "\n" + ORG_CLAUDE_MD_RULES_SECTION + "\n" + ORG_CLAUDE_MD_X0_SECTION + "\n" + ORG_CLAUDE_MD_RECALL_SECTION, "utf-8");
     return "created";
   }
   const cur = readFileSync(p, "utf-8");
@@ -314,12 +328,14 @@ export function ensureOrgClaudeMd(dir?: string): "created" | "exists" | "upgrade
   const hasM2P1 = cur.includes(ORG_CLAUDE_MD_M2P1_MARKER);
   const hasRules = cur.includes(ORG_CLAUDE_MD_RULES_MARKER);
   const hasX0 = cur.includes(ORG_CLAUDE_MD_X0_MARKER);
-  if (hasM2 && hasM2P1 && hasRules && hasX0) return "exists";
+  const hasRecall = cur.includes(ORG_CLAUDE_MD_RECALL_MARKER);
+  if (hasM2 && hasM2P1 && hasRules && hasX0 && hasRecall) return "exists";
   const parts = [cur.trimEnd()];
   if (!hasM2) parts.push(ORG_CLAUDE_MD_M2_SECTION);
   if (!hasM2P1) parts.push(ORG_CLAUDE_MD_M2P1_SECTION);
   if (!hasRules) parts.push(ORG_CLAUDE_MD_RULES_SECTION);
   if (!hasX0) parts.push(ORG_CLAUDE_MD_X0_SECTION);
+  if (!hasRecall) parts.push(ORG_CLAUDE_MD_RECALL_SECTION);
   writeFileSync(p, parts.join("\n\n"), "utf-8");
   return "upgraded";
 }

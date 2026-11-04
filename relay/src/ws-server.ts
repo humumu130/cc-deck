@@ -7,6 +7,7 @@ import { detectLanIp } from "./lan-ip.js";
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
 import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
+import { recallResolve } from "./recall.js"; // chainrecall MVP：只读链式召回（/api/recall）
 import {
   serveAcceptancePage,
   loadAcceptance,
@@ -896,6 +897,36 @@ export function startServer(
       }
       res.writeHead(200, { "content-type": "application/json" })
         .end(JSON.stringify({ ok: true, artifacts: listArtifacts() }));
+      return;
+    }
+    // chainrecall MVP（1104 用户令，架构升级期二）：只读链式召回——上下文当缓存管，
+    // 任务书/回执写「见 recall:<id>」，端上按 id 取回 {kind, 摘要≤80, 关联[]}。
+    // id 路由四类对象（会话/板卡/派单/回执文件），关联只用既有账面事实（零写账、
+    // 权限走既有 token——与 /api/artifacts 同款）。hop=2 展开第二跳（板卡→派单→回执）。
+    if (req.method === "GET" && url.pathname === "/api/recall") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      const q = (url.searchParams.get("id") ?? "").trim();
+      if (!q) {
+        res.writeHead(400, { "content-type": "application/json" })
+          .end(JSON.stringify({ ok: false, error: "缺 id 参数（?id=<对象id>，可加 &kind=session|card|dispatch|receipt&hop=1|2）" }));
+        return;
+      }
+      const hop = url.searchParams.get("hop") === "2" ? 2 : 1;
+      const node = recallResolve(q, {
+        kind: url.searchParams.get("kind") ?? undefined,
+        hop,
+        sessions: () => mgr.snapshot(),
+      });
+      if (!node) {
+        res.writeHead(404, { "content-type": "application/json" })
+          .end(JSON.stringify({ ok: false, error: `id 未命中四类对象（session/card/dispatch/receipt）：${q}` }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify({ ok: true, hop, node }));
       return;
     }
     if (req.method === "GET" && url.pathname.startsWith("/artifacts/")) {
