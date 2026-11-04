@@ -6544,7 +6544,51 @@ ${lines.join("\n")}
             redispatch_of: str("redispatch_of") || undefined, // M12-3 重投锚（段链接续）
             worktree: str("worktree") || undefined, // P1-1：bash leader-dispatch 目标树（认领边写锁用；缺省零影响）
             slug: str("slug") || undefined,
+            target_sid: str("target_sid") || undefined, // W-PRREVIEW：显式定席（review-route 路由结果落席）
+            exclude_sessions: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined, // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话）
           });
+        }
+        // W-PRREVIEW（期一④ PR 互审，1104 拍板）：互审员路由查询——只路由零派发零
+        // spawn。PM 收割工具 leader-harvest --review 调用；routed=false 时调用方回落
+        // PM 子代理（不自动开新会话顶位）。count 钳 1..3=审查档位上限（档位由 PM 按
+        // 全局审查纪律定——一行 1 审/常规 2 审其一反方/重大 3 审，本口不代定档，
+        // 审查员是 worker 还是子代理不影响档位规则）。
+        case "review-route": {
+          const gid = str("gid");
+          if (!gid) return { ok: false, error: "gid 必填" };
+          const g = findGroup(gid);
+          if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+          if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可路由互审` };
+          const rr = this.routeReviewers(gid, {
+            count: typeof p.count === "number" ? p.count : 1,
+            skills: Array.isArray(p.skills) ? p.skills.filter((x): x is string => typeof x === "string" && !!x) : undefined,
+            exclude: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined,
+            anchorKey: g.anchor_dir,
+          });
+          return { ok: true, data: { routed: rr.routed, reviewers: rr.reviewers, ...(rr.reason ? { reason: rr.reason } : {}) } };
+        }
+        // W-PRREVIEW：PR 互审台账段行——原单链 in_review（审查发起，phase=begin）/
+        // done（squash-merge 收割收口，phase=end）段，时序证据链落权威台账。幂等：
+        // begin 时末行已 in_review 即返 already；活单白名单不含 in_review=不重收口
+        // 不阻新单；sqlite 冻结四态投影落 loss 同 queued 先例（ndjson 审计面权威）。
+        // run_ref 透传 prev 值=终态归档钩子（appendDispatch 咽喉）不再重归档。
+        case "review-ledger": {
+          const rid = str("dispatch_id");
+          const phase = str("phase");
+          const note = str("note");
+          if (!rid) return { ok: false, error: "dispatch_id 必填" };
+          const prev = readDispatchLog().find((e) => e.id === rid);
+          if (!prev) return { ok: false, error: `原单不存在: ${rid.slice(0, 8)}（核对台账 id）` };
+          if (phase === "begin") {
+            if (prev.status === "in_review") return { ok: true, data: { already: true, status: "in_review" } };
+            const okw = appendDispatch({ ts: Date.now(), id: rid, tier: prev.tier, target: prev.target, status: "in_review", session_id: prev.session_id, project_anchor: prev.project_anchor, receipt: truncate(note || "PR 互审发起（W-PRREVIEW：交付开 PR→CI 绿→worker 互审）", 200), ...(prev.title ? { title: prev.title } : {}), actor: "leader" });
+            return okw ? { ok: true, data: { status: "in_review" } } : { ok: false, error: "台账写入失败（见 relay 日志；schema 拒写？）" };
+          }
+          if (phase === "end") {
+            const okw = appendDispatch({ ts: Date.now(), id: rid, tier: prev.tier, target: prev.target, status: "done", session_id: prev.session_id, project_anchor: prev.project_anchor, receipt: truncate(note || "PR 审查收口（squash-merge 收割，W-PRREVIEW）", 200), ...(prev.title ? { title: prev.title } : {}), actor: "leader", ...(prev.run_ref ? { run_ref: prev.run_ref } : {}) });
+            return okw ? { ok: true, data: { status: "done" } } : { ok: false, error: "台账写入失败（见 relay 日志；schema 拒写？）" };
+          }
+          return { ok: false, error: `phase 只收 begin|end（收到 ${phase || "空"}）` };
         }
         // X1 多机编排（PRD §4.2-2）：org dispatch --remote <dev>——派单任务书经密封 xmsg
         // 送对端值班位，**对端权威消化**（对端 PM 按其本机 org 现状分诊；对端无值班位/
@@ -7703,7 +7747,7 @@ ${lines.join("\n")}
     });
   }
 
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string }):
     { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
@@ -7826,8 +7870,28 @@ ${lines.join("\n")}
     // tags，test-dispatch D13「skills 命中越过熟练序」语义保留），装配探测只对
     //「无标签证据的回落席」把关——两层正交：tags=策展声明，装配观测=实测并集，
     // 回落席（声明了 skills 但无人带标签）才是公司侧「装配故障静默降级」风险面。
-    let pv = input.gid ? this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor) : null;
+    // W-PRREVIEW（期一④ PR 互审）：显式定席优先——review-route 路由结果的确定性
+    // 落席（互审单派给指定 worker 会话）：跳过下方选席/复拉/装配探测序（路由决策
+    // 已由 review-route 用同款全链判据做出，探测清席换新会话=违背确定性），安全闸
+    // 保留且不可用即响亮拒——不静默换席（无匹配回落 PM 子代理是调用方决策位）。
+    const excludeSet = input.exclude_sessions?.length ? new Set(input.exclude_sessions) : null;
+    let pv = input.target_sid ? { sid: input.target_sid, tagHit: false } : (input.gid ? this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor, excludeSet) : null);
     let veteran: string | null = pv?.sid ?? null;
+    if (input.target_sid) {
+      const t = input.target_sid;
+      if (excludeSet?.has(t))
+        return { ok: false, error: `target_sid ${t.slice(0, 8)} 同时在排除集内（自相矛盾的派单参数）` };
+      const s = this.sessions.get(t);
+      if (!s || !s.state.relay_session_id) return { ok: false, error: `定席会话不存在或不可 resume: ${t.slice(0, 8)}（review-route 路由后已离场？重跑路由）` };
+      if (s.state.external) return { ok: false, error: `定席会话是外部会话: ${t.slice(0, 8)}` };
+      if (this.isLeaderSession(t)) return { ok: false, error: `定席会话是 Leader: ${t.slice(0, 8)}` };
+      if (s.state.status === "WORKING" || s.state.status === "WAITING")
+        return { ok: false, error: `定席会话在忙（${s.state.status}）: ${t.slice(0, 8)}——稍后重跑 review-route` };
+      if ((this.openDispatches.get(t)?.length ?? 0) > 0)
+        return { ok: false, error: `定席会话有在途单未收口: ${t.slice(0, 8)}——稍后重跑 review-route` };
+      if (input.gid && !(findGroup(input.gid)?.headcount ?? []).some((h) => h.session_id === t))
+        return { ok: false, error: `定席会话不在组 ${input.gid} 编制内: ${t.slice(0, 8)}（互审员=在编 worker，非编制走 PM 子代理）` };
+    }
     // C-MODE-B2 模块10 复拉优先于新开（C 模式「席位常驻+会话可换」的选席序补档）：routing
     // 高分熟手已被退休（roster 无）而编制有空位时，先 member-add 拉回再重跑选席——上下文
     // 亲和（该熟手有本组成功史）优先于干净冷启动；新开仍是兜底（无高分/无空位照旧）。
@@ -7838,7 +7902,7 @@ ${lines.join("\n")}
     if (input.gid && !veteran) {
       const revived = this.tryReviveVeteran(input.gid, role, anchor);
       if (revived) {
-        pv = this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor);
+        pv = this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor, excludeSet);
         veteran = pv?.sid ?? null;
       }
     }
@@ -7867,7 +7931,7 @@ ${lines.join("\n")}
     // 自由标签词在装配清单恒零命中会恒降级（词汇域对齐归 Leader 运营口径）。
     // 标签命中席（veteranTagHit）整段免检（重派③）：路由标签=Leader 策展能力证据，
     // D13「skills 命中越过熟练序」语义原样保留——探测只守无证据回落席。
-    if (veteran && !veteranTagHit && input.skills?.length && process.env.CCR_X0_PROBE !== "0") {
+    if (!input.target_sid && veteran && !veteranTagHit && input.skills?.length && process.env.CCR_X0_PROBE !== "0") { // W-PRREVIEW：定席路径免探测（review-route 已全链判定，探测清席换新=违背路由确定性）
       const inventory = this.assemblyInventoryOf(veteran);
       if (inventory === null) {
         // W-ROLE-BUILDER 冷启动通道（1101 实锤「新 tag 首派 422」对症）：skills 全部落在
@@ -7913,7 +7977,7 @@ ${lines.join("\n")}
         try { this.trimHeadcounts({ onlyGid: input.gid }); } catch { /* 清理失败不阻断派单主路径 */ }
         const g1 = findGroup(input.gid);
         if (g1 && g1.status === "active" && genericWorkerCount(g1.headcount) >= headcountCapOf(g1)) {
-          const reuse = this.pickIdleRosterWorker(g1, role, planned, input.worktree);
+          const reuse = this.pickIdleRosterWorker(g1, role, planned, input.worktree, excludeSet);
           if (reuse) {
             veteran = reuse;
             capReuse = true;
@@ -8500,29 +8564,71 @@ ${lines.join("\n")}
   // 无 skills 参数时行为与此前完全一致（回归口径）。
   /** X0 件1：带「标签命中」标注的熟手查表——tagHit=skills 在路由标签层已命中
    *（策展证据，装配探测免检）；false=无标签证据的回落席（探测把关面）。 */
-  private pickVeteranDetail(gid: string, skills?: string[], selfWorktree?: string, anchorKey?: string): { sid: string; tagHit: boolean } | null {
+  /** W-PRREVIEW（期一④ PR 互审，1104 用户拍板「Multica 同款」）：互审员路由——只路由
+   * 零派发零台账。候选=在编活 worker（pickVeteranEligible 全链同款判据：编制/运行态/
+   * busy 双账/僵尸/worktree 锁），skills 匹配同域熟手（routing tags）+ 同锚亲和
+   *（anchorKey 亲和轮）；排除集=交付者本人+同单关联会话（调用方组装传入）。N 审取
+   * N 个互异会话（逐个收入排除集再选下一位）。routed=false=无匹配——**不自动开新会话
+   * 顶位**：审查席位来源（worker 互审 vs PM 子代理）是 PM 决策位，调用方收到
+   * routed=false 自行回落 PM 子代理；审查档位（1/2/3 审）同样由 PM 按全局纪律定，
+   * 本口只按请求数路由（count 钳 1..3=档位上限，不代定档）。 */
+  routeReviewers(gid: string, opts: { count?: number; skills?: string[]; exclude?: string[]; anchorKey?: string }):
+    { ok: true; routed: boolean; reviewers: { session_id: string; tag_hit: boolean }[]; reason?: string } {
+    const count = Math.max(1, Math.min(3, Math.floor(opts.count ?? 1)));
+    const exclude = new Set((opts.exclude ?? []).filter((x) => typeof x === "string" && x));
+    const wanted = (opts.skills ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean);
+    const tagFilter = wanted.length
+      ? (tags: string[]) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w))
+      : null;
+    const reviewers: { session_id: string; tag_hit: boolean }[] = [];
+    for (let i = 0; i < count; i++) {
+      let sid: string | null = null;
+      let tagHit = false;
+      if (tagFilter) {
+        // 标签命中席两轮（亲和→普通，pickVeteranDetail 语义同款）
+        const h = this.pickVeteranEligible(gid, tagFilter, undefined, opts.anchorKey, true, exclude)
+          ?? this.pickVeteranEligible(gid, tagFilter, undefined, undefined, undefined, exclude);
+        if (h) { sid = h; tagHit = true; }
+      }
+      if (!sid) {
+        sid = this.pickVeteranEligible(gid, null, undefined, opts.anchorKey, true, exclude)
+          ?? this.pickVeteranEligible(gid, null, undefined, undefined, undefined, exclude);
+      }
+      if (!sid) break;
+      reviewers.push({ session_id: sid, tag_hit: tagHit });
+      exclude.add(sid); // 互异：已选入排除集再选下一位
+    }
+    return {
+      ok: true,
+      routed: reviewers.length > 0,
+      reviewers,
+      ...(reviewers.length === 0 ? { reason: "无在编可承接 worker（全忙/全死/全被排除）——回落 PM 子代理（审查席位来源是 PM 决策位）" } : {}),
+    };
+  }
+
+  private pickVeteranDetail(gid: string, skills?: string[], selfWorktree?: string, anchorKey?: string, exclude?: Set<string> | null): { sid: string; tagHit: boolean } | null {
     const wanted = (skills ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
     if (wanted.length === 0) {
       // C-MODE-B2 模块7 前半 issue 亲和档：同锚（project_anchor）历史成功单者优先——防
       // 熟练度漂移把同锚上下文拆到多会话（亲和轮全过滤链同款，仅候选集收窄到 anchorVets）
-      const affinitive = this.pickVeteranEligible(gid, null, selfWorktree, anchorKey, true);
+      const affinitive = this.pickVeteranEligible(gid, null, selfWorktree, anchorKey, true, exclude);
       if (affinitive) return { sid: affinitive, tagHit: false };
-      const sid = this.pickVeteranEligible(gid, null, selfWorktree);
+      const sid = this.pickVeteranEligible(gid, null, selfWorktree, undefined, undefined, exclude);
       return sid ? { sid, tagHit: false } : null;
     }
     // 审查修正（三家同报）：标签比对双侧小写归一——写侧 tagRouting 已归一，读侧
     // 再归一道防存量档案（归一前写入的大写标签）静默失配
-    const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w)), selfWorktree, anchorKey, true)
-      ?? this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w)), selfWorktree);
+    const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w)), selfWorktree, anchorKey, true, exclude)
+      ?? this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w)), selfWorktree, undefined, undefined, exclude);
     if (hit) return { sid: hit, tagHit: true };
-    const fallback = this.pickVeteranEligible(gid, null, selfWorktree, anchorKey, true) ?? this.pickVeteranEligible(gid, null, selfWorktree);
+    const fallback = this.pickVeteranEligible(gid, null, selfWorktree, anchorKey, true, exclude) ?? this.pickVeteranEligible(gid, null, selfWorktree, undefined, undefined, exclude);
     return fallback ? { sid: fallback, tagHit: false } : null;
   }
 
   // 熟手筛（#26 补章加两道）：① 编制门——路由记录在册但已从组编制除名（成员级
   // 退休）= 只剩档案，不自动 resume（复拉 = member-add 再入编，§6.1 worker
   // 「退休后只剩路由表记录」）；② 技能门——tagFilter 命中才入选（null = 不过滤）
-  private pickVeteranEligible(gid: string, tagFilter: ((tags: string[]) => boolean) | null, selfWorktree?: string, anchorKey?: string, affinitiveOnly?: boolean): string | null {
+  private pickVeteranEligible(gid: string, tagFilter: ((tags: string[]) => boolean) | null, selfWorktree?: string, anchorKey?: string, affinitiveOnly?: boolean, exclude?: Set<string> | null): string | null {
     // 模块7 亲和轮：候选集收窄到「同锚历史成功单的会话」（dispatchLog 同 anchor done 行
     // 的 session_id 并集）——亲和轮不中回落普通轮（调用点 ?? 链），全过滤链（roster/
     // 运行态/busy/锁）对两轮同款适用。
@@ -8540,6 +8646,7 @@ ${lines.join("\n")}
         .map((x) => x.session_id as string),
     );
     for (const e of routingFor(gid)) {
+      if (exclude?.has(e.session_id)) continue; // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话——全过滤链最前置）
       if (e.rating === "bad") continue;
       if (e.failed >= 2 && e.failed > e.count) continue;
       if (!roster.has(e.session_id)) continue;
@@ -8641,10 +8748,12 @@ ${lines.join("\n")}
     role: string,
     planned: { engine?: SessionEngine; model?: string; provider?: string },
     selfWorktree?: string,
+    exclude?: Set<string> | null,
   ): string | null {
     const now = Date.now();
     const cands: { sid: string; last: number }[] = [];
     for (const h of g.headcount) {
+      if (exclude?.has(h.session_id)) continue; // W-PRREVIEW：选席排除集（同 pickVeteranEligible 前置位）
       if ((h.role || "worker") !== (role || "worker")) continue; // 角色精确匹配（泛 worker↔泛派单）
       // W-TS63FIX ②（review-tsync-relay P3-1）：PM 身份行反向排除——managed 会话被立为
       // PM 行时「不接派单」原仅靠词表约定；词表若未来收录 "pm" 即被此处命中接单。显式排除。

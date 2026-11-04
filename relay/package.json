@@ -103,6 +103,7 @@
     "test:recon-autoclose": "tsx scripts/test-recon-autoclose.ts",
     "test:sqlite-resilience": "tsx scripts/test-sqlite-resilience.ts",
     "test:org-defects": "tsx scripts/test-org-defects.ts",
+    "test:prreview": "tsx scripts/test-prreview.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
     "test:pmresume": "tsx scripts/test-pmresume.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",

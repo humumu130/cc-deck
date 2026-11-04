@@ -17,7 +17,7 @@ export const SESSION_ENGINE_VALUES = ["claude", "codex", "trae", "qwen-code", "c
 // DispatchStatus 与 BOARD_ENTRY_STATUSES（projects.ts）保持各自主定义——此处镜像引用面
 // 只做校验，不重复定义权威（board 词表 import 自 projects.ts 有环风险：projects→schema→
 // projects；镜像表在本文件头注声明同步责任）
-export const DISPATCH_STATUSES = ["dispatched", "running", "done", "failed", "queued"] as const;
+export const DISPATCH_STATUSES = ["dispatched", "running", "done", "failed", "queued", "in_review"] as const;
 // 板状态五态词表权威上移到本文件（W-CMDIMPL T0b）：依赖单向 projects.ts→org-schema.ts，
 // projects.ts 保留 re-export 兼容既有消费面（D18 freeze 词表语义不变，权威注释见彼处）
 export const BOARD_ENTRY_STATUSES = ["backlog", "claimed", "submitted", "ready_to_install", "done"] as const;
