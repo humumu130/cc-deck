@@ -5,7 +5,7 @@
 //   输出：ensureStore 首建 / 二次调用（缓存命中——修复前=同步七域聚合·修复后=签名短路）/
 //   源变更后三次调用 / readDispatchLog sqlite 档二次读 的逐次毫秒——修复树 vs 基线
 //  （git stash 后同跑）对照即验收 ① 的单元级证据；全 URL p99 见回执（真 relay 压测）。
-import { mkdirSync, appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { mkdirSync, appendFileSync, existsSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 
 const ORG = process.env.CCR_ORG_DIR ?? "/tmp/sf-bench-org";
@@ -58,6 +58,16 @@ console.log(`[bench] ensureStore 二次×10（缓存命中——修复前=七域
 appendFileSync(join(ORG, "dispatch-log.ndjson"), JSON.stringify({ id: "dbench", tier: "正经立项", stage: "claim", title: "增量行", body: "x", created_at: Date.now(), updated_at: Date.now(), status: "running", gid: "g1" }) + "\n");
 const ms3 = t(() => ensureStore(dirs));
 console.log(`[bench] ensureStore 源变更后（真导入快进）: ${ms3}ms`);
+// sqlitefix 补面：org 源变更（mtime touch projects.json）——触发 orgRescanPending 十表
+// 全清重灌（生产 8s 主源假说：外部写者/relay 写 org 三源后，基线命中分支的同步导入跑
+// 全量重灌——本段两轮对照：变更后首轮=重灌成本；再一轮（签名回填后）=短路
+const pj = join(ORG, "projects.json");
+const now2 = new Date();
+utimesSync(pj, now2, new Date(now2.getTime() + 5000));
+const ms4 = t(() => ensureStore(dirs));
+console.log(`[bench] ensureStore org 源变更后首轮（基线=十表全清重灌同步跑 / 修复=同样跑但仅此轮）: ${ms4}ms`);
+const ms5 = t(() => ensureStore(dirs));
+console.log(`[bench] ensureStore org 变更后二轮（修复=签名回填短路 <10ms / 基线=再跑一轮导入）: ${ms5}ms`);
 
 const org = await import("../src/org.js");
 const rd: number[] = [];

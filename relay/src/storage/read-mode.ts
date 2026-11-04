@@ -247,6 +247,20 @@ function scheduleShadowImport(port: StoragePort, dirs: ReadModeDirs, sig: string
   });
 }
 
+/** sqlitefix：后台导入过渡窗判定（viaReadMode 走 json 权威的依据）。 */
+export function isShadowImportPending(dataDir: string): boolean {
+  return shadowDirty.has(dataDir);
+}
+
+/** sqlitefix 测试面：等后台导入收尾（CI「写→读→直查库」链的同步栅栏——
+ * autorevive/sqlite-resilience 类测试写源后立即断言库行/投影态时调用）。 */
+export async function flushShadowImportForTest(dataDir?: string): Promise<void> {
+  for (let i = 0; i < 500; i++) {
+    if (dataDir ? !shadowDirty.has(dataDir) && !shadowInflight.has(dataDir) : shadowDirty.size === 0 && shadowInflight.size === 0) return;
+    await new Promise<void>((r) => setTimeout(r, 20));
+  }
+}
+
 /** sqlitefix：影子导入源文件集（七域 importer 源的全拼——org 三源/events.ndjson/
  * dispatch-log.ndjson/boards-journal.ndjson/deliverables.json 精确 stat + tasks/
  * acceptances/boards 目录内容遍历（文件内改目录 mtime 不变——必须逐文件））。 */
@@ -850,6 +864,10 @@ export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
     return io.json();
   }
   const dirs = resolveDirs(io.dirs);
+  // sqlitefix 三段：后台导入过渡窗（源已变、后台单飞未完成）走 json 权威源——
+  // 「写→立即读」链（autorevive 组状态判定/测试直查）不读到旧库快照（bench 后台化
+  // 引入的语义回归修复：读面新鲜度与修复前同阶，投影/有损映射差过渡窗=json 档语义）
+  if (isShadowImportPending(dirs.dataDir)) return io.json();
   let port: StoragePort;
   try {
     port = ensureStore(dirs);
