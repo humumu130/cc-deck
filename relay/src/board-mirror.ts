@@ -26,10 +26,11 @@ export interface BoardMirrorTodo extends TodoItem {
 
 // 板态 → 三态渲染映射 + content 徽标词（五态语义不动，仅渲染投影；区分靠徽标词）：
 // backlog=待认领（pending 档）；claimed/submitted/ready_to_install 都是「流程中」
-// （in_progress 档）；done 不进镜像（完结回收）。 parked/archived 组板冻结——
-// listGroupsByStatus().active 只投在办组，挂起组的卡随组冻结退出镜像（恢复在办
-// 自动回来），与「板冻结只读」语义（projects.ts §2.2）同源。
-const BOARD_STATUS_PROJECTION: Record<Exclude<BoardEntryStatus, "done">, { status: "pending" | "in_progress"; label: string }> = {
+// （in_progress 档）；done/planned 不进镜像（done=完结回收；planned=规划中非可执行
+// 面，planlane 批——镜像喂的是 CLI 会话任务存储=执行面，规划想法进待办列表=噪音）。
+// parked/archived 组板冻结——listGroupsByStatus().active 只投在办组，挂起组的卡随组
+// 冻结退出镜像（恢复在办自动回来），与「板冻结只读」语义（projects.ts §2.2）同源。
+const BOARD_STATUS_PROJECTION: Record<Exclude<BoardEntryStatus, "done" | "planned">, { status: "pending" | "in_progress"; label: string }> = {
   backlog: { status: "pending", label: "待认领" },
   claimed: { status: "in_progress", label: "进行中" },
   submitted: { status: "in_progress", label: "待复核" },
@@ -70,7 +71,7 @@ export function boardMirrorTodos(dir?: string): BoardMirrorTodo[] {
   for (const g of groups) {
     const board = loadBoard(g.id, dir);
     for (const e of board.entries) {
-      if (e.status === "done") continue; // 完结回收：终态卡不进镜像
+      if (e.status === "done" || e.status === "planned") continue; // done=完结回收；planned=规划中非执行面（planlane 批，不进镜像）
       const proj = BOARD_STATUS_PROJECTION[e.status];
       if (!proj) continue; // 词表外未知值（migrateBoardStatuses 保留态）不投影不炸
       out.push({

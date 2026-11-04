@@ -60,8 +60,10 @@ export const DEFAULT_BATCH_SIZE = 500;
 // 一次性成本：分键后新键首判定=失效→段 2 重放一次（幂等 upsert/重灌，无损），之后稳定。
 export const ACC_DIR_CP_SUFFIX = "#tasks-view";
 
-/** task.status 五态词表（DDL CHECK；映射目标面）。 */
-const TASK_STATUS = new Set(["backlog", "claimed", "submitted", "ready_to_install", "done"]);
+/** task.status 六态词表（DDL CHECK v10 起含 planned；映射目标面——CLI 域源词表
+ *（todo/pending/doing/in_progress/completed）恒不映射 planned，此处收录仅供
+ * 直落校验防未来 CLI 直写面炸 CHECK）。 */
+const TASK_STATUS = new Set(["planned", "backlog", "claimed", "submitted", "ready_to_install", "done"]);
 /** task 源状态双词表 → 五态映射（todo/doing/done=看板旧词；pending/in_progress/completed=tasks 文件实测词）。 */
 const TASK_STATUS_MAP: Record<string, string> = {
   todo: "backlog",

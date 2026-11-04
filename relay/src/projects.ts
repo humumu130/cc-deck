@@ -85,14 +85,18 @@ export interface ProjectGroup {
   headcount_cap?: number;
 }
 
-// 板状态五态词表（D18，freeze v2-m10-freeze §1.2 逐字）：backlog 待认领 / claimed
-// 进行中 / submitted 完成候选待复核 / ready_to_install 待装机 / done 完成收口。
-// 迁移一次完成三态→五态：todo→backlog、doing→claimed、done→done 就近映射，不保留
-// 旧态（loadBoardFile 读入惰性迁移+冷备份 .pre-d18.json）。submitted 仅由完成候选
-// 且 review_required=1 生成（upsert/move 双入口同规则，见两函数头注）；ready_to_install
-// 无存量自动生成，只走显式搬卡。旧注「五段色属废弃 V5~V7 词表」口径由 2026-10-06
-// 用户拍板⑤排期项推翻，本词表为新权威（旧三态 todo/doing 词表外值读入即迁移）。
-export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_install" | "done";
+// 板状态六态词表（D18 五态 + planlane 批 planned 规划中，1104 用户想法）：planned
+// 规划中（泳道最前·不可认领）/ backlog 待认领 / claimed 进行中 / submitted 完成候选
+// 待复核 / ready_to_install 待装机 / done 完成收口。D18 迁移口径不变：todo→backlog、
+// doing→claimed、done→done 就近映射（loadBoardFile 读入惰性迁移+冷备份 .pre-d18.json）；
+// planned 存量迁移=[规划] 前缀 backlog 卡惰性迁 planned（.pre-planlane.json，见
+// migratePlanningCards）。submitted 仅由完成候选且 review_required=1 生成（upsert/move
+// 双入口同规则，见两函数头注）；ready_to_install 无存量自动生成，只走显式搬卡。
+// 同类绝迹机制（planlane 验收点5）：类型由词表数组推导——加态只改 org-schema.ts
+// BOARD_ENTRY_STATUSES 一处，类型/校验面（orgAction task-*/board、schema reducer）
+// 全部随动，端上（web lanes/RN BOARD_LANES）无共享层、走注释锚同步（protocol.ts
+// BoardEntryStatus 头注为 RN 锚，web team-domain.js lanes 头注为 web 锚）。
+export type BoardEntryStatus = (typeof BOARD_ENTRY_STATUSES)[number];
 
 /** D18 词表运行时值（orgAction board 校验面/测试件静态锚共用单点，勿散写字面量）。
  *  W-CMDIMPL T0b：权威定义上移 org-schema.ts（reducer 校验层，依赖单向），此处
@@ -896,6 +900,49 @@ function migrateBoardStatuses(gid: string, board: ProjectBoard, dir?: string): P
   return board;
 }
 
+/** planlane 批（1104 用户想法）：[规划] 前缀 backlog 卡惰性迁 planned（规划中）。
+ * 背景：泳道落地前的止血惯例=PM 把缓做想法（轻量化/攒批类）以 [规划] 前缀暂住
+ * backlog 泳道（生产 pg-7cb58ab4 四张实锤）——本迁移把它们搬进正经泳道，**前缀文字
+ * 保留**（词面即语义，不动卡文本）。规则：status==="backlog" 且 text 以 "[规划]"
+ * 开头且 **transitions 无 planned 行**（未经过规划态）→ planned + transitions 追加
+ * 一行（append-only 同两写口口径）。
+ * 「无 planned 史」判据是本规则的灵魂（首版教训实测修）：前缀是常驻书写惯例，
+ * 若只看 status，排产（planned→backlog）后的前缀卡会在下次读入被迁回 planned=
+ * 排产白点+R4 回流闸被绕——transitions 流转史即卡的记忆：进过规划面的卡，其后的
+ * backlog 是人决策的排产结果，程序不碾（与 converge「人工重开豁免看序列」同族）。
+ * 幂等：迁后 status=planned 不再命中 status 判据；排产后 transitions 有 planned 行
+ * 不再命中史判据——两道闸零重复触发。派单安全：dispatch 建卡恒 claimed 不经此
+ * 规则；题名接卡池只认 backlog|submitted 而 planned 不在池——迁移后即退出派单
+ * 路由面。冷备份 .pre-planlane.json 同 D18 口径（首次迁移一次，journal
+ * action=migrate-planlane 留痕）。 */
+function migratePlanningCards(gid: string, board: ProjectBoard, dir?: string): ProjectBoard {
+  let moved = 0;
+  const now = Date.now();
+  for (const e of board.entries) {
+    if (e.status !== "backlog" || !e.text?.startsWith("[规划]")) continue;
+    if ((e.transitions ?? []).some((t) => t && t.status === "planned")) continue; // 进过规划面：此后 backlog=排产结果，不碾
+    // planlane R1 返修（A 审 P1，review-w-planlane-a-1104）：派单退单卡排除——经
+    // dispatch 建卡的 [规划] 卡（claimed+dispatch_id）被退单 claimed→backlog 后，
+    // 原判据下次读板即吞入 planned（transitions=[claimed,backlog,planned] 沙盒复现）
+    // ——卡带 dispatch_id 进 planned 态=failed 单退出认领/closeHung 白名单/值守/重派
+    // 四路自愈面全失明。两排除：带 dispatch_id（派单联动键在）+transitions 含
+    // claimed 史（经认领过——派单域的卡永不入规划面，退单回 backlog 等重派/对账）。
+    if (e.dispatch_id) continue;
+    if ((e.transitions ?? []).some((t) => t && t.status === "claimed")) continue;
+    e.status = "planned";
+    if (!e.transitions) e.transitions = [];
+    if (e.transitions[e.transitions.length - 1]?.status !== "planned") e.transitions.push({ status: "planned", ts: now });
+    moved++;
+  }
+  if (moved === 0) return board;
+  try {
+    const p = boardFilePath(gid, dir);
+    if (existsSync(p)) copyFileSync(p, `${p}.pre-planlane.json`);
+    saveBoardFile(board, dir, { action: "migrate-planlane", entry_id: "*", next: { status: `${moved} 条 [规划] 前缀 backlog→planned` } });
+  } catch { /* 冷备份/落盘失败不阻断读侧 */ }
+  return board;
+}
+
 /** boardfix R2（双审 B-P0-2）：transitions 行形状惰性自愈——板外写手（如 pm-reconcile
  * 带外对账脚本）会落 {at,by,note,status} 形状行，schema（org-schema）要求 {status,ts}：
  * ts 缺席的卡此后任何机写都被「transitions 行应为 {status 词表内, ts 数字}」拒收=碰不得
@@ -935,13 +982,13 @@ function normalizeTransitionsShape(gid: string, board: ProjectBoard, dir?: strin
 export function loadBoardFile(gid: string, dir?: string): ProjectBoard | null {
   try {
     const raw = JSON.parse(readFileSync(boardFilePath(gid, dir), "utf-8")) as Partial<ProjectBoard>;
-    return normalizeTransitionsShape(gid, migrateBoardStatuses(gid, {
+    return normalizeTransitionsShape(gid, migratePlanningCards(gid, migrateBoardStatuses(gid, {
       gid,
       entries: Array.isArray(raw.entries) ? (raw.entries as BoardEntry[]) : [],
       ...(Array.isArray(raw.lessons) ? { lessons: raw.lessons as LessonEntry[] } : {}),
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0,
-    }, dir), dir);
+    }, dir), dir), dir);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
       return { gid, entries: [], frozen: false, updated_at: 0 }; // 板懒创建常态：未写过=空板（非读失败，emitBoard 照常发空板帧）
@@ -1059,20 +1106,42 @@ function freezeBoard(gid: string, frozen: boolean, dir?: string): void {
  * R2 done 候选升级——done 请求且入参显式 review_required=true 且卡不在 submitted
  * （submitted→done 属复核确认非再生成）→ 落 submitted+设资格位；
  * R3 复核闭环/终态清位——落 done 恒清资格位（done 是终态无复核态，submitted→done
- * 确认与普通 done 同收）。
+ * 确认与普通 done 同收）；
+ * R4 planned（规划中）单进单出锁（planlane 批，1104 用户想法）——planned 只能：
+ * ①建卡直设（newCard=true 伪态放行）/ ②同态编辑幂等 / ③出口两道=排产→backlog、
+ * 废弃→done（transitions 留痕在两写口统一追加）。既有态回 planned 拒收（在途卡退回
+ * 规划面=派单对账面失真）；planned→claimed/ready_to_install 拒收（planned 不可认领
+ * ——dispatchWorker 认领闸同语义，本内核堵手工 move 侧门；submitted 已被 R1 堵）。
  * 返回 review_required：true=设位 / false=清位 / undefined=不动（非 done 搬移保现值）。 */
 function resolveStatusTransition(
   e: Pick<BoardEntry, "status" | "review_required">,
   to: BoardEntryStatus,
   rrInput?: boolean,
+  opts?: { newCard?: boolean },
 ): { ok: true; status: BoardEntryStatus; review_required?: boolean } | { ok: false; error: string } {
   if (to === "submitted") {
     if (e.review_required === true || rrInput === true) return { ok: true, status: "submitted", review_required: true };
     return { ok: false, error: "submitted 仅由完成候选且 review_required=1 生成（先为卡设 review_required）" };
   }
   if (to === "done") {
+    // planlane R1 返修（A 审 P2①）：planned 卡堵 R2 改道侧门——原分支会把
+    // upsert{done, review_required:true} 改道落 submitted（planned→submitted 无交付
+    // 事实=撒谎，可恢复但无 UI 路径）。只堵 rr=true 改道；**废弃出口②保留**
+    //（planned+done 不带 rr=废弃放行直 done——原交付口径，测试「废弃：planned→done
+    // 带 note 放行」钉死）；排产=先搬 backlog/claimed 走派单交付。
+    if (e.status === "planned" && rrInput === true) return { ok: false, error: "planned 卡不可走完成候选（R2 改道 submitted 侧门已堵，planlane R1）——废弃=upsert done 不带 review_required；排产=先搬 backlog/claimed" };
     if (e.status !== "submitted" && rrInput === true) return { ok: true, status: "submitted", review_required: true };
     return { ok: true, status: "done", review_required: false };
+  }
+  if (to === "planned") {
+    // R4：唯一入口=建卡直设（新卡伪态 backlog 视作非 planned）；同态重编辑幂等放行
+    if (e.status === "planned" || opts?.newCard === true) return { ok: true, status: "planned" };
+    return { ok: false, error: "planned（规划中）只可建卡直设或 [规划] 前缀卡迁移进入，既有卡不可回 planned（排产/废弃是唯一出口）" };
+  }
+  if (e.status === "planned" && to !== "backlog") {
+    // R4 出口收窄：done（废弃）已在上支放行；backlog（排产）= 唯一余下合法出口；
+    // 其余目标（claimed/ready_to_install 等）拒——planned 不可认领
+    return { ok: false, error: `规划中卡出口只有排产（→backlog）与废弃（→done），不可直迁 ${to}（先排产再认领）` };
   }
   return { ok: true, status: to };
 }
@@ -1158,8 +1227,9 @@ function upsertBoardEntryInner(
     }
     e.updated_at = now;
   } else {
-    // D18：新卡也过规则内核（建卡即完成候选=done+review_required → R2 落 submitted）
-    const t = resolveStatusTransition({ status: "backlog" }, entry.status ?? "backlog", entry.review_required);
+    // D18：新卡也过规则内核（建卡即完成候选=done+review_required → R2 落 submitted）；
+    // planlane R4：newCard 旗标放行「建卡直设 planned」（PM 轻量化/攒批想法入冰盒面）
+    const t = resolveStatusTransition({ status: "backlog" }, entry.status ?? "backlog", entry.review_required, { newCard: true });
     if (!t.ok) return { ok: false, error: t.error };
     e = {
       id: entry.id ?? `t-${randomUUID().slice(0, 8)}`,
@@ -1312,7 +1382,10 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       // （submitted=交付候选待审，boardlife 起 close 翻入；done 出口=过审收割面），
       // 收敛扫不自动搬（D18「自动搬=碾过复核闸」同款教训；recon #263 先例同口径）。
       // 豁免机制（hold/人工重开）对新态天然兼容：豁免判据只作用 backlog 强翻分支。
-      if (entry.status === "submitted" || entry.status === "ready_to_install") continue;
+      // planlane 批：planned（规划中）同款保护——规划面非派单对账面，自愈不碰
+      //（planned 卡常态无 dispatch_id，此处防御性兜底：带史卡的规划中态只可能出自
+      // 人工迁移，台账收敛不得碾过规划意图）。
+      if (entry.status === "submitted" || entry.status === "ready_to_install" || entry.status === "planned") continue;
       const doneAt = doneAtById.get(entry.dispatch_id);
       if (doneAt === undefined) continue;
       // boardfix 刀2（1103 板面说谎形态 C）：backlog 陈卡强翻分支——原防碾条件
@@ -1588,7 +1661,8 @@ export interface ArchiveChecklist {
   openDispatches: { id: string; tier: string; status: string; target: string; ts: number }[];
   /** 在编成员会话（结项=解散编制；M2 会话不删档，只解除归属） */
   headcount: ProjectHeadcountEntry[];
-  /** 板上未完成条目数（D18 五态：done 以外全部计入——backlog/claimed/submitted/ready_to_install） */
+  /** 板上未完成条目数（D18 五态+planned：done 以外全部计入——planned/backlog/claimed/
+   * submitted/ready_to_install；规划中也是未完成存量，结项断言应看见） */
   openBoardEntries: number;
   anchor_dir: string;
 }

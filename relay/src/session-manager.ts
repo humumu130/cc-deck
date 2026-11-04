@@ -7833,6 +7833,9 @@ ${lines.join("\n")}
         const board = loadBoard(input.gid);
         const card = board.entries.find((x) => x.id === input.entry_id);
         if (!card) return { ok: false, error: `板卡不存在: ${input.entry_id}（先建卡再认领派单）` };
+        // planlane 批（1104 用户想法）：planned=规划中不可认领——dispatch 路由面对
+        // 此态不可达（验收断言点）。排产（planned→backlog）是唯一派单前置。
+        if (card.status === "planned") return { ok: false, error: `板卡 ${input.entry_id} 为规划中态不可派（先排产 →backlog 再认领）` };
         const ready = computeReady(card, board);
         if (!ready.ready) {
           const why = [...ready.reasons, ...(ready.gate_reason ? [`gate 未过: ${ready.gate_reason}`] : [])].join("；");

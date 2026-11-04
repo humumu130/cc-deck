@@ -1,6 +1,6 @@
               (() => {
                 const root = document.querySelector("#d-team");
-                const lanes = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* 1014 用户定版词表；boardlife R2：submitted「待审查」→「审查中」（用户 1103 点名「甬道为什么叫待审查」——进行时态与卡面 chip「审查中 · PM」对齐） */
+                const lanes = [["planned", "规划中"], ["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* 1014 用户定版词表；boardlife R2：submitted「待审查」→「审查中」（用户 1103 点名「甬道为什么叫待审查」——进行时态与卡面 chip「审查中 · PM」对齐）；planlane 批（1104 用户想法）加 planned 规划中最前——PM 轻量化/攒批类缓做想法的冰盒层，不可认领（dispatch 路由跳过）。【词表锚】泳道词表与 relay org-schema.ts BOARD_ENTRY_STATUSES 同源，加态先改 relay 单点再同步此处/RN OrgZone BOARD_LANES/session-domain TEAM_DRAWER_LANES/老壳 index.html BOARD_LANE 四处 */
                 // #G3 板卡富模型：父子链折叠态（展开的父卡 id 集；模块级——render 重建存活）
                 const boardExpanded = new Set(); // 1014 用户定版词表：待认领/进行中/审查中/待收单/完成（批4b 改向作废；boardlife R2 submitted 改词）
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
@@ -347,8 +347,15 @@
                     ? "<span>流转：" + task.transitions.map((tr) => laneName(tr.status) + " " + expFmtTime(tr.ts)).join(" → ") + "</span>"
                     : "";
                   // W-HYBRID #114① 五色条映射（Codex 轨）：gate 阻塞恒 error 覆盖 lane 色；
-                  // claimed=working/backlog=idle/submitted·ready_to_install=blocked（等外部）/done=closed
-                  const stripe = task.gate ? "error" : ({ backlog: "idle", claimed: "working", submitted: "blocked", ready_to_install: "blocked", done: "closed" })[laneKey] || "idle";
+                  // claimed=working/backlog·planned=idle（未开始族灰系）/submitted·ready_to_install=blocked（等外部）/done=closed
+                  const stripe = task.gate ? "error" : ({ planned: "idle", backlog: "idle", claimed: "working", submitted: "blocked", ready_to_install: "blocked", done: "closed" })[laneKey] || "idle";
+                  // planlane 批（1104 用户想法）：planned 卡面操作行——排产（→backlog 进派单面，
+                  // 单步直发：方向天然、误触后果=卡回待认领可重建）与废弃（→done 带 note 留痕，
+                  // 两步武装同 exp-retire 惯例：破坏性动作不裸奔）。状态机出口收窄在 relay
+                  // resolveStatusTransition R4 单点，端上只发意图不重复判定。
+                  const planActs = laneKey === "planned"
+                    ? '<div class="task-planacts"><span class="tag action" role="button" tabindex="0" data-board-schedule="' + escape(task.id) + '" title="排产：规划中 → 待认领（进入可派单面）">排产</span><span class="tag danger" role="button" tabindex="0" data-board-scrap="' + escape(task.id) + '" title="废弃：规划中 → 完成（记「规划终止」，transitions 留痕）">废弃</span></div>'
+                    : "";
                   // #G3 子任务折叠：挂靠数与展开态（kidsByParent 由 boardMarkup laneBody 注入——
                   // 同泳道父子挂靠；跨泳道/坏引用=孤儿容错平铺，与 depends_on 同口径）
                   const subCount = task.__subCount || 0;
@@ -359,7 +366,7 @@
                   const subAllDone = !!task.__subAllDone;
                   // #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀；P2=默认档不显——显了反而噪音）+ data-priority 左缘色条（CSS）
                   const prio = /^(P0|P1)$/.test(String(task.priority || "")) ? String(task.priority) : "";
-                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + (subAllDone ? " sub-all" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + (subAllDone ? "——批次齐活（全部子卡 done）" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subDone + "/" + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + (subAllDone ? '<span class="tchip sub-all-chip" title="批次齐活：全部子任务已完成（M2b 父子联动）">批次齐活</span>' : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
+                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + (subAllDone ? " sub-all" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + (subAllDone ? "——批次齐活（全部子卡 done）" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subDone + "/" + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + (subAllDone ? '<span class="tchip sub-all-chip" title="批次齐活：全部子任务已完成（M2b 父子联动）">批次齐活</span>' : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + planActs + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
                 }
                 // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -480,7 +487,7 @@
                     }
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + (body || (laneLoading ? '<div class="lane-skel" aria-hidden="true"><i></i><i></i><i></i></div>' : '<div class="lane-empty">暂无任务</div>')) + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架 */
+                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + (body || (laneLoading ? '<div class="lane-skel" aria-hidden="true"><i></i><i></i><i></i></div>' : '<div class="lane-empty">' + (status === "planned" ? "暂无规划——缓做想法（攒批/待评估）记在这里，排产后进待认领" : "暂无任务") + "</div>")) + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架；planlane：规划泳道空态带去向指引 */
                     // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
                     // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
                     // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
@@ -1593,6 +1600,33 @@
                     render();
                   }
                 }
+                // planlane 批（1104 用户想法）：planned 卡操作单漏斗——排产（board move →backlog
+                // 进派单面）/废弃（board upsert →done 带 note 留痕，transitions 由 relay 两写口
+                // 统一追加）。状态机合法性（R4 出口收窄）在 relay 单点裁决，端上不重复判定；
+                // BOARD_UPDATED 帧推送即时回渲。废弃 note 追加不覆写（卡自带 note 保留）。
+                async function planLaneOp(entryId, to) {
+                  const gid = state.selected;
+                  if (!gid || !state.command || !state.online) { toast("未选中团队或离线——稍后再试"); return; }
+                  const flight = "board-plan-" + entryId + "-" + to;
+                  if (state.flights.has(flight)) return;
+                  const board = state.boards.get(gid);
+                  const card = board && Array.isArray(board.entries) ? board.entries.find((x) => x && x.id === entryId) : null;
+                  if (!card) { toast("板数据未同步——刷新后重试"); return; }
+                  state.flights.add(flight);
+                  render();
+                  try {
+                    const result = to === "backlog"
+                      ? verdict(await state.command("COMMAND_ORG_ACTION", { action: "board", op: "move", gid, entry_id: entryId, status: "backlog" }, undefined, undefined))
+                      : verdict(await state.command("COMMAND_ORG_ACTION", { action: "board", op: "upsert", gid, entry_id: entryId, text: String(card.text || ""), status: "done", note: ((card.note ? String(card.note) + "\n" : "") + "[规划废弃 " + new Date().toLocaleDateString("zh-CN") + "] 规划终止（规划中泳道废弃钮）") }, undefined, undefined));
+                    if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("操作失败：" + result.error); toast("操作失败：" + result.error); return; }
+                    feedback(to === "backlog" ? "已排产：卡进入待认领（可派单面）。" : "已废弃：卡收口完成，卡面留痕。");
+                  } catch (error) {
+                    feedback("操作失败：" + String(error?.message || error));
+                  } finally {
+                    state.flights.delete(flight);
+                    render();
+                  }
+                }
                 function mount() {
                   if (state.mounted) return;
                   const panes = root.querySelectorAll(".workspace-body > .workspace-pane");
@@ -1709,6 +1743,22 @@
                       const pid = boardToggle.dataset.boardToggle;
                       if (boardExpanded.has(pid)) boardExpanded.delete(pid); else boardExpanded.add(pid);
                       render();
+                      return;
+                    }
+                    // planlane：planned 卡操作——排产单步直发；废弃两步武装（首点变「确认废弃？」
+                    // 再点才发，exp-retire 同惯例；dataset.arm 就地标记，任意重渲自然复位）
+                    const boardSchedule = event.target.closest("[data-board-schedule]");
+                    if (boardSchedule) {
+                      event.stopPropagation();
+                      void planLaneOp(boardSchedule.dataset.boardSchedule, "backlog");
+                      return;
+                    }
+                    const boardScrap = event.target.closest("[data-board-scrap]");
+                    if (boardScrap) {
+                      event.stopPropagation();
+                      if (boardScrap.dataset.arm === "1") { void planLaneOp(boardScrap.dataset.boardScrap, "done"); return; }
+                      boardScrap.dataset.arm = "1";
+                      boardScrap.textContent = "确认废弃？";
                       return;
                     }
                     // V8R 活动页筛选 chips（纯前端过滤，零链路）；W-ACTIVITY3 加源轴（Codex 轨双轴口径）

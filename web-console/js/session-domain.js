@@ -1397,7 +1397,7 @@
                 // BOARD_UPDATED 帧跟随（会话域唯一新增消费点）；板缺席=「板未同步」降级文案不伪造
                 // 0/0/0；成员态/水位吃 S.sessions 现成字段。板新鲜度承诺=快照级+帧级跟随，深度实时
                 // 去团队域（域职责不越界）。泳道词表与 team-domain lanes 同源（legacy 归并+五段条）。
-                const TEAM_DRAWER_LANES = [["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* boardlife R2：与板面 lanes 同词（待审查→审查中） */
+                const TEAM_DRAWER_LANES = [["planned", "规划中"], ["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* boardlife R2：与板面 lanes 同词（待审查→审查中）；planlane 加 planned 最前（同 team-domain lanes 词表锚） */
                 const TEAM_DRAWER_LEGACY = { todo: "backlog", doing: "claimed" };
                 /** 纯函数拼装模型（单测锚：relay/scripts/test-session-slim.ts 纯函数直跑同范式）。
                  * boardEntries=null=板未同步（旧 relay/未随快照）——概览区走降级，不伪造空板。 */
@@ -1419,7 +1419,7 @@
                   const laneOf = (e) => e && (TEAM_DRAWER_LEGACY[e.status] || e.status);
                   const entries = Array.isArray(boardEntries) ? boardEntries : null;
                   const lanes = entries ? TEAM_DRAWER_LANES.map(([k, label]) => ({ k, label, n: entries.filter((e) => laneOf(e) === k).length })) : null;
-                  const activeN = lanes ? lanes.slice(0, 4).reduce((n, l) => n + l.n, 0) : null; // 在办=四未完泳道合计（done 除外）
+                  const activeN = lanes ? lanes.filter((l) => l.k !== "done").reduce((n, l) => n + l.n, 0) : null; // 在办=未完泳道合计（done 除外；planlane 起五道——slice(0,4) 位数假设废，按 k 过滤）
                   const keyTasks = entries ? entries.filter((e) => e && e.gate && e.gate.reason).slice(0, 3) : [];
                   const arts = roster.flatMap((r) => r.arts.map((a) => ({ path: String(a.path || ""), last_at: Number(a.last_at || 0), sid: r.sid, who: r.nick || r.title.slice(0, 8) }))).sort((a, b) => b.last_at - a.last_at);
                   return { gid: team ? String(team.id || "") : "", name: team ? String(team.name || "") : "", rosterN: members.length, running, roster, lanes, activeN, keyTasks, artsCount: arts.length, recentArts: arts.slice(0, 3) };

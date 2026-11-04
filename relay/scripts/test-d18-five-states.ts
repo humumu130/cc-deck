@@ -121,10 +121,10 @@ try {
     depCheck.check.reasons.some((r) => r.includes("未完成") && r.includes("ready_to_install")),
     "依赖 ready_to_install（非 done 终态）→ 未就绪（依赖判定只认 done）");
 
-  // ---------- S5 orgAction 词表校验五态（session-manager 板域校验面静态锁+运行时单点） ----------
-  console.log("S5 词表常量单点与五态完备");
-  assert(j(BOARD_ENTRY_STATUSES) === j(["backlog", "claimed", "submitted", "ready_to_install", "done"]),
-    "BOARD_ENTRY_STATUSES 词表序=freeze §1.2（store 单点，校验面共用）");
+  // ---------- S5 orgAction 词表校验六态（session-manager 板域校验面静态锁+运行时单点） ----------
+  console.log("S5 词表常量单点与六态完备");
+  assert(j(BOARD_ENTRY_STATUSES) === j(["planned", "backlog", "claimed", "submitted", "ready_to_install", "done"]),
+    "BOARD_ENTRY_STATUSES 词表序=freeze §1.2 五态+planlane planned 最前（store 单点，校验面共用）");
 
   // ---------- S6 三端词表静态锚（store/types/session-manager/web-console/expo 同源） ----------
   console.log("S6 三端渲染词表静态锚");
@@ -132,14 +132,16 @@ try {
   const typesSrc = readFileSync(join(repo, "relay", "src", "types.ts"), "utf-8");
   const smSrc = readFileSync(join(repo, "relay", "src", "session-manager.ts"), "utf-8");
   const webSrc = readFileSync(join(repo, "web-console", "index.html"), "utf-8");
-  const expoSrc = readFileSync(join(repo, "expo-app", "src", "screens", "ListScreen.tsx"), "utf-8");
-  for (const s of ["backlog", "claimed", "submitted", "ready_to_install", "done"]) {
+  // planlane 锚修正：expo 板词表随 W-EXPOLISH 拆分迁至 OrgZone BOARD_LANES（ListScreen
+  // 已无词表——旧锚在 dev 上预存红 5 例，本批随 planlane 一并升格）
+  const expoSrc = readFileSync(join(repo, "expo-app", "src", "screens", "OrgZone.tsx"), "utf-8");
+  for (const s of ["planned", "backlog", "claimed", "submitted", "ready_to_install", "done"]) {
     assert(projectsSrc.includes(`"${s}"`), `projects.ts 词表含 ${s}`);
     assert(webSrc.includes(s), `web-console BOARD_LANE 含 ${s}`);
-    assert(expoSrc.includes(`"${s}"`), `expo ListScreen 分区含 ${s}`);
+    assert(expoSrc.includes(`"${s}"`), `expo OrgZone BOARD_LANES 含 ${s}`);
   }
-  assert(projectsSrc.includes('export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_install" | "done"'),
-    "BoardEntryStatus 五态类型定义（词表权威行）");
+  assert(projectsSrc.includes("export type BoardEntryStatus = (typeof BOARD_ENTRY_STATUSES)[number]"),
+    "BoardEntryStatus 类型由词表数组推导（planlane 同类绝迹机制：加态只动 org-schema 单点）");
   assert(typesSrc.includes("status?: BoardEntryStatus") && typesSrc.includes('status?: "backlog" | "claimed"'),
     "types.ts 命令 payload 词表（task create/update 五态+dispatch.task 收窄 backlog|claimed）");
   assert(smSrc.includes("BOARD_ENTRY_STATUSES") && !smSrc.includes('["todo", "doing", "done"]'),

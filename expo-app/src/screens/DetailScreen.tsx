@@ -49,6 +49,7 @@ const SLIM_KEEP_ROLE_RE = /^(pm|leader|产品经理|项目经理|领队)$/i;
 //      （行点按直开成员会话，桌面 data-slim-open 同职能）③输出物计数汇总
 //      ④跳团队域钮。泳道词表与桌面 TEAM_DRAWER_LANES 同源（legacy 归并）
 const TEAM_LANES: { k: string; label: string }[] = [
+  { k: "planned", label: "规划中" }, // planlane：词表最前同 relay BOARD_ENTRY_STATUSES
   { k: "backlog", label: "待认领" },
   { k: "claimed", label: "进行中" },
   { k: "submitted", label: "审查中" }, // boardlife R2：同词跟随
@@ -70,7 +71,7 @@ function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
   const entries = Array.isArray(board?.entries) ? board!.entries : null;
   const laneOf = (st?: string) => (st ? TEAM_LANE_LEGACY[st] ?? st : "");
   const lanes = entries ? TEAM_LANES.map((l) => ({ ...l, n: entries.filter((e) => laneOf(e?.status) === l.k).length })) : null;
-  const activeN = lanes ? lanes.slice(0, 4).reduce((n, l) => n + l.n, 0) : null;
+  const activeN = lanes ? lanes.filter((l) => l.k !== "done").reduce((n, l) => n + l.n, 0) : null; // planlane 起未完泳道五道——slice(0,4) 位数假设废，按 k 过滤
   const sessionsById = useMemo(() => new Map(sessions.map((x) => [x.session_id, x] as const)), [sessions]);
   // W-MOBFUSION R2（审查 B P2）：headcount 条目判空（wire 脏数据 null 成员防红屏，桌面 slimRosterOf 同滤）
   const roster = (team.headcount ?? []).filter((m) => m && typeof m.session_id === "string").map((m) => {

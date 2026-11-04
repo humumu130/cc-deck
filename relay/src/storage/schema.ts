@@ -295,4 +295,42 @@ export const migrations: readonly Migration[] = [
     name: "x1-device-trust（设备互信：首联确认卡消费方，pubkey 钉扎防换钥冒名；原 v7 收割合并时因 S3/run_ref 已占 v7/v8 改 v9）",
     up: (p) => p.exec(DEVICE_TRUST_DDL),
   },
+  {
+    // planlane 批（1104 用户想法）：task.status CHECK 扩 planned（规划中——不可认领，
+    // 板卡域新增态，词表权威 org-schema BOARD_ENTRY_STATUSES）。SQLite CHECK 约束
+    // 不可 ALTER，须重建表；连接级 foreign_keys=ON 且 PRAGMA foreign_keys 在事务内是
+    // no-op（migrator 逐版包事务），可用的只有事务级 defer_foreign_keys——但**裸
+    // 「CREATE 新表→搬行→DROP 旧→RENAME」在 defer 下 COMMIT 必炸**（better-sqlite3
+    // 实测：DROP 的隐式 DELETE 记账旧表违例，COMMIT 复查不认 RENAME 复活的新表，
+    // foreign_key_check 数据面干净仍失败）。实测可行序（M 序，含子表行场景验证）：
+    // defer → TEMP 快照 → 建 v10 表 → **先 DELETE 旧表行**（违例记账，COMMIT 按现值
+    // 复查可解）→ DROP 空表（零新违例）→ RENAME → 回灌 → 重建索引。列集与 v1 基线
+    // 逐字同构（v4/v5/v7/v8 只动过 dispatch，task 列集未变过），仅 CHECK 词表加
+    // 'planned'；idx_task_ready 随表俱灭须重建（索引 DDL 同 v1）。
+    version: 10,
+    name: "planlane（task.status CHECK 扩 planned 规划中——defer+TEMP 快照重建表改 CHECK+重建 idx_task_ready）",
+    up: (p) => {
+      p.exec("PRAGMA defer_foreign_keys = ON");
+      p.exec("CREATE TEMP TABLE task_m10 AS SELECT * FROM task");
+      p.exec(`
+CREATE TABLE task_v10 (
+  id TEXT PRIMARY KEY, project_id TEXT REFERENCES project(id), group_id TEXT REFERENCES "group"(id),
+  session_id TEXT REFERENCES session(id), parent_task_id TEXT REFERENCES task(id),
+  origin TEXT NOT NULL, external_sid TEXT, external_task_file_id TEXT,
+  task_ref TEXT NOT NULL UNIQUE, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+  scope_json TEXT NOT NULL DEFAULT '{}', handoff TEXT, assignee_id TEXT REFERENCES member(id),
+  branch TEXT, artifact_id TEXT, depends_on_json TEXT NOT NULL DEFAULT '[]',
+  gate_reason TEXT, gate_opened_at INTEGER, review_required INTEGER NOT NULL DEFAULT 0,
+  review_status TEXT CHECK(review_status IN ('pending','passed','not_required')),
+  workflow_profile TEXT, status TEXT NOT NULL CHECK(status IN ('planned','backlog','claimed','submitted','ready_to_install','done')),
+  deleted_at INTEGER, ts INTEGER NOT NULL
+)`);
+      p.exec("DELETE FROM task");
+      p.exec("DROP TABLE task");
+      p.exec("ALTER TABLE task_v10 RENAME TO task");
+      p.exec("INSERT INTO task SELECT * FROM task_m10");
+      p.exec("DROP TABLE task_m10");
+      p.exec("CREATE INDEX idx_task_ready ON task(group_id,status,gate_reason)");
+    },
+  },
 ];

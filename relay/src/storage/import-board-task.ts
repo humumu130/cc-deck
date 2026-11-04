@@ -70,8 +70,8 @@ export function boardTaskRef(gid: string, entryId: string): string {
   return `board/${gid}/${entryId}`;
 }
 
-/** task.status 五态词表（DDL CHECK；与 BoardEntryStatus 逐字同域直落）。 */
-const TASK_STATUS = new Set(["backlog", "claimed", "submitted", "ready_to_install", "done"]);
+/** task.status 六态词表（DDL CHECK v10 起含 planned；与 BoardEntryStatus 逐字同域直落）。 */
+const TASK_STATUS = new Set(["planned", "backlog", "claimed", "submitted", "ready_to_install", "done"]);
 /** 旧三态→五态就近映射（D18 冻结件 §1.2 逐字；migrateBoardStatuses 同款，本件内存映射不落盘）。 */
 const LEGACY_STATUS_MAP: Record<string, string> = { todo: "backlog", doing: "claimed" };
 

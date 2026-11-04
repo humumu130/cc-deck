@@ -155,8 +155,8 @@ try {
     assert(ack2b.ok === false && typeof ack2b.error === "string" && ack2b.error.includes("板卡不存在"),
       "C3② 坏路径：entry_id 不存在拒收（error fixture）");
     const ack2c = send(mgr, "c2c", "COMMAND_TASK_UPDATE", { gid, entry_id: eid, status: "zombie" }, "web-1");
-    assert(ack2c.ok === false && ack2c.error === "status 必须是 backlog|claimed|submitted|ready_to_install|done",
-      "C3③ 坏路径：status 词表外拒收（error fixture）");
+    assert(ack2c.ok === false && ack2c.error === "status 必须是 planned|backlog|claimed|submitted|ready_to_install|done",
+      "C3③ 坏路径：status 词表外拒收（error fixture；planlane 批词表含 planned）");
 
     // ---------- C4 DISPATCH ----------
     console.log("C4 DISPATCH");

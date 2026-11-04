@@ -461,12 +461,15 @@ export interface OrgConfirm {
 }
 
 // 任务板条目（COMMAND_PROJECT_DETAIL.board 携带；BOARD_UPDATED 增量维护）。
-// status 五态词表 = relay projects.ts BoardEntryStatus（D18 freeze v2-m10-freeze §1.2
-// 逐字）：backlog/claimed/submitted/ready_to_install/done——此前端侧类型注记的
-// todo/doing/done 三态是 D18 迁移前旧形状（wire 早已五态，GroupModal 渲染面即按五态），
-// W-EXPODOMAIN v2（design-expo-mobile-v2 A1-2）随团队详情页对齐修正。transitions =
+// status 六态词表 = relay org-schema.ts BOARD_ENTRY_STATUSES（D18 freeze v2-m10-freeze
+// §1.2 五态 + planlane 批 planned）：planned/backlog/claimed/submitted/
+// ready_to_install/done——此前端侧类型注记的 todo/doing/done 三态是 D18 迁移前旧形状。
+// 【词表锚】relay 是唯一权威（BoardEntryStatus 类型由词表数组推导），端上无共享层、
+// 此处为 RN 侧镜像锚——加态先改 relay 单点再同步此处/OrgZone BOARD_LANES/
+// TeamDetailPage LANE_COLORS·LANE_RENDER_ORDER/DetailScreen TEAM_LANES。
+// planned=规划中（泳道最前·不可认领·dispatch 路由跳过）。transitions =
 // 泳道迁移时间线（桌面件十九；端上只读消费）
-export type BoardEntryStatus = "backlog" | "claimed" | "submitted" | "ready_to_install" | "done";
+export type BoardEntryStatus = "planned" | "backlog" | "claimed" | "submitted" | "ready_to_install" | "done";
 export interface BoardEntry {
   id: string;
   text: string;

@@ -1560,6 +1560,7 @@
     #d-team .board-progress { display: flex; height: 8px; gap: 2px; margin-top: 0; overflow: hidden; border-radius: 4px; background: var(--bg1); }
     #d-team .board-progress i { display: block; flex: 0 0 auto; min-width: 2px; height: 100%; transition: width .2s ease; } /* t25fix #7：段间分隔改 gap 露底实现（border-left 会占段宽，窄窗小段被分隔线吃掉=「遮挡」观感）；有任务的段 min-width 2px 保底可见（全灰=0 宽段堆叠观感之一） */
     #d-team .board-progress .backlog { background: var(--p-backlog); }
+    #d-team .board-progress .planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
     #d-team .board-progress .claimed { background: var(--p-claimed); }
     #d-team .board-progress .submitted { background: var(--p-submitted); }
     #d-team .board-progress .ready_to_install { background: var(--p-ready); }
@@ -1711,6 +1712,7 @@
     #d-team .task-card.task-done { opacity: .45; }
     #d-team .task-card.task-done .task-title strong { color: var(--text); font-weight: 500; }
     #d-team .task-flag { margin-top: 5px; color: var(--error); font-size: var(--fs-C); }
+    #d-team .task-planacts { display: flex; align-items: center; gap: 6px; margin-top: 6px; } /* planlane：planned 卡操作行（排产/废弃，.tag 动作钮惯例） */
     #d-team .boardfoot { flex: 0 0 auto; margin: 0 18px; padding: 8px 0 10px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: var(--fs-C); line-height: 1.7; }
     /* lane-subhead 退役兜底（markup 已停产出；防历史快照/旧缓存渲染残留） */
     #d-team .lane-subhead { display: none; }
@@ -2705,6 +2707,7 @@
     .team-drawer .lane-bar { display: flex; gap: 2px; height: 7px; margin: 2px 2px 5px; border-radius: 4px; overflow: hidden; }
     .team-drawer .lane-bar i { min-width: 2px; border-radius: 1px; } /* 段宽走内联 flex-grow（team-domain board-progress 同语汇） */
     .team-drawer .lane-bar i.backlog { background: var(--p-backlog); }
+    .team-drawer .lane-bar i.planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
     .team-drawer .lane-bar i.claimed { background: var(--p-claimed); }
     .team-drawer .lane-bar i.submitted { background: var(--p-submitted); }
     .team-drawer .lane-bar i.ready_to_install { background: var(--p-ready); }

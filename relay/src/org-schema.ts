@@ -18,9 +18,14 @@ export const SESSION_ENGINE_VALUES = ["claude", "codex", "trae", "qwen-code", "c
 // 只做校验，不重复定义权威（board 词表 import 自 projects.ts 有环风险：projects→schema→
 // projects；镜像表在本文件头注声明同步责任）
 export const DISPATCH_STATUSES = ["dispatched", "running", "done", "failed", "queued"] as const;
-// 板状态五态词表权威上移到本文件（W-CMDIMPL T0b）：依赖单向 projects.ts→org-schema.ts，
-// projects.ts 保留 re-export 兼容既有消费面（D18 freeze 词表语义不变，权威注释见彼处）
-export const BOARD_ENTRY_STATUSES = ["backlog", "claimed", "submitted", "ready_to_install", "done"] as const;
+// 板状态六态词表权威上移到本文件（W-CMDIMPL T0b）：依赖单向 projects.ts→org-schema.ts，
+// projects.ts 保留 re-export 兼容既有消费面（D18 freeze 词表语义不变，权威注释见彼处）。
+// planlane 批（1104 用户想法）加 planned 规划中态——泳道序最前、不可认领（dispatch
+// 路由跳过/converge 自愈不碰）；入口=建卡直设/存量 [规划] 前缀迁移，出口=排产
+// （→backlog）/废弃（→done），其余态不可回 planned（resolveStatusTransition 单点闸）。
+// 同类绝迹机制：词表唯一权威=本数组（BoardEntryStatus 类型由数组推导、校验面全引用
+// 本常量），下位加态只动这一处。
+export const BOARD_ENTRY_STATUSES = ["planned", "backlog", "claimed", "submitted", "ready_to_install", "done"] as const;
 export const DISPATCH_TIERS = ["咨询", "随手办", "轻立项", "正经立项", "暂缓", "看门狗"] as const;
 // #G3 板卡富模型：优先级三档（对标 multica）——权威=本文件（BOARD_ENTRY_STATUSES 同款），
 // projects.ts re-export。缺省=未标注（不落键，旧行兼容）
