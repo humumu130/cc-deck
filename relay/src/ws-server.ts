@@ -1062,6 +1062,11 @@ export function startServer(
             // 的 HTTP/WS 面）——hold=流程扣留位写面（PM 工具/通知一键破锁），非决议类
             //（无确认卡语义；破锁动作有 hold-release 审计帧全链可查）。
             "board-hold", "board-release",
+            // W-WATCHAGENT R1（1104 用户令）：巡查阈值调整建议——恒出确认卡（零直写：
+            // HTTP 面剥 direct，巡查员/PM/CLI 提案统一「建议+人批」，决议走用户端
+            // confirm-decide；词表+值域闸在 orgAction case 内）。非决议类（本动作自身
+            // 零副作用，副作用在 ✓ 后 applyConfirmEffects）。
+            "patrol-suggest",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

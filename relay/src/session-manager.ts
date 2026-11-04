@@ -120,6 +120,9 @@ import {
 // W-KWP1 件三（2026-10-11）岗位模板库（知识轴 fail-open，bizRole 权限轴不经过此）：
 // 岗位纪律注入块构建 + 只读查看（org role list/show）
 import { buildRoleInjection, builderSeededTags, getRoleTemplate, listRoleTemplates, upsertRoleTemplate, validateRoleUpsertDraft } from "./role-templates.js";
+// W-WATCHAGENT（1104 用户令）巡查员 Agent 化：patrol-suggest 确认卡的生效体（词表校验+
+// patrol-config 落盘+即时改 env——store 零依赖本文件，无环）；喂料模块本体在 index.ts 接线
+import { applyPatrolOverride, PATROL_TUNABLE_KEYS, preloadPatrolOverrides } from "./watch-feed.js";
 // W-RULES1（2026-10-11）团队规则库（org/rules.json，用户红线）：数值硬闸写入口/查询/
 // 替代链/升格复制 + 注入块构建（store 零依赖本文件，无环）
 import {
@@ -6166,6 +6169,13 @@ ${lines.join("\n")}
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // W-WATCHAGENT R1（1104 用户令）：巡查阈值建议面板通道——与 HTTP 面同权（R1-P0-F1
+    // 三堵补齐之二：白名单+本直通+direct 语义收口）。#212 同款坑预防：case 在
+    // orgAction switch 而咽喉不放行=面板死路。
+    if (action === "patrol-suggest") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     // #204②连带：编制面动作（member-retire/member-add/member-archive 等）咽喉放行——
     // case 全在 orgAction switch（:5627 区），org CLI 走 orgCommand 时此前落
     // "unsupported org action"（本单实锤：CLI org member-retire 必挂）。与 rule-*/
@@ -6923,6 +6933,28 @@ ${lines.join("\n")}
           console.log(`[role-builder] 建岗提案出卡 ${c.id.slice(0, 8)} slug=${v.draft.slug}（待用户决议，不代创建）`);
           return { ok: true, data: { confirm_id: c.id, pending: true, draft: v.draft } };
         }
+        // ---------- W-WATCHAGENT（1104 用户令，R1 修订）：巡查阈值调整建议（规则自调
+        // 的受限面）。铁律「不代改」且**恒出确认卡**（R1-P0-F1 direct 语义收口：HTTP
+        // 面剥 direct+CLI 统一出卡流——巡查员/PM/用户 CLI 一律「建议+人批」，无直写
+        // 通道；生效动作只在 applyConfirmEffects case patrol-suggest 的 ✓ 后单点）。
+        // key 词表+值域闸前置（PATROL_TUNABLE_KEYS 单点，响亮拒垃圾 key/越界值）。 ----------
+        case "patrol-suggest": {
+          const key = str("key");
+          const value = typeof p.value === "number" ? p.value : Number(p.value);
+          const entry = PATROL_TUNABLE_KEYS.find((k) => k.key === key);
+          if (!entry) return { ok: false, error: `未知巡查阈值 key: ${key || "空"}（词表：${PATROL_TUNABLE_KEYS.map((k) => k.key).join(", ")}）` };
+          if (!Number.isFinite(value) || value <= 0) return { ok: false, error: `value 必须是正数（得 ${String(p.value)}）` };
+          if (value < entry.min || value > entry.max) return { ok: false, error: `value 越界：${key} 取值 [${entry.min}, ${entry.max}]（${entry.desc}——得 ${value}）` };
+          const reason = str("reason") || "巡查阈值调整建议（agent 起草，✓ 落 patrol-config、✗ 弃）";
+          const c = addConfirm({
+            kind: "patrol-suggest",
+            title: `巡查阈值调整：${key} → ${value}${entry.runtimeImmediate ? "（✓ 即时生效）" : "（✓ 后重启生效——周期阈值）"}`,
+            reason: `${reason}｜${entry.desc}`,
+            payload: { key, value, reason, ...(str("session_id") ? { session_id: str("session_id") } : {}) },
+          });
+          console.log(`[watch-feed] 阈值建议出卡 ${c.id.slice(0, 8)} ${key}=${value}（待用户决议，不代改）`);
+          return { ok: true, data: { confirm_id: c.id, pending: true, key, value } };
+        }
         // ---------- W-RULES1 团队规则库漏斗（org/rules.json，拍板 verdict-rules-20261011）。
         // 审计行经 auditRuleAction（口径同 exp-*）。安全面拍板 #7「agent 文本永不直入权威
         // 通道」：rule-append 缺省（无 direct）= 提案出确认卡（OrgConfirm kind=rule-append，
@@ -7452,6 +7484,18 @@ ${lines.join("\n")}
           });
           if (!r.ok) return fail("岗位入库", r);
           console.log(`[role-builder] 确认卡 ${c.id.slice(0, 8)} ✓ 落库 slug=${r.template.slug}（rows=${r.template.rows.length}${r.template.suggested_tags?.length ? ` tags=${r.template.suggested_tags.join(",")}` : ""}${r.backup ? " 备份 .bak-builder" : ""}）`);
+          break;
+        }
+        case "patrol-suggest": {
+          // W-WATCHAGENT：阈值建议卡 ✓ → applyPatrolOverride 真落效（写 patrol-config.json
+          // + 即时改 process.env——runtimeImmediate 的阈值下轮巡检即吃到；周期阈值重启
+          // 后由 preloadPatrolOverrides 承载）；✗ 无副作用（提案不落半态，卡留审计）。
+          // 出卡后 key 若已不在词表（词表演进）→ fail 面回传（决议已留痕，可 org set 补救）
+          const key = typeof c.payload.key === "string" ? c.payload.key : "";
+          const value = typeof c.payload.value === "number" ? c.payload.value : NaN;
+          const r = applyPatrolOverride(key, value, this.cfg.dataDir);
+          if (!r.ok) return fail("阈值落效", r);
+          console.log(`[watch-feed] 确认卡 ${c.id.slice(0, 8)} ✓ 落效 ${key}=${value}（${r.immediate ? "即时生效" : "重启后生效（周期阈值）"}）`);
           break;
         }
         case "device-trust": {

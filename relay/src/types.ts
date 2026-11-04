@@ -1534,5 +1534,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "board-force-close", // boardfix R3：72h 断链残留强翻（hold/人工重开两道豁免后）——自愈动作入审计流（converge 回调发射）
   "builder-tag-coldstart", // W-ROLE-BUILDER：新建岗 tag 首派无装配观测——探测降级告警不拒收（清熟手走新会话；Builder 策展声明在档）
   "deliver-callback", // W-DELIVERCB（用户 1102 拍板）：沃克交付直达——线一线二投递/去重跳过/无目标占坑全入审计流
+  "watch-feed", // W-WATCHAGENT（1104 用户令）：巡查员喂料——投递/哑然/滞留水位全入审计流（喂料链可观测面）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

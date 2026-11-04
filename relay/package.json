@@ -147,7 +147,8 @@
     "test:console-guardrails": "tsx scripts/test-console-guardrails.ts",
     "test:notify-overhaul": "tsx scripts/test-notify-overhaul.ts",
     "test:win-font-aa": "tsx scripts/test-win-font-aa.ts",
-    "test:boardlife": "tsx scripts/test-boardlife.ts"
+    "test:boardlife": "tsx scripts/test-boardlife.ts",
+    "test:watchagent": "tsx scripts/test-watchagent.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

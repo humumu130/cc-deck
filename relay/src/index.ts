@@ -14,6 +14,10 @@ import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
 import { PatrolModule } from "./patrol.js";
+// W-WATCHAGENT（1104 用户令）巡查员 Agent 化：喂料模块（巡查域事实定时摘要→在编巡查员
+// 会话）+ patrol overrides 启动预载（确认卡拍板过的阈值重启后持续生效——预载在前，
+// PatrolModule.start 在后，周期阈值同吃到）
+import { WatchFeedModule, preloadPatrolOverrides } from "./watch-feed.js";
 import { readDispatchLog } from "./org.js"; // M4：SIGTERM 退出诊断（活派单留档，graceful-restart 屏障的 relay 侧对称面）
 import { readPluginConfig } from "./plugin-config.js";
 import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
@@ -594,10 +598,22 @@ startAcceptanceCloudPoll(cfg, mgr, bus);
 // CCR_PATROL=0 应急停；异常经 notifyDone 推用户（/api/notify 绿框同通道）。
 // 自愈（kickstart 自拉）由壳负责，本模块只报告不动进程。
 if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+  // W-WATCHAGENT：预载先于 start——用户拍板过的 patrol overrides 注入 env，PatrolModule
+  // start() 读周期（CCR_PATROL_LIGHT_MS/FULL_MS 缓存值）时同吃到（✓ 后重启生效的载体）
+  preloadPatrolOverrides(cfg.dataDir);
   new PatrolModule(mgr, {
     dataDir: cfg.dataDir,
     reportPath: join(cfg.dataDir, "patrol-report.md"),
     enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
+  }).start();
+}
+// W-WATCHAGENT 巡查员喂料（与 patrol 同开关域：巡查关=喂料关——无报告即无料，联动
+// 语义一致；独立应急停 CCR_WATCH_FEED=0）。零在册巡查员=哑然审计（上岗后首轮全量补投）。
+if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+  new WatchFeedModule(mgr, {
+    dataDir: cfg.dataDir,
+    reportPath: join(cfg.dataDir, "patrol-report.md"),
+    enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
   }).start();
 }
 startServer(bus, mgr, cfg, {

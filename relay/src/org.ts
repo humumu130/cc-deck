@@ -606,7 +606,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org set <id> <active|parked|archived> [note]   状态迁移（结项有悬账/未完 → 出确认卡附核对清单）
 #   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡；参数为存储档位词）
 #   org hold <id|-> <reason> [condition]           建议暂缓（id=- 无组暂缓仅台账；点头即挂起）
-#   org dispatch <anchor> <task> [gid] [title] [skills] 派单 worker（无 gid=随手办；有 gid=项目组任务+板联动；skills=逗号分隔技能标签，优先派带标签熟手）
+#   org dispatch <anchor> <task> [gid] [title] [skills] [role] 派单 worker（无 gid=随手办；有 gid=项目组任务+板联动；skills=逗号分隔技能标签，优先派带标签熟手；role=岗位名缺省 worker——watchdog=派给巡查员建岗/复用，岗位模板自然注入）
 #   org dispatch --remote <dev> <anchor> <task> …  跨机派单（X1：密封 xmsg 送对端值班位，对端权威消化；CLI 阻塞回显注入/被拒状态，≤25s）
 #   org board upsert <gid> <text> [todo|doing|done]
 #   org board move <gid> <entry_id> <todo|doing|done>
@@ -625,6 +625,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org exp import <path>                          导入备份（normKey 合并去重：撞车 bump 不覆盖；坏文件/超 5MB 整单拒绝零写入）
 #   org role list                                  岗位模板库查看（内置+用户合并视图，W-KWP1；用户库同 slug 覆盖内置）
 #   org role show <slug>                           单岗位模板详情（name/audience/rows 逐行）
+#   org patrol-suggest <key> <value> [reason]      巡查阈值调整提案（W-WATCHAGENT；恒出确认卡待用户面板决议——✓ 落 patrol-config 生效，无直写通道；key 词表见拒错回显）
 #   org rule append <text> [audience] [scope]      立团队规则（W-RULES1；audience=all|leader|role:worker…，scope=team|项目路径，用户直写免卡）
 #   org rule list [status] [audience|scope]        规则库查询（active/retired/superseded、all/leader/role:x、team/路径）
 #   org rule retire <id>                           规则退役（停注可溯，不物理删）
@@ -751,10 +752,13 @@ PY
     [ $# -ge 2 ] || { echo "用法: org dispatch [--remote <dev>] <anchor> <task> [gid] [title] [skills]" >&2; exit 1; }
     anchor="$(abs "$1")"; shift
     task="$1"; shift || true
-    gid=""; title=""; skills=""
+    gid=""; title=""; skills=""; role=""
     if [ $# -ge 1 ]; then gid="$1"; shift || true; fi
     if [ $# -ge 1 ]; then title="$1"; shift || true; fi
     if [ $# -ge 1 ]; then skills="$1"; shift || true; fi
+    # W-WATCHAGENT：第 6 位可选 role（缺省 worker 不变；watchdog=巡查员上岗/复用——
+    # 派单链 buildRoleInjection 命中岗位模板自然注入，会话入编 role=watchdog）
+    if [ $# -ge 1 ]; then role="$1"; shift || true; fi
     if [ -n "$remote" ]; then
       body="$(python3 - "$remote" "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
 import json, sys
@@ -766,12 +770,13 @@ print(json.dumps(d,ensure_ascii=False))
 PY
 )"
     else
-      body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
+      body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" "$role" <<'PY'
 import json, sys
 d={"action":"dispatch","anchor":sys.argv[1],"prompt":sys.argv[2]}
 if sys.argv[3]: d["gid"]=sys.argv[3]
 if sys.argv[4]: d["title"]=sys.argv[4]
 if sys.argv[5]: d["skills"]=[t.strip() for t in sys.argv[5].split(",") if t.strip()]
+if len(sys.argv)>6 and sys.argv[6]: d["role"]=sys.argv[6]
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"
@@ -975,6 +980,24 @@ print(json.dumps(d,ensure_ascii=False))
 PY
 )"
     ;;
+  patrol-suggest)
+    # W-WATCHAGENT（1104 用户令，R1 修订）巡查阈值调整：恒出确认卡（R1-P0-F1 direct
+    # 语义收口——CLI/agent/面板一律「建议+人批」，无直写通道；✓ 走用户面板或
+    # confirm-decide 决议后 applyConfirmEffects 落效）。
+    [ $# -ge 2 ] || { echo "用法: org patrol-suggest <key> <value> [reason]（恒出确认卡待面板决议；key 词表: CCR_PATROL_LIGHT_MS/CCR_PATROL_FULL_MS/CCR_BOARD_SUBMITTED_STALE_MS/CCR_PATROL_RECEIPT_STALE_H/CCR_PATROL_TODO_STALE_H/CCR_PATROL_DOING_STALE_MIN）" >&2; exit 1; }
+    body="$(python3 - "$1" "$2" "\${3:-}" <<'PY'
+import json, sys
+try:
+    val=float(sys.argv[2])
+    if val==int(val): val=int(val)
+except Exception:
+    print("value 必须是数字（正数）: "+sys.argv[2], file=sys.stderr); sys.exit(1)
+d={"action":"patrol-suggest","key":sys.argv[1],"value":val}
+if len(sys.argv)>3 and sys.argv[3]: d["reason"]=sys.argv[3]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
   *)
     echo "未知子命令: $action" >&2; exit 1
     ;;
@@ -1010,7 +1033,7 @@ except Exception:
   echo "xmsg 在途（state=\${state:-pending} msg_id=\$mid，25s 窗口未到终态——稍后可再查：org 分诊侧留 msg_id）"; exit 4
 fi
 
-exec curl -sS -X POST "http://127.0.0.1:\${port}/api/org?token=\${token}" -H 'content-type: application/json' --data-binary "$body"
+exec curl -sS --max-time 25 -X POST "http://127.0.0.1:\${port}/api/org?token=\${token}" -H 'content-type: application/json' --data-binary "$body"
 `;
 
 // 物化 ~/.cc-deck/bin/org（内容比对幂等；CCR_ORG_BIN_DIR 显式改落点便于测试，

@@ -194,7 +194,12 @@ export type ConfirmKind =
   // 完整岗位卡（slug/name/audience/rows/suggested_tags）；✓=upsertRoleTemplate 落
   // role-templates.json 用户库（applyConfirmEffects case "role-upsert"），✗=弃（不代
   // 创建铁律）。防 agent 文本直入权威通道（rule-append 同款安全面口径）。
-  | "role-upsert";
+  | "role-upsert"
+  // W-WATCHAGENT（1104 用户令）：巡查阈值调整建议（巡查员规则自调的受限面——DS「在线
+  // 改提示词」降级为「建议+人批」，Mandate 思想）；payload 携 key/value/reason；
+  // ✓=applyPatrolOverride 落 patrol-config.json+即时改 env（applyConfirmEffects case
+  // "patrol-suggest"），✗=弃零半态。巡查员不能自改配置——这是唯一生效通道。
+  | "patrol-suggest";
 
 export interface OrgConfirm {
   id: string;

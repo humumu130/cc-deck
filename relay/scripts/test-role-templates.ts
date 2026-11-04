@@ -59,15 +59,15 @@ const mkExp = (text: string, kind: ExperienceEntry["kind"], over: Partial<Experi
 });
 
 // ---------- S0 store：内置库 + 用户库合并读 ----------
-section("\nS0 store（内置 3 岗/用户覆盖/fail-open）");
+section("\nS0 store（内置 4 岗/用户覆盖/fail-open）");
 {
   const dir = mkDir("s0");
   dirs.push(dir);
   resetRoleTemplatesRuntimeForTests();
   const all = listRoleTemplates(dir);
   const slugs = all.map((t) => t.slug).sort();
-  assert(slugs.join() === "content-marketing,engineering-dev,pm", `内置 3 岗在库（${slugs.join("/")}）`);
-  assert(all.reduce((n, t) => n + t.rows.length, 0) === 16, "在库 16 行（pm 6 行【#108 纪律行】+其余 2 岗×5 行）");
+  assert(slugs.join() === "content-marketing,engineering-dev,pm,watchdog", `内置 4 岗在库（${slugs.join("/")}）`);
+  assert(all.reduce((n, t) => n + t.rows.length, 0) === 21, "在库 21 行（pm 6 行【#108 纪律行】+watchdog 5 行【W-WATCHAGENT】+其余 2 岗×5 行）");
   // #108 角色边界产品化：PM 模板纪律行（身份行置首——预算裁剪保序截尾，首位最后被裁）
   const pm = getRoleTemplate("pm", dir);
   assert(!!pm && pm.rows[0]!.includes("不直接编码") && pm.rows[0]!.includes("派发 worker"), "#108 PM 模板纪律行在场（首行：不直接编码/派发 worker）");
@@ -89,10 +89,10 @@ section("\nS0 store（内置 3 岗/用户覆盖/fail-open）");
   // 坏 JSON fail-open：内置兜底不抛
   writeFileSync(roleTemplatesPath(dir), "{bad json", "utf-8");
   const fallback = listRoleTemplates(dir);
-  assert(fallback.length === 3 && fallback.every((t) => t.source === "builtin"), "用户库坏 JSON → 内置兜底（fail-open 不抛）");
+  assert(fallback.length === 4 && fallback.every((t) => t.source === "builtin"), "用户库坏 JSON → 内置兜底（fail-open 不抛）");
   // 结构坏同口径
   writeFileSync(roleTemplatesPath(dir), '{"templates":"not-array"}', "utf-8");
-  assert(listRoleTemplates(dir).length === 3, "用户库结构非法 → 内置兜底");
+  assert(listRoleTemplates(dir).length === 4, "用户库结构非法 → 内置兜底");
   // 坏条目逐条跳过
   writeUserLib([{ slug: "qa", name: "缺 rows 的坏条目", updated_at: 1 }, { slug: "ok", name: "好条目", audience: "", rows: ["行。"], updated_at: 2 }], dir);
   assert(getRoleTemplate("qa", dir) === null && getRoleTemplate("ok", dir)?.name === "好条目", "坏条目跳过、好条目可用");
