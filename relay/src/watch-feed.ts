@@ -245,20 +245,15 @@ export class WatchFeedModule {
     const raw = process.env.CCR_WATCH_FEED_MS;
     const n = Number(raw);
     const interval = raw && Number.isFinite(n) && n > 0 ? n : (this.opts.intervalMs ?? DEFAULT_INTERVAL_MS);
-    // sqlitefix（P0·三定时器错峰 2/3）：首拍相位 40s（patrol 0s/pr-comment 20s 错开）
+    // sqlitefix-R1（F3·A/B 双审）：首拍 40s **单段**（原三段 setTimeout 拼接残留=同拍
+    // 双跑 tick+stop 后幽灵拍——两审定罪）。守卫方向 `if (!this.timer) return`：等待期
+    // 被 stop（timer=null）即不再起；运行态到达（timer 已赋值）照跑 tickGuarded（带
+    // ticking 重入门）。错峰语义=仅首拍相位偏移（稳态共振由签名短路根治，patrol.ts:85
+    // 注释同口径订正）。
     setTimeout(() => {
-      if (this.timer) return; // 等待期被 stop 即不再起
-      try { this.tick(); } catch (e) {
-        console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
-      }
+      if (!this.timer) return; // 等待期被 stop 即不再起（stop 置 null——方向曾写反）
+      void this.tickGuarded();
     }, 40_000).unref?.();
-    // sqlitefix（P0·三定时器错峰 2/3）：首拍相位 40s（patrol 0s/pr-comment 20s 错开——
-    // test.97 三定时器同相启动=每周期同拍共振摸读路径，错峰后读路径峰值减 ~2/3）
-    setTimeout(() => { if (this.timer) { try { this.tick(); } catch { /* 首拍尽力 */ } } }, 40_000).unref?.();
-    // sqlitefix（P0·三定时器错峰 2/3）：首拍相位 40s（patrol 0s/pr-comment 20s 错开——
-    // 同拍共振摸读路径的峰值减 ~2/3）；ticking 重入门=上轮未收尾本轮跳过（预算闸兜底：
-    // 刀 A 签名短路后周期工作 ~5ms 级，重入仅在异常态出现，跳过即让出事件循环）。
-    setTimeout(() => { if (this.timer && !this.ticking) void this.tickGuarded(); }, 40_000).unref?.();
     this.timer = setInterval(() => { void this.tickGuarded(); }, interval);
     this.timer.unref?.();
   }

@@ -49,6 +49,8 @@
     "test:watchdog": "tsx scripts/test-watchdog.ts",
     "test:acceptance": "tsx scripts/test-acceptance.ts",
     "test:org": "tsx scripts/test-org.ts",
+    "test:sqlitefix": "tsx scripts/test-sqlitefix.ts",
+    "test:sqlitefix-poison": "tsx scripts/test-sqlitefix-poison.ts",
     "test:leader": "tsx scripts/test-leader.ts",
     "test:projects": "tsx scripts/test-projects.ts",
     "test:boardfix": "tsx scripts/test-boardfix.ts",

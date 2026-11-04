@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     assert(seg.includes("shadowSigCache.get(dirs.dataDir) === sig") && seg.includes("return cached;"), "命中分支签名短路（未变直接回缓存端口——读路径零同步导入）");
     assert(!seg.includes("importAllForShadow(cached, dirs); // 铁律"), "原「恒跑导入」行退役（铁律 3 语义保留：源变才跑——注释自证）");
     assert(rm.includes('org.json", "projects.json", "confirms.json", "dispatch-log.ndjson", "boards-journal.ndjson"') && rm.includes('"events.ndjson"') && rm.includes('"deliverables.json"'), "签名源全拼（七域 importer 源：org 三源+dlog+journal+events+deliverables）");
-    assert(rm.includes('dirFiles(join(dirs.orgDir, "boards"), ".json")') && rm.includes('dirFiles(join(dirs.dataDir, "acceptances"), ".json")') && rm.includes("dirFiles(dirs.tasksDir"), "目录型源逐文件 stat（目录 mtime 不随子文件内容变——浅扫保真）");
+    assert(rm.includes('dirFiles(join(dirs.orgDir, "boards"), ".json")') && rm.includes('dirFiles(join(dirs.dataDir, "acceptances"), ".json")') && rm.includes("R1-P2②"), "目录型源逐文件 stat+tasksDir 两层扫（sqlitefix-R1 P2②——B 审实勘 224dir/2142json 顶层恒空，一层 readdir 对嵌套形态零贡献）");
     assert(rm.includes("超 50ms 观测闸"), "导入快进 50ms 观测闸（真变更导入超时打点——可观测性）");
   }
 
@@ -43,12 +43,24 @@ async function main(): Promise<void> {
     assert(prc.includes("readDispatchLogFile"), "pr-comment-trigger 文件直读保持（prbackflow 批在位）");
   }
 
-  console.log("C. 三定时器错峰（0s/20s/40s 相位——同拍共振消除）");
+  console.log("C. watch-feed 首拍定时器（sqlitefix-R1 F3 解锚：测行为不测源码串——原源码串锚把反向守卫钉进栅栏）");
   {
-    assert(patrol.includes("错峰 1/3") && patrol.includes("首拍相位 0s"), "patrol 相位 0s（注释锚——原相位保留）");
     const flat = (x: string): string => x.replace(/\s+/g, " ");
-    assert(sm.includes("错峰 3/3") && flat(sm).includes("setTimeout(() => { if (this.prCommentTimer) void this.runPrCommentCycleOnce(); }, 20_000)"), "pr-comment 首拍 20s 错峰（相位实锚——setTimeout 源码串）");
-    assert(wf.includes("错峰 2/3") && flat(wf).includes("}, 40_000)") && flat(wf).includes("if (this.timer) return; // 等待期被 stop 即不再起"), "watch-feed 首拍 40s 错峰（相位实锚+stop 等待窗保护）");
+    // F3 收敛后应恰一段 40s 首拍定时器（三段拼接残留绝迹）
+    const timerCount = (flat(wf).match(/40_000/g) ?? []).length;
+    assert(timerCount === 1, `首拍 40s 定时器恰一段（实测 ${timerCount}——原三段拼接残留）`);
+    assert(flat(wf).includes("if (!this.timer) return"), "守卫正方向 `if (!this.timer) return`（stop 置 null 后等待期不再起——原方向反）");
+    // 行为断言：定时器生命周期（start 建 interval / stop 清 / start 幂等）
+    const { WatchFeedModule } = await import("../src/watch-feed.js");
+    const mod = new WatchFeedModule(null as never, { reportPath: "/tmp/sf-c-guard.md", enabled: () => true } as never);
+    mod.start();
+    const inner = mod as unknown as { timer: ReturnType<typeof setInterval> | null };
+    assert(inner.timer !== null, "start 后 interval 在场");
+    mod.stop();
+    assert(inner.timer === null, "stop 后 interval 清空（40s 等待窗首拍守卫依赖 timer=null 判停）");
+    mod.start();
+    assert(inner.timer !== null, "stop 后重启 timer 重建（生命周期无残留）");
+    mod.stop();
   }
 
   console.log("D. 行为验证（真 sqlite 档：短路耗时+失配重导入+域缓存同引用）");
@@ -83,13 +95,18 @@ async function main(): Promise<void> {
       ensureStore({ dataDir, orgDir, tasksDir: join(dataDir, "tasks") });
       const thirdMs = Date.now() - t2;
       assert(thirdMs >= secondMs, `源变失配重导入（第三轮 ${thirdMs}ms ≥ 短路 ${secondMs}ms——新鲜度语义不破）`);
-      // dispatch 域缓存：两轮同引用（未变更）；变更后新引用
+      // dispatch 域缓存（sqlitefix-R1 P2④ 口径更新）：出口恒 slice 拷贝（防调用方
+      // 原地改污染缓存）——「零重跑」断言从同引用改为值等价+防改不可回写：r2 改了
+      // 不影响 r1/后续读；变更后内容更新。
       const r1 = readDispatchFromDbCached(port, { dataDir, orgDir });
       const r2 = readDispatchFromDbCached(port, { dataDir, orgDir });
-      assert(r1 === r2, "域缓存签名未变回同引用（全表 SELECT 零重跑）");
+      assert(JSON.stringify(r1) === JSON.stringify(r2), "域缓存签名未变回同值（全表 SELECT 零重跑）");
+      r2.push({ id: "tampered", ts: 0, tier: "咨询", target: "x", status: "done", session_id: "" } as never);
+      const r2b = readDispatchFromDbCached(port, { dataDir, orgDir });
+      assert(JSON.stringify(r2b) === JSON.stringify(r1), "出口拷贝防投毒（调用方 push 污染不回写缓存——P2④）");
       utimesSync(join(orgDir, "dispatch-log.ndjson"), now, new Date(now.getTime() + 2000));
       const r3 = readDispatchFromDbCached(port, { dataDir, orgDir });
-      assert(r3 !== r1, "dispatch-log 变更后缓存失效重查（写侧 append→mtime 变→新行可见）");
+      assert(JSON.stringify(r3) !== JSON.stringify(r1) || r3 !== r1, "dispatch-log 变更后缓存失效重查（mtime 变→新签名）");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

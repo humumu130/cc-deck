@@ -234,8 +234,15 @@ function scheduleShadowImport(port: StoragePort, dirs: ReadModeDirs, sig: string
   setImmediate(() => {
     try {
       const t0 = Date.now();
-      importAllForShadow(port, dirs);
+      const failures = importAllForShadow(port, dirs);
       shadowSigCache.set(dirs.dataDir, sig);
+      // sqlitefix R1-P0 双保险③：导入完成即失效 dispatch 域缓存——库已追平，下读重查落
+      // 新行（防「导入完成前的查询结果」被守卫②拒缓存后仍残留旧命中——双保险闭环）。
+      for (const k of [...dispatchReadCache.keys()]) if (k.startsWith(dirs.dataDir + "\u0000")) dispatchReadCache.delete(k);
+      // sqlitefix R1-P2③：域失败退避可见性——失败不静默（原签名照常推进=失败域停留旧
+      // 快照无人知）。一次性汇总告警（同 dataDir 去重 60s），签名照推（成功域生效），
+      // 失败域由下轮源变更自愈重试。
+      if (failures.length) reportImportFailureOnce(dirs.dataDir, failures);
       const ms = Date.now() - t0;
       if (ms > 50) console.warn(`[read-mode] 影子导入快进 ${ms}ms（后台异步——源变更触发，超 50ms 观测闸）`);
     } catch (err) {
@@ -243,8 +250,23 @@ function scheduleShadowImport(port: StoragePort, dirs: ReadModeDirs, sig: string
     } finally {
       shadowInflight.delete(dirs.dataDir);
       shadowDirty.delete(dirs.dataDir);
+      // sqlitefix-R1 P0 保险③：导入收尾失效 dispatch 域缓存——窗内任何直调口已写
+      // 的条目（防漏网）随导入完成一并作废，新签名下的下次读重查已追平的库。
+      dispatchReadCache.clear();
     }
   });
+}
+
+/** sqlitefix R1-P2③：域导入失败一次性汇总（60s 去重——替代每读一条 warn 刷屏）。 */
+const importFailNotedAt = new Map<string, number>();
+function reportImportFailureOnce(dataDir: string, failures: { domain: string; error: string }[]): boolean {
+  const now = Date.now();
+  const last = importFailNotedAt.get(dataDir) ?? 0;
+  if (now - last < 60_000) return false;
+  if (importFailNotedAt.size > 50) importFailNotedAt.clear();
+  importFailNotedAt.set(dataDir, now);
+  console.warn(`[read-mode] 影子导入 ${failures.length} 域失败（${failures.map((x) => x.domain).join("/")}；下轮源变更自愈重试）: ${failures[0]?.error ?? ""}`);
+  return true;
 }
 
 /** sqlitefix：后台导入过渡窗判定（viaReadMode 走 json 权威的依据）。 */
@@ -279,6 +301,10 @@ function shadowSourcesSig(dirs: ReadModeDirs): string {
   for (const f of ["org.json", "projects.json", "confirms.json", "dispatch-log.ndjson", "boards-journal.ndjson"]) file(join(dirs.orgDir, f));
   file(join(dirs.dataDir, "events.ndjson"));
   file(join(dirs.dataDir, "deliverables.json"));
+  // sqlitefix R1-P2①（A 审）：notification 域两源入签名（import-notification.ts 两源——
+  // 原漏=该两文件变化永不触发重导入；今天无 sqlite 权威读面故曾列 P2，契约补全）
+  file(join(dirs.dataDir, "notifications.json"));
+  file(join(dirs.dataDir, "decision-notifications.json"));
   const dirFiles = (d: string, ext: string) => {
     try {
       for (const e of readdirSync(d)) if (e.endsWith(ext)) file(join(d, e));
@@ -286,7 +312,24 @@ function shadowSourcesSig(dirs: ReadModeDirs): string {
   };
   dirFiles(join(dirs.orgDir, "boards"), ".json");
   dirFiles(join(dirs.dataDir, "acceptances"), ".json");
-  if (dirs.tasksDir) dirFiles(dirs.tasksDir, ".json");
+  // sqlitefix R1-P2②（B 审实勘 224dir/2142json）：tasksDir 两层形态——顶层全目录，原
+  // 一层 dirFiles 恒零贡献。修=两层廉价信号：每 sid 目录（mtimeMs+内 .json 计数）——
+  // ~224 目录 stat+readdir（非 2142 文件逐 stat），命中面成本主张保持（B 修法建议采
+  // 纳「廉价信号」路线而非递归全扫）。
+  if (dirs.tasksDir) {
+    try {
+      for (const e of readdirSync(dirs.tasksDir)) {
+        const sidDir = join(dirs.tasksDir, e);
+        try {
+          const st = statSync(sidDir);
+          if (!st.isDirectory()) { parts.push(statSigOf(sidDir)); continue; }
+          let n = 0;
+          for (const t of readdirSync(sidDir)) if (t.endsWith(".json")) n++;
+          parts.push(`${e}@${st.mtimeMs}#${n}`);
+        } catch { parts.push(`${e}@-`); }
+      }
+    } catch { /* 根缺席=空贡献 */ }
+  }
   return parts.join("|");
 }
 
@@ -538,11 +581,20 @@ export function readDispatchFromDbCached(port: StoragePort, dirs: { dataDir: str
   const sig = [statSigOf(join(dirs.orgDir, "dispatch-log.ndjson")), statSigOf(join(dirs.orgDir, "org.json")), statSigOf(join(dirs.orgDir, "projects.json")), statSigOf(join(dirs.orgDir, "confirms.json"))].join("|");
   const hit = dispatchReadCache.get(key);
   const now = Date.now();
-  if (hit && hit.sig === sig) return hit.rows;
+  // sqlitefix R1-P2④：出口恒拷贝——缓存数组本体曾被调用方原地 sort/splice 改写（org.ts
+  // len 路径等），改后签名仍同=恒命中被污染视图。浅拷贝成本 O(n) 引用复制，远低于重查。
+  if (hit && hit.sig === sig) return hit.rows.slice();
   const rows = dispatchEntriesFromDb(port, 1_000_000);
   if (dispatchReadCache.size > 20) dispatchReadCache.clear(); // 上限兜底（dataDir/orgDir 组合有限）
+  // sqlitefix R1-P0 双保险②（守卫语义修正）：**导入过渡窗（dirty/inflight）不写缓存**——
+  // 此刻库可能滞后于文件，把陈旧行缓存进新签名=投毒恒命中（A 审 repro-poison.ts 实证）。
+  // 原稿 shadowSigCache===sig 守卫恒 false（全源签名 vs 本域四文件签名不同名空间）=缓存
+  // 永不写入、SELECT 每读全跑——P0 修了但命中面性能回退。窗内每次直调重查（代价=一次
+  // SELECT，窗长=导入时长）；窗外=导入完成库已追平，写缓存安全。另保险③=导入完成回调
+  // clear()（scheduleShadowImport finally，防窗内已写的漏网）。
+  if (isShadowImportPending(dirs.dataDir) || shadowInflight.has(dirs.dataDir)) return rows.slice();
   dispatchReadCache.set(key, { sig, at: now, rows });
-  return rows;
+  return rows.slice();
 }
 
 export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEntry[] {
@@ -867,7 +919,10 @@ export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
   // sqlitefix 三段：后台导入过渡窗（源已变、后台单飞未完成）走 json 权威源——
   // 「写→立即读」链（autorevive 组状态判定/测试直查）不读到旧库快照（bench 后台化
   // 引入的语义回归修复：读面新鲜度与修复前同阶，投影/有损映射差过渡窗=json 档语义）
-  if (isShadowImportPending(dirs.dataDir)) return io.json();
+  // sqlitefix-R1 P0·F1（A/B 双审合议）：pending 检查**后移到 ensureStore 之后**——
+  // 原序「pending 检查在前」在变更后首读恒 false（调度还没发生）→ 首读穿进 sqlite
+  // 分支吃导入前的旧库快照（test-org 3 红/两审复现脚本同 TOCTOU）。ensureStore 的
+  // scheduleShadowImport 同步段即置 dirty → 后置检查必中 → 变更后首读也走 json 权威。
   let port: StoragePort;
   try {
     port = ensureStore(dirs);
@@ -875,6 +930,7 @@ export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
     warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `配置档位 ${mode}，读域 ${domain}，sqlite 建库/迁移失败`);
     return io.json();
   }
+  if (isShadowImportPending(dirs.dataDir)) return io.json();
   if (mode === "sqlite") return io.sqlite(port);
   // ---- shadow 档：返回值以 JSON 为准，旁路对比只报告 ----
   const jsonVal = io.json();

@@ -492,7 +492,7 @@ export function importSessionTask(
 
   const current = { schemaVersion };
   const cpEvents = obsEvents.lines !== null
-    ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount })
+    ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount }, { appendOnly: true })
     : null;
   const cpTasks = readCheckpoint(port, sources.tasksDir, { ...current, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count });
   // accDir checkpoint 分键读（域视图 key；acceptance 域的键仍是原目录 path，两域互不干扰）

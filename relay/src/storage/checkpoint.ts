@@ -55,6 +55,7 @@ export function readCheckpoint(
   port: StoragePort,
   path: string,
   current: { mtimeMs: number; mtimeNs?: string; lineCount: number; schemaVersion: number },
+  opts?: { appendOnly?: boolean },
 ): ImportCheckpoint | null {
   const row = port.query<{
     path: string; mtime_ms: number; mtime_ns: string | null; line_count: number; line_offset: number; schema_version: number; updated_at: number;
@@ -69,6 +70,16 @@ export function readCheckpoint(
     schemaVersion: row.schema_version,
     updatedAt: row.updated_at,
   };
+  // sqlitefix-R1 F2（A/B 审跑步机定罪）：append-only 源（events.ndjson）增量续读——
+  // 原失效判定 mtime/lineCount 任变即 null→fromLine=0 全量重放（生产 36MB/148k 行
+  // 每次变更 183ms~3.3s 主线程块×每 append 触发=稳态跑步机）。append-only 语义下
+  // 行数纯增长=前缀不变（EventBus appendLine 只追加）→旧 offset 仍有效，续读增量；
+  // 行数缩减（compact 重写/截断）=前缀已变→全量重放兜底。mtime 变不杀（append 必变）。
+  if (opts?.appendOnly) {
+    if (checkpoint.schemaVersion !== current.schemaVersion) return null;
+    if (current.lineCount < checkpoint.lineCount) return null;
+    return checkpoint;
+  }
   if (
     checkpoint.mtimeMs !== current.mtimeMs ||
     checkpoint.lineCount !== current.lineCount ||
