@@ -165,6 +165,7 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   task_snapshot: { type: "object" },
   /** M1 run 机器留档：终态行自动回填的 run 目录名（dispatch-runs/<id>；读侧宽容透传） */
   run_ref: { type: "string" },
+  trigger_key: { type: "string" }, // domstep1（域图 I2 入口幂等）：Trigger 键（trigger-key.ts 单点生成；旧行缺省宽容）
 };
 
 // ---------- reducer 门面 ----------

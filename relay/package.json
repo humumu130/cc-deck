@@ -60,6 +60,7 @@
     "test:decision-notify": "tsx scripts/test-decision-notify.ts",
     "test:decision-ledger": "tsx scripts/test-decision-ledger.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
+    "test:domstep1": "tsx scripts/test-domstep1.ts",
     "test:multieng": "tsx scripts/test-multieng.ts",
     "test:teamvis": "tsx scripts/test-teamvis.ts",
     "test:headcount": "tsx scripts/test-headcount.ts",

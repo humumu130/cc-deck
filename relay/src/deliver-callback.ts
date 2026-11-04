@@ -16,6 +16,33 @@ import { appendJournal } from "./fs-safe.js";
 
 export type DeliverCallbackVia = "relay-observe" | "stop-hook";
 
+// ---------- domstep1（域图 Report 六态·§三第一步）：回执状态枚举位 ----------
+// DS 域概念 #7：Report 六态 progress/waiting/ready/blocked/failed/dropped——「从自由
+// 文本推断等待人」被 DS 001 明文拒绝，我们正踩着（「等用户」散在回执文本里）。第一步
+// 纯记账：deliver-callbacks 行加 report_status 枚举；waiting 只认结构化卡
+// （waiting_request/组织确认——confirm_ref 记卡引用），散文本 waiting 记 progress+
+// 备注缺卡。读侧宽容（旧行无字段照旧解析，零迁移）。
+export type ReportStatus = "progress" | "waiting" | "ready" | "blocked" | "failed" | "dropped";
+
+/** 回执六态分类单点（结构化优先）：waitingCard 在场=waiting（卡引用随行，文本让位）；
+ *  散文本 waiting 无卡=progress+备注（不认 waiting——反恒真面的根）；blocked/失败按
+ *  文本/终态词识别；缺省 ready（交付回调边=已交付待收割）。
+ *  domstep1r1（P2-A③ 审 A 3b）：failed 原生产无源（classify 调用点不传 dispatchFailed）
+ *  且无失败词——「任务失败：无法修复」类回执误落 ready（第二/三步读侧会拿 ready 当
+ *  可收割凭据，错误的枚举比缺枚举更伤）。补窄失败词识别（任务失败/无法完成/行首
+ *  「失败：」——刻意窄防「0 failed tests/失败分析文档已交付」误伤）；结构化源
+ *  dispatchFailed 仍最高优，收口判 failed 的修正行见 amendFailedReport。 */
+export function classifyReportStatus(input: { receipt: string; waitingCardRef?: string | null; dispatchFailed?: boolean }): { status: ReportStatus; note?: string; confirm_ref?: string } {
+  if (input.dispatchFailed) return { status: "failed" };
+  if (input.waitingCardRef) return { status: "waiting", confirm_ref: input.waitingCardRef }; // 结构化卡压倒文本——即使回执没写等待字样
+  const t = input.receipt || "";
+  if (/已放弃|放弃处理|dropped/.test(t)) return { status: "dropped" };
+  if (/阻塞|blocked/i.test(t)) return { status: "blocked" };
+  if (/任务失败|执行失败|无法完成|无法修复|无法继续|(?:^|\n)\s*(?:失败|failed)[:：]/i.test(t)) return { status: "failed", note: "失败词识别（窄词表——结构化源缺位时的文本兜底）" };
+  if (/等待|waiting|待确认|待回答|待验收/.test(t)) return { status: "progress", note: "waiting 无结构化确认卡（散文本不认——域图 Report 六态口径）" };
+  return { status: "ready" };
+}
+
 export interface DeliverCallbackRow {
   ts: number;
   dispatch_id: string;
@@ -29,6 +56,13 @@ export interface DeliverCallbackRow {
   delivered?: boolean;
   /** 派单档（主投递行携带——PM 上线补扫聚合行文案消费） */
   tier?: string;
+  /** domstep1：回执六态枚举位（classifyReportStatus 单点分类；旧行缺省=未分类，读侧
+   *  宽容不降级——零迁移） */
+  report_status?: ReportStatus;
+  /** 六态备注（如「waiting 无结构化确认卡」——散文本不认的留痕） */
+  report_note?: string;
+  /** waiting 态的结构化卡引用（wait-card:<tool> 或 confirm:<id8>——验收对账键） */
+  confirm_ref?: string;
 }
 
 const FILE = "deliver-callbacks.ndjson";
@@ -42,6 +76,31 @@ export function appendDeliverCallback(row: DeliverCallbackRow, dir?: string): vo
   try {
     appendJournal(deliverCallbackLogPath(dir), { ...row });
   } catch { /* 记账失败不阻断投递主路径（最坏=双投一次，通知 stableKey 幂等兜底） */ }
+}
+
+/** domstep1r1（P2-A③ 审 A 3b）：failed 六态修正行单点——收口判 failed 时对已有交付
+ *  回执行补记 failed（deliverCallbackSeen 末行赢口径：读侧随后即见 failed）。修「failed
+ *  生产无源+失败回执误分 ready」：stop-hook 先投形态（收工即报先落 ready/progress，
+ *  随后零产出闸判 failed）此前无任何路径改写六态。原始行的投递位（delivered/skipped/
+ *  target/tier/confirm_ref）原样携带——补扫面（undeliveredCallbacks 末行 delivered
+ *  判定）不被修正行洗掉。无既有行/已 failed=no-op（无回执的单不造行、不重复修正）。 */
+export function amendFailedReport(dispatchId: string, dir?: string): boolean {
+  const seen = deliverCallbackSeen(dispatchId, dir);
+  if (!seen || seen.report_status === "failed") return false;
+  appendDeliverCallback({
+    ts: Date.now(),
+    dispatch_id: dispatchId,
+    session_id: seen.session_id,
+    via: seen.via,
+    ...(seen.target ? { target: seen.target } : {}),
+    ...(seen.skipped ? { skipped: seen.skipped } : {}),
+    ...(seen.delivered === false ? { delivered: false } : {}),
+    ...(seen.tier ? { tier: seen.tier } : {}),
+    report_status: "failed",
+    report_note: "收口判 failed（dispatchFailed 结构化源）——修正先行回执行六态",
+    ...(seen.confirm_ref ? { confirm_ref: seen.confirm_ref } : {}),
+  }, dir);
+  return true;
 }
 
 /** 该 dispatch 是否已有 Callback 判定行（投或 skip 皆算——「只投一次」语义含 skip 占坑） */

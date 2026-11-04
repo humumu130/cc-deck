@@ -4,7 +4,7 @@
 // 跑法：cd relay && npx tsx scripts/test-leader-dispatch.ts
 import { createServer } from "node:http";
 import { execSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -256,6 +256,35 @@ async function resetState(): Promise<void> {
   orgResponses.push({ status: 422, body: { ok: false, error: "项目组不存在: pg-x" } });
   const r4 = await run(LD, ["pg-x", "#213 拒收单", "--slug", "reject", "--repo", repo, "--no-worktree"], { input: GOOD_BRIEF });
   assert(r4.status === 1 && r4.stderr.includes("项目组不存在"), "API 拒收退出码 1 带错误文案");
+}
+
+// ---------- 5c. domstep1r1（P2-B 审 B ③）：拒单孤儿清扫——422 后 worktree/分支/哨兵锁零残留 ----------
+{
+  await resetState();
+  orgResponses.push({ status: 422, body: { ok: false, error: "幂等命中（已有在途单 abc12345）：同 trigger_key tk-deadbeef 在途（domstep1 幂等验证单），二次派单拒绝", duplicate_of: "dispatch-inflight-1" } });
+  const r = await run(LD, ["pg-1", "#213 幂等拒收单", "--slug", "dupclean", "--repo", repo], { input: GOOD_BRIEF });
+  assert(r.status === 1 && r.stderr.includes("幂等命中"), "幂等拒收退出码 1 带错误文案");
+  assert(r.stdout.includes("RESULT ok=false duplicate_of=dispatch-inflight-1"), "RESULT 行结构化透传 duplicate_of（识别不靠散文）");
+  assert(!execSync(`git -C "${repo}" worktree list`).toString().includes("cc-deck-w-dupclean"), "拒单后 worktree 零残留（本进程预建即本进程清扫）");
+  assert(execSync(`git -C "${repo}" branch --list "feat/dupclean"`).toString().trim() === "", "拒单后分支零残留（add -b 所建随清扫删）");
+  assert(!existsSync(join(wtRoot, "cc-deck-w-dupclean", ".cc-deck-lock")), "拒单后哨兵锁零残留（原 2h held 挡同 slug 重派）");
+  assert(r.stderr.includes("拒单清扫"), "清扫动作有痕（stderr 留账）");
+  // 审 B 场景闭环：拒单后最可能的下一步=同 slug 立即重派——锁已清扫→acquire WIN→受理
+  //（存量对照：无清扫时同 slug 活锁 acquire 判负 die 2，同 slug 续派缝见回执存量债备案）
+  orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-retry", session_id: "sess-retry-1" } });
+  const rr = await run(LD, ["pg-1", "#213 幂等拒收后重派", "--slug", "dupclean", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
+  assert(rr.status === 0 && rr.stdout.includes("dispatch_id=did-retry"), "拒单清扫后同 slug 立即重派成功（2h held 闭环）");
+  execSync(`git -C "${repo}" worktree remove --force "${join(wtRoot, "cc-deck-w-dupclean")}" 2>/dev/null; git -C "${repo}" branch -D "feat/dupclean" >/dev/null 2>&1 || true`);
+
+  // reuse 形态拒单：既有树非本进程所建不删，自建哨兵锁自撤。前置模拟产线形态——上单
+  // 锁已被 relay 认领收口/收割清掉（同 slug 活锁 acquire 判负=返工②既有缝，本批不越界
+  // 修，见回执存量债；此处验的是「拒单自撤自建锁」本身）。
+  rmSync(join(wtRoot, "cc-deck-w-e2e-ok", ".cc-deck-lock"), { force: true });
+  orgResponses.push({ status: 422, body: { ok: false, error: "幂等命中（已有在途单 abc12345）" } });
+  const r2 = await run(LD, ["pg-1", "#213 reuse 拒收", "--slug", "e2e-ok", "--repo", repo], { input: GOOD_BRIEF });
+  assert(r2.status === 1, "reuse 形态拒收退出码 1");
+  assert(execSync(`git -C "${repo}" worktree list`).toString().includes("cc-deck-w-e2e-ok"), "reuse 树保留（非本进程所建不误删）");
+  assert(!existsSync(join(wtRoot, "cc-deck-w-e2e-ok", ".cc-deck-lock")), "reuse 拒单后自建哨兵锁自撤（同 slug 可立即重派）");
 }
 
 // ---------- 6. worktree 幂等：创建 → 同 slug 复用 → 移除后挂载既有分支 ----------

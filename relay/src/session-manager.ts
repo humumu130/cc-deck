@@ -11,6 +11,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
+import { dispatchTriggerKey, findInFlightByTriggerKey } from "./trigger-key.js"; // domstep1：Trigger 键（域图 I2 入口幂等——挂键纪律见该文件头注：新增派单入口必须带键+查重）
+import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Report 六态（回执落账枚举位——散文本 waiting 不认）
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
@@ -92,7 +94,7 @@ import { cronTasksKey, readCronTasks } from "./cron.js";
 // W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排缺陷 P0 批）：worktree 互斥锁底座 + 审计词表
 import { claimWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther } from "./dispatch-lock.js";
 // W-DELIVERCB（用户 1102 拍板）：沃克交付 Callback 三线机制——去重账+文案（纯 fs 模块）
-import { appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js";
+import { amendFailedReport, appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js"; // domstep1r1：amendFailedReport=failed 六态修正行单点（P2-A③）
 import type { ChainAuditAction } from "./types.js";
 import { readTaskStoreTodos } from "./task-store.js";
 // W-TASKFLOW（2026-10-12 唯一事实源强制）：看板→PM 会话清单单向镜像 + 对账看门 v2
@@ -5024,6 +5026,26 @@ export class SessionManager {
       return;
     }
     const prompt = buildDeliverCallbackPrompt({ dispatchId: e.id, tier: e.tier, receiptPath: e.receiptPath, receipt, via });
+    // domstep1（域图 Report 六态·§三第一步）：回执状态从格式约定升为枚举位。结构化
+    // 优先（DS「从自由文本推断等待人」明文拒绝）：在场等待卡（session.waiting_request
+    // 或 payload 指向本 worker 的 pending 组织确认）→ waiting+confirm_ref；散文本
+    // waiting 无卡 → 仅 progress+备注缺卡（不认 waiting——验收点 3 反恒真面）。
+    const waitingCardRef = (() => {
+      try {
+        const w = this.sessions.get(workerSessionId)?.state.waiting_request;
+        if (w && typeof w === "object") return w.tool_name ? `wait-card:${String(w.tool_name).slice(0, 24)}` : "wait-card";
+      } catch { /* 会话不在场=无卡 */ }
+      try {
+        const pc = listPendingConfirms().find((c) => {
+          const p = c.payload as Record<string, unknown>;
+          const sid = typeof p.sid === "string" ? p.sid : typeof p.session_id === "string" ? p.session_id : "";
+          return sid === workerSessionId;
+        });
+        if (pc) return `confirm:${pc.id.slice(0, 8)}`;
+      } catch { /* 确认账不可读=无卡 */ }
+      return null;
+    })();
+    const rep = classifyReportStatus({ receipt, waitingCardRef });
     // 通知账：收件箱直达款（action 桶可操作——「已交付待收割」是 PM 的下一步动作；
     // stableKey=dispatch:id 与 notifyDispatchClosed 的 done 行同键——upsert 幂等，
     // 正文被本行覆盖为「待收割」行动语义）。**先于目标判定落账**：PM 无卡/离线窗
@@ -5037,7 +5059,7 @@ export class SessionManager {
       });
     } catch { /* 尽力而为 */ }
     if (!targetId) {
-      appendDeliverCallback({ ts: Date.now(), dispatch_id: e.id, session_id: workerSessionId, via, skipped: "no-pm-target" });
+      appendDeliverCallback({ ts: Date.now(), dispatch_id: e.id, session_id: workerSessionId, via, skipped: "no-pm-target", report_status: rep.status, ...(rep.note ? { report_note: rep.note } : {}), ...(rep.confirm_ref ? { confirm_ref: rep.confirm_ref } : {}) });
       this.emitChainAudit("deliver-callback", `dispatch=${e.id.slice(0, 8)} via=${via} skip：无 PM 目标（账占坑+通知面持久兜底）`);
       return;
     }
@@ -5045,7 +5067,7 @@ export class SessionManager {
     // 丢注入①（B 审格①）：PM 卡不在场=占坑但未投——行记 delivered:false（PM 上线边
     // flushUndeliveredCallbacks 补扫聚合注入，见 agentCallbacks onInit leader 边）；
     // 在场投递（suppress 入账/resumeAgent/extInput 成功发出）=delivered:true 缺省
-    appendDeliverCallback({ ts: Date.now(), dispatch_id: e.id, session_id: workerSessionId, via, target: targetId, tier: e.tier, ...(t ? {} : { delivered: false }) });
+    appendDeliverCallback({ ts: Date.now(), dispatch_id: e.id, session_id: workerSessionId, via, target: targetId, tier: e.tier, ...(t ? {} : { delivered: false }), report_status: rep.status, ...(rep.note ? { report_note: rep.note } : {}), ...(rep.confirm_ref ? { confirm_ref: rep.confirm_ref } : {}) });
     try {
       this.pushExternalLog(targetId, "system", `[worker 已交付] ${e.tier}单 ${e.id.slice(0, 8)}（via ${via}）——待收割`);
       if (t?.state.external) {
@@ -5099,7 +5121,7 @@ ${lines.join("\n")}
         else this.resumeAgent(t, prompt);
       }
       for (const r of pending) {
-        appendDeliverCallback({ ts: Date.now(), dispatch_id: r.dispatch_id, session_id: r.session_id, via: r.via, target: targetId }); // 末行 delivered 缺省=已投
+        appendDeliverCallback({ ts: Date.now(), dispatch_id: r.dispatch_id, session_id: r.session_id, via: r.via, target: targetId, ...(r.report_status ? { report_status: r.report_status } : {}), ...(r.report_note ? { report_note: r.report_note } : {}), ...(r.confirm_ref ? { confirm_ref: r.confirm_ref } : {}) }); // 末行 delivered 缺省=已投；domstep1：report_* 随原行携带（投递态变报告态不变）
       }
       this.emitChainAudit("deliver-callback", `PM 上线补投 ${pending.length} 单（delivered:false 聚合——丢注入①闭合）`);
       return pending.length;
@@ -5150,6 +5172,11 @@ ${lines.join("\n")}
     if (status === "done" && e.actor === "leader" && !interrupted) { // P1-c：中断口径不直达（板已退 backlog，收割指引=误导）
       this.deliverCallbackToPM({ id: e.id, tier: e.tier, gid: e.gid, anchor: e.anchor, actor: e.actor, receiptPath: (e as { receiptPath?: string }).receiptPath }, receipt, workerSessionId, "relay-observe");
     }
+    // domstep1r1（P2-A③ 审 A 3b）：failed 位结构化接线——收口判 failed 时对已有交付
+    // 回执行（stop-hook 先投形态：收工即报先落 ready/progress，随后零产出闸判 failed）
+    // 追加六态修正行（末行赢=deliverCallbackSeen 读侧即见 failed）。修「failed 生产
+    // 无源+失败回执误分 ready」；无既有行=no-op（非 leader 单本就无回执行）。
+    if (status === "failed") amendFailedReport(e.id);
     if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
     // W-LEADFIX：回执注入先过熔断/pin 休眠闸——Leader 死卡时这里曾是死循环主驱动
     // 之一（每条 failed 回执拉一次 resume）。压制时 prompt 入队 unacked，手动恢复后
@@ -7741,7 +7768,7 @@ ${lines.join("\n")}
   }
 
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string }):
-    { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string } {
+    { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string; /** domstep1：幂等命中时的在途单 id（回执对账键） */ duplicate_of?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
     // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
@@ -7845,6 +7872,22 @@ ${lines.join("\n")}
     // F7（2026-10-19）：派单面结构化日志——dispatchWorker 此前零 console 输出（台账只落
     // dispatch-log.ndjson 文件），embedded-relay.log 长时段无派单痕迹成排障盲区
     //（w-sched-c §五.3）。只加日志不动逻辑；时间戳由 index.ts 内嵌包装器统一加
+    // domstep1（域图 I2 入口幂等·§三第一步）：同 trigger_key 在途拒新单——超时重发/
+    // 回放双开的入口侧防线（世代 CAS 防收口侧，两半合璧）。内部段链（queue_replay/
+    // retry_of/redispatch_of=同 id 续行非新 Trigger）豁免；plugin-config 第十一键
+    // dispatchIdempotency（默认开）off=完全旧行为（回退口）。拒收=台账 failed 行记因
+    // （同席活单拒收先例：回执可见可对账）+幂等命中回执（含在途单 id）。位置=全部
+    // 副作用（编制闸/建卡/台账首行）之前，最早拒最早省。
+    const triggerKey = dispatchTriggerKey(input);
+    if (!input.queue_replay && !input.retry_of && !input.redispatch_of && readPluginConfig().dispatchIdempotency) {
+      const dup = findInFlightByTriggerKey(triggerKey);
+      if (dup) {
+        const msg = `幂等命中（已有在途单 ${dup.slice(0, 8)}）：同 trigger_key ${triggerKey} 在途（${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}），二次派单拒绝——域图 I2 入口幂等；等该单终态、换题名重派，或 dispatchIdempotency=off 回退`;
+        appendDispatch({ ts: Date.now(), id: randomUUID(), tier, target: "dispatch-gate", status: "failed", receipt: truncate(msg, 200), session_id: "", ...(anchor ? { project_anchor: anchor } : {}), actor, failure_reason: "logic_error", trigger_key: triggerKey });
+        console.warn(`[dispatch] idempotent-reject trigger_key=${triggerKey} in_flight=${dup.slice(0, 8)} title=${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 40)}`);
+        return { ok: false, error: msg, duplicate_of: dup };
+      }
+    }
     console.log(`[dispatch] start id=${dispatchId.slice(0, 8)} tier=${tier} gid=${input.gid ?? "-"} actor=${actor} engine=${planned.engine ?? "-"} title=${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}`);
     // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
     // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
@@ -8134,7 +8177,7 @@ ${lines.join("\n")}
       const clash = withStorageTx(undefined, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) });
+          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey });
           return null;
         }
         return c;
@@ -8145,7 +8188,7 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId }; /* dispatch_id 随拒收返回：调用方/审计按 id 关联 failed 记因行（编制闸同族但本行含活单语义，对账需要） */
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线 */
+      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等 */
     }
 
     // M1 run 留档①任务书快照（multica 借①，m-observ 织合补）：实际派发注入后全文
@@ -8297,7 +8340,7 @@ ${lines.join("\n")}
         return { ok: false, error: am.error ?? "入编失败" };
       }
     }
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields, generation: dispatchGeneration }); /* S3：running 行透传 generation（收敛末行赢语义下不洗掉世代戳，CAS 比对链全程可判） */
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields, generation: dispatchGeneration, trigger_key: triggerKey }); /* S3：running 行透传 generation（收敛末行赢语义下不洗掉世代戳，CAS 比对链全程可判）；domstep1：running=在途态必带 Trigger 键（查重 any-row 键口径的锚行） */
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     // W-RESTARTDESIGN §三：从任务书 prompt 提取约定回执路径（派单纪律固定写
     // ~/.cc-deck/artifacts/w-*.md）——收口后按此精确核对（无提取值回落前缀扫描）
@@ -8755,7 +8798,7 @@ ${lines.join("\n")}
     }
     // W-SANDBOXFIX P2-1：排队行同带标题截断段（与满队 failed 行同口径）
     const queuedTitleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
-    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields });
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, trigger_key: dispatchTriggerKey(input) }); // domstep1：queued 也在途（TRIGGER_IN_FLIGHT）——排队期间同 Trigger 照样拒重
     console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g.id} actor=${actor} title=${queuedTitleSeg}`);
     this.pushExternalLog(this.leaderId ?? "", "system", `派单排队：${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}（编制 ${genericWorkerCount(g.headcount)}/${headcountCapOf(g)} 触顶且全忙，队列位置 ${this.dispatchQueueItems.length}）`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };

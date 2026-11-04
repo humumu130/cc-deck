@@ -469,6 +469,12 @@ export interface DispatchEntry {
    *  快照关键字段（text/status/updated_at）——收口时对比「单在跑期间板被谁动过」，
    *  变动即回执附注（对账的根治前置）。新卡派单（无 entry_id）缺省不带。 */
   task_snapshot?: { text?: string; status?: string; updated_at?: number };
+  /** domstep1（域图 I2 入口幂等）：Trigger 键——来源("dispatch")+gid+意图归一化指纹
+   *  （trigger-key.ts 单点生成；title 缺省 prompt 首行 60 截断与建卡文本同口径）。
+   *  同 key 在途（dispatched/running/queued）→ 入口拒新单（幂等命中回执含在途单 id）。
+   *  内部段链（queue_replay/retry_of/redispatch_of 同 id 续行）豁免；drill/org-command
+   *  审计行不带键；旧行缺省 undefined=不参与查重（宽容，存量零迁移）。 */
+  trigger_key?: string;
   /** M1 run 机器留档（multica 借①，2026-10-29 批）：终态行由 appendDispatch 咽喉
    *  自动回填——值为相对 artifacts 根的 run 目录名（dispatch-runs/<id>，三件套：
    *  任务书快照/事件切片/终态 stats，见 dispatch-run-archive.ts）。审计行/drill/
