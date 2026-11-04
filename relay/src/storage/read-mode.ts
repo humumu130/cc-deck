@@ -62,7 +62,7 @@
 // READ_MODE_ENV（本单职责）+缺省目录解析（dataDir=CCR_DATA_DIR ?? <cwd>/data、orgDir=
 // CCR_ORG_DIR ?? ~/.cc-deck/org，与 config.ts/org.ts 口径同式，集中在此一处）；接线原点
 // 可显式传 dirs 覆盖（测试注入路径）。
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { StoragePort } from "./port.js";
@@ -195,15 +195,85 @@ const portCache = new Map<string, StoragePort>();
 export function ensureStore(dirs: ReadModeDirs): StoragePort {
   const cached = portCache.get(dirs.dataDir);
   if (cached) {
-    importAllForShadow(cached, dirs); // 铁律 3 读前触发的字面执行：命中缓存≠跳过灌账
+    // sqlitefix（P0·1104 用户实锤「启动 1-2min 未启动+断连难重连」/test.97 撤回根修）：
+    // 源签名短路——原「命中缓存仍同步 importAllForShadow（幂等快进近零开销）」实测
+    // 为秒级主线程占用（七域 observe 查询+orgRescanPending 十表扫描——PM sample 实锤
+    // sqlite3VdbeExec/vdbeCompareMemString 全表排序），test.97 三定时器（patrol/watch-feed/
+    // pr-comment-trigger）周期摸读路径→反复触发→事件循环打爆（全 URL 8s/请求+CPU 100%
+    // 单核）。修：stat 源文件集拼签名（~30 次 stat<5ms），未变直接回缓存端口（读路径零
+    // 同步导入）；变了才快进导入（外部写者 CLI 直写文件 mtime 即变，新鲜度语义保持——
+    // P81-6FIX B1「中途消费者见新账」前提不破）。
+    const sig = shadowSourcesSig(dirs);
+    if (shadowSigCache.get(dirs.dataDir) === sig && !shadowDirty.has(dirs.dataDir)) return cached;
+    // sqlitefix 二段（bench 实测补刀）：源变更后的同步导入在 20k 行台账库上实测 ~29s
+    // 主线程占用——哪怕只发生在「写后首读」也堵事件循环（writeDispatchToDb 的 setImmediate
+    // 链同占主线程）。改后台单飞导入：读路径**恒零同步导入**（dirty 标记+setImmediate 合并
+    // 调度，同窗多次失配只跑一轮）；读面滞后 ≤ 导入时长（生产 events 17MB 量级为秒级一次性，
+    // 对比修复前每读都堵——主诉「启动慢/断连难重连」根治；导入耗时本身优化入 #45 债）。
+    scheduleShadowImport(cached, dirs, sig);
     return cached;
   }
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
   importAllForShadow(port, dirs);
+  shadowSigCache.set(dirs.dataDir, shadowSourcesSig(dirs));
   portCache.set(dirs.dataDir, port);
   return port;
+}
+
+/** sqlitefix 二段：后台导入单飞调度——dirty 标记 + setImmediate 合并（同 dataDir 同窗
+ * 只跑一轮）；完成后原子推进签名+清 dirty。首建（ensureStore 冷路径）仍同步（boot 期
+ * 可接受——portCache 建立前无并发读）。 */
+const shadowDirty = new Set<string>();
+const shadowInflight = new Set<string>();
+function scheduleShadowImport(port: StoragePort, dirs: ReadModeDirs, sig: string): void {
+  if (shadowInflight.has(dirs.dataDir)) { shadowDirty.add(dirs.dataDir); return; }
+  shadowInflight.add(dirs.dataDir);
+  shadowDirty.add(dirs.dataDir);
+  setImmediate(() => {
+    try {
+      const t0 = Date.now();
+      importAllForShadow(port, dirs);
+      shadowSigCache.set(dirs.dataDir, sig);
+      const ms = Date.now() - t0;
+      if (ms > 50) console.warn(`[read-mode] 影子导入快进 ${ms}ms（后台异步——源变更触发，超 50ms 观测闸）`);
+    } catch (err) {
+      console.warn("[read-mode] 后台影子导入失败（读面停在上一快照，下次读重试）：", err instanceof Error ? err.message : String(err));
+    } finally {
+      shadowInflight.delete(dirs.dataDir);
+      shadowDirty.delete(dirs.dataDir);
+    }
+  });
+}
+
+/** sqlitefix：影子导入源文件集（七域 importer 源的全拼——org 三源/events.ndjson/
+ * dispatch-log.ndjson/boards-journal.ndjson/deliverables.json 精确 stat + tasks/
+ * acceptances/boards 目录内容遍历（文件内改目录 mtime 不变——必须逐文件））。 */
+const shadowSigCache = new Map<string, string>();
+function statSigOf(p: string): string {
+  try {
+    const st = statSync(p);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return "-";
+  }
+}
+function shadowSourcesSig(dirs: ReadModeDirs): string {
+  const parts: string[] = [];
+  const file = (p: string) => parts.push(statSigOf(p));
+  for (const f of ["org.json", "projects.json", "confirms.json", "dispatch-log.ndjson", "boards-journal.ndjson"]) file(join(dirs.orgDir, f));
+  file(join(dirs.dataDir, "events.ndjson"));
+  file(join(dirs.dataDir, "deliverables.json"));
+  const dirFiles = (d: string, ext: string) => {
+    try {
+      for (const e of readdirSync(d)) if (e.endsWith(ext)) file(join(d, e));
+    } catch { /* 目录缺席=空贡献 */ }
+  };
+  dirFiles(join(dirs.orgDir, "boards"), ".json");
+  dirFiles(join(dirs.dataDir, "acceptances"), ".json");
+  if (dirs.tasksDir) dirFiles(dirs.tasksDir, ".json");
+  return parts.join("|");
 }
 
 /** #292-B2 写口事务端口：与 ensureStore 同建（open→migrate→cache）但**不触发导入**——
@@ -443,6 +513,24 @@ export function boardTaskEntriesFromDb(port: StoragePort, gid: string): BoardEnt
 /** dispatch 段链收敛 → DispatchEntry[]（D2 一行状态机投影：段 id 剥 #rN、同原 id 后写赢、尾 max 条）。
  * 有损映射面（target/project_anchor，备案见头注）：target=target_member_id（member 归因映射后值域，
  * 源串无表列）、project_anchor 无表列不投影。 */
+/** sqlitefix（P0）：dispatch 读结果域级缓存——dispatchEntriesFromDb 为全表 SELECT+
+ * ORDER BY（20k+ 行全表排序=PM sample 实锤的主线程大头之一）。域签=dispatch-log.ndjson+
+ * org 三源（dispatch 表数据源；org 联动重灌连锁）stat 拼串；签名未变直接回上次全量行
+ * （调用侧 slice(max)——「返回最后 max 条」语义同源）。缓存上限：dispatch 台账写入走
+ * 本进程 writeDispatchToDb（签名文件同步变）或外部直写（mtime 变）——两路都失配重查。 */
+const dispatchReadCache = new Map<string, { sig: string; at: number; rows: DispatchEntry[] }>();
+export function readDispatchFromDbCached(port: StoragePort, dirs: { dataDir: string; orgDir: string }): DispatchEntry[] {
+  const key = dirs.dataDir + "\u0000" + dirs.orgDir;
+  const sig = [statSigOf(join(dirs.orgDir, "dispatch-log.ndjson")), statSigOf(join(dirs.orgDir, "org.json")), statSigOf(join(dirs.orgDir, "projects.json")), statSigOf(join(dirs.orgDir, "confirms.json"))].join("|");
+  const hit = dispatchReadCache.get(key);
+  const now = Date.now();
+  if (hit && hit.sig === sig) return hit.rows;
+  const rows = dispatchEntriesFromDb(port, 1_000_000);
+  if (dispatchReadCache.size > 20) dispatchReadCache.clear(); // 上限兜底（dataDir/orgDir 组合有限）
+  dispatchReadCache.set(key, { sig, at: now, rows });
+  return rows;
+}
+
 export function dispatchEntriesFromDb(port: StoragePort, max = 500): DispatchEntry[] {
   const rows = port.query<{
     id: string; tier: string; target_member_id: string | null; source_session_id: string | null;

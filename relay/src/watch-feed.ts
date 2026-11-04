@@ -245,12 +245,34 @@ export class WatchFeedModule {
     const raw = process.env.CCR_WATCH_FEED_MS;
     const n = Number(raw);
     const interval = raw && Number.isFinite(n) && n > 0 ? n : (this.opts.intervalMs ?? DEFAULT_INTERVAL_MS);
-    this.timer = setInterval(() => {
+    // sqlitefix（P0·三定时器错峰 2/3）：首拍相位 40s（patrol 0s/pr-comment 20s 错开）
+    setTimeout(() => {
+      if (this.timer) return; // 等待期被 stop 即不再起
       try { this.tick(); } catch (e) {
         console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
       }
-    }, interval);
+    }, 40_000).unref?.();
+    // sqlitefix（P0·三定时器错峰 2/3）：首拍相位 40s（patrol 0s/pr-comment 20s 错开——
+    // test.97 三定时器同相启动=每周期同拍共振摸读路径，错峰后读路径峰值减 ~2/3）
+    setTimeout(() => { if (this.timer) { try { this.tick(); } catch { /* 首拍尽力 */ } } }, 40_000).unref?.();
+    // sqlitefix（P0·三定时器错峰 2/3）：首拍相位 40s（patrol 0s/pr-comment 20s 错开——
+    // 同拍共振摸读路径的峰值减 ~2/3）；ticking 重入门=上轮未收尾本轮跳过（预算闸兜底：
+    // 刀 A 签名短路后周期工作 ~5ms 级，重入仅在异常态出现，跳过即让出事件循环）。
+    setTimeout(() => { if (this.timer && !this.ticking) void this.tickGuarded(); }, 40_000).unref?.();
+    this.timer = setInterval(() => { void this.tickGuarded(); }, interval);
     this.timer.unref?.();
+  }
+
+  private ticking = false;
+  private async tickGuarded(): Promise<void> {
+    if (this.ticking) { console.log("[watch-feed] 上轮 tick 未收尾，本轮跳过（sqlitefix 重入门）"); return; }
+    this.ticking = true;
+    const t0 = Date.now();
+    try { await this.tick(); } catch (e) {
+      console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
+    } finally { this.ticking = false; }
+    const ms = Date.now() - t0;
+    if (ms > 50) console.warn(`[watch-feed] tick ${ms}ms（超 50ms 预算观测闸——sqlitefix 打点）`);
   }
 
   stop(): void {

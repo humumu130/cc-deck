@@ -2187,6 +2187,8 @@ export class SessionManager {
 
   startPrCommentWatch(intervalMs = 5 * 60_000): void {
     if (this.prCommentTimer) return; // 幂等启动
+    // sqlitefix（P0·三定时器错峰 3/3）：首拍相位 20s（patrol 0s/watch-feed 40s 错开）
+    setTimeout(() => { if (this.prCommentTimer) void this.runPrCommentCycleOnce(); }, 20_000).unref?.();
     this.prCommentTimer = setInterval(() => { void this.runPrCommentCycleOnce(); }, intervalMs);
     this.prCommentTimer.unref?.(); // 不阻进程退出（测试/沙盒友好）
   }

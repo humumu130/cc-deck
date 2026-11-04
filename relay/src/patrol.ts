@@ -82,6 +82,8 @@ export class PatrolModule {
     if (this.lightTimer || this.fullTimer) return;
     const lightMs = num(process.env.CCR_PATROL_LIGHT_MS, this.opts.lightMs ?? 5 * 60_000);
     const fullMs = num(process.env.CCR_PATROL_FULL_MS, this.opts.fullMs ?? 30 * 60_000);
+    // sqlitefix（P0·三定时器错峰 1/3）：首拍相位 0s（watch-feed 40s/pr-comment 20s 错开——
+    // test.97 三定时器同相启动=每 5min 同拍共振摸读路径，错峰后读路径峰值减 ~2/3）
     this.lightTimer = setInterval(() => {
       if (!this.opts.enabled()) return;
       if (autoTierOf("patrol") === "off") return; // observe3：patrol 族 off 档（完全黑——与配置键/应急停同义叠加）
