@@ -10,9 +10,6 @@ export const relayRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 // 以下注释是参数的历史沿革（从 build-plugin.mjs 移入，改动前先读）：
 export function bundleOptions(outfile, relayVersion) {
   return {
-    // tauritrust：relay 烙印（拼盘守卫三指纹之一——build-plugin 读 VERSION 传入；
-    // rebuild-bundle 同参重建保持字节一致闸）。运行时 process.env.CCR_RELAY_VERSION 只读。
-    define: relayVersion ? { "process.env.CCR_RELAY_VERSION": JSON.stringify(relayVersion) } : undefined,
     entryPoints: [join(relayRoot, "src", "index.ts")],
     // absWorkingDir 钉死（2026-10-10 A2 实测发现）：bundle 内 node_modules 的模块路径
     // 注解是相对 esbuild 工作目录记的，不钉则「同一份源码从不同 cwd 打包字节不同」
@@ -32,7 +29,15 @@ export function bundleOptions(outfile, relayVersion) {
     // file-uri-to-path（缺 file-uri-to-path 同样 boot 必崩，2026-10-07 沙盒
     // 二度实锤；含 build/Release 原生二进制）
     external: ["bufferutil", "utf-8-validate", "better-sqlite3"],
-    define: { "process.env.CC_DECK_PLUGIN": '"1"' },
+    // tauritrust R1（A 审 P1 连带）：define 单处合并——原两处 define 重复键（tauritrust
+    // 加的 CCR_RELAY_VERSION 在前、CC_DECK_PLUGIN 在后）JS 对象后者覆盖前者=烙印 define
+    // 恒失效（产物 grep CCR_RELAY_VERSION 命中的是未替换源码字面量，实锤）。合并后两键
+    // 同 define（烙印=拼盘守卫三指纹之一，build-plugin 读 VERSION 传入；rebuild 同参
+    // 重建保持字节一致闸）。
+    define: {
+      "process.env.CC_DECK_PLUGIN": '"1"',
+      ...(relayVersion ? { "process.env.CCR_RELAY_VERSION": JSON.stringify(relayVersion) } : {}),
+    },
     // banner 里不声明 createRequire 标识符——源码（如 cli-path.ts）静态 import { createRequire }
     // 时 esbuild 会原样保留该 import，banner 再 import 一份 = 重复声明 SyntaxError，
     // 整个 bundle 起不来（2026-09-16 事故）。动态取用无标识符冲突

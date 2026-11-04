@@ -483,8 +483,13 @@ export function startServer(
       return "";
     }
   };
-  const ver005 = readVer(join(webRoot, "web-console", "index-005.html"), /__ccDeck005Version\s*=\s*"([^"]+)"/);
-  const verLegacy = readVer(join(webRoot, "web-console", "index.html"), /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
+  const ver005Path = join(webRoot, "web-console", "index-005.html");
+  const verLegacyPath = join(webRoot, "web-console", "index.html");
+  const ver005 = readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
+  const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
+  // tauritrust R1 随批②：热换活指纹（/health 每请求现算；启动值供启动自检 warn 用）
+  const ver005Live = (): string => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
+  const verLegacyLive = (): string => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const verRelay = process.env.CCR_RELAY_VERSION ?? "";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] ⚠️ 版本拼盘：双壳 console 不同版（005=${ver005} / legacy=${verLegacy}）——热换单件带病上线的高危形态（1104 Nova 事故放大器），请整批重布`);
@@ -744,9 +749,12 @@ export function startServer(
     }
     if (req.method === "GET" && url.pathname === "/health") {
       // tauritrust：/health 附版本拼盘指纹（壳/手机端可比对三件套是否同批——拼盘自检见
-      // startServer 头部；空串=该件缺席（tsx 源码跑无 relay 烙印/console 未布）不判拼盘）
+      // startServer 头部；空串=该件缺席（tsx 源码跑无 relay 烙印/console 未布）不判拼盘）。
+      // R1 随批②：热换逃逸——原启动快照（ver005/verLegacy 启动时一次）热换单件后 /health
+      // 仍旧值。修=每请求现算（readVer 内一次 stat+读 ~µs 级——轻量取舍：不引入 mtime
+      // 监视/文件 watch 的进程面，代价=每 /health 两次小文件读，换恒真指纹）。
       res.writeHead(200, { "content-type": "application/json" }).end(
-        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005, consoleLegacy: verLegacy } }),
+        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005Live(), consoleLegacy: verLegacyLive() } }),
       );
       return;
     }
@@ -759,7 +767,10 @@ export function startServer(
       const origin = (req.headers.origin ?? "").trim();
       const ips = localIps();
       // tauritrust（1104 用户实锤「Nova 桌面永远连接中」）：tauri.localhost 收口进可信 host。
-      // 裁决：Tauri 壳 WebView 的官方虚拟域名（macOS=http://tauri.localhost/Windows=https 变体），
+      // 裁决（R1 随批③平台归属订正）：Tauri 壳 WebView 官方虚拟域名——Windows=WebView2
+      // http(s)://tauri.localhost；macOS=Tauri1 tauri://localhost（scheme 自定义但 hostname
+      // 同为 tauri.localhost——下方 hostname 判定 scheme 无关，两形态同覆盖；Tauri2 macOS
+      // http://tauri.localhost 同判）。判定用 hostname 不用 origin=天然覆盖全 scheme 变体。
       // 浏览语义上恒绑定 loopback（Tauri 2 自定义协议解析到 127.0.0.1，非任意 *.localhost 通配——
       // 显式只收精确值，勿静默扩大到子域通配：*.localhost 在公共后缀表外，任意子域可被本地
       // DNS 劫持者注册形似名）。壳源特征=Origin 的 scheme∈{http,https} 且 host 恒 tauri.localhost。

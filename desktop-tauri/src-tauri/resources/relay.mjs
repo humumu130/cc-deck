@@ -70871,9 +70871,13 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return "";
     }
   };
-  const ver005 = readVer(join59(webRoot, "web-console", "index-005.html"), /__ccDeck005Version\s*=\s*"([^"]+)"/);
-  const verLegacy = readVer(join59(webRoot, "web-console", "index.html"), /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = process.env.CCR_RELAY_VERSION ?? "";
+  const ver005Path = join59(webRoot, "web-console", "index-005.html");
+  const verLegacyPath = join59(webRoot, "web-console", "index.html");
+  const ver005 = readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
+  const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
+  const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
+  const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
+  const verRelay = "0.7.0-test.97";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -71112,7 +71116,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end(
-        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005, consoleLegacy: verLegacy } })
+        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005Live(), consoleLegacy: verLegacyLive() } })
       );
       return;
     }
