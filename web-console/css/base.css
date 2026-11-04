@@ -1569,26 +1569,51 @@
     #d-team .board-legend span { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface1); color: var(--dim); font-size: var(--fs-C); }
     #d-team .board-legend i { width: 7px; height: 7px; border-radius: 50%; background: var(--legend-color, var(--faint)); }
     #d-team .board-legend b { color: var(--text-strong); font-weight: 600; font-variant-numeric: tabular-nums; }
-    #d-team .workspace-body > .workspace-pane.board-pane .board { display: flex; flex: 1 1 0; grid-template-rows: none; grid-template-columns: none; min-width: 0; min-height: 320px; gap: 10px; overflow: auto hidden; padding: 12px 18px 10px; } /* V8R：原型 bcols gap 10/padding 14-18-12；均分甬道（1 1 0）+窄窗保底滚动 */
+    #d-team .workspace-body > .workspace-pane.board-pane .board { display: flex; flex: 1 1 0; grid-template-rows: none; grid-template-columns: none; min-width: 0; min-height: 320px; gap: 10px; overflow: hidden; padding: 12px 18px 10px; } /* V8R：原型 bcols gap 10/padding 14-18-12；均分甬道（1 1 0）。lanefold 修1（1104 用户令「甬道内部不要横向滚动条」）：横向滚动退役——列可收缩（min-width 186→0）+低频列折叠（planned/done 细头）保默认窗口六列全可见；纵向空间恒足（board 行高随 pane 拉伸） */
     /* 件9：卡在甬道内纵向滚动；高度=stretch 拉满 board。W-LV8 甬道对齐 v8 bcol：
        三层明度阶梯（画布 bg0 < 甬道 surface1+描边 < 卡 surface2）——原 lane-bg 与画布
        近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来。
        V8R：均分 flex 1 1 0 + min-width 186（原型 bcol flex:1 1 0 无滚动；窄窗可滚不压缩） */
-    #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 1 0; min-width: 186px; flex-direction: column; min-height: 0; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 1 0; min-width: 0; flex-direction: column; min-height: 0; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); } /* lanefold：min-width 186→0 可收缩（横向溢出根除）；纵向滚动保留（横向禁——board 已 hidden 双保险） */
     /* V8R：待收单列 = 原型 bcol.go（行动列）——描边 + 1px 光环 + 顶部渐变 + 列头亮字
       （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中）。
       W-BOARDCOLOR：列高亮色随五态语义族改走 --p-ready（橙族——待收单=待动作；原
       var(--working) 黄与「进行中恒黄」口径打架，且进行中列已非高亮列） */
     #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install { border-color: transparent; border-color: color-mix(in srgb, var(--p-ready) 42%, transparent); background: var(--surface1); background: linear-gradient(180deg, color-mix(in srgb, var(--p-ready) 8%, var(--surface1)), var(--surface1) 40%); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--p-ready) 15%, transparent); }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--p-ready); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane.lane-ready_to_install .lane-head { color: var(--p-ready); background: linear-gradient(180deg, color-mix(in srgb, var(--p-ready) 8%, var(--surface1)), var(--surface1) 40%); } /* lanefold：ready 列头遮底沿列渐变（贴边后头部背景与列面同源） */
     /* W-LV8：空列空态（v8 .arch 语义）——死黑矩形→轻提示，扫读不失衡 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-empty { padding: 14px 0 10px; text-align: center; color: var(--faint); font-size: var(--fs-C); line-height: 1.6; }
     /* 件9：看板 pane 内的图纸/输出物侧区——限高内滚不与甬道争纵向空间（恒 ≤190px） */
     #d-team .workspace-body > .workspace-pane.board-pane .board-side-list { flex: 0 0 auto; max-height: 190px; overflow: auto; padding: 10px 22px 8px; border-top: 1px solid var(--line-soft); }
-    #d-team .workspace-body > .workspace-pane.board-pane .lane-head { position: sticky; top: -1px; z-index: 1; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: -2px -2px 8px; padding: 2px 2px 9px; background: inherit; font-size: var(--fs-C); font-weight: 600; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-head { position: sticky; top: -8px; z-index: 1; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: -8px -8px 8px; padding: 8px 8px 9px; background: var(--surface1); font-size: var(--fs-C); font-weight: 600; } /* lanefold 修2（1104 用户令「标题与上边缘贴合零缝隙」）：负 margin 全贴 lane padding 边+实色遮底（--surface1 替 inherit——底字彻底不可见）；ready 列头底色沿其渐变面（下条覆写） */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* V8R：列头防换行（窄列/浅色长词） */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { flex: none; }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-head span:last-child { color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; } /* W-LV8：v8 h4 b——计数亮色锚住列头 */
+    /* ===== lanefold 修3（1104 用户令·抽屉折叠）：泳道头=抽屉把手 =====
+       仅规划中/完成两条可折叠（低频列）；收起=细头一条（标题+计数徽章+chevron ≈32px）；
+       开合=grid-template-rows 0fr↔1fr 单一协调动画 240ms cubic-bezier(.2,.8,.2,1)（禁
+       max-height 猜值跳变）；卡片轻上浮 stagger ≤60ms（just-opened 一次性类，render 不
+       重播）；计数徽章变化轻弹一次（新增卡提醒感）。reduced-motion：全局 .01ms!important
+       闸（:2518 族）自动把 transition/animation 钳成立即显隐——本块不另写降级。 */
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold { min-height: 0; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head { cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 11px 11px 0 0; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head:hover { background: color-mix(in srgb, var(--text-strong) 4%, var(--surface1)); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: -2px; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-chev { flex: none; width: 0; height: 0; margin-right: 2px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 5px solid var(--dim); transform: rotate(0deg); transition: transform 240ms cubic-bezier(.2, .8, .2, .1); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-open .lane-chev { transform: rotate(90deg); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-badge { flex: none; min-width: 18px; padding: 1px 6px; border-radius: 9px; background: color-mix(in srgb, var(--text-strong) 9%, transparent); color: var(--text-strong); font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-badge.pop { animation: laneBadgePopKf 300ms cubic-bezier(.2, .8, .2, 1); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 240ms cubic-bezier(.2, .8, .2, 1); }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-closed .lane-drawer { grid-template-rows: 0fr; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in { min-height: 0; overflow: hidden; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-closed .lane-drawer-in { visibility: hidden; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in.just-opened > * { animation: laneRiseKf 240ms cubic-bezier(.2, .8, .2, 1) both; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in.just-opened > *:nth-child(1) { animation-delay: 0ms; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in.just-opened > *:nth-child(2) { animation-delay: 40ms; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in.just-opened > *:nth-child(3) { animation-delay: 80ms; }
+    #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in.just-opened > *:nth-child(n+4) { animation-delay: 120ms; }
+    @keyframes laneRiseKf { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes laneBadgePopKf { 50% { transform: scale(1.28); } }
     #d-team .workspace-body > .workspace-pane.board-pane .task-card { flex: 0 0 auto; }
     #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; } /* 【退役 W-MEMBERGRID】同被后置 t25fix 定列块盖死，从未生效；权威落点见文件后段 W-MEMBERGRID 块 */
     #d-team .workspace-pane .member-card { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 11px; min-height: 142px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--surface2); } /* t25fix #8：145deg brand 渐变退役 */
