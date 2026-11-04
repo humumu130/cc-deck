@@ -15,7 +15,7 @@
                 const laneLastCounts = new Map();
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
-                const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"], ["headcount-trim-first", "编制清理"]]); // [W-SEAT-SEMANTICS] 首裁确认卡标签（缺席时卡面裸显 kind 串）
+                const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"], ["headcount-trim-first", "编制清理"], ["pm-appoint", "值守 PM 任命"], ["dispatch-closeout", "收口待办"]]); // [W-SEAT-SEMANTICS] 首裁确认卡标签（缺席时卡面裸显 kind 串）；[W-PMSEAT] 任命/收口两卡标签（1104 串台根治批）
                 // 件十（2026-10-11 用户实锤）：tier 措辞口语化——显示层映射「正经立项→正式项目 /
                 // 轻立项→轻量项目」；存储值保持旧词（创建载荷 option value/relay 校验/org CLI 参数
                 // 全不动，旧数据零迁移）。新增显示点一律走 tierDisplay()

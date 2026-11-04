@@ -209,7 +209,19 @@ export type ConfirmKind =
   // 改提示词」降级为「建议+人批」，Mandate 思想）；payload 携 key/value/reason；
   // ✓=applyPatrolOverride 落 patrol-config.json+即时改 env（applyConfirmEffects case
   // "patrol-suggest"），✗=弃零半态。巡查员不能自改配置——这是唯一生效通道。
-  | "patrol-suggest";
+  | "patrol-suggest"
+  // [W-PMSEAT] 值守 PM 任命确认（1104 用户实锤「串台」根治件①②）：duty 候选/claim
+  // 认领不再「先斩后奏」——pm.session_id 从空→某会话前出本卡；未决期间零值守喂活。
+  // payload 携 sid/cli_pid/cwd/origin(auto|claim)；✓=setPmOverride 落值守位
+  // （applyConfirmEffects case "pm-appoint"）+喂活恢复；✗=appoint_rejected 记档
+  // （该会话不再被自动提名）+值守位保持空。
+  | "pm-appoint"
+  // [W-PMSEAT] 收割收尾联检（1104 第三条）：dispatch 终态收口时联检该单关联的开着
+  // PR（pr_url/pr_state）与 review-ledger 段行——未收口挂 PM 待办，不允许静默漏。
+  // payload 携 dispatch_id/pr_url/pr_state/session_id/review_segment；✓=通知值守 PM
+  // 执行收口（leader-harvest --merge / gh pr close——relay 不代关）；✗=知情放弃留痕；
+  // pr-report merged 上报自动消单（decideConfirm by=auto:pr-merged）。
+  | "dispatch-closeout";
 
 export interface OrgConfirm {
   id: string;

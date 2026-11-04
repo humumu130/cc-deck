@@ -1065,7 +1065,7 @@ export function startServer(
             // 值守位接管写 duty.json（信任级同 dispatch 写面：token 已鉴权的本机
             // CLI）；log-append=台账补录审计行（exp-append 同级）；agent-teams=
             // 实验特性协助（check 只读，on 写 settings env 段——CLI 由用户亲手运行）
-            "join", "pm-claim", "log-append", "agent-teams", "dispatch-remote", "xmsg-status",
+            "join", "pm-claim", "pm-release", "log-append", "agent-teams", "dispatch-remote", "xmsg-status",
             // W-ORG-DEFECTS 件3（2026-11-01）：held 卡上锁/破锁（board-hold/board-release
             // 的 HTTP/WS 面）——hold=流程扣留位写面（PM 工具/通知一键破锁），非决议类
             //（无确认卡语义；破锁动作有 hold-release 审计帧全链可查）。

@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { writeCollabMode } from "../src/settings.js";
-import { setLightConfirmTrusted, upsertBoardEntry } from "../src/projects.js";
+import { setLightConfirmTrusted, upsertBoardEntry, listPendingConfirms } from "../src/projects.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { RelayConfig } from "../src/config.js";
 import type { Command } from "../src/types.js";
@@ -112,10 +112,20 @@ function mkFixture(dirs: string[]) {
     created[created.length - 1]?.cb.onInit(`sdk-p105-${seq}-boot`, "test-model");
     return base;
   };
-  const mkPm = (): string => {
+  const mkPm = (autoAppoint = true): string => {
     const id = `ext-pm-${seq}-${randomUUID().slice(0, 8)}`;
     mgr.ensureExternal(id, ANCHOR, "PM 主会话", `sdk-pm-${seq}`);
     mgr.setExternalCliPid(id, process.pid); // 本进程 pid：信号 0 探测恒活
+    // [W-PMSEAT] 值守位=任命确认制（1104 串台根修）：no-leader 下外部会话不再自动成
+    // 值守目标——先出 pm-appoint 卡。缺省自动 ✓（override 落位=本测试件 N1/N3/N4/P 的
+    // 行为基线，与旧回落现算语义等价）；N1 用 mkPm(false) 显式走拦截+决议路径
+    if (autoAppoint) {
+      const card = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.payload?.sid === id);
+      if (card) {
+        const d = mgr.orgAction("confirm-decide", { confirm_id: card.id, approve: true, by: "user" }) as { ok: boolean };
+        if (!d.ok) throw new Error("mkPm 自动任命决议失败");
+      }
+    }
     return id;
   };
   return { mgr, created, extInputs, rounds, gid, card, dispatch, ensureLeaderIdx, mkPm, dataDir: DATA, cleanup: () => {
@@ -163,7 +173,12 @@ try {
     const f = mkFixture(dirs);
     const leaderIdx = f.ensureLeaderIdx();
     writeCollabMode(f.dataDir, "no-leader");
-    const pmId = f.mkPm();
+    const pmId = f.mkPm(false); // N1 走拦截+决议显式路径（mkPm 缺省自动任命=其他景基线）
+    // [W-PMSEAT] 语义变更牵连：no-leader 值守位=任命确认制——mkPm 出场即 auto 提名卡
+    //（xdd-7c 形态），✓ 落位后本景喂活语义才成立（未决零喂活在 test-pmseat A 组断言）
+    const apCard = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.payload?.sid === pmId);
+    assert(!!apCard, "N1⓪ 任命卡拦截在位（外部会话出场→pm-appoint 卡，先斩后奏根除）");
+    send(f.mgr, `p105ap${seq}`, "COMMAND_ORG_ACTION", { action: "confirm-decide", confirm_id: apCard!.id, approve: true, by: "user" }, "web-1");
     (f.mgr as unknown as { setExternalStatus(id: string, s: string, sum: string): void }).setExternalStatus(pmId, "DONE", "空闲等输入");
     f.card("N1 待办卡");
     const wIdx = f.dispatch("N1 worker 活");
@@ -216,6 +231,7 @@ try {
     f.ensureLeaderIdx();
     writeCollabMode(f.dataDir, "no-leader");
     const pmId = f.mkPm();
+    // [W-PMSEAT] 任命确认制牵连：✓ 落位后「PM WORKING 合并门」才有目标可判
     (f.mgr as unknown as { setExternalStatus(id: string, s: string, sum: string): void }).setExternalStatus(pmId, "WORKING", "PM 在岗干活");
     f.card("N3 待办卡");
     const wIdx = f.dispatch("N3 worker 活");
@@ -233,6 +249,7 @@ try {
     f.ensureLeaderIdx();
     writeCollabMode(f.dataDir, "no-leader");
     const pmId = f.mkPm();
+    // [W-PMSEAT] 任命确认制牵连：✓ 落位后 finishExternal 检查点才认目标
     (f.mgr as unknown as { setExternalStatus(id: string, s: string, sum: string): void }).setExternalStatus(pmId, "DONE", "空闲等输入");
     f.card("N4 待办卡");
     const wIdx = f.dispatch("N4 worker 活");
@@ -259,6 +276,7 @@ try {
     f.ensureLeaderIdx();
     writeCollabMode(f.dataDir, "no-leader");
     const pmId = f.mkPm();
+    // [W-PMSEAT] 任命确认制牵连：✓ 落位后停放语义复查才有目标
     // external 卡置 saved（异常态防御）：不该走 pm_parked 停放分支（判定只对托管目标）
     const pmState = (f.mgr as unknown as { getExternal(id: string): { saved?: boolean } | undefined }).getExternal(pmId);
     if (pmState) pmState.saved = true;
