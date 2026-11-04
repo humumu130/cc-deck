@@ -7,10 +7,11 @@
 //   1. 两源各持 B2 checkpoint 五元组：ndjson 行级语义（offset=前 offset 行已处理，续跑从
 //      offset+1 起）；boardsDir 目录级语义（mtime=板文件最大 mtime、lineCount=板文件数，
 //      命中=域快进，失效=域重灌——JSON 树无逐行续跑面）。
-//   2. 失效 vs 中断（D1 调和的 D2 版）：
-//      · cp 有效+offset<lineCount = 纯中断续跑——不清域，从 offset+1 增量续行；重投链状态
+//   2. 失效 vs 中断（D1 调和的 D2 版；dispatchappend 起 ndjson 源走 appendOnly 增量）：
+//      · cp 有效+offset<lineCount = 中断/追加续跑——不清域，从 offset+1 增量续行（追加只导
+//        新增行——纯 append 源 mtime 变不杀 cp，见段 1 头注）；重投链状态
 //        （当前段号/是否终态）从 dispatch 表恢复（dispatch 域仅由本源灌入，全表回溯即全量状态）。
-//      · cp 失效 = 从 0 重放——dispatch 段首批事务清 lesson+dispatch 两域（倒序：lesson 的
+//      · cp 失效（行数缩减/schemaVersion 变） = 从 0 重放——dispatch 段首批事务清 lesson+dispatch 两域（倒序：lesson 的
 //        source_dispatch_id FK 引用 dispatch）+本源旧 loss。联动规则：dispatch 失效 ⇒ lesson
 //        必重灌（source_dispatch_id 悬空面随 dispatch 集变化，防陈旧归因）；boards 失效 ⇒ 仅
 //        lesson 重灌。文件缺失（lines=null）=源不可观测，不动作不清域（D1 events 同口径）。
@@ -400,8 +401,14 @@ export function importDispatchLesson(
   const obsBoards = observeBoardsDir(sources.boardsDir);
 
   const current = { schemaVersion };
+  // dispatchappend（t-a5e9f79e·P0 实锤 1105 振荡瘫痪）：appendOnly 增量续读（events 源
+  // F2 先例同款——checkpoint.ts appendOnly 分支）。原严格匹配「mtime 变即 null→replay 清两域
+  // 全量重放」在生产形态 550-600ms/次 × duty 心跳/keepalive/派单 append 高频（1 次/秒级）
+  // =事件循环近连续阻塞、HTTP 200/000 振荡（07:3x test.98 实锤）。dispatch-log 写面纯追加
+  // （org.ts writeDispatchToDb flag:"a"）——行数纯增长=前缀不变→旧 offset 仍有效，追加只导
+  // 新增行（毫秒级）；行数缩减（compact 重写/截断）=前缀已变→null→全量重放兜底（语义保留）。
   const cpLog = obsLog.lines !== null
-    ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount })
+    ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }, { appendOnly: true })
     : null;
   const cpBoards = readCheckpoint(port, sources.boardsDir, { ...current, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count });
 
@@ -425,7 +432,7 @@ export function importDispatchLesson(
 
   // ---- 段 1：dispatch-log 行级重放/续跑（重投链状态机） ----
   if (obsLog.lines !== null) {
-    const replay = cpLog === null; // 失效/首次→0 重放（首批事务清两域）；有效→offset+1 续跑
+    const replay = cpLog === null; // 行数缩减/首见→0 重放（首批事务清两域）；appendOnly 追加/中断→offset+1 增量续跑
     const fromLine = replay ? 0 : cpLog!.offset;
     // 归因锚预载（段 1 与续跑路径共用；dispatch 重放场景 group/session 行不受本域清理影响）
     const groupByAnchor = new Map<string, string>(

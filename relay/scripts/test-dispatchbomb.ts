@@ -83,6 +83,54 @@ async function main(): Promise<void> {
     assert(idl.indexOf("obs.unchanged === true") < idl.indexOf("const lines = obs.text.split"), "unchanged 分支先于 split（短路先行——空 text 永不进 split）");
   }
 
+  console.log("D. dispatchappend（t-a5e9f79e·P0 振荡根治）：append 只导新增行（appendOnly 增量续读）");
+  {
+    const { readFileSync } = await import("node:fs");
+    const idl = readFileSync(new URL("../src/storage/import-dispatch-lesson.ts", import.meta.url), "utf8");
+    assert(idl.includes("{ appendOnly: true }"), "appendOnly 传参在场（events F2 先例同款——纯追加 mtime 变不杀 checkpoint）");
+
+    const { importDispatchLesson } = await import("../src/storage/import-dispatch-lesson.js");
+    const { createSqlitePort } = await import("../src/storage/sqlite.js");
+    const { runMigrations } = await import("../src/storage/migrator.js");
+    const { migrations } = await import("../src/storage/schema.js");
+    const root = mkdtempSync(join(tmpdir(), "dispatchappend-"));
+    const dataDir = join(root, "data");
+    const orgDir = join(root, "org");
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(orgDir, { recursive: true });
+    const logFile = join(orgDir, "dispatch-log.ndjson");
+    try {
+      const row = (i: number) => JSON.stringify({ ts: 1700000000000 + i, id: "a" + i, tier: "正经立项", status: "dispatched", receipt: null });
+      const L = 100;
+      writeFileSync(logFile, Array.from({ length: L }, (_, i) => row(i)).join("\n") + "\n", "utf8");
+      const port = createSqlitePort({ dataDir });
+      port.open();
+      runMigrations(port, migrations);
+      const n = (sql: string): number => port.query<{ n: number }>(sql)[0]?.n ?? -1;
+      importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: join(orgDir, "boards") });
+      const base = n("SELECT COUNT(*) AS n FROM dispatch");
+      assert(base === L, `小台账首轮全量（${base} 行）`);
+
+      // D2 核心：append 5 行（mtime 必变）→ 只导新增行——dispatchProcessed=5（全量重放=100）
+      appendFileSync(logFile, Array.from({ length: 5 }, (_, i) => row(L + i)).join("\n") + "\n", "utf8");
+      const r2 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: join(orgDir, "boards") });
+      const after = n("SELECT COUNT(*) AS n FROM dispatch");
+      assert(r2.dispatchProcessed === 5, `**振荡根除**：append 只导新增行（dispatchProcessed=${r2.dispatchProcessed}——修前全量重放 100 行/550-600ms）`);
+      assert(after === L + 5, `域行数正确增长（${base}→${after}）`);
+      assert(r2.skipped !== true, `append 未被误判快进（走了续跑路径）`);
+
+      // D3：行数缩减（截断）→ appendOnly 兜底失效 → 全量重放（前缀已变语义保留）
+      writeFileSync(logFile, Array.from({ length: 30 }, (_, i) => row(i)).join("\n") + "\n", "utf8");
+      const r3 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: join(orgDir, "boards") });
+      const after3 = n("SELECT COUNT(*) AS n FROM dispatch");
+      assert(after3 === 30, `行数缩减兜底重放（${after3}=30——前缀已变不增量）`);
+
+      port.close?.();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
   console.log(`\n========== dispatchbomb 套件：${pass} 通过 / ${fail} 失败 ==========`);
   process.exit(fail > 0 ? 1 : 0);
 }
