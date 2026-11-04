@@ -101,7 +101,7 @@ export function buildSessionsReconcile(mgr: SessionManager, relayName: string | 
   };
 }
 
-import { appendLinkEvent, linkSummary, type LinkEventRow, type LinkEventSrc } from "./link-quality.js";
+import { ingestLinkEvents, linkSummary } from "./link-quality.js"; // [R1] 补报单口（校验+指纹去重；调试 HTTP 口与帧命令共用）
 
 function localIps(): Set<string> {
   const out = new Set<string>();
@@ -297,6 +297,8 @@ export const COMMAND_TYPES = new Set([
   // X1 多机编排：密封 xmsg 发送命令面（ccops/org/会话卡按钮三口汇流；与 cloud-client
   // 白名单逐字一致纪律——#212 漏加=LAN 实机死路同款坑）
   "COMMAND_XMSG",
+  // [W-LINKQUALITY-R1] 遥测补报帧命令（与 cloud-client COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_TELEMETRY_LINK",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -832,27 +834,12 @@ export function startServer(
         req.on("data", (c: Buffer) => { lqBody += c; });
         req.on("end", () => {
           try {
+            // [W-LINKQUALITY-R1]（A审 P0）：主链已改 ws 帧命令（COMMAND_TELEMETRY_LINK，
+            // web-lan/web-cloud/rn 四形态一条链）；本 HTTP 口降级为**调试口**——校验/
+            // 去重/落账与帧命令共用 ingestLinkEvents 单口（含 connect 形态收编+指纹去重）
             const body = JSON.parse(lqBody || "{}") as { events?: unknown[] };
-            const SRC_OK = new Set<LinkEventSrc>(["web-lan", "web-cloud", "rn"]);
-            const KIND_OK = new Set(["drop", "reconnect", "retry-fail"]);
-            const now = Date.now();
-            let n = 0;
-            for (const ev of Array.isArray(body.events) ? body.events.slice(0, 200) : []) {
-              const r = ev as Partial<LinkEventRow>;
-              if (!r || typeof r.ts !== "number" || now - r.ts > 7 * 86_400_000 || r.ts > now + 60_000) continue;
-              if (typeof r.src !== "string" || !SRC_OK.has(r.src as LinkEventSrc)) continue;
-              if (typeof r.kind !== "string" || !KIND_OK.has(r.kind)) continue;
-              appendLinkEvent(cfg.dataDir, {
-                ts: r.ts, src: r.src as LinkEventSrc, kind: r.kind as LinkEventRow["kind"],
-                ...(typeof r.reason === "string" ? { reason: r.reason.slice(0, 120) } : {}),
-                ...(typeof r.code === "number" ? { code: r.code } : {}),
-                ...(typeof r.downtimeMs === "number" ? { downtimeMs: r.downtimeMs } : {}),
-                ...(typeof r.attempts === "number" ? { attempts: r.attempts } : {}),
-                ...(typeof r.connectedMs === "number" ? { connectedMs: r.connectedMs } : {}),
-              });
-              n++;
-            }
-            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ accepted: n }));
+            const r = ingestLinkEvents(cfg.dataDir, body.events);
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(r));
           } catch (e) {
             res.writeHead(400).end("bad request: " + String(e instanceof Error ? e.message : e).slice(0, 80));
           }

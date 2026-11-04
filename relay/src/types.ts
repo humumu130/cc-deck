@@ -1019,6 +1019,9 @@ export type CommandType =
   | "COMMAND_EXT_STOP"
   // X1 多机编排：密封 xmsg 发送命令面（三口汇流；详见 XmsgCommand 接口注）
   | "COMMAND_XMSG"
+  // [W-LINKQUALITY-R1] 断连遥测补报改 ws 帧上行（A审 P0/P1-1：HTTP 链 ccd_cfg 幽灵键
+  // 全形态死+CF worker 无 /api/* 反代=云形态恒 404——帧通道一处修通 web-lan/web-cloud/rn）
+  | "COMMAND_TELEMETRY_LINK"
   | "COMMAND_DELETE"
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
@@ -1127,6 +1130,14 @@ export interface ExtInputCommand extends CommandBase {
 export interface XmsgCommand extends CommandBase {
   type: "COMMAND_XMSG";
   payload: { op?: "send" | "status" | "peers"; dev?: string; session?: string; text?: string; msg_id?: string; source_session?: string };
+}
+
+// [W-LINKQUALITY-R1] 遥测补报帧命令：events=端侧断连/重连事件批（服务端校验+指纹
+// 去重后落账，见 link-quality.ts ingestLinkEvents 单口）；get="summary"=诊断卡取数
+//（ack.data 回 LinkSummary）。HTTP /api/telemetry/link 降级为调试口不再是主链。
+export interface TelemetryLinkCommand extends CommandBase {
+  type: "COMMAND_TELEMETRY_LINK";
+  payload: { events?: unknown; get?: "summary" };
 }
 
 // 外部会话打断（向终端注入 Esc）
@@ -1353,6 +1364,7 @@ export interface EngineLoginCommand extends CommandBase {
 
 export type Command =
   | CreateCommand
+  | TelemetryLinkCommand // [W-LINKQUALITY-R1] 补报帧命令（见接口注）
   | MessageCommand
   | StopCommand
   | ContinueCommand

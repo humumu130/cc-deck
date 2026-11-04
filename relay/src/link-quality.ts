@@ -24,6 +24,61 @@ export interface LinkEventRow {
   attempts?: number;
   /** 本次掉线前连接存活时长（drop 形态） */
   connectedMs?: number;
+  /** [R1·P1-2] 端侧通道（rn 源 LAN/云分键；web 源已由 src 区分，缺省=旧端兼容） */
+  channel?: "lan" | "cloud";
+}
+
+/** [W-LINKQUALITY-R1]（A审 P0/P1-1/P1-3）补报单口：校验+事件指纹去重+落账——
+ * ws 帧命令（主链）与 HTTP /api/telemetry/link（调试口）共用。指纹=src|kind|ts
+ *（任务书口径），近窗去重（进程内 2000 条/30min 窗）——补报 at-least-once 重发
+ * （响应丢失/ACK 丢）不双记账；P1-3 断言：同批重放 N 次落账数不变。 */
+export const LINK_SRC_OK = new Set<LinkEventSrc>(["web-lan", "web-cloud", "rn"]); // bridge 段不经补报（cloud-client 直记）
+const LINK_KIND_OK = new Set<LinkEventKind>(["drop", "reconnect", "connect", "retry-fail"]);
+const LINK_SEEN = new Map<string, number>();
+const LINK_SEEN_MAX = 2000;
+const LINK_SEEN_WINDOW_MS = 30 * 60_000;
+
+export interface LinkIngestResult { accepted: number; deduped: number; rejected: number; }
+
+function num(v: unknown, min: number): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) && v >= min ? v : undefined;
+}
+
+export function ingestLinkEvents(dataDir: string, events: unknown, now = Date.now()): LinkIngestResult {
+  const out: LinkIngestResult = { accepted: 0, deduped: 0, rejected: 0 };
+  if (!Array.isArray(events)) return out;
+  for (const e of events.slice(0, 200)) { // 单批 200 截（原 HTTP 口径随批保留）
+    if (!e || typeof e !== "object") { out.rejected++; continue; }
+    const r = e as Partial<LinkEventRow> & { channel?: unknown };
+    const src = r.src as LinkEventSrc, kind = r.kind as LinkEventKind;
+    if (typeof r.ts !== "number" || !LINK_SRC_OK.has(src) || !LINK_KIND_OK.has(kind)) { out.rejected++; continue; }
+    if (r.ts > now + 60_000 || r.ts < now - 7 * 86_400_000) { out.rejected++; continue; } // 未来 60s / 7d 界（原 HTTP 口径单口化）
+    const fp = `${src}|${kind}|${r.ts}`;
+    if (LINK_SEEN.has(fp)) { out.deduped++; continue; }
+    LINK_SEEN.set(fp, r.ts);
+    appendLinkEvent(dataDir, {
+      ts: r.ts,
+      src,
+      kind,
+      ...(typeof r.reason === "string" && r.reason ? { reason: r.reason.slice(0, 100) } : {}),
+      ...(num(r.code, 0) !== undefined ? { code: r.code as number } : {}),
+      ...(num(r.downtimeMs, 0) !== undefined ? { downtimeMs: r.downtimeMs as number } : {}),
+      ...(num(r.attempts, 1) !== undefined ? { attempts: r.attempts as number } : {}),
+      ...(num(r.connectedMs, 0) !== undefined ? { connectedMs: r.connectedMs as number } : {}),
+      ...(r.channel === "lan" || r.channel === "cloud" ? { channel: r.channel } : {}),
+    });
+    out.accepted++;
+  }
+  if (LINK_SEEN.size > LINK_SEEN_MAX) { // 近窗清理：按记录 ts 淘汰过期+超量截尾（值=事件 ts）
+    const cutoff = now - LINK_SEEN_WINDOW_MS;
+    for (const [k, ts] of [...LINK_SEEN.entries()]) { if (ts < cutoff) LINK_SEEN.delete(k); }
+    if (LINK_SEEN.size > LINK_SEEN_MAX) {
+      const keep = [...LINK_SEEN.entries()].sort((a, b) => b[1] - a[1]).slice(0, LINK_SEEN_MAX);
+      LINK_SEEN.clear();
+      for (const [k, ts] of keep) LINK_SEEN.set(k, ts);
+    }
+  }
+  return out;
 }
 
 export interface LinkSummary {

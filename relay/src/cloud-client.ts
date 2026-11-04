@@ -54,6 +54,8 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_EXT_STOP",
   // X1 多机编排：密封 xmsg 发送命令面（三口汇流；与 ws-server 白名单逐字一致纪律）
   "COMMAND_XMSG",
+  // [W-LINKQUALITY-R1] 遥测补报帧命令（与 ws-server COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_TELEMETRY_LINK",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",

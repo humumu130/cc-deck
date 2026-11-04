@@ -76,6 +76,7 @@ import { adoptReplayed } from "./lifecycle/adopt.js"; // W-SPLIT-S5①：收养�
 import { transitionLegal } from "./lifecycle/transition.js"; // W-SMIMPL ③：状态转移断言层（纯观测；SessionStatus 用 types.js 既有 import）
 import * as reviveMod from "./lifecycle/revive.js"; // W-SPLIT-S5②：autoRevive/激活器协调出舱
 import { pmKeepaliveEligible, PM_KEEPALIVE_DELAY_MS } from "./lifecycle/revive.js"; // #287 PM 常驻化保活判定（纯函数，schedule/fire 双查同源）
+import { ingestLinkEvents, linkSummary } from "./link-quality.js"; // [W-LINKQUALITY-R1] 补报帧单口（校验+去重+summary）
 import { setExternalUsage as setExtUsageMod, ctxWatchdogOnContext as ctxWdOnCtx, ctxWatchdogOnTurnBoundary as ctxWdOnBoundary } from "./lifecycle/context-link.js"; // W-SPLIT-S5③：上下文链出舱
 import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT-S3c
 import { createEngineCommands } from "./commands/engine-commands.js"; // W-SPLIT-S3c
@@ -3085,6 +3086,17 @@ export class SessionManager {
         }
         case "COMMAND_ARTIFACT_FETCH": {
           return this.boardCmds.COMMAND_ARTIFACT_FETCH(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
+        }
+        case "COMMAND_TELEMETRY_LINK": {
+          // [W-LINKQUALITY-R1]（A审 P0/P1-1/P1-3）：端侧补报改 ws 帧上行单口——web-lan
+          //（LAN ws 直发）/web-cloud/rn（云桥密封帧，cloud-client 同入口进本 case）一条链
+          // 落账；HTTP /api/telemetry/link 降级为调试口。get="summary"=诊断卡取数（ack.data
+          // 回 LinkSummary）；events 批走 ingestLinkEvents（校验+指纹去重——重发不双记账）
+          const tp = cmd.payload as { events?: unknown; get?: unknown };
+          if (tp.get === "summary") {
+            return { command_id: cmd.command_id, ok: true, data: linkSummary(this.cfg.dataDir) } as unknown as CommandAckPayload;
+          }
+          return { command_id: cmd.command_id, ok: true, data: ingestLinkEvents(this.cfg.dataDir, tp.events) } as unknown as CommandAckPayload;
         }
         case "COMMAND_ORG_ACTION": {
           return this.boardCmds.COMMAND_ORG_ACTION(cmd, by); // W-SPLIT-S3c：mixin 委托（体在 commands/board-commands.ts）
