@@ -1557,5 +1557,13 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-claim-rejected", // 双 PM 互斥拒收（活值守 PM 在位，挑战者被拒+现任收通知）
   "closeout-pending", // 收割收尾联检挂卡（dispatch 终态而 PR 未关——dispatch-closeout 卡入 PM 待办）
   "restart-skip-live-worker", // 重启误伤守卫（外部 worker pid 活→跳过重启清扫，待真实回合终态收口）
+  // ---- R1（1105 双审返修）新增审计词 ----
+  "pm-override-stale-pid", // 复合判活：override pid 活但在册会话 pid 已换代（pid 回收占位假阳）→视死清档
+  "pm-release", // 值守位显式让出（org pm release 解锁出口——R1-B-F2）
+  "pm-appoint-auto-dead", // 待决卡所属会话退出 auto 消卡（R1 起不入否决档——复活可再提名）
+  "pm-appoint-target-dead", // 决议时点候选已死：任命作废不入否决档（R1-A-P1②）
+  "pm-appoint-target-pid-changed", // 决议时点候选 pid 已换代（提名→决议间 CLI 重启）：作废不入档
+  "pm-appoint-superseded-blocked", // 决议时点席位已有活值守 PM：陈旧卡作废不覆写（R1-B-F1 现任复查）
+  "dispatch-no-duty-pm", // no-leader 模式派单时值守位空（时序对账告警档——R1-B-F1 半件）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

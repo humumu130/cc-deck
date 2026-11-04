@@ -26,8 +26,8 @@ import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { writeCollabMode } from "../src/settings.js";
-import { setLightConfirmTrusted, listPendingConfirms } from "../src/projects.js";
-import { appendDispatch, readDispatchLog, readAppointRejected, readPmOverride } from "../src/org.js";
+import { setLightConfirmTrusted, listPendingConfirms, addConfirm } from "../src/projects.js";
+import { appendDispatch, readDispatchLog, readDispatchLogFile, readAppointRejected, readPmOverride, setPmOverride } from "../src/org.js";
 import { pendingUserActionsOf } from "../src/pending-user-actions.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -341,6 +341,89 @@ async function main() {
       appendDispatch({ ts: Date.now(), id: "pmseat-d3", tier: "轻立项", target: "manual", status: "dispatched", session_id: "ext-gone", title: "D3 未知单" });
       (f.mgr as unknown as { closeHungDispatchRows: () => void }).closeHungDispatchRows();
       assert(readDispatchLog().find((r) => r.id === "pmseat-d3")?.status === "done", "D④ 未知会话悬账照常清扫（守卫不扩大豁免面）");
+      f.cleanup();
+    }
+
+    // ============ E 组：R1 返修（1105 双审 P0×1+P1×4） ============
+    console.log("E R1 返修（P0 sqlite 档守卫/现任复查/复合判活+release/auto 分档/pid 帧兜底）:");
+    {
+      // E1【P0】生产 sqlite 读档档位下守卫生效（A 审复现脚本 repro-sqlite-guard.ts
+      // 行为版并入——改前红：守卫经 readDispatchLog 拿投影行，归因空=恒清扫；改后
+      // 绿：ndjson 直读。档位切 sqlite 模拟生产默认读档）
+      const f = mkFixture(dirs);
+      process.env.CCR_STORAGE_READ_MODE = "sqlite";
+      const liveW = f.mkExt("ext-e1live", "/Users/xdd/dev/e1", "E1 活 worker", process.pid);
+      appendDispatch({ ts: Date.now(), id: "pmseat-e1", tier: "轻立项", target: "manual", status: "running", session_id: liveW, title: "E1 在途单" });
+      (f.mgr as unknown as { closeHungDispatchRows: () => void }).closeHungDispatchRows();
+      assert(readDispatchLogFile().find((r) => r.id === "pmseat-e1")?.status === "running", "E1【P0】sqlite 档活 worker 仍被守卫（ndjson 直读，不依赖读档投影归因）");
+      const smSrc = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
+      const gStart = smSrc.indexOf("private closeHungDispatchRows");
+      const guardBlk = smSrc.slice(gStart, smSrc.indexOf("\n  private ", gStart + 10)); // 函数边界=下一个方法（helper 在本函数之前，勿用其定义定位）
+      assert(!guardBlk.includes("readDispatchLog(") && guardBlk.includes("readFileSync(dispatchLogPath()"), "E1b 静态锁：守卫体 ndjson 直读（无 readDispatchLog——防档位回归）");
+      assert(guardBlk.includes("cliPidFromEventsTail"), "E1c 静态锁：守卫判活多源接线（pid 帧兜底源在场）");
+      process.env.CCR_STORAGE_READ_MODE = "json";
+      f.cleanup();
+    }
+    {
+      // E2【B-F1】现任复查：席位有活值守 PM 时陈旧卡 ✓ 被拦（不覆写不记档）；
+      // 同 sid 复决放行
+      const f = mkFixture(dirs);
+      writeCollabMode(f.dataDir, "no-leader");
+      const inc = f.mkExt("ext-e2-incumbent", "/Users/xdd/dev/e2i", "E2 现任", process.pid);
+      setPmOverride({ session_id: inc, cli_pid: process.pid, cwd: "/Users/xdd/dev/e2i", claimed_at: Date.now() });
+      const cand = f.mkExt("ext-e2-cand", "/Users/xdd/dev/e2c", "E2 迟到候选", process.pid);
+      const card = addConfirm({ kind: "pm-appoint", title: "E2 迟到任命卡", reason: "现任复查夹具", payload: { sid: cand, cli_pid: process.pid, cwd: "/Users/xdd/dev/e2c", origin: "auto" } });
+      const r = f.mgr.orgAction("confirm-decide", { confirm_id: card.id, approve: true, by: "user" }) as { ok: boolean; error?: string };
+      assert(r.ok === false && (r.error ?? "").includes("在位"), "E2 活现任在场→陈旧卡 ✓ 被拦（incumbent 无感换位窗封死）");
+      assert(readPmOverride()?.session_id === inc, "E2b 现任 override 未被覆写");
+      assert(f.chain().some((x) => x.action === "pm-appoint-superseded-blocked"), "E2c superseded-blocked 审计在档");
+      assert(!readAppointRejected().some((x) => x.session_id === cand), "E2d 陈旧卡作废不入否决档（非候选问题）");
+      const card2 = addConfirm({ kind: "pm-appoint", title: "E2 同席复决", reason: "同 sid 放行面", payload: { sid: inc, cli_pid: process.pid, cwd: "/Users/xdd/dev/e2i", origin: "claim" } });
+      const r2 = f.mgr.orgAction("confirm-decide", { confirm_id: card2.id, approve: true, by: "user" }) as { ok: boolean };
+      assert(r2.ok === true && readPmOverride()?.session_id === inc, "E2e 同 sid 复决放行（幂等再确认）");
+      f.cleanup();
+    }
+    {
+      // E3【B-F2/A-P1①】复合判活：pid 活但会话在册 pid 已换代（回收占位）→视死清档
+      const f = mkFixture(dirs);
+      writeCollabMode(f.dataDir, "no-leader");
+      const sl = spawn("sleep", ["30"]);
+      const pidB = sl.pid ?? 1;
+      const a = f.mkExt("ext-e3-a", "/Users/xdd/dev/e3", "E3 会话", pidB);
+      setPmOverride({ session_id: a, cli_pid: process.pid, cwd: "", claimed_at: Date.now() }); // ov.pid 活但 ≠ 在册 pidB → stale
+      const st = (f.mgr as unknown as { pmDutyStatus(): { alive: boolean } }).pmDutyStatus();
+      assert(st.alive === false, "E3 pid 回收占位假阳→视死清档（锁席两出口互锁死根除）");
+      assert(f.chain().some((x) => x.action === "pm-override-stale-pid"), "E3b stale-pid 审计在档");
+      // E4【解锁出口】org pm release：显式让位直效
+      setPmOverride({ session_id: a, cli_pid: pidB, cwd: "", claimed_at: Date.now() });
+      const rr = f.mgr.orgAction("pm-release", {}) as { ok: boolean; data?: { released?: boolean } };
+      assert(rr.ok === true && rr.data?.released === true, "E4 org pm release 直效让位");
+      assert(readPmOverride() === null || readPmOverride() === undefined, "E4b override 已清（席位空，claim/提名恢复可达）");
+      assert(f.chain().some((x) => x.action === "pm-release"), "E4c release 审计在档");
+      sl.kill();
+      f.cleanup();
+    }
+    {
+      // E5【A-P1②】auto:pm-dead 不入否决档（进程幂窗≠用户否决）；用户 ✗ 才记档
+      const f = mkFixture(dirs);
+      writeCollabMode(f.dataDir, "no-leader");
+      const sid = f.mkExt("ext-e5-cand", "/Users/xdd/dev/e5", "E5 候选", process.pid);
+      const c1 = addConfirm({ kind: "pm-appoint", title: "E5 auto 消卡", reason: "幂窗分档", payload: { sid, cli_pid: process.pid, cwd: "", origin: "auto" } });
+      f.mgr.orgAction("confirm-decide", { confirm_id: c1.id, approve: false, by: "auto:pm-dead" });
+      assert(!readAppointRejected().some((x) => x.session_id === sid), "E5 auto:pm-dead 消卡不入否决档（CLI 重启复活可再提名）");
+      assert(f.chain().some((x) => x.action === "pm-appoint-rejected" && (x.detail ?? "").includes("不入否决档")), "E5b auto 分档审计措辞在档");
+      const c2 = addConfirm({ kind: "pm-appoint", title: "E5 用户否决", reason: "真否决记档", payload: { sid, cli_pid: process.pid, cwd: "", origin: "auto" } });
+      f.mgr.orgAction("confirm-decide", { confirm_id: c2.id, approve: false, by: "user" });
+      assert(readAppointRejected().some((x) => x.session_id === sid), "E5c 用户真 ✗ 记档（语义分档成立）");
+      f.cleanup();
+    }
+    {
+      // E6【B-F3】pid 帧 events 尾账兜底源（压缩窗/挤出后回放态缺 pid 的第二源）
+      const f = mkFixture(dirs);
+      const sid = f.mkExt("ext-e6", "/Users/xdd/dev/e6", "E6 会话", process.pid);
+      const got = (f.mgr as unknown as { cliPidFromEventsTail(s: string): number | undefined }).cliPidFromEventsTail(sid);
+      assert(got === process.pid, "E6 events 尾账可捞该会话最新 pid 帧");
+      assert((f.mgr as unknown as { cliPidFromEventsTail(s: string): number | undefined }).cliPidFromEventsTail("ext-no-such") === undefined, "E6b 无帧 sid 空手返回（快筛零成本）");
       f.cleanup();
     }
 

@@ -4,7 +4,7 @@ import { notificationsListOf } from "./decision-ledger-projection.js";
 import { pendingUserActionsOf, type PendingUserAction } from "./pending-user-actions.js"; // [W-AWAITUSER] 三源聚合单口（源登记注释锚在该件文件头）
 import { readTitleOverrides } from "./title-derive.js";
 import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { appendJournal, atomicWriteJson } from "./fs-safe.js"; // #292-cutover-P1（B-F3）：notifications/deliverables 原子写；[W-SEAT-SEMANTICS] appendJournal=trim 轮次账
 import { withStorageTx } from "./storage/org-write-tx.js";
 import { shadowWriteSession, tombstoneSession } from "./storage/session-write.js";
@@ -5043,8 +5043,54 @@ export class SessionManager {
   // 账与台账不对称、离线端重启后看不到「哪些单被打断」（PM R1 终审 P1-2）。补记
   // 豁免的只有熟手路由评价（recordRoutingResult 不经此，维持原口径：relay 重启不是
   // worker 的账）
+  /** R1-B-F3：events 尾账捞会话最新 cli_pid（pid 帧被压缩/挤出后回放态缺 pid 的
+   * 兜底源）——2MB 尾窗反向扫（leader-dispatch scan_alive 同款手法），快筛 sid+
+   * cli_pid 双词再 parse；只在守卫判活缺 pid 时调用（boot 一次性，非常态热路径）。 */
+  private cliPidFromEventsTail(sid: string): number | undefined {
+    try {
+      const p = join(this.cfg.dataDir, "events.ndjson");
+      const size = statSync(p).size;
+      const fd = openSync(p, "r");
+      try {
+        const len = Math.min(size, 2_097_152);
+        const buf = Buffer.alloc(len);
+        readSync(fd, buf, 0, len, size - len);
+        for (const line of buf.toString("utf-8").split("\n").reverse()) {
+          const t = line.trim();
+          if (!t.includes(sid) || !t.includes("cli_pid")) continue; // 快筛（尾窗内无帧=快速零成本空手）
+          try {
+            const d = JSON.parse(t) as { session_id?: string; payload?: { cli_pid?: number } };
+            if (d.session_id === sid && typeof d.payload?.cli_pid === "number" && d.payload.cli_pid > 0) return d.payload.cli_pid;
+          } catch { /* 损坏行跳过 */ }
+        }
+      } finally { closeSync(fd); }
+    } catch { /* events 文件不可读：无兜底源 */ }
+    return undefined;
+  }
+
   private closeHungDispatchRows(): void {
-    const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
+    // R1-P0（A 审）：hung 行改 **ndjson 原始账直读+自收敛**——原 readDispatchLog 走
+    // viaReadMode，生产默认 sqlite 档下 dispatch 归因 0%（生产库 1857/1857 行
+    // source_session_id NULL+3500 dangling-ref 实测），`e.session_id` 恒空=守卫判据
+    // 恒空、生产失效（1104 21:09 误伤形态将复发）；测试 json 钉档遮蔽之。ndjson 原始
+    // running 行 session_id 完好——closeoutJointCheck 同款直读手法（:5636 起），此处
+    // 加同 id 末行收敛（hung 语义=收敛后仍开放）。与 PR#14（sqlitefix）先后：本改动
+    // 使守卫**不依赖**读档投影——两 PR 在读档面无交集冲突，后合并方无需 rebase 此函数。
+    const hung: DispatchEntry[] = [];
+    {
+      const byId = new Map<string, DispatchEntry>();
+      try {
+        for (const line of readFileSync(dispatchLogPath(), "utf-8").split("\n")) {
+          const t = line.trim();
+          if (!t) continue;
+          try {
+            const r = JSON.parse(t) as DispatchEntry;
+            if (typeof r.id === "string" && r.id && typeof r.status === "string") byId.set(r.id, r);
+          } catch { /* 损坏行跳过 */ }
+        }
+      } catch { /* 台账不可读：零 hung 行（无账可守） */ }
+      for (const e of byId.values()) if (e.status === "running" || e.status === "dispatched") hung.push(e);
+    }
     if (!hung.length) return;
     const bySt = listGroupsByStatus();
     const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
@@ -5057,11 +5103,18 @@ export class SessionManager {
       // 误伤面（resume 续跑 vs 清扫收口）不在本批——回执遗留。
       if (e.session_id) {
         const s = this.sessions.get(e.session_id);
-        if (s?.state.external && s.state.cli_pid) {
+        // R1-B-F3：pid 判据多源化——pid 帧被 64MB 事件压缩/MAX_SESSIONS_KEPT 挤出后
+        // boot 回放 cli_pid=undefined，守卫第二前提（external+pid）落空（B 审 F3：
+        // 夹具盲区恰把此窗固化成期望行为）。第二源=events 尾账反向捞该会话最新
+        // cli_pid 帧（与必修 1 的 ndjson 直读同解族：原始账优先于投影/回放态）。
+        const wpid = s?.state.external
+          ? (s.state.cli_pid && s.state.cli_pid > 0 ? s.state.cli_pid : this.cliPidFromEventsTail(e.session_id))
+          : undefined;
+        if (wpid && wpid > 0) {
           let alive = false;
-          try { process.kill(s.state.cli_pid, 0); alive = true; } catch { alive = false; }
+          try { process.kill(wpid, 0); alive = true; } catch { alive = false; }
           if (alive) {
-            this.emitChainAudit("restart-skip-live-worker", `dispatch=${e.id.slice(0, 8)} session=${e.session_id.slice(0, 8)} pid=${s.state.cli_pid} 活——跳过重启清扫（回合在途，待真实终态收口）`);
+            this.emitChainAudit("restart-skip-live-worker", `dispatch=${e.id.slice(0, 8)} session=${e.session_id.slice(0, 8)} pid=${wpid}${s?.state.cli_pid === wpid ? "" : "(events 尾账兜底源)"} 活——跳过重启清扫（回合在途，待真实终态收口）`);
             continue;
           }
         }
@@ -5529,11 +5582,29 @@ ${lines.join("\n")}
     // 不再自动提名。候选现算搬 dutyCandidateId（提案专用，消费面不碰）。
     const ov = readPmOverride();
     if (ov && ov.cli_pid > 0 && readCollabMode(this.cfg.dataDir) === "no-leader") {
-      try { process.kill(ov.cli_pid, 0); return ov.session_id; } catch { /* pid 死：清档回落 */ }
+      // R1-B-F2/A-P1① 复合判活（原纯 kill(0)）：pid 活但 ov.session_id 在册且其当前
+      // cli_pid ≠ ov.cli_pid（CLI 重启换 pid，旧 pid 已回收/被占位）= 假阳视死清档——
+      // 纯 pid 探测的「死 PM 锁席（pid 回收占位→互斥闸恒拒+candidate 恒 null 两出口
+      // 互锁死无产品面解锁）」与「幽灵喂活 pm_unwakeable 循环」两形态根除。pid 活且
+      // （会话不在册=外部冷启动窗 或 绑定一致）= 真活守位。歧义窗（pid 活+不在册）
+      // 保守守位，显式出口= org pm release（R1 新增）。
+      const l = this.pmOverrideLiveness(ov);
+      if (l === "alive") return ov.session_id;
+      if (l === "stale") this.emitChainAudit("pm-override-stale-pid", `session=${ov.session_id.slice(0, 8)} override pid=${ov.cli_pid} 但在册 pid 已换代——pid 回收占位视死，值守位清档（claim/提名恢复可达）`);
       clearPmOverride();
     }
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
     return null; // no-leader 无（活）override：席位空——候选提名走确认卡，见 dutyCandidateId
+  }
+
+  /** R1-B-F2 复合判活："alive"=pid 活且绑定一致（或会话不在册的外部冷窗）/
+   * "stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）/"dead"=pid 死。
+   * stale 与 dead 同清档（读路径顺手清档语义维持），区别只在审计措辞与定性。 */
+  private pmOverrideLiveness(ov: { cli_pid: number; session_id: string }): "alive" | "stale" | "dead" {
+    try { process.kill(ov.cli_pid, 0); } catch { return "dead"; }
+    const s = this.sessions.get(ov.session_id);
+    if (s?.state.cli_pid && s.state.cli_pid > 0 && s.state.cli_pid !== ov.cli_pid) return "stale";
+    return "alive";
   }
 
   /** [W-PMSEAT] 值守候选现算（原 dutyTargetId 回落扫描搬此，提案专用）：最近活跃+
@@ -5545,8 +5616,9 @@ ${lines.join("\n")}
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return null;
     const ov = readPmOverride();
     if (ov && ov.cli_pid > 0) {
-      try { process.kill(ov.cli_pid, 0); return null; } catch { /* 死 override：清档后可提新名 */ }
-      clearPmOverride();
+      // R1-B-F2 同款复合判活（防 override pid 回收假活→候选恒 null 永不出任命卡）
+      if (this.pmOverrideLiveness(ov) === "alive") return null;
+      clearPmOverride(); // dead/stale：清档后可提新名
     }
     const rejected = new Set(readAppointRejected().map((r) => r.session_id));
     let best: string | null = null;
@@ -5589,8 +5661,11 @@ ${lines.join("\n")}
         if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
         if (!alive) {
           decideConfirm(c.id, false, "auto:pm-dead");
-          recordAppointRejected(sid, pid); // 死席入否决档：重启回放期防同席再提名刷卡
+          // R1-A-P1②：auto:pm-dead **不入否决档**——「pid 死」常态=CLI 重启换 pid
+          //（claude --resume 同 id 复活），系统进程幂窗≠用户否决，入档=复活后永黑。
+          // 防刷卡闸天然在：dutyCandidateId 要求 pid 活（死席进不了候选集）。
           clearDutyAppoint(sid);
+          this.emitChainAudit("pm-appoint-auto-dead", `session=${sid.slice(0, 8)} pid=${pid} 待决期间退出——auto 消卡（不入否决档，复活可再提名）`);
         }
       }
       const stillPending = listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending");
@@ -6476,8 +6551,9 @@ ${lines.join("\n")}
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
     // [W-PMSEAT] pm-claim 咽喉放行（#212 坑同款自查：case 在 orgAction switch，此处
-    // 不放行则 WS/面板通道恒收 unsupported——org CLI 走 HTTP 白名单侥幸可用）
-    if (action === "pm-claim") {
+    // 不放行则 WS/面板通道恒收 unsupported——org CLI 走 HTTP 白名单侥幸可用）。
+    // R1：pm-release 同款放行（解锁出口必须 WS/HTTP 双面可达，否则锁席时只剩单面救）
+    if (action === "pm-claim" || action === "pm-release") {
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
@@ -6903,6 +6979,20 @@ ${lines.join("\n")}
           this.emitOrgState();
           return { ok: true, data: { needsConfirm: true, confirm, sid: self.state.session_id } };
         }
+        case "pm-release": {
+          // R1-B-F2/A-P1① 显式解锁出口（「席位永久锁死无产品面出口不可接受」）：
+          // 清值守 override（让位/强解）。判活歧义窗（pid 活但会话不在册的保守守位
+          // 位）与人为误锁席的唯一产品面出口。免卡直效（CLI direct 先例：让位是
+          // 显式主动作、无「先斩后奏」面——与 claim 出卡语义相反）+审计留痕。
+          if (readCollabMode(this.cfg.dataDir) !== "no-leader") {
+            return { ok: false, error: "当前为 leader 协作模式，值守位由 Leader 会话承担——无 release 面" };
+          }
+          const ov = readPmOverride();
+          if (!ov) return { ok: true, data: { released: false, note: "值守位本就空（无 override）" } };
+          clearPmOverride();
+          this.emitChainAudit("pm-release", `session=${ov.session_id.slice(0, 8)} pid=${ov.cli_pid}——值守位显式让出（org pm release），喂活即刻回落空席（下轮提名/claim 可达）`);
+          return { ok: true, data: { released: true, pm_session_id: ov.session_id } };
+        }
         case "pm-claim": {
           // X0 件6（PRD §4.6 前半）+ [W-PMSEAT] 任命确认卡化（1104 用户实锤「串台」根治）：
           // 活 PM 会话接管值守位——**不再直写 override 先斩后奏**，改出 pm-appoint 确认卡
@@ -6998,6 +7088,15 @@ ${lines.join("\n")}
           }
         }
         case "dispatch": {
+          // R1-B-F1 半件·派单口告警档（席位=喂活地址非写权锁，设计口径不阻断——但
+          // 双 PM 并存病类的时序对账面要有痕）：no-leader 模式下派单发生而值守位空/
+          // override 失活 → 审计一行（「谁在派单」与值守位状态可对账）。leader 模式
+          // 零噪音（值守=Leader 常态）。收割口（leader-harvest bash 侧）同款检查挂
+          // 下批 bash 面收口（回执遗留）。
+          if (readCollabMode(this.cfg.dataDir) === "no-leader") {
+            const duty = this.pmDutyStatus();
+            if (!duty.alive) this.emitChainAudit("dispatch-no-duty-pm", `dispatch=${String(str("title") || "").slice(0, 40)}——no-leader 模式派单时值守位空（谁在派/PM 是否失联，时序对账用）`);
+          }
           if (p.engine !== undefined && !isSessionEngine(p.engine)) return { ok: false, error: `未知引擎: ${String(p.engine)}` };
           return this.dispatchWorker({
             anchor: str("anchor"),
@@ -7965,9 +8064,43 @@ ${lines.join("\n")}
           let alive = pid > 0;
           if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
           if (!alive) {
-            recordAppointRejected(sid, pid); // 死席入否决档：防重启回放期同席再提名
+            // R1-A-P1②：死席**不入否决档**（系统推断≠用户否决——CLI 重启换 pid 正是
+            // 「pid 死」常态，入档=同席 resume 复活后被永久逐出自动提名）。防刷闸
+            // 天然在：死席不在 sessions 册即不满足 dutyCandidateId 的 pid 活前提。
             clearDutyAppoint(sid);
-            return fail("任命生效", { error: "候选会话进程已退出——任命作废，值守位保持空（下一候选自动提名）" });
+            this.emitChainAudit("pm-appoint-target-dead", `session=${sid.slice(0, 8)} pid=${pid} 决议时已死——任命作废不入否决档（复活可再提名）`);
+            return fail("任命生效", { error: "候选会话进程已退出——任命作废，值守位保持空（下一候选自动提名；本会话复活后可再被提名）" });
+          }
+          // R1-B-F1 现任复查（决议时点三查——「死→提名→复活→✓」时序窗内 incumbent
+          // 无感换位是 1104 双 PM 并存病类的复发面）：①现任仍空或=本候选才放行；
+          // ②席位已被他人占（陈旧卡/竞争卡窗）→不覆写不记档（非候选问题）；
+          // ③候选会话在册复核（注释许愿的 member-join 同款防线补全）。落位时现任
+          // （异 sid）已死清档不构成占位；被换下通知走 incumbent 侧+决议留痕。
+          const incumbent = readPmOverride();
+          if (incumbent && incumbent.session_id !== sid) {
+            const il = this.pmOverrideLiveness(incumbent);
+            if (il === "alive") {
+              this.emitChainAudit("pm-appoint-superseded-blocked", `卡候选 session=${sid.slice(0, 8)} 决议时席位已有活值守 PM session=${incumbent.session_id.slice(0, 8)}——陈旧卡作废不覆写（现任无感保持）`);
+              clearDutyAppoint(sid);
+              return fail("任命生效", { error: "席位已有值守 PM 在位（会话 " + incumbent.session_id.slice(0, 8) + "）——本卡已陈旧作废；如需移交先 org pm release 或等现任退出" });
+            }
+            clearPmOverride(); // 现任死/stale：清档腾位（与 dutyTargetId 读路径同语义）
+          }
+          const cand = this.sessions.get(sid);
+          if (!cand || !cand.state.cli_pid || cand.state.cli_pid !== pid) {
+            // 在册但 pid 已换代（提名到决议间 CLI 重启）＝卡载 pid 已失效——按死席同款
+            // 作废（不入否决档）；不在册（挤出/冷窗）则放行 pid 探活结果（外部会话常态）
+            if (cand) {
+              clearDutyAppoint(sid);
+              this.emitChainAudit("pm-appoint-target-pid-changed", `session=${sid.slice(0, 8)} 卡载 pid=${pid} 在册 pid=${cand.state.cli_pid}——决议时已换代，任命作废不入否决档`);
+              return fail("任命生效", { error: "候选会话 CLI 已重启（pid 换代）——任命作废，新 pid 提名可达（不入否决档）" });
+            }
+          }
+          if (incumbent && incumbent.session_id !== sid) {
+            // 被换通知（现任已死被本卡接替——留痕告知原任会话侧，防「明知归 B 而 A 不知」）
+            try {
+              this.pushExternalLog(incumbent.session_id, "system", `[值守位] 你已被会话 ${sid.slice(0, 8)} 接替（任命卡 ✓，你 pid 已失效）——值守喂活自此改道新任`);
+            } catch { /* 留痕尽力而为 */ }
           }
           const r = setPmOverride({ session_id: sid, cli_pid: pid, cwd: String(c.payload.cwd ?? ""), claimed_at: Date.now() });
           if (!r.ok) return fail("任命生效", r);
@@ -7997,12 +8130,20 @@ ${lines.join("\n")}
     } else if (c.kind === "pm-appoint") {
       // [W-PMSEAT] 任命卡 ✗（含 auto:pm-dead 自愈消卡同走此）：不认领——否决记档（该
       // 会话不再被自动提名；显式 claim 仍可再提案，用户改主意有手动通道）+提案镜像清。
-      // 席位保持空，零喂活。
+      // 席位保持空，零喂活。R1-A-P1②：仅**用户真 ✗** 记档——auto:pm-dead 消卡（决议
+      // 人=auto:pm-dead）不入档（进程幂窗≠用户否决，复活可再提名）。R1-A-P2-2：✗ 回告
+      // claimant（原拒绝路径静默——claim 方挂起等决议却零通知）。
       const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+      const by = c.decided_by ?? "user";
       if (sid) {
-        recordAppointRejected(sid, Number(c.payload.cli_pid) || 0);
+        if (by !== "auto:pm-dead") recordAppointRejected(sid, Number(c.payload.cli_pid) || 0);
         clearDutyAppoint(sid);
-        this.emitChainAudit("pm-appoint-rejected", `session=${sid.slice(0, 8)} by=${c.decided_by ?? "user"}——不认领（否决档，自动提名跳过）`);
+        this.emitChainAudit("pm-appoint-rejected", `session=${sid.slice(0, 8)} by=${by}——不认领${by === "auto:pm-dead" ? "（auto 消卡不入否决档）" : "（否决档，自动提名跳过）"}`);
+        try {
+          if (this.sessions.get(sid)) {
+            this.pushExternalLog(sid, "system", `[值守位] 任命卡被${by === "auto:pm-dead" ? "系统 auto 消卡（进程退出）" : "用户 ✗"}——不认领；如需值守用 org pm claim 再提案（用户可改主意）`);
+          }
+        } catch { /* 回告尽力而为 */ }
       }
     } else if (c.kind === "device-trust") {
       // X1 首联卡 ✗：device_trust 吊销 + 悬置消息弃置（各回 rejected:first-contact）——

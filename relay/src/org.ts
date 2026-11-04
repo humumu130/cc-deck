@@ -235,8 +235,9 @@ export const ORG_CLAUDE_MD_X0_SECTION = `${ORG_CLAUDE_MD_X0_MARKER}（2026-10-29
 - 任何本机会话可自荐入编：在项目目录里运行 \`org join <组id> [角色]\`（默认 worker）——
   申请进待确认队列，用户在面板放行后正式入编（防任意混入，你不代放行）。
 - 非 deck 会话干了活要留痕：\`org log-append "<做了什么>"\` 手动补录台账（一行一条）。
-- 值守 PM 位接管（no-leader 模式双机场景）：\`org pm claim\`——本机会话成为值守 PM，
-  原 PM 会话死亡自动移交。
+- 值守 PM 位（no-leader 模式双机场景）：\`org pm claim\` 提认——**出任命卡待用户拍板**
+  （未决期间零值守喂活，防先斩后奏；✓ 才落位）；\`org pm release\` 显式让出（R1 解锁
+  口：判活歧义/移交场景，免卡直效+审计留痕）。
 `;
 
 // chainrecall MVP（2026-11-04，架构升级期二）：PM 工具箱使用说明——「见 recall:<id>」
@@ -752,7 +753,8 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rule supersede <id> <text> [audience] [scope]  替代（新条入库+旧条停注指新）
 #   org rule promote <exp_id> [text] [audience] [scope]  经验升格为规则（复制非搬移，promoted_from 溯源）
 #   org join <gid> [role]                          自荐入编（X0 件2；本机会话→待确认卡，用户放行后入编）
-#   org pm claim                                   值守 PM 位接管（X0 件6；原 PM 死亡自动移交）
+#   org pm claim                                   值守 PM 位提认（X0 件6；出任命卡待用户拍板，未决零喂活）
+#   org pm release                                 值守 PM 位让出（R1；清 override 直效——解锁/移交用）
 #   org log-append "<文本>"                        台账补录（X0 件5；非 deck 会话工作一行入账）
 #   org agent-teams [check|on]                     AGENT_TEAMS 实验特性协助（X0 件4；on=一键写入用户 settings env）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
@@ -784,9 +786,17 @@ case "$action" in
     body="$(python3 -c 'import json,sys,os;print(json.dumps({"action":"join","gid":sys.argv[1],"role":sys.argv[2],"cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))' "$1" "$role")"
     ;;
   pm)
-    # X0 件6（PRD §4.6 前半）：值守 PM 位接管（双机 no-leader 场景）
-    [ "\${1:-}" = "claim" ] || { echo "用法: org pm claim   本机会话接管值守 PM 位（原 PM 死亡自动移交）" >&2; exit 1; }
-    body="$(python3 -c 'import json,os;print(json.dumps({"action":"pm-claim","cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))')"
+    # X0 件6（PRD §4.6 前半）+R1：claim=出卡待拍板（未决零喂活）；release=显式让位
+    #（R1-B-F2 解锁出口：判活歧义窗/误锁席的唯一产品面出口，免卡直效+审计留痕）
+    case "\${1:-}" in
+      claim)
+        body="$(python3 -c 'import json,os;print(json.dumps({"action":"pm-claim","cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))')"
+        ;;
+      release)
+        body="$(python3 -c 'import json;print(json.dumps({"action":"pm-release"},ensure_ascii=False))')"
+        ;;
+      *) echo "用法: org pm claim   提认值守 PM 位（出任命卡待用户拍板，未决零喂活）" >&2; echo "      org pm release  让出值守位（清 override 直效；解锁/移交用）" >&2; exit 1 ;;
+    esac
     ;;
   chain)
     # #92 W-NOTIFY2 D：派发→收帧→回执→收割 时间线一处可查（只读；org chain [id前缀] [条数=20]）
