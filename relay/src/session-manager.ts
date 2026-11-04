@@ -13,12 +13,20 @@ import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import type { DeliverablePathValidation } from "./artifacts.js";
 import { dispatchTriggerKey, findInFlightByTriggerKey } from "./trigger-key.js"; // domstep1：Trigger 键（域图 I2 入口幂等——挂键纪律见该文件头注：新增派单入口必须带键+查重）
+
+/** W-RATELIMIT429：全局并发帽（CCR_WORKER_CONCURRENCY_CAP 可配，缺省 6——任务书
+ * 口径；下限 2 防误配 0/1 把编排打死）。relay 侧权威；bin 侧 leader-dispatch 同名
+ * env 读取做派单前提示（只提示不强拦——PM 主权）。 */
+export function workerConcurrencyCap(): number {
+  const v = Number(process.env.CCR_WORKER_CONCURRENCY_CAP);
+  return Number.isFinite(v) && v >= 2 ? Math.floor(v) : 6;
+}
 import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Report 六态（回执落账枚举位——散文本 waiting 不认）
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
 } from "./org.js";
-import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
+import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸（只读）
@@ -494,6 +502,14 @@ interface ManagedSession {
   // 重试机会），与 resumePending 同生命周期
   resumeFailStreak?: number;
   resumeCooldownUntil?: number;
+  // W-RATELIMIT429：API 限流（429/1302 速率限制）退避账——onTurnEnd 失败边识别
+  //（classifyDispatchFailure→model_overload）后 streak+1、backoffUntil=now+指数退避
+  //（首 30s 起×2 封顶 10min±20% 抖动）；退避中自愈链（revive 族选人）跳过该会话
+  //（重试风暴不放大——今晚实锤：并发 ~10 下 429 报错卡死等人工捞×2）；到点定时器
+  // 自清+喂一次值守。回合成功（onTurnEnd ok）清零。内存态（重启即清=重启本身即退避结束）
+  rateLimitStreak?: number;
+  rateLimitBackoffUntil?: number;
+  rateLimitTimer?: ReturnType<typeof setTimeout> | null;
   // #287 PM 常驻化：dutyTarget 空闲保活账——idleStreak=连续「拉起后无回合活动即退
   // 出」计数（pmKeepaliveEligible 死循环闸；onTurnEnd 复位——回合跑过即证明拉起有
   // 效）；timer=延时拉起句柄（deleteSession 清，防删卡后幽灵拉起）
@@ -3741,6 +3757,12 @@ export class SessionManager {
           if (ok) {
             this.transition(managed.state.session_id, "DONE", "turn-end"); /* W-SMIMPL③ 直写收口 */
             managed.state.done_reason = reason;
+            // W-RATELIMIT429：回合成功=限流解除，清退避账（streak 归零+摘可见态）
+            if (managed.rateLimitStreak || managed.rateLimitBackoffUntil) {
+              managed.rateLimitStreak = undefined;
+              managed.rateLimitBackoffUntil = undefined;
+              if (managed.rateLimitTimer) { clearTimeout(managed.rateLimitTimer); managed.rateLimitTimer = null; }
+            }
             // #102 批 A：回合成功=登录态恢复（或兜底误报自愈），清 needs_auth 标记
             if (managed.state.auth_hint) managed.state.auth_hint = undefined;
             this.bus.emit(managed.state.session_id, "SESSION_DONE", {
@@ -3751,6 +3773,31 @@ export class SessionManager {
           } else {
             this.transition(managed.state.session_id, "ERROR", "turn-end"); /* W-SMIMPL③ 直写收口 */
             managed.state.last_error = reason;
+            // W-RATELIMIT429：429/1302 速率限制识别（分类器单点复用）→会话退避态：
+            // 自愈链到点前跳过（reviveEligible 谓词）+端上可见（action_summary 带下次
+            // 尝试时刻——用户不用再手动捞）+到点自清。指数退避+抖动防并发同窗共振。
+            if (classifyDispatchFailure(reason) === "model_overload") {
+              const streak = (managed.rateLimitStreak = (managed.rateLimitStreak ?? 0) + 1);
+              const delay = backoffDelayMs(streak);
+              const until = Date.now() + delay;
+              managed.rateLimitBackoffUntil = until;
+              const hhmmss = new Date(until).toLocaleTimeString("zh-CN", { hour12: false });
+              managed.state.action_summary = `限流退避中（第 ${streak} 次，下次尝试 ${hhmmss}）`;
+              const entry = { kind: "system" as const, text: `API 限流（429/速率限制）——退避 ${Math.round(delay / 1000)}s（下次尝试 ${hhmmss}），到点自动恢复，无需手动处理`, ts: Date.now() };
+              managed.logs.push(entry);
+              if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
+              this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+              this.emitChainAudit("rate-limit-backoff", `${managed.state.session_id.slice(0, 12)} 限流退避 streak=${streak} ${Math.round(delay / 1000)}s（until ${hhmmss}）`);
+              if (managed.rateLimitTimer) clearTimeout(managed.rateLimitTimer);
+              managed.rateLimitTimer = setTimeout(() => {
+                managed.rateLimitBackoffUntil = undefined; // 到点自清（streak 留账——再中 429 则升档）
+                managed.rateLimitTimer = null;
+                if (managed.state.action_summary.startsWith("限流退避中")) managed.state.action_summary = "限流退避结束，等待续跑";
+                this.emitUpdated(managed, true);
+                if (dutyEnabled()) this.feedPM("rate_limit_clear"); // 到点喂值守：有空闲即续跑（排队/待办面自然接续）
+              }, delay);
+              managed.rateLimitTimer.unref?.();
+            }
             // #102 批 A 运行时兜底：token 中途过期（创建闸过后才失效）——引擎输出/
             // 退出尾行命中登录失效 pattern → 会话进 needs_auth 态（auth_hint 随
             // SNAPSHOT/UPDATE 下发，端上显示登录指引而非笼统错误）
@@ -8021,6 +8068,23 @@ ${lines.join("\n")}
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string }):
     { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string; /** domstep1：幂等命中时的在途单 id（回执对账键） */ duplicate_of?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
+    // W-RATELIMIT429：全局并发闸——在编活 worker（managed 且 agent 在）≥帽
+    //（CCR_WORKER_CONCURRENCY_CAP 缺省 6）→ 排队不拒收（复用编制排队底座：FIFO
+    // 持久化+台账 queued 行+空位 drain 接续）。今晚实锤：并发 ~10 下 429 卡死
+    // （5e4f4963×69 次等）——闸从源头压并发。幂等面在闸后：重复 Trigger 派单查到
+    // queued 在途行（trigger_key 同款）照样拒重，语义不变。
+    if (!input.queue_replay && this.activeManagedCount() >= workerConcurrencyCap()) {
+      const cap = workerConcurrencyCap();
+      const dispatchId = randomUUID();
+      const item: QueuedDispatch = { dispatch_id: dispatchId, enqueued_at: Date.now(), input: { ...input } as Record<string, unknown> };
+      this.dispatchQueueItems = [...this.dispatchQueueItems, item];
+      if (!saveDispatchQueue(this.dispatchQueueItems)) console.warn("[dispatch-queue] 全局帽排队落盘失败（内存队列有效，重启该单丢失）");
+      const titleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier: "正经立项", target: "cap-queue", status: "queued", receipt: truncate(`${titleSeg}全局并发触顶（${this.activeManagedCount()}/${cap}）——排队等待空位（429 限流治理）`, 200), session_id: "", project_anchor: input.anchor, ...(input.actor ? { actor: input.actor } : {}), trigger_key: dispatchTriggerKey(input) });
+      this.emitChainAudit("worker-cap", `全局并发闸：${this.activeManagedCount()}/${cap} 触顶，单 ${dispatchId.slice(0, 8)} 排队（队列 ${this.dispatchQueueItems.length}）`);
+      console.log(`[dispatch] worker-cap queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length}（${this.activeManagedCount()}/${cap}）`);
+      return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
+    }
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
     // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
     if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
@@ -9089,6 +9153,23 @@ ${lines.join("\n")}
   // **内存队列权威**：this.dispatchQueueItems 是唯一事实源，盘文件只做持久化
   //（boot reload 回灌）——enqueue 一律内存 push+写穿；若从盘 load-append（首版实现），
   // 排水期间盘落后内存，重放再排队会把整条旧队列复制回来（测试 H3 实锤四重账）。
+  /** W-RATELIMIT429：在编活 worker 计数（managed 且 agent 在**且 status∈{WORKING,
+   * WAITING}**=真占用并发槽——回合收口即 DONE/ERROR 不占（agent wrapper 残留/ended
+   * 置位时序均不可靠，status 是收口链权威态）。对齐 groupHasLiveWorker 的「活」语义
+   * 取全局）。全局并发闸判定用。 */
+  activeManagedCount(): number {
+    let n = 0;
+    for (const s of this.sessions.values()) {
+      if (!s.state.external && s.agent && (s.state.status === "WORKING" || s.state.status === "WAITING")) n++;
+    }
+    return n;
+  }
+
+  /** W-RATELIMIT429：排队长度（/api/state 轻端点只读面——private 队列的只读缝） */
+  dispatchQueueSize(): number {
+    return this.dispatchQueueItems.length;
+  }
+
   private enqueueCapDispatch(
     input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; entry_id?: string; redispatch_of?: string; queue_replay?: string },
     g: ProjectGroup,

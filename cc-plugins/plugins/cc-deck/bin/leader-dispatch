@@ -322,6 +322,19 @@ PY
 fi
 
 # ---------- POST /api/org（deliver/org 先例：token 走 query） ----------
+# W-RATELIMIT429：派单前并发提示（只提示不强拦——PM 主权）。查 relay /api/state
+#（若在）拿在编并发，超帽提示排队预期。查询失败静默跳过（不阻派单主链）。
+if [ "$dry" = 0 ]; then
+  cap_hint="${CCR_WORKER_CONCURRENCY_CAP:-6}"
+  state_resp="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/api/state?token=${token}" 2>/dev/null || true)"
+  running_n="$(printf '%s' "$state_resp" | python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin); print(d.get("workers_running", d.get("running", "")))
+except Exception: print("")' 2>/dev/null || true)"
+  if [ -n "$running_n" ] && [ "$running_n" -ge "$cap_hint" ] 2>/dev/null; then
+    echo "leader-dispatch：⚠️ 当前在编并发 ${running_n} 已达帽 ${cap_hint}（CCR_WORKER_CONCURRENCY_CAP）——本单预计排队等空位（429 限流治理；只提示不强拦，PM 主权）"
+  fi
+fi
 # 64KB 预检（ws-server /api/org body 超 65536 直接 req.destroy()——长任务书会被断连，
 # curl 只见 HTTP 000 误报「拒收」，先在本侧明示）
 body_bytes="$(wc -c < "$tmp_body" | tr -d ' ')"

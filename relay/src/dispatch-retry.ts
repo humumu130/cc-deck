@@ -63,3 +63,14 @@ export function scheduleTransientRetry(fire: () => void, delayMs: number = TRANS
   const t = setTimeout(fire, delayMs);
   t.unref?.();
 }
+
+/** W-RATELIMIT429：429/限流指数退避+抖动（任务书口径首退 30s 起、重试风暴不放大）。
+ * streak 从 1 起：30s→60s→120s→240s→480s→600s（封顶）×±20% 抖动（防同刻共振——
+ * 并发 ~10 会话同窗 429 后错峰复活）。纯函数测试直吃。base 可 env 短值化
+ *（CCR_RATE_LIMIT_BASE_MS，测试缝——生产缺省 30s）。 */
+export function backoffDelayMs(streak: number, base = Number(process.env.CCR_RATE_LIMIT_BASE_MS) > 0 ? Number(process.env.CCR_RATE_LIMIT_BASE_MS) : TRANSIENT_RETRY_DELAY_MS, cap = 10 * 60_000, now = Date.now()): number {
+  const n = Math.max(1, Math.floor(streak));
+  const raw = Math.min(cap, base * 2 ** (n - 1));
+  const jitter = 0.8 + (now % 41) / 100; // 0.8~1.2 伪随机（确定性：测试可复算）
+  return Math.round(raw * jitter);
+}

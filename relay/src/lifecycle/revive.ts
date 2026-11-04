@@ -283,6 +283,11 @@ export function todoStaleDays(): number {
 
 export function reviveEligible(mgr: any, s: any): string | null {
   if (s.state.external) return "external";
+  // W-RATELIMIT429：API 限流退避中不自动拉起/不喂活（429 下 revive/resume 重试风暴
+  // 放大器——今晚实锤并发 ~10 会话 429 卡死等人工捞×2）。**先于 agent-alive**：429
+  // 退避的会话 agent 常还活着（回合报错≠进程死），活会话的注入/喂活族同受此闸；
+  // 到点 onTurnEnd 退避定时器自清后恢复资格
+  if (s.rateLimitBackoffUntil && Date.now() < s.rateLimitBackoffUntil) return "rate-limit-backoff";
   if (s.agent) return "agent-alive";
   // #26 M3 审查修正：挂起退休成员不自动拉起——组挂起=编制退休释放（板冻结）
   if (s.state.org_parked) return "org-parked";
