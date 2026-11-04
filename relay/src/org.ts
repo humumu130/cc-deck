@@ -265,42 +265,99 @@ export interface PmOverride {
   claimed_at: number;
 }
 
+// [W-PMSEAT] 值守任命三态（1104 用户实锤「串台」根治）：duty.json 从单键
+// （pm_override=已确认值守位）扩为三键——
+//   pm_override       已确认值守位（既有语义：org pm claim 提案 ✓ 落值；pid 探活，
+//                     死进程由 dutyTargetId 清档=自动置空语义不变）
+//   pm_appoint        待确认任命提案（auto=dutyCandidateId 候选扫描自动提名 /
+//                     claim=org pm claim 显式认领）——提案期间零值守喂活（防「先斩
+//                     后奏」），用户 ✓→setPmOverride 落值 / ✗→appoint_rejected 记档
+//                     （该会话不再被自动提名；显式 claim 仍可再提案——用户改主意有
+//                     手动通道）
+//   appoint_rejected  用户否决档案（session_id 去重，cap 50）——自动提名跳过依据
+export interface DutyAppoint {
+  session_id: string;
+  cli_pid: number;
+  cwd: string;
+  origin: "auto" | "claim";
+  proposed_at: number;
+}
+export interface AppointRejected {
+  session_id: string;
+  cli_pid: number;
+  ts: number;
+}
+
 export function pmOverridePath(dir?: string): string {
   return join(dir ?? orgDir(), "duty.json");
 }
 
-let pmOverrideCache: { data: PmOverride | null; loaded: boolean } = { data: null, loaded: false };
+interface DutyFile {
+  pm_override?: PmOverride | null;
+  pm_appoint?: DutyAppoint | null;
+  appoint_rejected?: AppointRejected[];
+}
+// [W-PMSEAT] 缓存按解析目录键控（Map<orgDir, DutyFile>）：同进程多沙盒并存（测试
+// 夹具逐块换 CCR_ORG_DIR——CI 实锤：前夹具 approve 落的 override 带测试进程 pid 恒活，
+// 污染下一夹具的候选判定=提名恒空）是常态而非只有测试面；unkeyed 单槽缓存在换目录
+// 时返回陈旧档，等于跨沙盒泄漏。键=dir ?? orgDir() 现解析值，写口同键刷新；cap 64
+// 防长进程多沙盒无界增长（超限整体重置，冷读自愈）。
+let dutyFileCache = new Map<string, DutyFile>();
+function dutyCacheKey(dir?: string): string {
+  return dir ?? orgDir();
+}
+function readDutyFileUncached(dir?: string): DutyFile {
+  try {
+    const raw = JSON.parse(readFileSync(pmOverridePath(dir), "utf-8")) as DutyFile;
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+function readDutyFile(dir?: string): DutyFile {
+  const key = dutyCacheKey(dir);
+  let v = dutyFileCache.get(key);
+  if (v === undefined) {
+    v = readDutyFileUncached(dir);
+    if (dutyFileCache.size >= 64) dutyFileCache.clear(); // cap：整体重置冷读自愈
+    dutyFileCache.set(key, v);
+  }
+  return v;
+}
+function writeDutyFile(next: DutyFile, dir?: string): boolean {
+  try {
+    const d = dir ?? orgDir();
+    mkdirSync(d, { recursive: true });
+    const ok = atomicWriteJson(pmOverridePath(d), JSON.stringify(next, null, 2) + "\n");
+    if (ok) dutyFileCache.set(d, next);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 export function readPmOverride(dir?: string): PmOverride | null {
-  // 单进程单写口（setPmOverride 同模块）——内存缓存零 fs 热路径；测试沙盒传 dir 时
-  // 绕缓存直读（CCR_ORG_DIR 沙盒态的多目录并存只有测试面）
-  if (!dir) {
-    if (pmOverrideCache.loaded) return pmOverrideCache.data;
-    pmOverrideCache = { data: readPmOverrideUncached(), loaded: true };
-    return pmOverrideCache.data;
-  }
+  // 单进程单写口（setPmOverride 同模块）——内存缓存零 fs 热路径；缓存随 dutyFileCache
+  // 按目录键控（见上），沙盒切换零泄漏
   return readPmOverrideUncached(dir);
 }
 
 function readPmOverrideUncached(dir?: string): PmOverride | null {
-  try {
-    const raw = JSON.parse(readFileSync(pmOverridePath(dir), "utf-8")) as { pm_override?: unknown };
-    const v = raw.pm_override;
-    if (!v || typeof v !== "object") return null;
-    const o = v as Partial<PmOverride>;
-    if (typeof o.session_id !== "string" || !o.session_id) return null;
-    return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), claimed_at: Number(o.claimed_at) || Date.now() };
-  } catch {
-    return null;
-  }
+  const v = readDutyFile(dir).pm_override;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Partial<PmOverride>;
+  if (typeof o.session_id !== "string" || !o.session_id) return null;
+  return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), claimed_at: Number(o.claimed_at) || Date.now() };
 }
 
 export function setPmOverride(v: PmOverride, dir?: string): { ok: boolean; error?: string } {
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
-    atomicWriteJson(pmOverridePath(d), JSON.stringify({ pm_override: v }, null, 2) + "\n");
-    if (!dir) pmOverrideCache = { data: v, loaded: true };
+    // [W-PMSEAT] 保留同文件其余键（pm_appoint/appoint_rejected）——任命 ✓ 落值与
+    // 否决记档同文件共存，单键重写会互抹
+    const okw = writeDutyFile({ ...readDutyFile(d), pm_override: v }, d);
+    if (!okw) return { ok: false, error: "duty.json 写入失败" };
     return { ok: true };
   } catch (e) {
     return { ok: false, error: `duty.json 写入失败: ${e instanceof Error ? e.message : String(e)}` };
@@ -308,10 +365,45 @@ export function setPmOverride(v: PmOverride, dir?: string): { ok: boolean; error
 }
 
 export function clearPmOverride(dir?: string): void {
-  try {
-    rmSync(pmOverridePath(dir), { force: true });
-  } catch { /* 不存在/不可删均视为已清 */ }
-  if (!dir) pmOverrideCache = { data: null, loaded: true };
+  // [W-PMSEAT] 不再物理删文件（duty.json 还承载 pm_appoint/appoint_rejected 两键）——
+  // 置空 pm_override 保留他键，readPmOverride 语义不变
+  writeDutyFile({ ...readDutyFile(dir), pm_override: null }, dir);
+}
+
+// ---------- [W-PMSEAT] 任命提案/否决档读写口（单模块单写口纪律同 pm_override） ----------
+
+export function readDutyAppoint(dir?: string): DutyAppoint | null {
+  const v = readDutyFile(dir).pm_appoint;
+  if (!v || typeof v !== "object") return null;
+  const o = v as Partial<DutyAppoint>;
+  if (typeof o.session_id !== "string" || !o.session_id) return null;
+  if (o.origin !== "auto" && o.origin !== "claim") return null;
+  return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), origin: o.origin, proposed_at: Number(o.proposed_at) || Date.now() };
+}
+
+export function setDutyAppoint(v: DutyAppoint, dir?: string): boolean {
+  return writeDutyFile({ ...readDutyFile(dir), pm_appoint: v }, dir);
+}
+
+/** 清任命提案（决议/作废收口）。带 sid 只清匹配提案（防并发把别席新提案误清）。 */
+export function clearDutyAppoint(sid?: string, dir?: string): void {
+  const cur = readDutyFile(dir);
+  if (sid && cur.pm_appoint && cur.pm_appoint.session_id !== sid) return;
+  writeDutyFile({ ...cur, pm_appoint: null }, dir);
+}
+
+export function readAppointRejected(dir?: string): AppointRejected[] {
+  const v = readDutyFile(dir).appoint_rejected;
+  return Array.isArray(v) ? v.filter((r) => r && typeof r.session_id === "string" && !!r.session_id) : [];
+}
+
+/** 否决记档（session_id 去重取最新 ts，cap 50——自动提名跳过名单，非永久拉黑语义）。 */
+export function recordAppointRejected(sessionId: string, cliPid = 0, dir?: string): void {
+  if (!sessionId) return;
+  const cur = readDutyFile(dir);
+  const rest = readAppointRejected(dir).filter((r) => r.session_id !== sessionId);
+  const next = [{ session_id: sessionId, cli_pid: Number(cliPid) || 0, ts: Date.now() }, ...rest].slice(0, 50);
+  writeDutyFile({ ...cur, appoint_rejected: next }, dir);
 }
 
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会
@@ -505,6 +597,16 @@ export function registerAnchorLockExempt(fn: ((anchor: string) => boolean) | nul
   anchorLockExempt = fn;
 }
 
+// [W-PMSEAT] dispatch 终态联检钩子（收割收尾联检，1104 用户实锤第三条）：org 底座不能
+// import projects（环，anchorLockExempt 同因），终态行落账后的联检动作（开着 PR /
+// 审查段行未收口→挂 PM 待办确认卡）经注册口由 SessionManager 注入。未注册（纯 org
+// 单元测试形态）=零行为变化。钩子异常吞掉——联检绝不阻断台账主路径。
+type DispatchTerminalHook = (e: DispatchEntry) => void;
+let dispatchTerminalHook: DispatchTerminalHook | null = null;
+export function registerDispatchTerminalHook(fn: DispatchTerminalHook | null): void {
+  dispatchTerminalHook = fn;
+}
+
 export function dispatchLogPath(dir?: string): string {
   return orgFilePath("dispatch-log.ndjson", dir);
 }
@@ -563,6 +665,10 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
     // （段链语义由 importer 权威执行；不经直写 SQL，避免腐蚀重投段链的冻结终态根行）。
     // 文件保留为审计原始账；checkpoint 与 append 同步推进=库即写源。
     writeDispatchToDb(); // 内部自兜错（文件已写成功=降级安全）
+    // [W-PMSEAT] 终态联检钩子：done/failed 行落账后触发（drill/审计行由 handler 自滤）
+    if ((e.status === "done" || e.status === "failed") && dispatchTerminalHook) {
+      try { dispatchTerminalHook(e); } catch { /* 联检尽力而为，绝不阻断台账 */ }
+    }
     return true;
   } catch (e2) {
     console.warn(`[org] 台账写入失败: ${e2 instanceof Error ? e2.message : String(e2)}`);

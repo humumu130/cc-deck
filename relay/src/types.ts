@@ -1550,5 +1550,12 @@ export const CHAIN_AUDIT_ACTIONS = [
   "deliver-callback", // W-DELIVERCB（用户 1102 拍板）：沃克交付直达——线一线二投递/去重跳过/无目标占坑全入审计流
   "watch-feed", // W-WATCHAGENT（1104 用户令）：巡查员喂料——投递/哑然/滞留水位全入审计流（喂料链可观测面）
   "pr-report", // prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 徽章上报落值/清除（PM 收割/worker 交付链——板卡+台账双写全入审计流）
+  // [W-PMSEAT]（1104 用户实锤「串台」根治）：值守任命链+收割收尾联检+重启误伤守卫
+  "pm-appoint-propose", // 值守任命提案（auto 提名出 pm-appoint 卡——未决零喂活）
+  "pm-appoint-approved", // 任命卡 ✓ 落 override（值守喂活恢复）
+  "pm-appoint-rejected", // 任命卡 ✗（用户否决/auto:pm-dead 自愈）——否决档记档不认领
+  "pm-claim-rejected", // 双 PM 互斥拒收（活值守 PM 在位，挑战者被拒+现任收通知）
+  "closeout-pending", // 收割收尾联检挂卡（dispatch 终态而 PR 未关——dispatch-closeout 卡入 PM 待办）
+  "restart-skip-live-worker", // 重启误伤守卫（外部 worker pid 活→跳过重启清扫，待真实回合终态收口）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

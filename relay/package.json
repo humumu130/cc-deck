@@ -110,6 +110,7 @@
 
 "test:prreview": "tsx scripts/test-prreview.ts",
 "test:prbackflow": "tsx scripts/test-prbackflow.ts",
+"test:pmseat": "tsx scripts/test-pmseat.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
     "test:pmresume": "tsx scripts/test-pmresume.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",

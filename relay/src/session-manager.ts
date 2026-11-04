@@ -17,6 +17,7 @@ import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Repo
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
+  clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, registerDispatchTerminalHook, setDutyAppoint,
 } from "./org.js";
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
@@ -905,6 +906,9 @@ export class SessionManager {
     // 组锚判定经注册口注入——appendDispatch 幂等咽喉遇组锚跳过（组内并行合法：组锚
     // ≠worker 真实写面，实证见 dispatchWorker S2 闸注释）
     registerAnchorLockExempt((a) => findGroupByAnchor(a) !== null);
+    // [W-PMSEAT] dispatch 终态联检钩子注入（同因同款注册口）：done/failed 行落账后
+    // 联检该单关联的开着 PR 与 review-ledger 段行——未收口挂 PM 待办确认卡
+    registerDispatchTerminalHook((e) => this.closeoutJointCheck(e));
     this.allowRules = new AllowRuleStore(cfg.dataDir);
     // #212 规则集任何 mutation（落规则/删除/会话清理）后瞬态广播最新全量——
     // 在线端设置页「记住的规则」实时收敛；离线端重连 SNAPSHOT.allow_rules 兜底
@@ -2006,6 +2010,7 @@ export class SessionManager {
       if (opts?.model && !existing.state.model) existing.state.model = opts.model;
       if (opts?.provider && !existing.state.engine_provider) existing.state.engine_provider = opts.provider;
       this.applyDeclaredDeliverables(id);
+      this.maybeProposePmAppointment(); // [W-PMSEAT] adopt/回归边：席位空时提名候选出任命卡
       return existing.state;
     }
     const state: SessionState = {
@@ -2037,6 +2042,7 @@ export class SessionManager {
     if (readPinnedSessions(this.cfg.dataDir).includes(id)) state.pinned = true;
     this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0, pmKeepaliveStreak: 0, pmKeepaliveTimer: null });
     this.applyDeclaredDeliverables(id);
+    this.maybeProposePmAppointment(); // [W-PMSEAT] 新外部会话入场（1104 案首发边）：席位空时提名候选出任命卡
     this.bus.emit(id, "SESSION_CREATED", {
       cwd: state.cwd,
       initial_prompt: prompt,
@@ -2968,6 +2974,7 @@ export class SessionManager {
       // boot 补水时刻固化成活跃时刻 + 双端客户端 fallback 伪造接收时刻，双洗）
       updated_at: s.state.updated_at,
     });
+    this.maybeProposePmAppointment(); // [W-PMSEAT] pid 落位=候选判活前提齐——席位空时提名
   }
 
   clearExternalCliPid(id: string): void {
@@ -5042,6 +5049,23 @@ export class SessionManager {
     const bySt = listGroupsByStatus();
     const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
     for (const e of hung) {
+      // [W-PMSEAT] 重启误伤守卫（1104 21:09 事故实录→PM 裁定入批）：外部 worker 的
+      // cli_pid 仍活=断在 relay 不在 worker——回合还在跑，此处收口即误伤（实录：在途
+      // pmseat 实现被「relay 重启，回合中断」收口→PM 复活接替→双写碰撞）。活 worker 的
+      // 悬账跳过本轮清扫（审计留痕），由其真实回合终态（finishExternal→closeOpenDispatches）
+      // 自然收口；worker 已死/下轮 relay 重启时再扫，语义不变。托管会话 auto-resume 同类
+      // 误伤面（resume 续跑 vs 清扫收口）不在本批——回执遗留。
+      if (e.session_id) {
+        const s = this.sessions.get(e.session_id);
+        if (s?.state.external && s.state.cli_pid) {
+          let alive = false;
+          try { process.kill(s.state.cli_pid, 0); alive = true; } catch { alive = false; }
+          if (alive) {
+            this.emitChainAudit("restart-skip-live-worker", `dispatch=${e.id.slice(0, 8)} session=${e.session_id.slice(0, 8)} pid=${s.state.cli_pid} 活——跳过重启清扫（回合在途，待真实终态收口）`);
+            continue;
+          }
+        }
+      }
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
       if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
@@ -5489,18 +5513,42 @@ ${lines.join("\n")}
   private dutyTargetId(): string | null {
     // X0 件6：pm override 优先（org pm claim 写入 org/duty.json）——pid 探活，死会话
     // 自动忽略+清档（=「启动检测旧 PM 死→自动转活/置空」的运行时形态，boot 兜底清理
-    // 见 ensureLeader 同族的启动链；no-leader 模式下若无 override 走既有最近活跃现算）。
+    // 见 ensureLeader 同族的启动链）。
     // X0 件6（重派修正②）：override 仅 no-leader 模式消费——leader 模式值守位由
     // Leader 承担，claim 不劫持（防 worker 误 claim 改写 leader 模式 PM 目标）；
     // 探活改 override 自带 cli_pid 自证（不看 sessions 在册）——relay 重启后会话
     // 尚未重注册期间 override 不被误清档（pid 活即值守），进程死才清档回落现算
     //（=「启动检测旧 PM 死→自动迁移/置空」的运行时形态）。
+    // [W-PMSEAT]（1104 用户实锤「串台」根治）：no-leader 无 override 时**不再回落
+    // 最近活跃现算**——旧回落在家庭目录随手开的外部会话（ext-70d8c594「xdd-7c」案）
+    // 无任何用户确认即成值守 PM、每轮吃喂活，与在岗干活 PM 双 PM 并存互不知晓。
+    // 现值守位=「经用户任命确认的会话」唯一来源：override（claim 提案 ✓ 落值或
+    // auto 提名 ✓ 落值），无 override=席位空（喂活 sleep no_pm_target、pm 视图
+    // session_id 空）；自动提名经 maybeProposePmAppointment 出 pm-appoint 确认卡，
+    // 用户 ✓ 才落位——未确认期间零喂活（防「先斩后奏」），✗ 记 appoint_rejected
+    // 不再自动提名。候选现算搬 dutyCandidateId（提案专用，消费面不碰）。
     const ov = readPmOverride();
     if (ov && ov.cli_pid > 0 && readCollabMode(this.cfg.dataDir) === "no-leader") {
       try { process.kill(ov.cli_pid, 0); return ov.session_id; } catch { /* pid 死：清档回落 */ }
       clearPmOverride();
     }
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
+    return null; // no-leader 无（活）override：席位空——候选提名走确认卡，见 dutyCandidateId
+  }
+
+  /** [W-PMSEAT] 值守候选现算（原 dutyTargetId 回落扫描搬此，提案专用）：最近活跃+
+   * pid 活（external 优先）且**不在 appoint_rejected 否决档**（用户 ✗ 过的会话不再
+   * 自动提名——防「否决→下一边沿再提名」的轰炸环；显式 org pm claim 仍可提案，
+   * 用户改主意有手动通道）。消费面（喂活/pm 视图/pm_standby）一律走 dutyTargetId
+   * （只认确认位），本口只喂 maybeProposePmAppointment。 */
+  private dutyCandidateId(): string | null {
+    if (readCollabMode(this.cfg.dataDir) !== "no-leader") return null;
+    const ov = readPmOverride();
+    if (ov && ov.cli_pid > 0) {
+      try { process.kill(ov.cli_pid, 0); return null; } catch { /* 死 override：清档后可提新名 */ }
+      clearPmOverride();
+    }
+    const rejected = new Set(readAppointRejected().map((r) => r.session_id));
     let best: string | null = null;
     let bestAt = -1;
     let bestIsExternal = false; // #294 PM 保活断点修复：managed PM（SDK 面板开会话）同样可为值守——external 优先、同类取最近
@@ -5508,6 +5556,7 @@ ${lines.join("\n")}
       if (s.state.historical) continue;
       // #294：不筛形态——external（终端开）和 SDK spawn 的（managed/面板开）都可当值守 PM。historical 仍排除。
       if (this.leaderId && s.state.session_id === this.leaderId) continue;
+      if (rejected.has(s.state.session_id)) continue; // [W-PMSEAT] 否决档跳过
       const pid = s.state.cli_pid;
       if (!pid) continue;
       try { process.kill(pid, 0); } catch { continue; }
@@ -5516,6 +5565,121 @@ ${lines.join("\n")}
       if (at > bestAt || (isExt && !bestIsExternal)) { bestAt = at; best = s.state.session_id; bestIsExternal = isExt; }
     }
     return best;
+  }
+
+  /** [W-PMSEAT] 值守任命提案边（1104 根治件①）：候选在席而无在确认任命 → 出
+   * pm-appoint 确认卡进用户待拍板（org-confirms 通道→awaituser 聚合清单自动含）。
+   * 幂等三闸：①该席已有待决 pm-appoint 卡不重提；②他人卡在决不抢提（一次一张，
+   * 用户决完再轮到当前候选）；③候选进否决档不提（dutyCandidateId 已滤）。自愈：
+   * 待决卡所属会话已死 → auto 否决消卡（by=auto:pm-dead）再提名当前候选。提案镜像
+   * duty.json pm_appoint（pm 视图 pending_appoint 面数据源）。全部尽力而为——异常
+   * 绝不阻断调用主路径。挂点：ensureExternal 两分支/setExternalCliPid（pid 落位=候选
+   * 判活前提齐）/feedPM 空目标分支（turn_end/worker_done/confirm-decided 事件边兜底）。 */
+  private maybeProposePmAppointment(): void {
+    try {
+      if (readCollabMode(this.cfg.dataDir) !== "no-leader") return; // leader 模式值守位=Leader，无提名面
+      if (!dutyEnabled()) return; // 值守链关：提名与喂活同门（环境门关=值守组件不存在）
+      if (readPluginConfig().duty === false) return; // 产品总闸关：全组停值守，提名同停
+      const candidate = this.dutyCandidateId();
+      // 自愈：待决卡所属会话 pid 已死 → auto 否决消卡（任命对象没了，卡悬空只会堵下一轮提名）
+      for (const c of listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending")) {
+        const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+        const pid = Number(c.payload.cli_pid) || 0;
+        let alive = !!sid && pid > 0;
+        if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+        if (!alive) {
+          decideConfirm(c.id, false, "auto:pm-dead");
+          recordAppointRejected(sid, pid); // 死席入否决档：重启回放期防同席再提名刷卡
+          clearDutyAppoint(sid);
+        }
+      }
+      const stillPending = listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending");
+      if (!candidate) return;
+      const mine = stillPending.find((x) => x.payload.sid === candidate);
+      if (mine) {
+        // 镜像同步（卡在而 duty.json pm_appoint 缺失/漂移——崩溃窗自愈）：显示面以卡为准
+        const ap = readDutyAppoint();
+        if (!ap || ap.session_id !== candidate) {
+          const s = this.sessions.get(candidate);
+          setDutyAppoint({ session_id: candidate, cli_pid: s?.state.cli_pid ?? 0, cwd: s?.state.cwd ?? "", origin: (mine.payload.origin === "claim" ? "claim" : "auto"), proposed_at: mine.created_at });
+        }
+        return;
+      }
+      if (stillPending.length > 0) return; // 他人卡在决：一次一张，不抢提
+      const s = this.sessions.get(candidate);
+      if (!s) return;
+      setDutyAppoint({ session_id: candidate, cli_pid: s.state.cli_pid ?? 0, cwd: s.state.cwd ?? "", origin: "auto", proposed_at: Date.now() });
+      addConfirm({
+        kind: "pm-appoint",
+        title: `值守 PM 任命：${s.state.title ? truncate(s.state.title, 24) : candidate.slice(0, 8)}`,
+        reason: `no-leader 模式值守位当前为空，候选会话 ${candidate.slice(0, 8)}（${s.state.external ? "external" : "managed"}·${truncate(s.state.cwd || "", 48)}）等待任命——批准后开始值守喂活；否决则不认领（该会话不再自动提名）`,
+        payload: { sid: candidate, cli_pid: s.state.cli_pid ?? 0, cwd: s.state.cwd ?? "", origin: "auto" },
+      });
+      this.emitOrgState();
+      this.emitChainAudit("pm-appoint-propose", `session=${candidate.slice(0, 8)} pid=${s.state.cli_pid ?? 0} origin=auto cwd=${truncate(s.state.cwd || "", 60)}`);
+    } catch { /* 提名尽力而为，绝不阻断主路径 */ }
+  }
+
+  /** [W-PMSEAT] 收割收尾联检（1104 根治件③，dispatch 终态钩子注入）：该 dispatch_id
+   * 关联的开着 PR（台账段行 pr_url/pr_state 快照，板卡 prchip 面兜底）与 review-ledger
+   * 段行——PR 未 merged 即挂 dispatch-closeout 确认卡进 PM 待办（复用待拍板聚合），
+   * 不允许静默漏。✓=通知值守 PM 执行收口（relay 不代关 PR），✗=知情放弃；pr-report
+   * merged 上报自动消单（本函数只建卡，消单在 pr-report 面）。同 id 待决收口卡不重提。
+   * 段行语义（readDispatchLogFile 同 id 收敛末行，历史须读 ndjson 原始账）：终态行的
+   * **前一段行**=in_review ⇒ 本收口=review-ledger end（leader-harvest --merge 已
+   * squash-merge 后才写 end，缺席硬拒）——PR 已收口，跳过不误报；前态=running/
+   * dispatched（closeOpenDispatches 直收）而 PR 面开着 ⇒ 正是 1104 PR#9 孤儿形态。 */
+  private closeoutJointCheck(e: { id: string; status: string; title?: string; session_id: string; drill?: boolean }): void {
+    try {
+      if (!e.id || e.drill === true) return;
+      // ndjson 原始段行（审计面=真相源；readDispatchLogFile 收敛视图无历史）
+      let rows: { status?: string; pr_url?: string; pr_state?: string }[] = [];
+      try {
+        for (const line of readFileSync(dispatchLogPath(), "utf-8").split("\n")) {
+          const t = line.trim();
+          if (!t) continue;
+          try {
+            const r = JSON.parse(t) as { id?: string; status?: string; pr_url?: string; pr_state?: string };
+            if (r && r.id === e.id) rows.push(r);
+          } catch { /* 损坏行跳过 */ }
+        }
+      } catch { /* 文件不可读：按无段行处理（板卡兜底仍可查） */ }
+      const prev = rows.length >= 2 ? rows[rows.length - 2] : undefined;
+      if (prev?.status === "in_review") {
+        // review-end（harvest --merge 已并 PR）：非孤儿不建卡；交付关口曾建的待决收口卡
+        //（PM 走 --merge 直收、未报 merged 的路径）随之自动消单（by=auto:review-end）——
+        // 防「已收割收口、卡残留」噪声滞留（与 pr-report merged 消单对称）
+        const pend2 = listPendingConfirms().find((c) => c.kind === "dispatch-closeout" && c.status === "pending" && c.payload?.dispatch_id === e.id);
+        if (pend2) {
+          const d2 = decideConfirm(pend2.id, false, "auto:review-end");
+          if (d2.ok) { try { this.applyConfirmEffects(d2.confirm); } catch { /* 留痕面尽力而为 */ } }
+        }
+        return;
+      }
+      // PR 面：段行快照倒序取最新（pr-report 续行），板卡 prchip 面兜底
+      let prUrl = "";
+      let prState = "";
+      for (const r of [...rows].reverse()) {
+        if (r.pr_url || r.pr_state) { prUrl = r.pr_url ?? ""; prState = r.pr_state ?? ""; break; }
+      }
+      if (!prUrl) {
+        for (const g of listGroups()) {
+          const ent = loadBoard(g.id).entries.find((x) => x.dispatch_id === e.id);
+          if (ent?.pr_url) { prUrl = ent.pr_url; prState = ent.pr_state ?? ""; break; }
+        }
+      }
+      if (!prUrl || prState === "merged") return; // 无 PR / 已 merged：无收口对象
+      const reviewSeg = rows.some((r) => r.status === "in_review");
+      if (listPendingConfirms().some((c) => c.kind === "dispatch-closeout" && c.payload?.dispatch_id === e.id)) return; // 幂等
+      addConfirm({
+        kind: "dispatch-closeout",
+        title: `收口待办：PR 未关 · ${e.title ? truncate(e.title, 32) : e.id.slice(0, 8)}`,
+        reason: `派单已${e.status === "done" ? "交付收口" : "失败收口"}但关联 PR 仍开着（${prState || "ci_unknown"}${reviewSeg ? "，审查段行未收口" : ""}）——PM 收口（leader-harvest --merge 或 gh pr close）后自动消单；✓=交 PM 处理，✗=知情放弃`,
+        payload: { dispatch_id: e.id, pr_url: prUrl, pr_state: prState || "ci_unknown", session_id: e.session_id ?? "", review_segment: reviewSeg },
+      });
+      this.emitOrgState();
+      this.emitChainAudit("closeout-pending", `dispatch=${e.id.slice(0, 8)} pr_state=${prState || "ci_unknown"}${reviewSeg ? " review_segment=open" : ""}`);
+    } catch { /* 联检尽力而为，绝不阻断台账 */ }
   }
 
   // ---------- #279 野生会话纳管：SessionStart 广播文案 ----------
@@ -5563,24 +5727,37 @@ ${lines.join("\n")}
   // 无感的放大器就是本视图只报「有没有 PM 目标」不报「值守链开没开」——环境门关时
   // alive 照样 true（假活）。现把两级开关状态一并暴露（缺省开反转后环境门基本恒开，
   // 但逃生阀/沙盒态可见性仍要保）：org status / 巡检据此一眼分辨「值守关闭」。
-  pmDutyStatus(): { mode: string; session_id: string; alive: boolean; duty_enabled: boolean; product_switch: boolean; hint?: string } {
+  pmDutyStatus(): { mode: string; session_id: string; alive: boolean; duty_enabled: boolean; product_switch: boolean; pending_appoint?: { session_id: string; origin: "auto" | "claim"; proposed_at: number }; hint?: string } {
     const mode = this.collabMode();
     const envOn = dutyEnabled();
     const productOn = readPluginConfig().duty !== false;
     const target = envOn ? this.dutyTargetId() : null;
+    // [W-PMSEAT] 任命待决面：以 pending 卡为准（duty.json pm_appoint 是显示镜像，崩溃
+    // 窗可能滞后——卡在才算「有提名」）。在岗 PM 会话据此可见「值守位当前是谁/谁在
+    // 等任命」（org status pm 节+SNAPSHOT pm_duty 键；板面值守标识=pm_standby 同源
+    // dutyTargetId 只认确认位）。
+    let pendingAppoint: { session_id: string; origin: "auto" | "claim"; proposed_at: number } | undefined;
+    if (envOn && productOn && !target) {
+      const card = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending");
+      const sid = typeof card?.payload.sid === "string" ? card.payload.sid : "";
+      if (card && sid) pendingAppoint = { session_id: sid, origin: card.payload.origin === "claim" ? "claim" : "auto", proposed_at: card.created_at };
+    }
     return {
       mode,
       session_id: target ?? "",
       alive: !!target,
       duty_enabled: envOn && productOn,
       product_switch: productOn,
+      ...(pendingAppoint ? { pending_appoint: pendingAppoint } : {}),
       ...(!envOn
         ? { hint: "值守环境门关闭（CCR_PM_DUTY=0 或 CCR_NO_LEADER=1）——值守链整体停摆，非无 PM 目标" }
         : !productOn
           ? { hint: "值守产品总闸关（~/.cc-deck/config.json duty=false）——全组停止值守 feed" }
           : target
             ? {}
-            : { hint: "当前无在岗 PM，分诊暂缓或走接管流程" }),
+            : pendingAppoint
+              ? { hint: `值守任命待用户决议：候选会话 ${pendingAppoint.session_id.slice(0, 8)}（${pendingAppoint.origin === "claim" ? "主动认领" : "自动提名"}）——批准后开始值守喂活，否决不认领` }
+              : { hint: "值守位空（no-leader 无确认任命）——外部会话活跃时自动提名出任命卡，或 org pm claim 主动认领（未决零喂活）" }),
     };
   }
 
@@ -5616,6 +5793,10 @@ ${lines.join("\n")}
         body: truncate(`候选待处置项无人接——无在册 PM 会话（external 且进程活）`, 160),
         severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
       }); } catch { /* 尽力而为 */ }
+      // [W-PMSEAT] 事件边兜底提名：席位空+有候选 → 出任命确认卡（ensureExternal/
+      // setExternalCliPid 首发边之外，turn_end/worker_done/confirm-decided 等喂活边
+      // 亦机会主义重查——挂点单次调用，无重复提案环）
+      this.maybeProposePmAppointment();
       return;
     }
     const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
@@ -6294,6 +6475,12 @@ ${lines.join("\n")}
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // [W-PMSEAT] pm-claim 咽喉放行（#212 坑同款自查：case 在 orgAction switch，此处
+    // 不放行则 WS/面板通道恒收 unsupported——org CLI 走 HTTP 白名单侥幸可用）
+    if (action === "pm-claim") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
 
@@ -6601,6 +6788,16 @@ ${lines.join("\n")}
           }
           this.emitBoard(hit.gid); // BOARD_UPDATED 广播：端上 chip 即时上屏（delta.upserts 全条目）
           this.emitChainAudit("pr-report", `卡 ${hit.entry.id}「${truncate(hit.entry.text, 40)}」PR 徽章：${prUrl ? `${prUrl} · ${prStateRaw || "ci_unknown"}` : "清除"}`);
+          // [W-PMSEAT] 收口联检自动消单：merged 上报=PR 已收口，该 dispatch 的待决
+          // dispatch-closeout 卡自动决（✗ 语义=放行，by=auto:pr-merged 留痕归因）——
+          // 防「PM 走 harvest --merge 直收、卡残留」的噪声滞留（1104 PR#9 案的收尾面）
+          if (prStateRaw === "merged") {
+            const pend = listPendingConfirms().find((c) => c.kind === "dispatch-closeout" && c.status === "pending" && c.payload?.dispatch_id === dispatchId);
+            if (pend) {
+              const d2 = decideConfirm(pend.id, false, "auto:pr-merged");
+              if (d2.ok) { try { this.applyConfirmEffects(d2.confirm); } catch { /* 留痕面尽力而为 */ } }
+            }
+          }
           return { ok: true, data: { entry: u.entry } };
         }
         case "suggest-hold": {
@@ -6707,10 +6904,12 @@ ${lines.join("\n")}
           return { ok: true, data: { needsConfirm: true, confirm, sid: self.state.session_id } };
         }
         case "pm-claim": {
-          // X0 件6（PRD §4.6 前半）：活 PM 会话接管值守位——写 org/duty.json override，
-          // dutyTargetId 优先消费（仅 no-leader 模式；pid 自证探活，死进程自动清档=
-          // 自动迁移/置空语义）。SNAPSHOT 的 pm 面随 emitOrgState 广播即时体现（远端
-          // 感知）。leader 模式值守由 Leader 承担，claim 拒收（防误 claim 劫持 PM 目标）。
+          // X0 件6（PRD §4.6 前半）+ [W-PMSEAT] 任命确认卡化（1104 用户实锤「串台」根治）：
+          // 活 PM 会话接管值守位——**不再直写 override 先斩后奏**，改出 pm-appoint 确认卡
+          //（用户 ✓ → applyConfirmEffects 落 org/duty.json override，未决期间零值守喂活）。
+          // 双 PM 互斥：已有活值守 PM（override pid 活）且非自己 → 拒绝+通知现任（在岗
+          // PM 会话可见值守位被争夺，timeline 留痕+通知账双面）；他人任命卡在决 → 拒绝
+          //（一次一张）。仅 no-leader 模式；leader 模式值守由 Leader 承担，claim 拒收。
           if (readCollabMode(this.cfg.dataDir) !== "no-leader") {
             return { ok: false, error: "当前为 leader 协作模式，值守位由 Leader 会话承担——org pm claim 属 no-leader（双机值守）场景" };
           }
@@ -6718,11 +6917,50 @@ ${lines.join("\n")}
           if (!self) return { ok: false, error: "未定位到你的会话——请在项目目录内运行 org pm claim" };
           const pid = self.state.cli_pid;
           if (!pid) return { ok: false, error: "会话无 CLI pid（外部会话需在终端活跃时 claim）" };
-          const r = setPmOverride({ session_id: self.state.session_id, cli_pid: pid, cwd: self.state.cwd || "", claimed_at: Date.now() });
-          if (!r.ok) return { ok: false, error: r.error ?? "claim 失败" };
+          // 幂等：已是确认值守位本人 → 直接收执（重复 claim 无害）
+          const cur = this.pmDutyStatus();
+          if (cur.alive && cur.session_id === self.state.session_id) {
+            return { ok: true, data: { pm_session_id: self.state.session_id, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          }
+          // 互斥闸①：活值守 PM 在位且非自己 → 拒+通知现任（1104 双 PM 并存根因）
+          if (cur.alive && cur.session_id) {
+            try {
+              this.pushExternalLog(cur.session_id, "system", `[值守位] 会话 ${self.state.session_id.slice(0, 8)} 尝试 claim 值守位被拒（你在位，pid 活）——如需移交先退出终端让 pid 探活失效，或用户面板改选`);
+            } catch { /* 留痕尽力而为 */ }
+            try {
+              this.upsertNotification("system", "pm-claim-contested", undefined, {
+                title: "值守位认领被拒：你仍在岗",
+                body: truncate(`会话 ${self.state.session_id.slice(0, 8)}（${truncate(self.state.cwd || "", 48)}）尝试接管值守位——已按双 PM 互斥拒绝，你保持值守。如需移交：让位会话退出后对方再 claim，或用户面板决议任命卡。`, 200),
+                severity: "waiting", group: "attention", actionable: true,
+                sessionId: cur.session_id, domain: "org", returnPath: "/",
+              });
+            } catch { /* 通知尽力而为 */ }
+            this.emitChainAudit("pm-claim-rejected", `session=${self.state.session_id.slice(0, 8)} 撞活值守位 ${cur.session_id.slice(0, 8)}——双 PM 互斥拒绝`);
+            return { ok: false, error: `值守位已由会话 ${cur.session_id.slice(0, 8)} 占据（进程活）——双 PM 互斥拒收。如需移交：现任退出终端后（pid 探活失效自动腾位）再 claim，或等用户决议任命卡` };
+          }
+          // 互斥闸②：他人任命卡在决 → 拒（一次一张，用户决完再收）
+          const otherPending = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending" && c.payload?.sid !== self.state.session_id);
+          if (otherPending) {
+            const otherSid = typeof otherPending.payload.sid === "string" ? otherPending.payload.sid : "";
+            return { ok: false, error: `已有值守任命待用户决议（候选会话 ${otherSid.slice(0, 8)}）——决完再 claim，防双卡竞争` };
+          }
+          // [W-PMSEAT] 本席幂等：auto 提名卡在决时 claim 不双开卡（回执原卡，origin 语义
+          // 由卡在决现场承载）——「一次一张」不被自 claim 破防（双 approve=重复落位噪音）
+          const ownPending = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending" && c.payload?.sid === self.state.session_id);
+          if (ownPending) {
+            return { ok: true, data: { needsConfirm: true, confirm: ownPending, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          }
+          // 提案：写 duty.json pm_appoint 镜像 + 出 pm-appoint 确认卡（不写 override）
+          setDutyAppoint({ session_id: self.state.session_id, cli_pid: pid, cwd: self.state.cwd || "", origin: "claim", proposed_at: Date.now() });
+          const confirm = addConfirm({
+            kind: "pm-appoint",
+            title: `值守 PM 认领：${self.state.title ? truncate(self.state.title, 24) : self.state.session_id.slice(0, 8)}`,
+            reason: `会话 ${self.state.session_id.slice(0, 8)}（${self.state.external ? "external" : "managed"}·${truncate(self.state.cwd || "", 48)}）主动认领值守位——批准后接管值守喂活；否决则不认领（该会话不再被自动提名，可再 claim 提案）`,
+            payload: { sid: self.state.session_id, cli_pid: pid, cwd: self.state.cwd || "", origin: "claim" },
+          });
           this.emitOrgState();
-          this.emitChainAudit("pm-claim", `session=${self.state.session_id.slice(0, 8)} pid=${pid} cwd=${truncate(self.state.cwd || "", 60)}`);
-          return { ok: true, data: { pm_session_id: self.state.session_id, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          this.emitChainAudit("pm-claim", `session=${self.state.session_id.slice(0, 8)} pid=${pid} cwd=${truncate(self.state.cwd || "", 60)}——提案待用户决议（未决零喂活）`);
+          return { ok: true, data: { needsConfirm: true, confirm, pm_session_id: "", collab_mode: readCollabMode(this.cfg.dataDir) } };
         }
         case "agent-teams": {
           // X0 件4（PRD §4.7 #6）：AGENT_TEAMS 实验特性协助——check=探测现状（含拼写
@@ -7717,10 +7955,55 @@ ${lines.join("\n")}
           }
           break;
         }
+        case "pm-appoint": {
+          // [W-PMSEAT] 值守任命卡 ✓：陈旧卡复核（会话在册+pid 活，member-join 同款
+          // 防线）→ setPmOverride 落值守位（喂活自此恢复——confirm-decided 边沿已挂
+          // feedPM）；对象已死 → fail 留痕不落位（席位保持空，下一轮提名/claim 提新名）。
+          const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+          const pid = Number(c.payload.cli_pid) || 0;
+          if (!sid) return fail("任命生效", { error: "卡载荷缺 sid（陈旧卡）" });
+          let alive = pid > 0;
+          if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+          if (!alive) {
+            recordAppointRejected(sid, pid); // 死席入否决档：防重启回放期同席再提名
+            clearDutyAppoint(sid);
+            return fail("任命生效", { error: "候选会话进程已退出——任命作废，值守位保持空（下一候选自动提名）" });
+          }
+          const r = setPmOverride({ session_id: sid, cli_pid: pid, cwd: String(c.payload.cwd ?? ""), claimed_at: Date.now() });
+          if (!r.ok) return fail("任命生效", r);
+          clearDutyAppoint(sid);
+          this.emitChainAudit("pm-appoint-approved", `session=${sid.slice(0, 8)} pid=${pid} origin=${typeof c.payload.origin === "string" ? c.payload.origin : "auto"}——值守喂活恢复`);
+          break;
+        }
+        case "dispatch-closeout": {
+          // [W-PMSEAT] 收口待办卡 ✓：通知值守 PM 执行收口（leader-harvest --merge /
+          // gh pr close——relay 不代关 PR，收割权在 PM）；✗ 走下方纯留痕分支（知情放弃）。
+          const prUrl = typeof c.payload.pr_url === "string" ? c.payload.pr_url : "";
+          const pmSid = this.dutyTargetId() ?? (typeof c.payload.session_id === "string" ? c.payload.session_id : "");
+          try {
+            this.upsertNotification("system", "closeout-ack", `${c.payload.dispatch_id ?? ""}`, {
+              title: "收口待办已确认：关 PR",
+              body: truncate(`派单 ${String(c.payload.dispatch_id ?? "").slice(0, 8)} 的 PR 未关（${String(c.payload.pr_state ?? "")}）——请 PM 收口：leader-harvest --merge 或 gh pr close ${prUrl}；合并后 pr-report merged 自动消单。`, 200),
+              severity: "waiting", group: "action", actionable: true,
+              ...(pmSid ? { sessionId: pmSid } : {}), domain: "org", returnPath: "/",
+            });
+          } catch { /* 通知尽力而为 */ }
+          break;
+        }
       }
     } else if (c.kind === "project-create" && gid) {
       const r = setGroupStatus(gid, "archived", "立项确认被否决"); // pending → archived 留痕
       if (!r.ok) return fail("否决留痕迁移", r);
+    } else if (c.kind === "pm-appoint") {
+      // [W-PMSEAT] 任命卡 ✗（含 auto:pm-dead 自愈消卡同走此）：不认领——否决记档（该
+      // 会话不再被自动提名；显式 claim 仍可再提案，用户改主意有手动通道）+提案镜像清。
+      // 席位保持空，零喂活。
+      const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+      if (sid) {
+        recordAppointRejected(sid, Number(c.payload.cli_pid) || 0);
+        clearDutyAppoint(sid);
+        this.emitChainAudit("pm-appoint-rejected", `session=${sid.slice(0, 8)} by=${c.decided_by ?? "user"}——不认领（否决档，自动提名跳过）`);
+      }
     } else if (c.kind === "device-trust") {
       // X1 首联卡 ✗：device_trust 吊销 + 悬置消息弃置（各回 rejected:first-contact）——
       // 与 ✓ 同一副作用单点（onTrustDecision），不可只在 approved 分支挂
