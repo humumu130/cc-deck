@@ -101,6 +101,8 @@ export function buildSessionsReconcile(mgr: SessionManager, relayName: string | 
   };
 }
 
+import { appendLinkEvent, linkSummary, type LinkEventRow, type LinkEventSrc } from "./link-quality.js";
+
 function localIps(): Set<string> {
   const out = new Set<string>();
   for (const list of Object.values(networkInterfaces())) {
@@ -817,6 +819,52 @@ export function startServer(
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr, cfg);
+      return;
+    }
+    // [W-LINKQUALITY]（1104 用户实锤×N）链路分段遥测：POST /api/telemetry/link=端侧
+    //（web/RN）断连/重连事件批量补报（断连时 ws 已死无法即时上行——补报是唯一可靠
+    // 通道；token 同 /api/artifacts 口径）；GET=24h 摘要（诊断面数据源）。src 白名单
+    // 收口（bridge 段 relay 自记——端侧伪造拒收），ts 越界（>7 天）拒行。
+    if (url.pathname === "/api/telemetry/link") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end("unauthorized"); return; }
+      if (req.method === "POST") {
+        let lqBody = "";
+        req.on("data", (c: Buffer) => { lqBody += c; });
+        req.on("end", () => {
+          try {
+            const body = JSON.parse(lqBody || "{}") as { events?: unknown[] };
+            const SRC_OK = new Set<LinkEventSrc>(["web-lan", "web-cloud", "rn"]);
+            const KIND_OK = new Set(["drop", "reconnect", "retry-fail"]);
+            const now = Date.now();
+            let n = 0;
+            for (const ev of Array.isArray(body.events) ? body.events.slice(0, 200) : []) {
+              const r = ev as Partial<LinkEventRow>;
+              if (!r || typeof r.ts !== "number" || now - r.ts > 7 * 86_400_000 || r.ts > now + 60_000) continue;
+              if (typeof r.src !== "string" || !SRC_OK.has(r.src as LinkEventSrc)) continue;
+              if (typeof r.kind !== "string" || !KIND_OK.has(r.kind)) continue;
+              appendLinkEvent(cfg.dataDir, {
+                ts: r.ts, src: r.src as LinkEventSrc, kind: r.kind as LinkEventRow["kind"],
+                ...(typeof r.reason === "string" ? { reason: r.reason.slice(0, 120) } : {}),
+                ...(typeof r.code === "number" ? { code: r.code } : {}),
+                ...(typeof r.downtimeMs === "number" ? { downtimeMs: r.downtimeMs } : {}),
+                ...(typeof r.attempts === "number" ? { attempts: r.attempts } : {}),
+                ...(typeof r.connectedMs === "number" ? { connectedMs: r.connectedMs } : {}),
+              });
+              n++;
+            }
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ accepted: n }));
+          } catch (e) {
+            res.writeHead(400).end("bad request: " + String(e instanceof Error ? e.message : e).slice(0, 80));
+          }
+        });
+        return;
+      }
+      if (req.method === "GET") {
+        const winMs = Math.min(Math.max(Number(url.searchParams.get("windowMs")) || 86_400_000, 3_600_000), 7 * 86_400_000);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(linkSummary(cfg.dataDir, winMs)));
+        return;
+      }
+      res.writeHead(405).end("method not allowed");
       return;
     }
     // W-CMDIMPL ③（#216，设计 §3.2）：POST /api/release——发版编排三 action（主 token
