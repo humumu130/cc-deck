@@ -20,7 +20,7 @@ import { bundleOptions } from "./bundle-options.mjs";
 const outDir = mkdtempSync(join(tmpdir(), "ccdeck-rebuild."));
 try {
   // logLevel 只影响日志不影响产物字节；静默以免污染调用方要解析的 stdout
-  await build({ ...bundleOptions(join(outDir, "relay.mjs")), logLevel: "silent" });
+  await build({ ...bundleOptions(join(outDir, "relay.mjs"), ver), logLevel: "silent" });
 } catch (err) {
   rmSync(outDir, { recursive: true, force: true });
   throw err;

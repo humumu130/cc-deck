@@ -469,6 +469,29 @@ export function startServer(
   const webRoot =
     webRootCandidates.find((p) => p && existsSync(join(p, "web-console", "index-005.html"))) ??
     webRootCandidates[1]!;
+  // tauritrust（1104 用户实锤·版本拼盘守卫）：壳二进制/relay.mjs/web-console 三时间戳
+  // 拼盘（19:34/12:22/12:18）是「永远连接中」的放大器——热换单件不校验即带病上线。
+  // 守卫=启动自检（告警档不拒启：拒启把用户锁死在外比连接中更糟）+/health 暴露三指纹
+  //（壳侧/手机端可拉取比对）。读法：index-005 的 __ccDeck005Version 与 index 的
+  // CONSOLE_VERSION（build-plugin 双回写应恒同版）+relay 烙印（bundle define
+  // CCR_RELAY_VERSION，见 bundle-options.mjs；tsx 源码跑无 define=缺席降级双 console 校）。
+  const readVer = (p: string, re: RegExp): string => {
+    try {
+      const m = readFileSync(p, "utf-8").match(re);
+      return m?.[1] ?? "";
+    } catch {
+      return "";
+    }
+  };
+  const ver005 = readVer(join(webRoot, "web-console", "index-005.html"), /__ccDeck005Version\s*=\s*"([^"]+)"/);
+  const verLegacy = readVer(join(webRoot, "web-console", "index.html"), /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
+  const verRelay = process.env.CCR_RELAY_VERSION ?? "";
+  if (ver005 && verLegacy && ver005 !== verLegacy) {
+    console.error(`[pallette] ⚠️ 版本拼盘：双壳 console 不同版（005=${ver005} / legacy=${verLegacy}）——热换单件带病上线的高危形态（1104 Nova 事故放大器），请整批重布`);
+  }
+  if (verRelay && ((ver005 && ver005 !== verRelay) || (verLegacy && verLegacy !== verRelay))) {
+    console.error(`[pallette] ⚠️ 版本拼盘：relay=${verRelay} 与 console 不一致（005=${ver005} / legacy=${verLegacy}）——relay.mjs 与 web-console 非同批，请整批重布`);
+  }
   // 新旧壳共存（用户拍板，2026-10-07）：`/` 主路径 = 旧版稳定壳，`/app2` = 005 新壳对照体验
   const consoleHtml005 = join(webRoot, "web-console", "index-005.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
@@ -720,7 +743,11 @@ export function startServer(
       }
     }
     if (req.method === "GET" && url.pathname === "/health") {
-      res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+      // tauritrust：/health 附版本拼盘指纹（壳/手机端可比对三件套是否同批——拼盘自检见
+      // startServer 头部；空串=该件缺席（tsx 源码跑无 relay 烙印/console 未布）不判拼盘）
+      res.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005, consoleLegacy: verLegacy } }),
+      );
       return;
     }
     // 同机零配置直连：本机浏览器打开 CC Deck 网页时探测本机 relay，直接拿连接参数。
@@ -731,7 +758,14 @@ export function startServer(
       const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
       const origin = (req.headers.origin ?? "").trim();
       const ips = localIps();
-      const hostTrusted = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      // tauritrust（1104 用户实锤「Nova 桌面永远连接中」）：tauri.localhost 收口进可信 host。
+      // 裁决：Tauri 壳 WebView 的官方虚拟域名（macOS=http://tauri.localhost/Windows=https 变体），
+      // 浏览语义上恒绑定 loopback（Tauri 2 自定义协议解析到 127.0.0.1，非任意 *.localhost 通配——
+      // 显式只收精确值，勿静默扩大到子域通配：*.localhost 在公共后缀表外，任意子域可被本地
+      // DNS 劫持者注册形似名）。壳源特征=Origin 的 scheme∈{http,https} 且 host 恒 tauri.localhost。
+      // 病灶链：Tauri 页面 fetch /local-info → hostTrusted 三不中 → 404 → 页面拿不到 token →
+      // 「正在连接本机 relay」死循环（手机端 relay 健康对照实锤——桌面专属）。
+      const hostTrusted = (h: string) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || ips.has(h);
       // 带 Origin（跨源页面）：白名单回显放行；无 Origin：同源 fetch / 本机进程，认 Host。
       // Host 浏览器不可伪造；能伪造的非浏览器进程本来就能直接读 token 文件，非此端点威胁面。
       let allowOrigin = "";
@@ -792,7 +826,7 @@ export function startServer(
       // 否则浏览器静默拦截响应，领码在部署域页面必失败（#411：新域 cc-deck.* 已入白名单）
       const origin = (req.headers.origin ?? "").trim();
       const ips = localIps();
-      const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || ips.has(h); // tauritrust：同 /local-info 收口（裁决见彼处注释）
       let acao = "";
       // Origin:"null" 豁免已删除（同 /local-info，P1FIX 2026-10-10：沙箱 iframe 可造
       // Origin:null；本端点另有 token 鉴权在前，豁免纯属多余攻击面）
@@ -1566,7 +1600,7 @@ async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Pr
   const url = new URL(req.url ?? "/", "http://localhost");
   const origin = (req.headers.origin ?? "").trim();
   const ips = localIps();
-  const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+  const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || ips.has(h); // tauritrust：同 /local-info 收口（裁决见彼处注释）
   let acao = "";
   // Origin:"null" 豁免已删除（同 /local-info，P1FIX 2026-10-10：沙箱 iframe 可造
   // Origin:null；本端点已持 LAN token 才可达，豁免无合法消费方）

@@ -8,8 +8,11 @@ import { fileURLToPath } from "node:url";
 export const relayRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // 以下注释是参数的历史沿革（从 build-plugin.mjs 移入，改动前先读）：
-export function bundleOptions(outfile) {
+export function bundleOptions(outfile, relayVersion) {
   return {
+    // tauritrust：relay 烙印（拼盘守卫三指纹之一——build-plugin 读 VERSION 传入；
+    // rebuild-bundle 同参重建保持字节一致闸）。运行时 process.env.CCR_RELAY_VERSION 只读。
+    define: relayVersion ? { "process.env.CCR_RELAY_VERSION": JSON.stringify(relayVersion) } : undefined,
     entryPoints: [join(relayRoot, "src", "index.ts")],
     // absWorkingDir 钉死（2026-10-10 A2 实测发现）：bundle 内 node_modules 的模块路径
     // 注解是相对 esbuild 工作目录记的，不钉则「同一份源码从不同 cwd 打包字节不同」

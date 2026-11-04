@@ -11,7 +11,7 @@ const root = join(relayRoot, "..");
 const out = join(root, "cc-plugins", "plugins", "cc-deck");
 
 // 1. bundle relay：esm 单文件，ws 的可选原生依赖不打进（参数单源见 bundle-options.mjs）
-await build(bundleOptions(join(out, "scripts", "relay.mjs")));
+await build(bundleOptions(join(out, "scripts", "relay.mjs"), ver));
 
 // 2. 版本同步（唯一版本源，2026-10-10 A1 收敛，审查 P1-1）：仓库根 VERSION 为唯一
 //    事实源，本脚本取值回写四线——plugin.json（原「第二事实源」降为纯落点）、
