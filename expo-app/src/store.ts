@@ -442,6 +442,46 @@ const RECONNECT_BASE_MS = 1000;
 // 不会退回 #33 的空转风暴
 const RECONNECT_MAX_MS = 60_000;
 
+// [W-LINKQUALITY]（1104 用户实锤×N）RN 段遥测：断连/重连事件本地记（recordConnEvent
+// 统一断因口挂点），恢复后延迟批量补报 POST /api/telemetry/link（src="rn"；断连时 ws
+// 已死无法即时上行——补报唯一可靠通道；失败留队列下次再试，容量 300 截旧）。
+const linkqRn = (() => {
+  const q: Array<{ ts: number; src: "rn"; kind: string; reason?: string; code?: number; downtimeMs?: number; attempts?: number; connectedMs?: number }> = [];
+  const st = { openAt: 0, dropAt: 0, attempts: 0 };
+  const note = (ev: Partial<{ kind: string; reason: string; code: number; downtimeMs: number; attempts: number; connectedMs: number }>) => {
+    q.push({ ts: Date.now(), src: "rn", ...ev } as never);
+    if (q.length > 300) q.splice(0, q.length - 300);
+  };
+  return {
+    onOpen(wsUrl?: string, token?: string) {
+      const now = Date.now();
+      if (st.dropAt > 0) note({ kind: "reconnect", downtimeMs: now - st.dropAt, attempts: Math.max(1, st.attempts) });
+      else note({ kind: "connect" });
+      st.openAt = now; st.dropAt = 0; st.attempts = 0;
+      setTimeout(() => { void this.flush(wsUrl, token); }, 2500);
+    },
+    onDrop(reason: string) {
+      const now = Date.now();
+      if (st.openAt > 0) { note({ kind: "drop", reason: reason.slice(0, 100), connectedMs: now - st.openAt }); st.openAt = 0; }
+      if (st.dropAt === 0) st.dropAt = now;
+      st.attempts += 1;
+    },
+    async flush(wsUrl?: string, token?: string) {
+      if (!q.length || !wsUrl || !token) return;
+      const base = String(wsUrl).replace(/^ws/, "http").replace(/\/ws$/, "");
+      if (!base) return;
+      const batch = q.splice(0, 100);
+      try {
+        const r = await fetch(base + "/api/telemetry/link?token=" + encodeURIComponent(String(token)), {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ events: batch }),
+        });
+        if (!r.ok) q.unshift(...batch);
+      } catch { q.unshift(...batch); /* 留队列下次再试 */ }
+    },
+  };
+})();
+
 // 命令 ACK 追踪：无回执超时（首等 4s）→ 重发同 id 一次（relay 按 command_id 幂等去重，
 // 重复送达回 ok:true "duplicate"，不会双执行）→ 再等 6s 仍无回执才报失败。
 // LAN 回执 <100ms、云链路 <1s，4s 已是宽裕值，避免把慢处理误判成丢包。
@@ -1532,6 +1572,7 @@ class RelayStore {
       opened = true;
       conn.reconnectDelay = RECONNECT_BASE_MS;
       conn.fastRetry = true;
+      try { linkqRn.onOpen(conn.cfg?.wsUrl, conn.cfg?.token); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY] RN 段恢复（downtime+attempts 随补报上行）
       // #33 假在线修正：桥 ws 开门 ≠ relay 在线（手机云通道连的是桥，relay 关机时
       // 桥照样开门）。真在线 = 收到 relay 首帧（SNAPSHOT/pong，onMessage 置位）；
       // 开门态标 connecting + 「等待电脑端响应」，用户不再看到关机电脑「在线」
@@ -1766,6 +1807,7 @@ class RelayStore {
       conn.connEvents.push({ ts: Date.now(), kind, detail: detail.slice(0, 120) });
       if (conn.connEvents.length > 20) conn.connEvents.splice(0, conn.connEvents.length - 20);
     } catch { /* 台账尽力而为 */ }
+    try { linkqRn.onDrop(kind + ": " + detail); } catch { /* 遥测尽力而为 */ } // [W-LINKQUALITY] RN 段 drop（五类断因统一口）
   }
   // conn-stability：关于页只读口——聚合/单源各自取 connEvents 尾 N 条（跨 conns 按时刻排）
   recentConnEvents(n = 3): Array<{ ts: number; kind: string; detail: string; durMs?: number }> {
