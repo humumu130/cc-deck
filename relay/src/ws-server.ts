@@ -1361,6 +1361,9 @@ export function startServer(
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
+          // bootfast2（移交§三）：boot 相位——listen 先起后数据渐进加载期端上可感
+          //（「已连接，数据加载中」替代「relay 未启动」空屏）；loaded=当前会话数
+          boot: { phase: mgr.bootDataReady ? ("ready" as const) : ("loading" as const), loaded: mgr.snapshot().length },
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）

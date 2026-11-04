@@ -901,6 +901,7 @@ export class SessionManager {
     private bus: EventBus,
     cfg: RelayConfig,
   ) {
+    bootMark("ctor-enter"); // bootfast2：ctor 入口针（字段初始化器已跑——与 ctor-notifications 间为 ctor 体）
     this.cfg = cfg;
     // S3-P4 组锚豁免注入（relfix-s 续作，幂等）：org 底座不能 import projects（环），
     // 组锚判定经注册口注入——appendDispatch 幂等咽喉遇组锚跳过（组内并行合法：组锚
@@ -918,7 +919,12 @@ export class SessionManager {
     bootMark("ctor-notifications"); // W-BOOTFAST：构造器细分（大账还原）
     // [W-AWAITUSER] 聚合投影基线（loadNotifications 同款：boot 静默锚定，防空基线
     // 首帧误发——首个订阅者到达前的 transient 本就无人收，锚定只为口径一致）
-    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
+    // bootfast2（黑盒 1.4s 定罪）：pendingUserActionsList() 现算触 org 读族（listAcceptances/
+    // listConfirms→viaReadMode→ensureStore **sqlite 首建/导入**——listen 前最大暗段）。
+    // 修=ctor 占位空基线+boot 后台段首算（refreshPendingUserActionsBaseline）——
+    // W-AWAITUSER 防误发语义保持：loading 相位端上不消费 pending 聚合（SNAPSHOT
+    // boot.phase=loading 端上启动屏态），data-ready 前首算完成。
+    this.pendingUserActionsJson = "[]";
     // bootfast2（1104 移交刀②）：reconcileOrphanConfirms 移出构造器→boot 后台段首跑
     //（mgr.adopt 前由 index 显式调——构造器纯小文件读化；原 bootMark("ctor-orphan-confirms")
     // 随迁 index 后台段）。#018-R1FIX1 P2-5 语义不变：adopt（消费确认单投影）前完成对账。
@@ -1677,6 +1683,16 @@ export class SessionManager {
   // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
   //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
   //，跨域误指无法在数据层比对——不硬造，以「非空才对账」收窄误收口窗口
+  /** bootfast2：pending 聚合基线首算（index 后台段首调——ctor 占位迁出） */
+  refreshPendingUserActionsBaseline(): void {
+    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
+  }
+
+  /** bootfast2（1104 移交§三）：boot 数据就绪 flag——SNAPSHOT boot.phase 消费
+   *（index 后台段 data-ready 处置 true；端上「已连接，数据加载中」判定源）。 */
+  bootDataReady = false;
+  markBootDataReady(): void { this.bootDataReady = true; }
+
   /** bootfast2（刀②公开化）：boot 后台段首跑（index.ts 后台段 adopt 前调）——
    * 构造器瘦身迁出，语义锚 #018-R1FIX1 P2-5 不变。 */
   reconcileOrphanConfirmsOnBoot(): void {

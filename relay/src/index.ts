@@ -499,6 +499,8 @@ console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "�
 void (async () => {
   // 刀②：mgr 构造器迁出的确认单对账（adopt 前完成——#018-R1FIX1 P2-5 语义锚）
   try { mgr.reconcileOrphanConfirmsOnBoot(); } catch (e) { console.warn(`[orphan-confirms] boot 对账失败: ${e instanceof Error ? e.message : String(e)}`); }
+  // bootfast2：pending 聚合基线首算（ctor 占位迁出——黑盒 1.4s sqlite 首建随此后移）
+  try { mgr.refreshPendingUserActionsBaseline(); } catch { /* 基线按空，帧驱动自愈 */ }
 
 // W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
 // 守「死了没人投递」的死角（SESSION_ERROR/派单失败触发）。CCR_NO_ACTIVATOR=1 逃生阀。
@@ -784,5 +786,6 @@ if (process.env.CC_DECK_DAEMON === "1") {
   }
 }
 
+  mgr.markBootDataReady(); // bootfast2：SNAPSHOT boot.phase→ready（端上启动屏切换）
   bootMark("data-ready"); // bootfast2：后台段完成（完整数据就绪——boot-time 分解终点）
 })();
