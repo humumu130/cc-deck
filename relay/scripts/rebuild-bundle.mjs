@@ -12,15 +12,22 @@
 // build-plugin 同源同版本——换 esbuild 版本可能改变产物字节，重建闸会如实报红，
 // 此时重跑 build-plugin.mjs 刷新部署位即可）。
 import { build } from "esbuild";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { bundleOptions } from "./bundle-options.mjs";
+// tauritrust R1-P1-2（A 审）：ver 同源同参取值——原直接引用未定义名=ReferenceError
+// exit 1（check-bundle-sync.sh:130 字节闸恒红）。与 build-plugin.mjs 同法（argv[2] ??
+// 仓库根 VERSION+trim；校验不重复——本脚本只重建对比，坏版本号在 build-plugin 已拦）。
+const relayRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(relayRoot, "..", "..");
+const ver = (process.argv[2] ?? readFileSync(join(repoRoot, "VERSION"), "utf-8")).trim();
 
 const outDir = mkdtempSync(join(tmpdir(), "ccdeck-rebuild."));
 try {
   // logLevel 只影响日志不影响产物字节；静默以免污染调用方要解析的 stdout
-  await build({ ...bundleOptions(join(outDir, "relay.mjs")), logLevel: "silent" });
+  await build({ ...bundleOptions(join(outDir, "relay.mjs"), ver), logLevel: "silent" });
 } catch (err) {
   rmSync(outDir, { recursive: true, force: true });
   throw err;

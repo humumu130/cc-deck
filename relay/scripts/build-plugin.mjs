@@ -9,9 +9,17 @@ import { bundleOptions, relayRoot } from "./bundle-options.mjs";
 
 const root = join(relayRoot, "..");
 const out = join(root, "cc-plugins", "plugins", "cc-deck");
+// tauritrust R1-P1-1（A 审）：ver 定义前移——原在下方 :26，顶层 bundle 调用先用后定义
+// =TDZ 崩（deploy-web.sh:182 发版打包唯一写口必炸，A 审沙箱实证）。
+const argVer = process.argv[2];
+const ver = (argVer ?? readFileSync(join(root, "VERSION"), "utf-8")).trim();
+if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(ver)) {
+  console.error(`版本号不是三段 semver（可带 -test.N/-snap.N 预发段；四段号与 Tauri/npm 不兼容）：${ver}`);
+  process.exit(1);
+}
 
 // 1. bundle relay：esm 单文件，ws 的可选原生依赖不打进（参数单源见 bundle-options.mjs）
-await build(bundleOptions(join(out, "scripts", "relay.mjs")));
+await build(bundleOptions(join(out, "scripts", "relay.mjs"), ver));
 
 // 2. 版本同步（唯一版本源，2026-10-10 A1 收敛，审查 P1-1）：仓库根 VERSION 为唯一
 //    事实源，本脚本取值回写四线——plugin.json（原「第二事实源」降为纯落点）、
@@ -22,12 +30,6 @@ await build(bundleOptions(join(out, "scripts", "relay.mjs")));
 //    同读 VERSION，幂等互证；与 version.mjs 落点差异仅官网主页（预发豁免在此管）。
 //    ⚠ 必须在静态资源拷贝之前跑：拷贝从 root/web-console 取源，晚于此步
 //    产物会带上旧版本号（test.1 预发首跑实锤，git status 无 diff 即症状）
-const argVer = process.argv[2];
-const ver = (argVer ?? readFileSync(join(root, "VERSION"), "utf-8")).trim();
-if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(ver)) {
-  console.error(`版本号不是三段 semver（可带 -test.N/-snap.N 预发段；四段号与 Tauri/npm 不兼容）：${ver}`);
-  process.exit(1);
-}
 const pluginJsonPath = join(out, ".claude-plugin", "plugin.json");
 const pluginJsonRaw = readFileSync(pluginJsonPath, "utf-8");
 writeFileSync(pluginJsonPath, pluginJsonRaw.replace(/("version":\s*)"[^"]*"/, `$1"${ver}"`));
