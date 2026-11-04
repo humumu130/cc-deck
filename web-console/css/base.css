@@ -1575,6 +1575,13 @@
        近同致层级压平（用户「丑」主因）；surface1+1px line 边框把列「立」起来。
        V8R：均分 flex 1 1 0 + min-width 186（原型 bcol flex:1 1 0 无滚动；窄窗可滚不压缩） */
     #d-team .workspace-body > .workspace-pane.board-pane .lane { display: flex; flex: 1 1 0; min-width: 0; flex-direction: column; min-height: 0; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface1); } /* lanefold：min-width 186→0 可收缩（横向溢出根除）；纵向滚动保留（横向禁——board 已 hidden 双保险） */
+    /* W-P2WEB ①（lanefold 审 A P2-1 窄窗护栏，PM 批准采纳）：极窄窗（≤1000px）部分恢复
+       修1 退役的横滚——列最低可用宽 186px+board 横滚兜底（审 A 实锤 ≈400px 档列宽 0=板面
+       消失；820px 档 96px 挤但活）；>1000px 正常窗宽语义零变化（仍无横滚六列均分）。 */
+    @media (max-width: 1000px) {
+      #d-team .workspace-body > .workspace-pane.board-pane .board { overflow-x: auto; }
+      #d-team .workspace-body > .workspace-pane.board-pane .lane { min-width: 186px; }
+    }
     /* V8R：待收单列 = 原型 bcol.go（行动列）——描边 + 1px 光环 + 顶部渐变 + 列头亮字
       （go 态从「进行中」移到「待收单」：原型高亮的是就绪待用户动作的列，非进行中）。
       W-BOARDCOLOR：列高亮色随五态语义族改走 --p-ready（橙族——待收单=待动作；原
@@ -1594,7 +1601,9 @@
        开合=grid-template-rows 0fr↔1fr 单一协调动画 240ms cubic-bezier(.2,.8,.2,1)（禁
        max-height 猜值跳变）；卡片轻上浮 stagger ≤60ms（just-opened 一次性类，render 不
        重播）；计数徽章变化轻弹一次（新增卡提醒感）。reduced-motion：全局 .01ms!important
-       闸（:2518 族）自动把 transition/animation 钳成立即显隐——本块不另写降级。 */
+       闸（含 duration+delay 四钳——W-P2WEB ② 补 animation/transition-delay:0s，修「stagger
+       delay 在 reduce 下把卡片钉隐最长 120ms」（B 审 CDP 实测））把 transition/animation
+       连延迟钳成立即显隐——本块不另写降级。 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold { min-height: 0; }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head { cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 11px 11px 0 0; }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head:hover { background: color-mix(in srgb, var(--text-strong) 4%, var(--surface1)); }
@@ -2659,7 +2668,11 @@
     #d-team .task-card > .tag { display: none; }
     :focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+      /* W-P2WEB ②（lanefold 审 B 反例1 CDP 实测）：delay 与 duration 必须同钳——stagger
+         animation-delay 40/80/120ms 在只钳 duration 的旧闸下原样存活，fill-mode:both 把
+         卡片钉在 from{opacity:0} 隐形态最长 120ms（「reduce 用户看到分级弹入」恰是闸要防
+         的）；transition-delay 同补（过渡链同族漏洞一次关死）。 */
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-delay: 0s !important; transition-delay: 0s !important; }
     }
     /* #166 手机端 wait-card：仅浏览模式（按钮禁用 + 引导文案） */
     .mobile-screen .wait-card { padding: 14px 16px; }

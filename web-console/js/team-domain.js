@@ -520,10 +520,17 @@
                     const foldable = LANE_FOLDABLE.has(status);
                     const gid = project?.id || "";
                     const ck = gid + ":" + status;
-                    const popCls = foldable && laneLastCounts.has(ck) && laneLastCounts.get(ck) !== visibleN ? " pop" : "";
+                    // W-P2WEB ⑤（审 A P2-5/审 B 反例3）：pop=「新增卡提醒」——只在**真实增量**弹
+                    //（visibleN > last）。旧判据 !== 把减量也当新增弹：done 列 7 天陈卡滑出 recent
+                    // 窗口时 visibleN 降 1 → 徽章假 pop 一次（每卡 7 天一遇）；丢板/清空形态同理
+                    // 不再弹。首见（laneLastCounts 无记录）不弹——冷启动不制造假提醒。
+                    const popCls = foldable && laneLastCounts.has(ck) && visibleN > laneLastCounts.get(ck) ? " pop" : "";
                     laneLastCounts.set(ck, visibleN);
+                    // W-P2WEB ④（审 A P2-4）：折叠腔 id 化+把手 aria-controls 关联——SR 导航闭环
+                    //（纯增强；visibility:hidden 已保隐藏内容不入可达树）。
+                    const drawerId = "lane-drawer-" + gid + "-" + status;
                     const lane = foldable
-                      ? (open => '<div class="lane lane-' + status + ' lane-fold ' + (open ? "lane-open" : "lane-closed") + '"><div class="lane-head lane-fold-head' + (open ? "" : " collapsed") + '" data-lane-fold="' + status + '" data-lane-gid="' + escape(gid) + '" role="button" tabindex="0" aria-expanded="' + open + '"><span class="lane-title">' + headLabel + '</span><span class="lane-badge' + popCls + '">' + visibleN + '</span><i class="lane-chev" aria-hidden="true"></i></div><div class="lane-drawer"><div class="lane-drawer-in">' + inner + "</div></div></div>")(laneFoldOpen(gid, status))
+                      ? (open => '<div class="lane lane-' + status + ' lane-fold ' + (open ? "lane-open" : "lane-closed") + '"><div class="lane-head lane-fold-head" data-lane-fold="' + status + '" data-lane-gid="' + escape(gid) + '" role="button" tabindex="0" aria-expanded="' + open + '" aria-controls="' + drawerId + '"><span class="lane-title">' + headLabel + '</span><span class="lane-badge' + popCls + '">' + visibleN + '</span><i class="lane-chev" aria-hidden="true"></i></div><div class="lane-drawer" id="' + drawerId + '"><div class="lane-drawer-in">' + inner + "</div></div></div>")(laneFoldOpen(gid, status))
                       : '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + inner + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架；planlane：规划泳道空态带去向指引；lanefold 折叠两条（1104） */
                     // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
                     // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
@@ -1779,7 +1786,6 @@
                     const open = !lane.classList.contains("lane-open");
                     lane.classList.toggle("lane-open", open);
                     lane.classList.toggle("lane-closed", !open);
-                    head.classList.toggle("collapsed", !open);
                     head.setAttribute("aria-expanded", String(open));
                     laneFoldSet(gid, status, open);
                     if (open) { const din = lane.querySelector(".lane-drawer-in"); if (din) { din.classList.add("just-opened"); setTimeout(() => din.classList.remove("just-opened"), 260); } }

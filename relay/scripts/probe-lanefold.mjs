@@ -132,7 +132,48 @@ await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-m
 await wait(300);
 const rm = await ev(`(() => { const l = document.querySelector('#d-team .workspace-body > .workspace-pane.board-pane.active .lane-done .lane-drawer') || document.querySelector('#d-team .lane-done .lane-drawer'); return getComputedStyle(l).transitionDuration; })()`);
 ok((parseFloat(rm) || 1) <= 0.05, `F reduced-motion 动画退化成立即显隐（transition=${rm}——全局闸钳制）`);
+// W-P2WEB ② 断言（审 B 反例1 实测形态）：reduce 下开抽屉——stagger delay 必被 0s 钳
+//（旧闸只钳 duration：第 4 卡 delay 0.12s 原样存活+fill both → 开后 60ms 卡 opacity:0 钉隐）
+await ev(`document.querySelector('${sel}')?.click()`);
+await wait(60);
+const rmd = JSON.parse(await ev(`(() => { const din = document.querySelector('#d-team .lane-done .lane-drawer-in'); if (!din) return JSON.stringify({ e: 1 }); const c4 = din.children[Math.min(3, din.children.length - 1)]; if (!c4) return JSON.stringify({ e: 2 }); const cs = getComputedStyle(c4); return JSON.stringify({ delay: cs.animationDelay, dur: cs.animationDuration, op: getComputedStyle(c4).opacity }); })()`));
+ok(!rmd.e && parseFloat(rmd.delay || "9") === 0, `F② reduce 下 stagger delay 钳 0s（第4卡 delay=${rmd.delay}——旧闸漏钳点）`);
+ok(!rmd.e && (parseFloat(rmd.dur) || 1) <= 0.05 && rmd.op === "1", `F② reduce 下开抽屉 60ms 卡即显（dur=${rmd.dur} op=${rmd.op}——不钉隐）`);
+const rmdShot = await ev(`(() => { const el = document.querySelector('#d-team .lane-done'); const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: Math.min(r.height + 160, 700), scale: 1 }; })()`);
+if (rmdShot) await shot("06-reduce-open", rmdShot); // reduce 态截图（任务书要求）
+await ev(`document.querySelector('${sel}')?.click()`);
+await wait(200);
 await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+
+// W-P2WEB ③④ 断言：死类已清+aria 闭环（aria-controls 指真实腔 id）
+const aria = JSON.parse(await ev(`(() => { const h = document.querySelector('#d-team .lane-done .lane-fold-head'); const d = document.querySelector('#d-team .lane-done .lane-drawer'); return JSON.stringify({ cls: h?.className || "", ctrl: h?.getAttribute("aria-controls") || "", hit: !!(h && d && document.getElementById(h.getAttribute("aria-controls") || "") === d) }); })()`));
+ok(!aria.cls.includes("collapsed"), `G③ .collapsed 死类已清（head cls="${aria.cls}"）`);
+ok(!!aria.ctrl && aria.hit, `G④ aria-controls 闭环（→真实腔 id=${aria.ctrl}）`);
+
+// W-P2WEB ⑤ 断言：pop 只随真实增量（+1 卡弹 pop；-1 卡不弹——7 天陈卡边界/丢板形态）
+const snapFor = (cards) => ({ sessions: [], projects: [{ id: "pg-lane", name: "泳道组", anchor_dir: "/d/lane", tier: "轻立项", status: "active", created_at: 1, updated_at: 1, headcount: [] }], boards: [{ gid: "pg-lane", entries: cards }], confirmations: [], notifications: [], receipts: [] });
+const window0 = (p) => ev(`window.ccDeckTeam?.onEvent?.({}, { type: "SNAPSHOT", payload: ${JSON.stringify(p)} })`);
+const badgePop = () => ev(`(() => { const b = document.querySelector('#d-team .lane-done .lane-badge'); return b ? (b.classList.contains("pop") ? "pop" : b.textContent) : "none"; })()`);
+await window0(snapFor([...entries, mk("d5", "done", "新增：pop 增量断言", 1000e3)])); await wait(600);
+const popInc = await badgePop();
+await window0(snapFor(entries)); await wait(600); // 回落 5→4（减量=陈卡边界同构）
+const popDec = await badgePop();
+ok(popInc === "pop", `H⑤ 增量弹（+1 后徽章 pop——新增卡提醒）`);
+ok(popDec !== "pop", `H⑤ 减量不弹（-1 后无 pop——陈卡边界/丢板假 pop 根修）`);
+await window0(snap.payload); await wait(500); // 回基线板
+
+// W-P2WEB ① 断言：≤1000px 窄窗护栏——列最低 186px+board 横滚兜底（正常窗宽零变化由
+// 断言 A 覆盖：1440 下 overflowX=hidden+scrollX≤1 已在上方）
+await send("Emulation.setDeviceMetricsOverride", { width: 990, height: 900, deviceScaleFactor: 1, mobile: false });
+await wait(500);
+const nw = JSON.parse(await ev(`(() => { const b = document.querySelector('#d-team .workspace-body > .workspace-pane.board-pane.active .board') || document.querySelector('#d-team .board-pane .board, #d-team .board'); const l = b?.querySelector('.lane'); if (!b || !l) return JSON.stringify({ e: 1 }); const csB = getComputedStyle(b), csL = getComputedStyle(l); return JSON.stringify({ ox: csB.overflowX, mw: parseFloat(csL.minWidth) || 0, sx: b.scrollWidth - b.clientWidth, lw: Math.round(l.getBoundingClientRect().width) }); })()`));
+ok(!nw.e && nw.ox === "auto", `I① 窄窗 990px board 横滚恢复（overflowX=${nw.ox}）`);
+ok(!nw.e && nw.mw >= 186 && nw.lw >= 186, `I① 窄窗列最低宽护栏（min-width=${nw.mw}px 实宽=${nw.lw}px ≥186）`);
+ok(!nw.e && nw.sx > 0, `I① 窄窗横向溢出可滚（scrollX=${nw.sx}>0——六列 186px 撑出）`);
+const nwClip = await ev(`(() => { const r = (document.querySelector('#d-team .workspace-body > .workspace-pane.board-pane.active .board') || document.querySelector('#d-team .board-pane .board, #d-team .board'))?.getBoundingClientRect(); return r ? { x: 0, y: r.y, width: 990, height: Math.min(r.height, 880), scale: 1 } : null; })()`);
+if (nwClip) await shot("07-narrow-990", nwClip); // 窄窗形态截图（任务书要求）
+await send("Emulation.clearDeviceMetricsOverride");
+await wait(400);
 
 // ---------- 截图 ----------
 if (boardClip) await shot("01-board-dark", boardClip);
