@@ -51,14 +51,18 @@ ok()  { echo "✅ $*"; }
 bad() { echo "❌ $*"; FAIL=1; }
 H()   { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}' || echo MISSING; }
 # 版本串提取（双壳格式，version.mjs 是口径权威：旧壳 index.html 内联 / 005 新壳
-# js/settings-domain.js 外置 const）。内嵌 || true 防 pipefail 杀——无匹配必须走
-# MISSING 报红而不是 set -e 静默死（裸 grep exit 1 经 pipefail 让赋值非零炸脚本）
+# index-005.html 的 window.__ccDeck005Version 字面——console-guardrails ④ 收敛的
+# 唯一定义位，settings-domain.js 只读值（⑥c-2）不落字面；本闸原 grep settings-domain.js
+# 字面 const 在 ④ 后恒 MISSING=test.96 四面假红实锤，闸随版本流改源）。
+# 内嵌 || true 防 pipefail 杀——无匹配必须走 MISSING 报红而不是 set -e 静默死
+# （裸 grep exit 1 经 pipefail 让赋值非零炸脚本）
 cv_html() {
   local m; m="$(grep -m1 -o 'CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
   if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
 }
-cv_js() {
-  local m; m="$(grep -m1 -o 'const CONSOLE_VERSION = "[^"]*"' "$1" 2>/dev/null || true)"
+cv_js() { # $1=…/web-console/js/settings-domain.js → 同壳根 index-005.html 取字面
+  local f; f="$(dirname "$(dirname "$1")")/index-005.html"
+  local m; m="$(grep -m1 -o 'window\.__ccDeck005Version = "[^"]*"' "$f" 2>/dev/null || true)"
   if [ -n "$m" ]; then printf '%s\n' "$m" | cut -d'"' -f2; else echo MISSING; fi
 }
 # 面新鲜度闸（#253 W-DEPLOYGATE 方向感知版）：git-clean 闸只拦脏不拦旧——本闸拦
