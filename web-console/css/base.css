@@ -677,8 +677,15 @@
     #d-session .head-sub [data-sub-time] { font-size: var(--fs-C); }
     #d-session .workspace-title-row .identity-cluster .engine-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: var(--srow-badge-size); line-height: 1; height: calc(var(--srow-badge-size) * 1.48); border-radius: 999px; border: 0; } /* 1026 用户裁定：head 与列表标签高度统一取平均 ≈15.5px */ /* W-CHIP3④：与列表卡徽章同档全对齐（computed 实测卡=10.5px 字号/1px 6px pad/999px 全圆/无边框/盒高 12.8=字号×1.22——head 文字匿名行盒 Chrome 怪癖恒 17，故锁高随档缩放）——旧「fs-C+0 6px」独立胶囊档退役；#248 图标 10.8/gap4 沿用 */
     #d-session .workspace-title-row .identity-cluster .team-chip { line-height: 1; height: calc(var(--srow-badge-size) * 1.48); } /* 1026 用户实锤 head 团队 chip（行高16≈18px 盒）与引擎徽章（锁高≈12.8px）差≈4px——head 场景同档对齐（padding 沿用 .team-chip 基础规则） */
-    #d-session .srow-r3 .team-chip { line-height: 1; height: 15.5px; } /* 1026 高度统一：列表/head 平均档 */
-    #d-session .srow-r3 .src-cap { min-height: 15.5px; box-sizing: border-box; }
+    /* W-CHIPH（1104 用户令）：列表卡 chip 紧凑档变量——1026 平均档 15.5 先被 :2291 段盖到
+       18（撑行真凶），本批统一收敛到 13px（9.5px 字号 ×1.37 协调档）。档位清单（防换马甲）：
+       ①列表卡 r3 全 chip+cwd-cap=var(--srow-chip-h) 13px（本行+:2291/:2294 段）
+       ②head 场景（:678-679）=×1.48≈15.5 平均档【用户明示不动】
+       ③expo ListScreen teamChip=内容驱动（lineHeight 12+pad1 同步紧凑档）
+       改档只动本变量与②③两锚。 */
+    #d-session .srow-r3 { --srow-chip-h: 13px; }
+    #d-session .srow-r3 .team-chip { line-height: 1; height: var(--srow-chip-h); }
+    #d-session .srow-r3 .src-cap { min-height: var(--srow-chip-h); box-sizing: border-box; }
     
     #d-session #session-perm-capsule[data-perm-readonly] { cursor: default; opacity: .82; } /* 件四：外部会话只读态轻降可辨 */
     #d-session #session-extmode-capsule { cursor: pointer; } /* W-PORT-A R-6：远程审批开关胶囊（external 专属，点击切换） */
@@ -2288,10 +2295,10 @@
        形状结论：高度与 pill 圆角统一（团队 chip 6→999 对齐胶囊族），身份色/内容保留
        （源胶囊深底白字/引擎 tint 淡彩/团队 chip 色条描边——身份区分度优先）；📁 目录
        chip test.66 r3 无发射体不涉。 */
-    #d-session .srow-r3 .src-cap, #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .team-chip { height: 18px; align-items: center; justify-content: center; }
+    #d-session .srow-r3 .src-cap, #d-session .srow-r3 .engine-badge, #d-session .srow-r3 .team-chip { height: var(--srow-chip-h, 13px); align-items: center; justify-content: center; } /* W-CHIPH：18px 撑行档废——随紧凑档变量（同排引擎徽章同档，防同簇高低不齐） */
     #d-session .srow-r3 .team-chip { border-radius: 999px; }
     /* W-FB66ALL ⑧：📁 目录 chip（非 PM 卡；与手机 ⑦ 对齐）——中性 dim 胶囊，同 ⑫ 18px 档 */
-    #d-session .srow-r3 .cwd-cap { display: inline-flex; align-items: center; gap: 4px; height: 15.5px; padding: 0 8px; border: 1px solid rgba(90,107,125,.24); border-radius: 999px; background: rgba(90,107,125,.10); color: #4E5D6C; font-size: var(--fs-micro, 9.5px); white-space: nowrap; max-width: 12em; overflow: hidden; text-overflow: ellipsis; flex: none; } /* 1026 三轮重设计：透明底被否（看不见）——浅灰蓝实底+同色系描边；实心双层文件夹图标 */
+    #d-session .srow-r3 .cwd-cap { display: inline-flex; align-items: center; gap: 4px; height: var(--srow-chip-h, 13px); padding: 0 8px; border: 1px solid rgba(90,107,125,.24); border-radius: 999px; background: rgba(90,107,125,.10); color: #4E5D6C; font-size: var(--fs-micro, 9.5px); white-space: nowrap; max-width: 12em; overflow: hidden; text-overflow: ellipsis; flex: none; } /* 1026 三轮重设计：透明底被否（看不见）——浅灰蓝实底+同色系描边；实心双层文件夹图标 */
     #d-session .srow-r3 .cwd-cap .cwd-ico { flex: none; width: 11.5px; height: 11.5px; fill: #5A6B7D; } /* 实心双层（tab 半透明+主体实心），比线稿更像文件夹 */
     #d-session .srow-r3 .cwd-cap .cwd-ico .tab { opacity: .55; }
     #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); /* W-V8 批10：摘要行提亮一档（路径/摘要全图最暗项） */ font-size: var(--srow-sub-size); line-height: calc(16px * var(--ui-scale)); min-height: calc(16px * var(--ui-scale)); }

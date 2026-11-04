@@ -2303,9 +2303,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // W-MOBFUSION 件①：置顶图钉（r1 行内、时间戳左侧；桌面 srow-pinned 同位）
   // W-MOBFUSION 件③：PM 团队 chip（桌面 team-chip 同构：accent 色条+9% 淡染底+
   // 32% 描边胶囊，补双人图标+编制数；idle 全闲置灰 0.58）
-  teamChip: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, paddingLeft: 5, paddingRight: 7, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1 },
+  teamChip: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0, paddingLeft: 5, paddingRight: 7, paddingVertical: 1, borderRadius: 6, borderWidth: 1 }, // W-CHIPH：紧凑档（pad 1.5→1）
   teamChipBar: { width: 3, height: 9, borderRadius: 2 },
-  teamChipName: { flexShrink: 1, color: c.dim, fontSize: 10, lineHeight: 14 },
+  teamChipName: { flexShrink: 1, color: c.dim, fontSize: 10, lineHeight: 12 }, // W-CHIPH：紧凑档（14→12，盒高≈14<web 13px 视觉近邻档——web 13/expo 内容驱动无字面档）
   teamChipRun: { color: c.working, fontSize: 9.5, fontWeight: "700", fontVariant: ["tabular-nums"], marginLeft: 4 }, // W-ENGLM2 F：活跃数（WORKING 计数；编制数 teamChipN 随语义返工退役）
   teamChipIdle: { opacity: 0.58 },
   // W-MOBFUSION 件②：团队入口卡（桌面 dock team-entry 同语言：首字头像+健康角灯、
