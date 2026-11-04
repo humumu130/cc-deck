@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
+import { reconcileBoardCards } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）
 import { readDispatchLog, orgDir } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
@@ -233,6 +234,41 @@ export class PatrolModule {
       }
     } catch (e) {
       console.warn(`[patrol] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    // [W-BOARDRECON]（1104 第三现「工作中 5 沃克 vs 进行中 8 卡」）：三方对账器——
+    // claimed 卡 × owner 会话活跃 × dispatch 台账。档位 CCR_BOARDRECON_MODE=observe
+    //（缺省——首跑研判清单+审计+通知不动板，PM 过目后切 auto）/auto（孤儿/漏网卡
+    // 真归位 backlog 可重派）。同文去重（onset-only）不刷屏。
+    try {
+      const mode = process.env.CCR_BOARDRECON_MODE === "auto" ? "auto" : "observe";
+      const boards: Array<{ gid: string; board: NonNullable<ReturnType<typeof loadBoardFile>> }> = [];
+      for (const g of listGroups()) {
+        if (g.status !== "active") continue;
+        const b = loadBoardFile(g.id);
+        if (b) boards.push({ gid: g.id, board: b });
+      }
+      const r = reconcileBoardCards({ boards, sessions: this.mgr.snapshot(), dispatchLog: readDispatchLog() });
+      if (r.actions.length) {
+        const lines = r.actions.slice(0, 8).map((a) => `${a.entryId}「${a.text}」${a.reason}：${a.detail}`);
+        this.mgr.emitChainAudit("board-recon", `三方对账（${mode}）：${r.actions.length} 张 claimed 卡待归位——${lines.join("；").slice(0, 400)}`);
+        if (mode === "auto") {
+          let moved = 0;
+          for (const a of r.actions) {
+            const b = boards.find((x) => x.gid === a.gid)?.board;
+            const e = b?.entries.find((x) => x.id === a.entryId);
+            if (e && e.status === "claimed") {
+              upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${new Date().toLocaleDateString("zh-CN")}] ${a.reason} 归位可重派：${a.detail}` });
+              moved++;
+            }
+          }
+          this.push("board-recon", `三方对账（auto）：${moved}/${r.actions.length} 张孤儿/漏网卡归位 backlog 可重派`);
+        } else {
+          this.push("board-recon", `三方对账（observe）：${r.actions.length} 张 claimed 卡待归位（孤儿/台账终态漏网/滞留无进展）——清单在审计流，PM 过目后 CCR_BOARDRECON_MODE=auto 生效`);
+        }
+      }
+      if (r.mismatch) this.push("board-consistency", `账实不符告警：${r.mismatch}`);
+    } catch (e) {
+      console.warn(`[patrol] 三方对账失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
     // observe3 R1 P2⑥ 下半：patrol 族 off 而 converge 档仍活时，converge 段跑完即退——
     // 后续 worker 帧新鲜度/看板漂移/演练/对账皆 patrol 族面，off 不执行
