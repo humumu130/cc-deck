@@ -31,6 +31,7 @@ import {
   type SessionState,
 } from "../protocol";
 import { store, useRelay } from "../store";
+import { ackVerdict } from "../org-commands";
 import { BOARD_LANES, ConfirmCard, normDir, ORG_ST_ZH, orgStColor, tierZh, useOrgDecide } from "./OrgZone";
 
 // 派单回执状态词中文化（桌面 activityMarkup statuses 同词表）
@@ -140,6 +141,7 @@ export function EngineBadge({ engine, size = "md" }: { engine?: string; size?: "
 // 「绿=空闲、黄=工作中」同族不再同色异义（原绿=进行中废）。与 web-console/css/
 // tokens.css --p-* 双主题组逐值同步（改一处必同步另一处——无共享层，注释契约）。
 export const LANE_COLORS: Record<string, { dark: string; light: string }> = {
+  planned: { dark: "#55677F", light: "#74879E" }, // planlane：规划中=未开始族灰（与 backlog 同值——同族不新色，区分靠泳道位/计数/卡面排产钮）
   backlog: { dark: "#55677F", light: "#74879E" }, // 浅档原 #C3CEDD 对比度不达 3:1，随 web 同步加深
   claimed: { dark: "#FFC53D", light: "#A56D00" }, // 进行中=黄（=web var(--working) 解析值）
   submitted: { dark: "#E08A63", light: "#C05B33" }, // 待审查=橙·深档
@@ -151,10 +153,11 @@ export function laneColorOf(st: string, mode: "dark" | "light"): string {
   return pair ? pair[mode] : "#55677F";
 }
 // 渲染序（v3 ph-pteamd plane 序）：待收单置顶（用户行动队列——产品三原则②「需 PM
-// 决策的事进一个行动队列」，v3 顺手拍板项）→ 进行中 → 审查中 → 待认领 → 完成。
-// 词表序（BOARD_LANES）是数据面契约不动；此处只影响详情页渲染序
+// 决策的事进一个行动队列」，v3 顺手拍板项）→ 进行中 → 审查中 → 待认领 → 规划中 → 完成
+//（planned=最不行动的冰盒层沉到完成前——planlane 批）。词表序（BOARD_LANES）是
+// 数据面契约不动；此处只影响详情页渲染序
 export const LANE_RENDER_ORDER: readonly string[] = [
-  "ready_to_install", "claimed", "submitted", "backlog", "done",
+  "ready_to_install", "claimed", "submitted", "backlog", "planned", "done",
 ];
 // 总览条比例（v3 .prog 五色分段）：各泳道 count / 全量，min 4% 防细段不可点不可见；
 // 全空板返回空数组（总览条整块不渲染）
@@ -291,6 +294,33 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
   // W-MV8A 泳道折叠组（v3 plane 语言）：默认全展开，点 laneh 收起/展开；
   // 待收单（ready_to_install）不参与折叠——行动队列恒显（v3 置顶 + pin 语义）
   const [lanesOpen, setLanesOpen] = useState<Set<string>>(new Set(BOARD_LANES.map(([st]) => st)));
+  // planlane 批（1104 用户想法）：planned 卡操作——排产（board move →backlog 进派单面）
+  // 单步直发；废弃（board upsert →done 带 note 留痕）两步武装（web 同款惯例：破坏性
+  // 动作不裸奔）。状态机出口收窄在 relay resolveStatusTransition R4 单点，端上只发意图。
+  // ACK 严格判定走 ackVerdict（org-commands 三态门）；BOARD_UPDATED 帧推送即时回渲。
+  const [scrapArm, setScrapArm] = useState<string | null>(null);
+  const [planErr, setPlanErr] = useState<{ key: string; msg: string } | null>(null);
+  const planFlight = useRef<Set<string>>(new Set());
+  const planOp = useCallback((e: BoardEntry, to: "backlog" | "done") => {
+    const fk = `plan-${e.id}-${to}`;
+    if (planFlight.current.has(fk)) return;
+    planFlight.current.add(fk);
+    setPlanErr(null);
+    const settle = (ok: boolean, msg?: string | null): void => {
+      planFlight.current.delete(fk);
+      if (ok) setScrapArm(null);
+      else setPlanErr({ key: fk, msg: msg ?? "操作未生效，可重试" });
+    };
+    const payload: Record<string, unknown> = to === "backlog"
+      ? { action: "board", op: "move", gid, entry_id: e.id, status: "backlog" }
+      : { action: "board", op: "upsert", gid, entry_id: e.id, text: e.text, status: "done",
+          note: (e.note ? e.note + "\n" : "") + "[规划废弃] 规划终止（规划中泳道废弃钮）" };
+    const sent = store.send("COMMAND_ORG_ACTION", payload, srcId, (r) => {
+      const v = ackVerdict(r);
+      settle(v.ok, v.error);
+    });
+    if (!sent) settle(false, "源未连接，可重试");
+  }, [gid, srcId]);
   // 泳道锚点（总览图例点击跳组）：laneYs 记各泳道在滚动内容中的 y 偏移
   const scrollRef = useRef<ScrollView>(null);
   const laneYs = useRef<Map<string, number>>(new Map());
@@ -378,6 +408,26 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
           })() : null}
           <Text style={styles.tCardTime}>{fmtMdHm(e.updated_at)}</Text>
         </View>
+        {/* planlane：planned 卡操作行——排产单步；废弃两步武装（web 同款） */}
+        {e.status === "planned" ? (
+          <View style={styles.tPlanActs}>
+            <Pressable
+              style={styles.tPlanBtn}
+              accessibilityLabel="排产：规划中进入待认领，可派单"
+              onPress={() => planOp(e, "backlog")}
+            >
+              <Text style={styles.tPlanBtnT}>排产</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tPlanBtn, styles.tPlanBtnDanger]}
+              accessibilityLabel={scrapArm === e.id ? "确认废弃：规划终止收口完成" : "废弃：规划终止"}
+              onPress={() => { if (scrapArm === e.id) planOp(e, "done"); else setScrapArm(e.id); }}
+            >
+              <Text style={[styles.tPlanBtnT, styles.tPlanBtnDangerT]}>{scrapArm === e.id ? "确认废弃？" : "废弃"}</Text>
+            </Pressable>
+            {planErr?.key.startsWith(`plan-${e.id}-`) ? <Text style={styles.tPlanErr} numberOfLines={1}>{planErr.msg}</Text> : null}
+          </View>
+        ) : null}
         {open ? (
           <FadeIn dy={4} dur={140}>
           <View style={styles.tCardX}>
@@ -879,6 +929,16 @@ const makeStyles = (c: ThemeColors) =>
     tCardReviewNone: { color: c.faint, fontSize: 10, fontStyle: "italic", borderWidth: 1, borderColor: c.line, borderStyle: "dashed", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
     tCardTime: { color: c.faint, fontSize: 10, marginLeft: "auto", fontVariant: ["tabular-nums"], flexShrink: 0 },
     tRunDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
+    // planlane：planned 卡操作行（排产/废弃钮——tCardChip 同族小钮）
+    tPlanActs: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+    tPlanBtn: {
+      borderWidth: 1, borderColor: c.brandA, borderRadius: 6, backgroundColor: c.tintSoft,
+      paddingHorizontal: 9, paddingVertical: 3,
+    },
+    tPlanBtnDanger: { borderColor: c.error, backgroundColor: c.panel2 },
+    tPlanBtnT: { color: c.brandA, fontSize: 10, fontWeight: "600" },
+    tPlanBtnDangerT: { color: c.error },
+    tPlanErr: { color: c.error, fontSize: 10, flexShrink: 1 },
     tCardX: { marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: c.lineStrong, gap: 2 }, /* #207：同 ListScreen 统一加重 */
     tCardXL: { color: c.faint, fontSize: 10, lineHeight: 14 },
     engBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6 }, // W-AVA09：chip 左右 pad 6（桌面同口径）

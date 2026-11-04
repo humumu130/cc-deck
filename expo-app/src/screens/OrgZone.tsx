@@ -43,9 +43,11 @@ export const TIER_ZH: Record<string, string> = { "正经立项": "正式项目",
 export function tierZh(t: string | undefined | null): string {
   return (t && TIER_ZH[t]) || t || "";
 }
-// 看板五态词表（relay projects.ts D18 freeze §1.2 + 桌面 lanes 逐字对齐：
-// submitted=审查中（boardlife R2 改词）、ready_to_install=待收单——v1 草案「待复核/待装机」作废）
+// 看板六态词表（relay org-schema BOARD_ENTRY_STATUSES + 桌面 lanes 逐字对齐：
+// submitted=审查中（boardlife R2 改词）、ready_to_install=待收单——v1 草案「待复核/待装机」作废；
+// planlane 批加 planned 规划中最前——不可认领冰盒层，【词表锚】加态先改 relay 单点）
 export const BOARD_LANES: readonly [string, string][] = [
+  ["planned", "规划中"],
   ["backlog", "待认领"],
   ["claimed", "进行中"],
   ["submitted", "审查中"], // boardlife R2：与 web lanes 同词（待审查→审查中，用户 1103 点名）
