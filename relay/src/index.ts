@@ -387,7 +387,7 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
 const bus = new EventBus({ preload: kept, persistPath });
 bootMark("bus-ctor"); // W-BOOTFAST 细分：EventBus preload 索引 vs SessionManager 构造
 const mgr = new SessionManager(bus, cfg);
-bootMark("bus+mgr-ctor");bootMark("bus+mgr-ctor");
+bootMark("bus+mgr-ctor"); // bootfast2-r1 P2-2：同行双调合并残留已清
 
 // ---------- bootfast2（1104 移交刀①③）：listen 先起 + 中段后台化 ----------
 // 原序：中段（adopt/pinned/leader/notify/...共 20+ 步，实测三大头 78%）全跑完才
@@ -416,8 +416,12 @@ startServer(bus, mgr, cfg, {
   // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
   // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
-  ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
-  ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
+  // bootfast2-r1 P1-4（A 审）：spread 守卫是急切求值——startServer 前移后 cloudIdentity
+  // 尚未构造（云桥块在后台段），`cloudIdentity ? {...} : {}` 求值恒空=两 opt 永不注册
+  //（relay_dev/wan_dev 停发，#95/#134 合并链断）。改恒展开+闭包内判空（ws-server 侧
+  // `?.() ?? ""` 空值守卫既有，空值即不下发——语义与旧序等价）。
+  cloudRelayDev: () => cloudIdentity?.relayDev ?? "",
+  cloudWanDev: () => cloudIdentity?.wanDev ?? "",
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
   // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
   relayName: () => relayNameOf(cfg.dataDir),
@@ -496,9 +500,17 @@ console.log("CC Deck Relay 已启动（HTTP 先行——数据加载中）");
 console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）｜端口: ${cfg.port}`);
 
 // ---------- bootfast2 刀③：boot 后台段（数据渐进——完成处 data-ready）----------
+// bootfast2-r1 P1-2/P2-5（A 审）：yieldLoop=真事件循环让出（setImmediate）——async IIFE
+// 无 await=同步跑完，listen 回调被数据步阻塞到全部就绪（实测 HTTP 5.2~6.3s）。每个重步
+// 后让一次：listening 回调/HTTP/WS 在数据加载期即服务（A 审 V2 单 yield 实证 listen 即达
+// 627~822ms；多 yield=窗口更稳）。尾部 .catch（P2-5）：后台段任一未捕获异常兜底打印
+// +data-ready 置位，免 unhandled rejection 全进程崩（listen 后崩比修前「listen 前崩」更险）。
+const yieldLoop = () => new Promise<void>((r) => setImmediate(r));
 void (async () => {
+  await yieldLoop(); // 进段先让一轮——listen 事件最早期可达
   // 刀②：mgr 构造器迁出的确认单对账（adopt 前完成——#018-R1FIX1 P2-5 语义锚）
   try { mgr.reconcileOrphanConfirmsOnBoot(); } catch (e) { console.warn(`[orphan-confirms] boot 对账失败: ${e instanceof Error ? e.message : String(e)}`); }
+  await yieldLoop();
   // bootfast2：pending 聚合基线首算（ctor 占位迁出——黑盒 1.4s sqlite 首建随此后移）
   try { mgr.refreshPendingUserActionsBaseline(); } catch { /* 基线按空，帧驱动自愈 */ }
 
@@ -526,6 +538,7 @@ for (const s of mgr.snapshot()) {
 // 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
 const pinned = mgr.applyPinned();
 bootMark("adopt+broadcast");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
 
 // #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
 // 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
@@ -535,6 +548,7 @@ bootMark("adopt+broadcast");
 // 其余功能（下次启动重试）
 const leader = mgr.ensureLeader();
 bootMark("pinned+leader");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
 
 const decisionNotify = new DecisionNotificationWatcher({
   dataDir: cfg.dataDir,
@@ -578,6 +592,7 @@ try {
 }
 mgr.startHeadcountTrim();
 bootMark("notify+parked+trim");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
 // W-RESTARTDESIGN F2 钉死顺序：adopt(:311)→applyPinned(:330)→ledger 回灌→reload
 // ——saved（pin 休眠）会话照灌（flushResumeBacklog 恢复时消费）；失败只 warn 队列按空
 try {
@@ -711,6 +726,7 @@ if (cfg.cloudUrls.length) {
 // #175 验收单云通道回流（公司网提交走 CF Worker→KV，relay 每 60s 拉回+通知）
 startAcceptanceCloudPoll(cfg, mgr, bus);
 bootMark("cloud+backfill");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
 // W-PATROL 巡检哨兵（内置定时模块）：30min 全巡（worker 帧新鲜度/看板漂移）+ 5min 轻探针
 // （磁盘/dataDir 可写/事件循环漂移）。开关=plugin-config 第十键 patrol（默认开）+
 // CCR_PATROL=0 应急停；异常经 notifyDone 推用户（/api/notify 绿框同通道）。
@@ -740,7 +756,9 @@ if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && read
     enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
   }).start();
 }
-bootMark("patrol+watchfeed");console.log("CC Deck Relay 已启动");
+bootMark("patrol+watchfeed");
+  await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
+  console.log("CC Deck Relay 已启动");
 // F7（2026-10-19）：启动行带 pid+运行模式——embedded-relay.log 排障对表（ps/launchd 比对）
 // 与「这段日志是哪个进程写的」一眼可判；时间戳由内嵌包装器统一加
 console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）`);
@@ -788,4 +806,8 @@ if (process.env.CC_DECK_DAEMON === "1") {
 
   mgr.markBootDataReady(); // bootfast2：SNAPSHOT boot.phase→ready（端上启动屏切换）
   bootMark("data-ready"); // bootfast2：后台段完成（完整数据就绪——boot-time 分解终点）
-})();
+})().catch((e) => {
+  // bootfast2-r1 P2-5：后台段异常兜底——打印+置 ready（banner 不悬死；进程不退）
+  console.error(`[boot] 后台段异常（兜底置 data-ready）: ${e instanceof Error ? e.stack || e.message : String(e)}`);
+  try { mgr.markBootDataReady(); } catch {}
+});

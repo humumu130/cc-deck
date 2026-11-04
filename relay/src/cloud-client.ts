@@ -542,14 +542,14 @@ export class CloudClient {
     const payloadSize = (p: Record<string, unknown>): number => Buffer.byteLength(JSON.stringify(p));
     {
       const probe: Record<string, unknown> = {
-        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => { const arr = withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()); (this as any).__lastSnapSessions = arr; return arr; })(),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2: Record<string, unknown> = {
-          sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
+          sessions: (() => { const arr = withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()); (this as any).__lastSnapSessions = arr; return arr; })(),
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         };
@@ -569,11 +569,12 @@ export class CloudClient {
       // 旧客户端忽略多余字段，向前兼容
       payload: {
         // W-SRC2 #134：per-session relay_source 根修（与 ws-server LAN 快照同源，#117 教训）
-        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => { const arr = withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()); (this as any).__lastSnapSessions = arr; return arr; })(),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
+        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: ((this as any).__lastSnapSessions as unknown[] | undefined)?.length ?? 0 }, // bootfast2-r1 P2-3：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
@@ -1138,14 +1139,14 @@ export class CloudClient {
       // W-SRC2 #134（本批②③）：wan resume 面补 per-session relay_source——与 phone 密封面
       //（:542 起）同源同键；探测与实发同形（size probe 不包会低估注入后的真实体积）
       const probe: Record<string, unknown> = {
-        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => { const arr = withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()); (this as any).__lastSnapSessions = arr; return arr; })(),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2: Record<string, unknown> = {
-          sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
+          sessions: (() => { const arr = withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()); (this as any).__lastSnapSessions = arr; return arr; })(),
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         };
@@ -1163,11 +1164,12 @@ export class CloudClient {
         // W-SRC2 #134（本批②③）：wan resume 快照与 phone 密封面同键——per-session
         // relay_source + relay_name/lan_hint（#117 两键此前只挂密封面，wan 直连端
         // 收不到=源标链在此面全断）；旧客户端忽略未知键，向前兼容
-        sessions: withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => { const arr = withRelaySource(this.mgr.snapshot(), this.extra?.relayName?.()); (this as any).__lastSnapSessions = arr; return arr; })(),
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
+        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: ((this as any).__lastSnapSessions as unknown[] | undefined)?.length ?? 0 }, // bootfast2-r1 P2-3：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         models: listModels(this.mgr.cfg.model),
         ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),
         ...(this.extra?.relayName?.() ? { relay_name: this.extra.relayName() } : {}),

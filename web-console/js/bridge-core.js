@@ -311,6 +311,11 @@
                       bridge.sessions.set(frame.session_id, { ...frame.payload, session_id: frame.session_id, started_at: frame.ts, updated_at: frame.ts, status: frame.payload.status || "WORKING", relay_channel: evSource === "cloud" ? "cloud" : "lan" });
                       changed = true;
                     }
+                  } else if (frame.type === "BOOT_PHASE") {
+                    // bootfast2-r1 P1-3：data-ready 相位翻转帧（markBootDataReady 广播）——
+                    // loading 期连入的端不再需要重连，banner「已连接，数据加载中」就地清位
+                    const bp = frame.payload || {};
+                    if (typeof bp.phase === "string") { bridge.bootPhase = bp.phase; bridge.bootLoaded = typeof bp.loaded === "number" ? bp.loaded : (bridge.bootLoaded || 0); changed = true; }
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
                     if (session && frame.payload && typeof frame.payload === "object") {

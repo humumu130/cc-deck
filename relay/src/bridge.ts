@@ -510,7 +510,9 @@ export class Bridge {
     // bootfast2（1104 移交刀④）：扫描族整体迁出构造器→runBootScan 公开口（startServer
     // listen 回调 setTimeout(0) 调——listen 前构造器零扫描；booting 期 /bridge 空挡
     // 守卫 503 见 ws-server）。顺序语义（113/257/W-INJECT/276）原样随迁，相对序不变。
-    this.runBootScan();
+    // bootfast2-r1 P1-1（A 审）：原位 this.runBootScan() 已删——抽方法时漏删致扫描族
+    // 前置（listen 前跑 697ms）+listen 回调再调=每 boot 双跑（打点铁证 bridge-* 段先于
+    // orphan-confirms）。构造器零扫描自此为真。
   }
 
   /** bootfast2（刀④）：boot 扫描族单口（原构造器 :512-548 段整体迁此）——pid 三源

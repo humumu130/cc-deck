@@ -1691,7 +1691,13 @@ export class SessionManager {
   /** bootfast2（1104 移交§三）：boot 数据就绪 flag——SNAPSHOT boot.phase 消费
    *（index 后台段 data-ready 处置 true；端上「已连接，数据加载中」判定源）。 */
   bootDataReady = false;
-  markBootDataReady(): void { this.bootDataReady = true; }
+  markBootDataReady(): void {
+    this.bootDataReady = true;
+    // bootfast2-r1 P1-3（A 审）：data-ready 广播——loading 期连入的端只在该次 SNAPSHOT
+    // 见 phase=loading，此后无帧则 banner 永久滞留。BOOT_PHASE transient 帧全端直达
+    //（EVENT/SESSION_UPDATED 同转发链；云通道 transient 转发同构），端上清 banner。
+    try { this.bus.emitTransient("BOOT_PHASE", { phase: "ready", loaded: this.snapshot().length, ts: Date.now() }); } catch { /* 广播尽力而为 */ }
+  }
 
   /** bootfast2（刀②公开化）：boot 后台段首跑（index.ts 后台段 adopt 前调）——
    * 构造器瘦身迁出，语义锚 #018-R1FIX1 P2-5 不变。 */

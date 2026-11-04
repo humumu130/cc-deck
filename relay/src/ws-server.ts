@@ -1353,7 +1353,7 @@ export function startServer(
           // 打标时序竞态漏标=用户 1016/1021 两报根因）。旧客户端 session.relay_source
           // 客户端打标有 `|| srcTag`/`if (!s.relay_source)` 守卫=自带字段自动优先，
           // 向前兼容零改
-          sessions: withRelaySource(mgr.snapshot(), opts.relayName?.()),
+          sessions: (() => { const sessionsArr = withRelaySource(mgr.snapshot(), opts.relayName?.()); (globalThis as any).__bootSnapSessions = sessionsArr; return sessionsArr; })(),
           // conn-page-v2 件③：客户端台账随快照（设置页「客户端」模块渲染源；旧端
           // 无消费面零影响——端上以字段存在性判能力）
           relay_devices: listDevices(cfg.dataDir, new Set([...onlineDeviceIds.values()])),
@@ -1363,7 +1363,7 @@ export function startServer(
           schema_version: SNAPSHOT_SCHEMA_VERSION,
           // bootfast2（移交§三）：boot 相位——listen 先起后数据渐进加载期端上可感
           //（「已连接，数据加载中」替代「relay 未启动」空屏）；loaded=当前会话数
-          boot: { phase: mgr.bootDataReady ? ("ready" as const) : ("loading" as const), loaded: mgr.snapshot().length },
+          boot: { phase: mgr.bootDataReady ? ("ready" as const) : ("loading" as const), loaded: ((globalThis as any).__bootSnapSessions as unknown[] | undefined)?.length ?? 0 }, // P2-1：复用上 sessions 数组（snapshot() 全量 clone 成本×2 根除）
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
