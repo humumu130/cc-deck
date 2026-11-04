@@ -269,7 +269,14 @@
                   // 信号保留（q-run 点 + cline 排队号）；未指派/失联警示色语义不变
                   const ownerBits = [];
                   if (queueCtx && queueCtx.running) ownerBits.push('<i class="q-run" title="派单运行中"></i>');
-                  if (engKnown) ownerBits.push(engineBadge(info.engine));
+                  // W-BOARDFUSE（1104 用户令）：引擎标签与 worker 标签融合——独立 engine-badge
+                  // 从 owner 行退役，引擎只保留品牌图标前置进 owner tchip 最前（名称/图标去重，
+                  // 卡面一行更紧凑）。旧壳无 __ccDeck005EngineMarkHtml 时回落独立徽章（不丢引擎信息）。
+                  const engVal = engine(info.engine);
+                  const engIconHtml = engKnown && window.__ccDeck005EngineMarkHtml
+                    ? '<span class="ow-eng" title="引擎 ' + escape(engVal[0]) + '">' + window.__ccDeck005EngineMarkHtml(engVal[1] || info.engine, engVal[0]) + "</span>"
+                    : "";
+                  if (engKnown && !engIconHtml) ownerBits.push(engineBadge(info.engine)); // 回落：旧壳图标助手缺席
                   // W-DISPVIS C2：看板卡执行者有已派单未消费（含换流窗口）→ owner chip 旁
                   // 轻量角标（同成员卡口径；q-run 是队列运行信号、本角标是消息级消费信号，
                   // 两者互补不互斥——q-run 由排队上下文驱动、本角标由 receipts.consumed 驱动）
@@ -281,7 +288,7 @@
                   // closest→selectSessionCard），点 chip 直达执行者会话；无 owner_session（未指派）
                   // 不挂牌不炸（优雅降级）。有 owner 即可点（claimed 进行中为主用例，其余态跳
                   // 转同链无害——sid 兜底跳，退休/外部会话由会话域空态兜底）。
-                  ownerBits.push('<span class="tchip owner' + (task.owner_session ? " owner-jump" : "") + '"' + (task.owner_session ? ' data-team-member-session="' + escape(task.owner_session) + '" role="button" tabindex="0" title="直达执行者会话 · ' + escape(dispName) + '"' : "") + '>' + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>");
+                  ownerBits.push('<span class="tchip owner' + (task.owner_session ? " owner-jump" : "") + '"' + (task.owner_session ? ' data-team-member-session="' + escape(task.owner_session) + '" role="button" tabindex="0" title="直达执行者会话 · ' + escape(dispName) + '"' : "") + '>' + engIconHtml + (hasOwner ? "<b>" + escape(dispName) + "</b>" + (info.role ? "<i>" + escape(info.role) + "</i>" : "") : task.owner_session ? "<b>" + escape(dispName) + "</b><i>失联</i>" : "<b>未指派</b>") + "</span>"); // W-BOARDFUSE：引擎图标前置最前
                   // boardlife ③（用户口径「审查中的卡看得到谁在审、点了能跳过去」）：submitted
                   // 态挂处理者 chip——数据源=组内 PM 席位行（members role=pm，建团自动补入
                   // 先例）；在岗显示「审查中 · PM（昵称/短 sid）」并同链可点跳 PM 会话；无在岗

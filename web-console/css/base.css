@@ -3438,3 +3438,9 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
 .toast.toast-error.show { pointer-events: auto; cursor: pointer; } /* 可点关闭仅显形期（.show）——隐形态不吞点击 */
 /* P2-7 手机组织确认卡胶囊：视觉增高（热区=整卡可点 ≥44px，见 mobile.js data-jump-team-tab） */
 .mobile-card .tag.action.mobile-confirm-pill { min-height: 24px; display: inline-flex; align-items: center; padding: 2px 9px; }
+
+/* =============== W-BOARDFUSE（1104 用户令）：看板任务卡引擎/worker 标签融合 ===============
+   引擎只保留品牌图标，前置进 owner tchip 最前（独立 engine-badge 从卡面 owner 行退役）；
+   图标 10.8px 承 :2135 全局档，title 悬停显引擎名。成员卡 identity-cluster 徽章不动（另域）。 */
+#d-team .tchip.owner .ow-eng { display: inline-flex; align-items: center; flex: none; margin-right: 4px; }
+#d-team .tchip.owner .ow-eng .badge-brand { display: inline-flex; align-items: center; }
