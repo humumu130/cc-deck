@@ -104,7 +104,12 @@ export function writePrCommentCursor(map: Record<string, number>, dir?: string):
 
 // ---------- 评论抓取（生产实现 + 测试注入缝） ----------
 /** gh api 直拉 PR 评论（REST issues/<n>/comments）。代理同 PM 工具口径
- *  （CCR_GH_PROXY 缺省 127.0.0.1:7890，空串=显式直连）；失败 reject 由周期捕获跳行。 */
+ *  （CCR_GH_PROXY 缺省 127.0.0.1:7890，空串=显式直连）；失败 reject 由周期捕获跳行。
+ *  R1（双审 P2·1104）：补 -F per_page=100 + --paginate——GitHub REST 缺省 30 条/页
+ *  升序，热 PR 首周期只投最旧 ≤30 条后 cursor 定格，第 2 页新评论永不可见=永久失聪
+ *  零报错。--paginate 由 gh 客户端多请求拼接，stdout 仍是合并数组（下游解析零改）；
+ *  -X GET 显式钉死——带 -F/-f 时 gh api 缺省切 POST（对本端点=尝试建评论，必炸）。
+ *  maxBuffer 4MB→16MB 配套：100 条/页×多页拼接的极端态余量。 */
 export function fetchPrCommentsViaGh(prUrl: string): Promise<PrComment[]> {
   const m = prUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
   if (!m) return Promise.reject(new Error(`PR URL 不合法: ${prUrl}`));
@@ -113,8 +118,8 @@ export function fetchPrCommentsViaGh(prUrl: string): Promise<PrComment[]> {
   return new Promise((resolve, reject) => {
     execFile(
       "gh",
-      ["api", `repos/${m[1]}/${m[2]}/issues/${m[3]}/comments`],
-      { timeout: 15_000, maxBuffer: 4 * 1024 * 1024, env },
+      ["api", "-X", "GET", `repos/${m[1]}/${m[2]}/issues/${m[3]}/comments`, "-F", "per_page=100", "--paginate"],
+      { timeout: 15_000, maxBuffer: 16 * 1024 * 1024, env },
       (err, stdout) => {
         if (err) { reject(new Error(`gh api 拉评论失败: ${err.message}`)); return; }
         try {

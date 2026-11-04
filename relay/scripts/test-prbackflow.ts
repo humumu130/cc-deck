@@ -12,22 +12,24 @@
 //   G subfanout 白名单：in_review 命中直投目标；终态 null
 //   H 收集口径：无 URL 的 in_review 不拉；终态窗外旧单不拉
 //   I 挂档静态自锁：pr-comment-trigger 引用 autoTierOf("patrol")（observe3 挂档纪律第三处）
+//   J R1 翻页（双审 P2·1104）：伪 gh 直测真 fetchPrCommentsViaGh——35 条夹具
+//     （>30 越缺省页）全量可见 + args 三要素锚（per_page=100/--paginate/-X GET 防 POST 漂移）
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { subFanTarget } from "../src/subfanout.js";
-import { collectPrWatchRows, readPrCommentCursor, type PrComment } from "../src/pr-comment-trigger.js";
+import { collectPrWatchRows, fetchPrCommentsViaGh, readPrCommentCursor, type PrComment } from "../src/pr-comment-trigger.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 
 let pass = 0;
 let fail = 0;
-function assert(cond: boolean, name: string) {
+function assert(cond: boolean, name: string, detail = "") {
   if (cond) { pass++; console.log(`  ✓ ${name}`); }
-  else { fail++; console.error(`  ✗ ${name}`); }
+  else { fail++; console.error(`  ✗ ${name}` + (detail ? "｜" + detail : "")); }
 }
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn: () => boolean, ms = 3000, every = 25): Promise<boolean> {
@@ -206,6 +208,40 @@ async function main() {
     const idxSrc = readFileSync(join(process.cwd(), "src", "index.ts"), "utf-8");
     assert(trigSrc.includes('autoTierOf("patrol")'), "pr-comment-trigger 引用 autoTierOf 单点（挂档纪律）");
     assert(smSrc.includes("runPrCommentCycleOnce") && idxSrc.includes("startPrCommentWatch"), "消费面挂载在位（session-manager 周期法 + index boot 启停）");
+
+    // ---------- J R1 翻页（双审 P2·1104）：per_page=100 + --paginate 全量可见 ----------
+    // 病：GitHub REST 缺省 30 条/页升序——热 PR 首周期只投最旧 ≤30 条后 cursor 定格，
+    // 第 2 页新评论永不可见=永久失聪零报错。根治=gh args 带 per_page=100+--paginate
+    //（翻页拼接是 gh 客户端语义，stdout 恒合并数组）。测法=伪 gh（PATH 前置）直测真
+    // fetchPrCommentsViaGh：35 条夹具（>30 越缺省页）全量解析 + args 三要素逐项锚。
+    console.log("J R1 翻页（35 条夹具·伪 gh 直测真函数）:");
+    {
+      const fakeDir = mkdtempSync(join(tmpdir(), "ccr-prbf-gh-"));
+      const fixture = join(fakeDir, "page.json");
+      const rec = join(fakeDir, "args.txt");
+      // 35 条拼接数组=gh --paginate 最终 stdout 形状（页 1×30+页 2×5 客户端拼接后单数组）
+      const comments35 = Array.from({ length: 35 }, (_, i) => ({ id: 1000 + i, user: { login: "reviewer-x" }, body: `第 ${i + 1} 条评论（翻页夹具）`, created_at: "2026-11-04T12:00:00Z" }));
+      writeFileSync(fixture, JSON.stringify(comments35), "utf-8");
+      writeFileSync(join(fakeDir, "gh"), `#!/bin/sh\nprintf '%s\\n' "$@" > "${rec}"\ncat "${fixture}"\n`, "utf-8");
+      chmodSync(join(fakeDir, "gh"), 0o755);
+      const prevPath = process.env.PATH;
+      process.env.PATH = fakeDir + ":" + (prevPath ?? "");
+      try {
+        const out = await fetchPrCommentsViaGh("https://github.com/humumu130/cc-deck/pull/9100");
+        assert(out.length === 35, "35 条夹具全量可见（>30 越缺省页——翻页拼接后零丢失）", `n=${out.length}`);
+        assert(out[0]?.id === 1000 && out[34]?.id === 1034, "首尾对号（升序完整性：1000…1034）");
+        assert(out.every((c) => c.author === "reviewer-x" && c.body.includes("条评论")), "字段解析完整（author/body 逐条）");
+        const ghArgs = readFileSync(rec, "utf-8");
+        assert(ghArgs.includes("per_page=100"), "gh args 带 per_page=100（缺省 30 失聪根治）", ghArgs.trim());
+        assert(ghArgs.includes("--paginate"), "gh args 带 --paginate（第 2 页起可见性=gh 客户端翻页保证）");
+        assert(ghArgs.includes("-X") && ghArgs.includes("GET"), "gh args 显式 -X GET（带 -F 时 gh 缺省切 POST——防漂移钉死）");
+        const bad = await fetchPrCommentsViaGh("https://gitlab.com/x/y/pull/1").then(() => null, (e: Error) => e.message);
+        assert(!!bad && bad.includes("不合法"), "非 github.com URL 拒（回归护栏——翻页改动不动 URL 校验）");
+      } finally {
+        if (prevPath === undefined) delete process.env.PATH; else process.env.PATH = prevPath;
+        rmSync(fakeDir, { recursive: true, force: true });
+      }
+    }
 
     console.log(`\nPASS: ${pass} passed, ${fail} failed`);
     process.exit(fail > 0 ? 1 : 0);
