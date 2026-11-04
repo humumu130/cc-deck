@@ -96,6 +96,15 @@ interface ObservedNdjson {
 function observeNdjson(file: string): ObservedNdjson {
   if (!existsSync(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
   const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）
+  // dispatchbomb（1105 sqlitefix 验收审猎获·存量层时炸弹）：大源（>2MB）双未变短路
+  // 时 statThenRead 返回 unchanged+空 text+基线 lineCount——原版无此分支直接 split("")
+  // → lines=[] 且 lineCount=**0**（丢基线）→ checkpoint 失配 → replay 清 dispatch/
+  // lesson 全域+灌 0 行+写 0/0（生产 1.1MB 逼近 2MB 越线即触发）。修=对照 session-task
+  // 版（import-session-task.ts:133）unchanged 处理：lineCount 取基线、lines=[]——
+  // checkpoint 比较走 lineCount 不变=快进，域内数据原样保留。
+  if (obs.unchanged === true) {
+    return { mtimeMs: obs.mtimeMs, lineCount: obs.lineCount ?? 0, lines: [] };
+  }
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
