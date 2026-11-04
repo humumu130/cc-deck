@@ -919,8 +919,9 @@ export class SessionManager {
     // [W-AWAITUSER] 聚合投影基线（loadNotifications 同款：boot 静默锚定，防空基线
     // 首帧误发——首个订阅者到达前的 transient 本就无人收，锚定只为口径一致）
     this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
-    this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
-    bootMark("ctor-orphan-confirms"); // W-BOOTFAST：构造器细分（确认单对账）
+    // bootfast2（1104 移交刀②）：reconcileOrphanConfirms 移出构造器→boot 后台段首跑
+    //（mgr.adopt 前由 index 显式调——构造器纯小文件读化；原 bootMark("ctor-orphan-confirms")
+    // 随迁 index 后台段）。#018-R1FIX1 P2-5 语义不变：adopt（消费确认单投影）前完成对账。
     // #279 野生会话纳管：boot 自愈 RULES.md 镜像（写库点已随 saveRules 刷新，此处
     // 兜底镜像丢失/漂移——失败自吞，镜像非关键路径）
     try { writeRulesMirror(); } catch { /* 尽力而为 */ }
@@ -1676,6 +1677,13 @@ export class SessionManager {
   // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
   //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
   //，跨域误指无法在数据层比对——不硬造，以「非空才对账」收窄误收口窗口
+  /** bootfast2（刀②公开化）：boot 后台段首跑（index.ts 后台段 adopt 前调）——
+   * 构造器瘦身迁出，语义锚 #018-R1FIX1 P2-5 不变。 */
+  reconcileOrphanConfirmsOnBoot(): void {
+    bootMark("orphan-confirms"); // W-BOOTFAST：随迁打点（原 ctor 内位）
+    this.reconcileOrphanConfirms();
+  }
+
   private reconcileOrphanConfirms(): void {
     const known = this.readConfirmsForReconcile();
     if (!known) return;

@@ -387,7 +387,119 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
 const bus = new EventBus({ preload: kept, persistPath });
 bootMark("bus-ctor"); // W-BOOTFAST 细分：EventBus preload 索引 vs SessionManager 构造
 const mgr = new SessionManager(bus, cfg);
-bootMark("bus+mgr-ctor");
+bootMark("bus+mgr-ctor");bootMark("bus+mgr-ctor");
+
+// ---------- bootfast2（1104 移交刀①③）：listen 先起 + 中段后台化 ----------
+// 原序：中段（adopt/pinned/leader/notify/...共 20+ 步，实测三大头 78%）全跑完才
+// startServer——用户 1-2min「relay 未启动」。新序：闭包声明（引用语义后填充）+
+// startServer 前移到 mgr 构造后（listen ≤2s），全部数据步进后台段（booting 期
+// SNAPSHOT boot.phase=loading 端上可感）。顺序敏感约束（W-RESTARTDESIGN F2
+// adopt→pinned→ledger 回灌→reload；ensureLeader 后于 pinned；parked 先于 autoRevive）
+// 在后台段内保持原相对序。
+// 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
+// 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
+let lanAuthNonces: Map<string, number> | null = null;
+let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
+const cloudClients: CloudClient[] = [];
+const pairCodes = createPairingCodes();
+// W-SRCLABEL #134：relay 源显示名单点（ws-server LAN 快照 + cloud-client 云快照共用）。
+// #100 自定义名（dataDir/relay-name 文件）优先；**缺省回落主机名**——此前文件未设即
+// 空名，W-SRC2 的 withRelaySource「空名=零注入」守卫随之清零：两台 relay 的会话全无
+// relay_source，web 聚合 srcSet 塌成 1 → CSS 门控隐藏全部源标签（1022 用户截图根因）。
+// 主机名恒在场 → relay_name/relay_source 恒下发，源身份不再依赖用户先去设置页命名
+// #272：读写收编 settings.ts 单源模块（effectiveRelayName 现算——setRelayName 改名后
+// SNAPSHOT/reconcile 免重启带新名）；此处仅保留注入闭包形态
+const relayNameOf = (dataDir: string): string => effectiveRelayName(dataDir);
+startServer(bus, mgr, cfg, {
+  cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
+  pairCodes, // bootfast2：恒传（云桥后台段起——pairCodes.issue 引用语义恒可用）
+  // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
+  // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
+  // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
+  ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
+  ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
+  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
+  // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
+  relayName: () => relayNameOf(cfg.dataDir),
+  // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
+  lanHint: () => {
+    const ip = detectLanIp(networkInterfaces());
+    return ip ? `${ip}:${cfg.port}` : "";
+  },
+  lanAuthHello: () => (cloudIdentity ? { relay_dev: cloudIdentity.relayDev, nonce: randomBytes(16).toString("base64") } : null),
+  lanAuthHandle: (dev, box) => {
+    if (!cloudIdentity) return { ok: false as const, error: "no identity" };
+    // dev 为明文路由键：用该 dev 的配对公钥作发送者公钥解 box（天然验持钥者身份）
+    const peer = cloudIdentity.peers.get(dev);
+    if (!peer) return { ok: false as const, error: "unknown device" };
+    const inner = unseal<{ nonce?: string }>(box, peer.pubkey, cloudIdentity.keypair.secretKey);
+    if (!inner || !inner.nonce) return { ok: false as const, error: "bad box" };
+    if (!lanAuthNonces) lanAuthNonces = new Map();
+    const now = Date.now();
+    for (const [n, t] of lanAuthNonces) if (now - t > 60_000) lanAuthNonces.delete(n);
+    if (lanAuthNonces.has(inner.nonce)) {
+      lanAuthNonces.delete(inner.nonce);
+    } else if (inner.nonce.length < 16 || inner.nonce.length > 44) {
+      return { ok: false as const, error: "bad nonce" };
+    }
+    const reply = seal({ token: cfg.token, port: cfg.port }, peer.pubkey, cloudIdentity.keypair.secretKey);
+    return { ok: true as const, box: reply };
+  },
+  // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
+  onReady: () => {
+    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）。
+    // CCR_NO_MDNS=1 关断（测试/沙盒）：真启动测试 relay ×3 会往局域网发 3 个同名
+    // 幽灵实例，同网真实设备短窗内可见（#20 审查实锤）。生产不设，广播行为不变
+    if (process.env.CCR_NO_MDNS !== "1") {
+      // CCR_MDNS_NAME：广播名覆盖（#36 M2 并行测试版，2026-10-03）——同机双 relay
+      // 并存（生产 8787 + M2 8788）时发现列表可分辨；缺省与生产逐字节一致
+      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
+    }
+    if (process.env.CC_DECK_DAEMON === "1") {
+      writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+    }
+    // hooks 桥接配置：listen 成功后才写（启动失败不覆盖持端口 relay 的配置）。
+    // 开发模式额外镜像到 ~/.cc-deck/data（hook 的首选目录）：dev/插件两个 relay
+    // 换班持端口时，hook 读到的 token 始终属于实际活着的 relay，杜绝 403 失联（#211）
+    const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
+    writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join(homedir(), ".cc-deck", "data");
+    // 沙箱测试形态不镜像（2026-10-02 实锤）：check-bundle-sync 冒烟（mktemp /tmp +
+    // 40000+ 随机端口）与测试套件（CLAUDE_CONFIG_DIR 隔离 ~/.claude）走此分支会把
+    // 随机端口/临时 bridgeToken 顶进生产 ~/.cc-deck/data/bridge.json——hooks/deliver
+    // 读到死端口全断（当晚 deliver 连 46086 拒连实锤；2026-09-28 事故同型）。
+    // 镜像语义只属于真实 dev 形态（repo 内 dataDir、不隔离 CLAUDE 配置），
+    // #211 dev/插件换班语义不受影响。CCR_NO_BRIDGE_MIRROR=1 另留显式关断
+    //（判断口径 ==="1"，与 CCR_NO_TITLE_GEN/CCR_WATCHDOG_DISABLE 约定对齐：
+    // 真值判断会把 "0"/"false" 等显式保留意图也当关断）。
+    // macOS os.tmpdir() 是 /var/folders/…，mktemp 惯用的字面 /tmp 须一并覆盖
+    const sandboxed =
+      !!process.env.CLAUDE_CONFIG_DIR ||
+      [tmpdir(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep).startsWith(t + sep));
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync(hookHome)) {
+      try {
+        writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
+      } catch {}
+    }
+    // 任务工具门控的用户级兜底（listen 成功后做，启动失败不碰用户文件）：终端自开的
+    // 会话不是 relay spawn 的，进程级注入管不到——幂等补写 settings.json env，让之后
+    // 新开的终端会话也有任务工具。只在键缺失时补，用户显式设置一律尊重（见模块头注释）
+    try {
+      if (ensureTodoToolsEnv() === "written") {
+        console.log(`  兜底:   已补 ${TODO_TOOLS_ENV_KEY}=1（用户 settings.json，新开会话生效）`);
+      }
+    } catch {} // 模块内部已吞写失败，这里只防未预期异常影响启动
+  },
+});
+// 简启动行（listen 即打——不依赖后台段数据；详情行随后台段完成打）
+console.log("CC Deck Relay 已启动（HTTP 先行——数据加载中）");
+console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）｜端口: ${cfg.port}`);
+
+// ---------- bootfast2 刀③：boot 后台段（数据渐进——完成处 data-ready）----------
+void (async () => {
+  // 刀②：mgr 构造器迁出的确认单对账（adopt 前完成——#018-R1FIX1 P2-5 语义锚）
+  try { mgr.reconcileOrphanConfirmsOnBoot(); } catch (e) { console.warn(`[orphan-confirms] boot 对账失败: ${e instanceof Error ? e.message : String(e)}`); }
+
 // W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
 // 守「死了没人投递」的死角（SESSION_ERROR/派单失败触发）。CCR_NO_ACTIVATOR=1 逃生阀。
 attachAgentActivator(bus, mgr);
@@ -528,20 +640,6 @@ setTimeout(() => {
   } catch {}
 }, 5_000).unref?.();
 
-// 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
-// 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
-let lanAuthNonces: Map<string, number> | null = null;
-let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
-const cloudClients: CloudClient[] = [];
-const pairCodes = createPairingCodes();
-// W-SRCLABEL #134：relay 源显示名单点（ws-server LAN 快照 + cloud-client 云快照共用）。
-// #100 自定义名（dataDir/relay-name 文件）优先；**缺省回落主机名**——此前文件未设即
-// 空名，W-SRC2 的 withRelaySource「空名=零注入」守卫随之清零：两台 relay 的会话全无
-// relay_source，web 聚合 srcSet 塌成 1 → CSS 门控隐藏全部源标签（1022 用户截图根因）。
-// 主机名恒在场 → relay_name/relay_source 恒下发，源身份不再依赖用户先去设置页命名
-// #272：读写收编 settings.ts 单源模块（effectiveRelayName 现算——setRelayName 改名后
-// SNAPSHOT/reconcile 免重启带新名）；此处仅保留注入闭包形态
-const relayNameOf = (dataDir: string): string => effectiveRelayName(dataDir);
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
@@ -640,90 +738,7 @@ if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && read
     enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
   }).start();
 }
-bootMark("patrol+watchfeed");
-startServer(bus, mgr, cfg, {
-  cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
-  ...(cloudClients.length ? { pairCodes } : {}),
-  // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
-  // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
-  // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
-  ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
-  ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
-  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
-  // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
-  relayName: () => relayNameOf(cfg.dataDir),
-  // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
-  lanHint: () => {
-    const ip = detectLanIp(networkInterfaces());
-    return ip ? `${ip}:${cfg.port}` : "";
-  },
-  lanAuthHello: () => (cloudIdentity ? { relay_dev: cloudIdentity.relayDev, nonce: randomBytes(16).toString("base64") } : null),
-  lanAuthHandle: (dev, box) => {
-    if (!cloudIdentity) return { ok: false as const, error: "no identity" };
-    // dev 为明文路由键：用该 dev 的配对公钥作发送者公钥解 box（天然验持钥者身份）
-    const peer = cloudIdentity.peers.get(dev);
-    if (!peer) return { ok: false as const, error: "unknown device" };
-    const inner = unseal<{ nonce?: string }>(box, peer.pubkey, cloudIdentity.keypair.secretKey);
-    if (!inner || !inner.nonce) return { ok: false as const, error: "bad box" };
-    if (!lanAuthNonces) lanAuthNonces = new Map();
-    const now = Date.now();
-    for (const [n, t] of lanAuthNonces) if (now - t > 60_000) lanAuthNonces.delete(n);
-    if (lanAuthNonces.has(inner.nonce)) {
-      lanAuthNonces.delete(inner.nonce);
-    } else if (inner.nonce.length < 16 || inner.nonce.length > 44) {
-      return { ok: false as const, error: "bad nonce" };
-    }
-    const reply = seal({ token: cfg.token, port: cfg.port }, peer.pubkey, cloudIdentity.keypair.secretKey);
-    return { ok: true as const, box: reply };
-  },
-  // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
-  onReady: () => {
-    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）。
-    // CCR_NO_MDNS=1 关断（测试/沙盒）：真启动测试 relay ×3 会往局域网发 3 个同名
-    // 幽灵实例，同网真实设备短窗内可见（#20 审查实锤）。生产不设，广播行为不变
-    if (process.env.CCR_NO_MDNS !== "1") {
-      // CCR_MDNS_NAME：广播名覆盖（#36 M2 并行测试版，2026-10-03）——同机双 relay
-      // 并存（生产 8787 + M2 8788）时发现列表可分辨；缺省与生产逐字节一致
-      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
-    }
-    if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
-    }
-    // hooks 桥接配置：listen 成功后才写（启动失败不覆盖持端口 relay 的配置）。
-    // 开发模式额外镜像到 ~/.cc-deck/data（hook 的首选目录）：dev/插件两个 relay
-    // 换班持端口时，hook 读到的 token 始终属于实际活着的 relay，杜绝 403 失联（#211）
-    const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join(homedir(), ".cc-deck", "data");
-    // 沙箱测试形态不镜像（2026-10-02 实锤）：check-bundle-sync 冒烟（mktemp /tmp +
-    // 40000+ 随机端口）与测试套件（CLAUDE_CONFIG_DIR 隔离 ~/.claude）走此分支会把
-    // 随机端口/临时 bridgeToken 顶进生产 ~/.cc-deck/data/bridge.json——hooks/deliver
-    // 读到死端口全断（当晚 deliver 连 46086 拒连实锤；2026-09-28 事故同型）。
-    // 镜像语义只属于真实 dev 形态（repo 内 dataDir、不隔离 CLAUDE 配置），
-    // #211 dev/插件换班语义不受影响。CCR_NO_BRIDGE_MIRROR=1 另留显式关断
-    //（判断口径 ==="1"，与 CCR_NO_TITLE_GEN/CCR_WATCHDOG_DISABLE 约定对齐：
-    // 真值判断会把 "0"/"false" 等显式保留意图也当关断）。
-    // macOS os.tmpdir() 是 /var/folders/…，mktemp 惯用的字面 /tmp 须一并覆盖
-    const sandboxed =
-      !!process.env.CLAUDE_CONFIG_DIR ||
-      [tmpdir(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep).startsWith(t + sep));
-    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync(hookHome)) {
-      try {
-        writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
-      } catch {}
-    }
-    // 任务工具门控的用户级兜底（listen 成功后做，启动失败不碰用户文件）：终端自开的
-    // 会话不是 relay spawn 的，进程级注入管不到——幂等补写 settings.json env，让之后
-    // 新开的终端会话也有任务工具。只在键缺失时补，用户显式设置一律尊重（见模块头注释）
-    try {
-      if (ensureTodoToolsEnv() === "written") {
-        console.log(`  兜底:   已补 ${TODO_TOOLS_ENV_KEY}=1（用户 settings.json，新开会话生效）`);
-      }
-    } catch {} // 模块内部已吞写失败，这里只防未预期异常影响启动
-  },
-});
-
-console.log("CC Deck Relay 已启动");
+bootMark("patrol+watchfeed");console.log("CC Deck Relay 已启动");
 // F7（2026-10-19）：启动行带 pid+运行模式——embedded-relay.log 排障对表（ps/launchd 比对）
 // 与「这段日志是哪个进程写的」一眼可判；时间戳由内嵌包装器统一加
 console.log(`  进程:   pid=${process.pid}（${process.env.CCR_PARENT_PID ? "内嵌·壳孵化" : "独立前台"}）`);
@@ -768,3 +783,6 @@ if (process.env.CC_DECK_DAEMON === "1") {
     }
   }
 }
+
+  bootMark("data-ready"); // bootfast2：后台段完成（完整数据就绪——boot-time 分解终点）
+})();

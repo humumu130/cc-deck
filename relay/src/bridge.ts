@@ -507,6 +507,17 @@ export class Bridge {
         scanner: new RolloutScanner(spec, engineRoot(spec, homedir()), path.join(opts.dataDir, `engine-cursors-${spec.engine}.json`)),
       });
     }
+    // bootfast2（1104 移交刀④）：扫描族整体迁出构造器→runBootScan 公开口（startServer
+    // listen 回调 setTimeout(0) 调——listen 前构造器零扫描；booting 期 /bridge 空挡
+    // 守卫 503 见 ws-server）。顺序语义（113/257/W-INJECT/276）原样随迁，相对序不变。
+    this.runBootScan();
+  }
+
+  /** bootfast2（刀④）：boot 扫描族单口（原构造器 :512-548 段整体迁此）——pid 三源
+   * 补定位+自愈/重接管+孤儿扫描+引擎扫描+60s heal/引擎两 timer 挂载。startServer 在
+   * listen 回调 setTimeout(0) 调用（listen 先起，扫描不挡 HTTP）。幂等保护：二次调用
+   * 仅重跑扫描（timer 挂载带 has 检查）——生产单次，测试可重复。 */
+  runBootScan(): void {
     // #113（2026-10-15）顺序：先 sessions/*.json 活证据补定位，后 cli-pids.json
     // 缓存兜底——缓存可能残留 resume 前的死 pid，活证据先行避免死 pid 抢占定位
     //（与 healExternal 抢救路径的既有顺序对齐）
@@ -528,6 +539,7 @@ export class Bridge {
     this.scanExternalEngines();
     bootMark("bridge-engine-scan"); // W-BOOTFAST：引擎转录扫描（RolloutScanner scan 族）
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
+    if (this.healTimer) return; // bootfast2：幂等（runBootScan 二次调用不重挂 timer）
     this.healTimer = setInterval(() => {
       // #113 同 boot 顺序：活证据先行，缓存兜底殿后；#257 进程扫描收尾（迟到的活恢复进程）
       this.reconcilePidsFromSessions();
@@ -541,8 +553,10 @@ export class Bridge {
     }, 60_000);
     this.healTimer.unref?.();
     const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5_000;
-    this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
-    this.engineScanTimer.unref?.();
+    if (!this.engineScanTimer) {
+      this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
+      this.engineScanTimer.unref?.();
+    }
   }
 
   close(): void {

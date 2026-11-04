@@ -558,6 +558,7 @@ export function startServer(
   mgr.liveFrontends = () =>
     [...wss.clients].some((c) => c.readyState === WebSocket.OPEN && !(c as ClientWs).pairing) ||
     !!opts.cloudHasPhones?.();
+  let bridgeBootScanned = false; // bootfast2 刀④：booting 空挡守卫位（runBootScan 完成置 true）
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
@@ -575,6 +576,12 @@ export function startServer(
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "POST" && url.pathname === "/bridge/hook") {
+      // bootfast2（移交刀④）：booting 空挡守卫——listen 先起后 hook 可能早于 boot 扫描
+      // 到达（收养/自愈未完，early hook 会把状态写进未收养形态）——503 让 hook 端重试
+      if (!bridgeBootScanned) {
+        res.writeHead(503, { "content-type": "application/json", "retry-after": "1" }).end(JSON.stringify({ ok: false, error: "relay booting" }));
+        return;
+      }
       void handleBridgeHook(req, res, bridge, cfg);
       return;
     }
@@ -1550,6 +1557,12 @@ export function startServer(
     bootMark("listen");
     bootDone();
     opts.onReady?.();
+    // bootfast2（移交刀④）：扫描族在 listen 后首轮跑（构造器已零扫描——runBootScan
+    // 单口承载 pid 三源/自愈/孤儿/引擎+两 timer；setTimeout(0) 让 listen 回调先完）
+    setTimeout(() => {
+      try { bridge.runBootScan(); } catch (e) { console.warn(`[bridge] boot 扫描族失败: ${e instanceof Error ? e.message : String(e)}`); }
+      bridgeBootScanned = true;
+    }, 0);
   });
 
   return {
