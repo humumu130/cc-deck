@@ -1278,7 +1278,10 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
 // 处置）；中断补记行（receipt 带「relay 重启」）不算收割（F-08 退 backlog 有意设计）；
 // 卡 updated_at 严格晚于终态行 ts=收口后被人工/流程搬过，不碾——收敛只清断点残留，不碾压
 // 人工板面操作。只扫 active 组（parked/archived 板冻结由 writableBoard 天然挡）。
-export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "board-force-close", detail: string) => void): { moved: number; skipped: number } {
+export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "board-force-close", detail: string) => void, opts?: { dryRun?: boolean }): { moved: number; skipped: number; wouldClose: Array<{ gid: string; entryId: string; text: string }> } {
+  // observe3（converge 族 observe 档）：dryRun=研判照常（含豁免/去重/读账全链）但**不落
+  // 盘**——将翻卡收进 wouldClose 返回（moved 恒 0），供调用方记「本会做什么」干跑证据。
+  // 板面零副作用=干跑可反复执行；auto 路径（dryRun 缺省 false）逐字节原行为。
   // 读预算（#25-P3 同款教训：readDispatchLog 全文件读，循环内重读=每卡一遍全量）——
   // 一次读入，末行赢语义按追加序后写覆盖。max 显式放大（默认 500 行窗口装不下长史
   // 项目，10-11 时代旧单恰是本扫的目标面，漏读=白扫）。
@@ -1292,8 +1295,9 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
     if (String(row.receipt || "").startsWith("relay 重启")) continue;
     doneAtById.set(row.id, Number(row.ts) || 0);
   }
-  if (!doneAtById.size) return { moved: 0, skipped: 0 };
+  if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [] };
   let moved = 0, skipped = 0;
+  const wouldClose: Array<{ gid: string; entryId: string; text: string }> = []; // observe3 dryRun 干跑账（auto 路径恒空）
   for (const g of listGroupsByStatus(dir).active) {
     let board: ReturnType<typeof loadBoard>;
     try { board = loadBoard(g.id, dir); } catch { continue; }
@@ -1334,6 +1338,7 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
         for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && (trSeq[i].status === "done" || trSeq[i].status === "submitted")) lastSettledIdx = i;
         const reopened = lastSettledIdx >= 0 && trSeq.slice(lastSettledIdx + 1).some((t) => t && t.status === "backlog");
         if (reopened) { skipped++; continue; }
+        if (opts?.dryRun) { wouldClose.push({ gid: g.id, entryId: entry.id, text: String(entry.text || entry.id).slice(0, 40) }); continue; } // observe3：干跑只记账不落盘
         if (moveEntryByDispatch(g.id, entry.dispatch_id as string, "done", dir)) {
           moved++;
           onAudit?.("board-force-close", `72h 断链残留强翻：${entry.id}（dispatch ${String(entry.dispatch_id).slice(0, 8)}，done @${new Date(doneAt).toLocaleString("zh-CN")}）`);
@@ -1344,10 +1349,11 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       // (T2>T1)」序列里 T2-T1<1s，60s 容差会放过它=把中断单拽进 done（1023 实测教训；
       // 同机时钟无抖动，容差无必要）
       if (Number(entry.updated_at || 0) > doneAt) continue;
+      if (opts?.dryRun) { wouldClose.push({ gid: g.id, entryId: entry.id, text: String(entry.text || entry.id).slice(0, 40) }); continue; } // observe3：干跑只记账不落盘（原防碾路径同构）
       if (moveEntryByDispatch(g.id, entry.dispatch_id, "done", dir)) moved++;
     }
   }
-  return { moved, skipped };
+  return { moved, skipped, wouldClose };
 }
 
 // ---------- #087 beads 思想采纳（009 §4 M1/M2 + §5 裁决；零外部依赖，不引 bd/Dolt） ----------

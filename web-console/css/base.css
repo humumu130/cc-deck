@@ -2945,6 +2945,11 @@
       border-bottom: 1px solid var(--line-soft);
       border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent);
     }
+    /* observe3（1104 注意力经济学）：动态组（健康态）默认折叠——组头可点开合，caret 复用
+       既有折叠头字符语言（▸/▾），零新色零新 token */
+    .ngrp.ngrp-fold { cursor: pointer; user-select: none; }
+    .ngrp.ngrp-fold:hover .caret { color: var(--text); }
+    .ngrp .caret { font-size: 10px; color: var(--faint); line-height: 1; }
     .ngrp .cnt {
       font-variant-numeric: tabular-nums; font-weight: 600; font-size: 11px; line-height: 16px;
       color: var(--dim); background: var(--hover); border-radius: 9px; padding: 0 7px;

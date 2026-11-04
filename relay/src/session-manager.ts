@@ -33,6 +33,7 @@ import {
   PM_ROLE_RE, seatGate, anchorPathError,
 } from "./projects.js";
 import type { SeatGateContext } from "./projects.js"; // W-SMIMPL ①：席位门单源判据
+import { autoTierOf, recordWouldDo } from "./auto-tiers.js"; // observe3：自主动作三档（boot converge 挂档点）
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permDenyMessage, permissionPolicyEnabled } from "./permission-policy.js";
 import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
@@ -1407,7 +1408,7 @@ export class SessionManager {
     return drained;
   }
 
-  private upsertNotification(
+  upsertNotification( // observe3：private→public（patrol 收敛/拉活 observe 干跑记录经通知账直达——同 boardfix R3 emitChainAudit 转公先例，模块外只写 observe-* 键不读内部态）
     kind: NotificationKind,
     entityId: string,
     revision: string | undefined,
@@ -1456,6 +1457,29 @@ export class SessionManager {
   // 生命周期收口：matcher 定位（org-confirm 按 confirm id、waiting 按会话），
   // transitionNotification 只填空位（幂等）；已 resolved 的账跳过（ACK 不复活）。
   // action 用 B3a 词表：source_succeeded（=handled）/dismissed/resolved
+  /** observe3 R1（P2⑦）：observe 干跑告知行（observe-converge/observe-revive/observe-patrol-*）
+   * 的收口——对应族档位离开 observe（转 auto=已转执行走各自通知/off=不再研判）即 resolved，
+   * 干跑建议过期不按天驻留「注意」组。patrol runFull 30min 一拍调用（boot 侧无需独立挂——
+   * 首拍巡检即收）；key 前缀判族（push 面 observe-patrol-<key> 每告警键一行，同族齐收）。 */
+  resolveObserveAdvisories(): void {
+    // 注意：账面 key=stableKey 哈希——判族走 sourceContext.entityId（写入侧
+    // upsertNotification 的第二参原样保真）；R1 测试首跑实锤 key 前缀法失配。
+    const eidOf = (n: NotificationLifecycleItem): string => {
+      const sc = n.sourceContext as { entityId?: string } | undefined;
+      return typeof sc?.entityId === "string" ? sc.entityId : "";
+    };
+    const tierOfEntity = (eid: string): string => {
+      if (eid.startsWith("observe-converge")) return autoTierOf("converge");
+      if (eid.startsWith("observe-revive")) return autoTierOf("revive");
+      if (eid.startsWith("observe-patrol")) return autoTierOf("patrol");
+      return "observe";
+    };
+    this.transitionNotifications(
+      (n) => { const eid = eidOf(n); return (eid.startsWith("observe-converge") || eid.startsWith("observe-revive") || eid.startsWith("observe-patrol")) && tierOfEntity(eid) !== "observe"; },
+      "resolved",
+    ); // action=resolved（source_succeeded 只标 handled 不落 resolved_at——测试实锤后修正；收口语义=干跑建议过期，非「已读」）
+  }
+
   private transitionNotifications(match: (n: NotificationLifecycleItem) => boolean, action: NotificationLifecycleAction): void {
     const at = Date.now();
     let changed = false;
@@ -4230,11 +4254,24 @@ export class SessionManager {
     // #236 D（W-TEAMVIS）：台账终态→板收敛扫（boot 一次性）——closeHungDispatchRows 把
     // 中断单退回 backlog 的历史断点残留（10-11 时代收割卡）在此归位 done；口径与防碾见
     // convergeBoardsWithDispatchLog 注释。失败自吞不阻断启动（收敛是清扫非关键路径）
+    // observe3（converge 族 boot 挂档点，与 patrol runFull 同口径）：off=跳过；observe=
+    // dryRun（研判/豁免照跑、翻面不执行——wouldClose 落 observe 账本+控制台 OBSERVE 行）；
+    // auto=原路径。boot 侧记录走 console+observe-log（通知账写入与 patrol 侧共用键
+    // observe-converge，day-bucket 幂等）。
     try {
-      // boardfix R3：返回 { moved, skipped }（豁免计数明示）+强翻审计回调（与 patrol 同口径）
-      const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.emitChainAudit(action, detail));
-      if (converged.moved) console.log(`[projects] 板收敛：${converged.moved} 张已收口卡归 done 泳道`);
-      if (converged.skipped) console.log(`[projects] 板收敛：跳过 ${converged.skipped} 张疑似人工在管（hold 锁/人工重开豁免）`);
+      const tier = autoTierOf("converge");
+      if (tier !== "off") {
+        const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.emitChainAudit(action, detail), { dryRun: tier === "observe" });
+        if (tier === "observe") {
+          if (converged.wouldClose.length > 0 || converged.skipped > 0) {
+            recordWouldDo(this.cfg.dataDir, "converge", "board-converge", "force-close", `boot 干跑：将翻正 ${converged.wouldClose.length} 张陈卡（跳过 ${converged.skipped} 张人工在管）——observe 档未执行`);
+            console.log(`[projects] 板收敛[observe]：将翻正 ${converged.wouldClose.length} 张陈卡（跳过 ${converged.skipped} 张疑似人工在管）——observe 档未执行`);
+          }
+        } else {
+          if (converged.moved) console.log(`[projects] 板收敛：${converged.moved} 张已收口卡归 done 泳道`);
+          if (converged.skipped) console.log(`[projects] 板收敛：跳过 ${converged.skipped} 张疑似人工在管（hold 锁/人工重开豁免）`);
+        }
+      }
     } catch (e) {
       console.warn(`[projects] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }

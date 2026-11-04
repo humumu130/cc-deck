@@ -52,6 +52,7 @@
     "test:leader": "tsx scripts/test-leader.ts",
     "test:projects": "tsx scripts/test-projects.ts",
     "test:boardfix": "tsx scripts/test-boardfix.ts",
+    "test:observe3": "tsx scripts/test-observe3.ts",
     "test:board-journal": "tsx scripts/test-board-journal.ts",
     "test:agent-activator": "tsx scripts/test-agent-activator.ts",
     "test:decision-notify": "tsx scripts/test-decision-notify.ts",

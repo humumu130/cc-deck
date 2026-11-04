@@ -22,6 +22,9 @@
                 const dismissedNotifyKeys = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
                 let lastRows = [];
                 let lastRenderSig = ""; // #282 签名跳帧（等待/降级分支置空防回跳脏数据） // FB18：清除动作要行信息（synth/actionable），渲染期留账
+                // observe3（1104 用户令·注意力经济学）：动态组（已处理/已读=健康态）默认折叠
+                // ——「健康态零占位」纪律；组头可点开合（会话内记忆，不持久化——重开面板回默认收起）。
+                let dynamicCollapsed = true;
                 // #B3-17 新通知入场动画：仅首见行挂 .enter（首帧存量不动画，防整列闪烁）
                 const seenNotifyKeys = new Set();
                 let notifySeenInit = false;
@@ -201,7 +204,8 @@
                   const attentionRows0 = rows.filter((r) => !r.active && r.unresolved);
                   const dynamicRows0 = rows.filter((r) => !r.unresolved);
                   const sig = rows.map((r) => r.key + ":" + (r.isNew ? 1 : 0) + ":" + (r.active ? 1 : 0) + ":" + (r.unresolved ? 1 : 0)).join("|")
-                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length;
+                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length
+                    + (dynamicCollapsed ? "#dyn-collapsed" : "#dyn-open"); // observe3：折叠态入签名（切换必重渲）
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
@@ -226,18 +230,19 @@
                   // p2-batch2 修（notify 审 P2-组清空越组）：grpClear 带组别（y=注意/n=动态）
                   // ——旧版两组合用 "soft" 调 clearSoftNotifications（清全部非 active=点「注意」
                   // 把「动态」也清了）；本版按组精确清
-                  const group = (label, dot, items, grpClear) => items.length
-                    ? '<div class="ngrp" data-notify-grp="' + (dot === "r" ? "r" : dot) + '"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
+                  const group = (label, dot, items, grpClear, collapsible) => items.length
+                    ? '<div class="ngrp' + (collapsible ? " ngrp-fold" : "") + '"' + (collapsible ? ' data-notify-grp-toggle="1" role="button" tabindex="0" title="展开/收起已处理动态"' : "") + ' data-notify-grp="' + (dot === "r" ? "r" : dot) + '"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
+                      + '<span class="caret">' + (collapsible ? (dynamicCollapsed ? "▸" : "▾") : "") + '</span>'
                       + '<span class="cnt">' + items.length + "</span>"
-                      + (grpClear ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
-                      + "</div>" + items.map(rowMarkup).join("")
+                      + (grpClear && (!collapsible || !dynamicCollapsed) ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
+                      + "</div>" + (collapsible && dynamicCollapsed ? "" : items.map(rowMarkup).join(""))
                     : "";
                   if (rows.length) {
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
                     const flatHtml = group("需你行动", "r", actionRows, "")
                       + group("注意", "y", attentionRows, "y")
-                      + group("动态", "n", dynamicRows, "n");
+                      + group("动态", "n", dynamicRows, "n", true); // observe3：健康态默认折叠零占位，组头点开
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
@@ -427,8 +432,14 @@
                   const target = event.target;
                   if (target.closest("[data-notify-mask]")) { closePanel(); return; } // B2 点外收起（遮罩命中层；面板内 mousedown 不达遮罩=不穿透）
                   if (target.closest("[data-notify-close]")) { closePanel(); return; } // 头部 ×（三路径共享退场）
+                  // observe3 R1 P1-2（A 审 DOM 探针实证）：清空钮判定必须**先于**折叠开合——
+                  // 清空钮渲染在携带 data-notify-grp-toggle 的组头内，closest 沿祖先链上行
+                  // 必先命中组头（「button 自带 target」是错误断言），先判 toggle=清空钮
+                  // 永远走开合分支=死路。钮自带 data-notify-grp-clear 先命中即清空。
                   const grpClear = target.closest("[data-notify-grp-clear]");
                   if (grpClear) { clearGroupNotifications(grpClear.dataset.notifyGrpClear === "y" ? "y" : "n"); return; } // p2-batch2：按组精确清（y=注意/n=动态）
+                  const grpToggle = target.closest("[data-notify-grp-toggle]");
+                  if (grpToggle) { dynamicCollapsed = !dynamicCollapsed; render(); return; } // observe3：健康态折叠开合（组头空白区点击）
                   const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
                   if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");

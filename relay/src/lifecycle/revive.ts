@@ -9,6 +9,7 @@ import { readTaskStoreTodos } from "../task-store.js";
 import { truncate } from "../summarizer.js";
 import { findGroup } from "../projects.js";
 import { resumePendingWindowMs } from "../session-manager.js"; // 类侧导出单源（S5 拆分面：常量级工具，S6 可提公共件
+import { autoTierOf, recordWouldDo, observeBucket } from "../auto-tiers.js"; // observe3：revive 族三档挂档点（边界声明见 auto-tiers.ts——#PMRESUME/#36 状态恢复不入族）
 
 // 样板参数：真身 SessionManager——any 网关为跨 private 成员边界（行为等价由
 // test-dispatch + parity 锁死，非类型信任面）。模块级工具（findGroup/
@@ -24,7 +25,9 @@ import { resumePendingWindowMs } from "../session-manager.js"; // 类侧导出�
 // 按最近活跃排序取 3 个；失败即止不重试（留 historical 态 = 与旧行为一致，
 // 等人来发消息）。CCR_NO_AUTOREVIVE=1 逃生阀（测试/紧急关闭）。
 export function autoReviveManaged(mgr: any, limit = 3): number {
-  if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
+  if (process.env.CCR_NO_AUTOREVIVE === "1") return 0; // 逃生阀恒最高（先于档位）
+  const reviveTier = autoTierOf("revive"); // observe3：off=不研判直接停（与逃生阀同义叠加）
+  if (reviveTier === "off") return 0;
   const candidates: { s: any; updated: number }[] = [];
   // #275R 陈年待办需确认面：reviveEligible 拦下的 stale-todos 不静默——boot 聚合出
   // 一条可操作通知（用户点头=去会话卡手动恢复），既不自动拉也不无声丢
@@ -39,17 +42,9 @@ export function autoReviveManaged(mgr: any, limit = 3): number {
     candidates.push({ s, updated: s.state.updated_at });
   }
   candidates.sort((a, b) => b.updated - a.updated);
-  let revived = 0;
-  for (const c of candidates) {
-    if (revived >= limit) break;
-    try {
-      mgr.resumeAgent(c.s, "[relay 自动恢复] relay 重启完成，检测到本会话仍有未完成任务。" + reviveInstruction(c.s));
-      revived++;
-    } catch (e) {
-      console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} 恢复失败: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  if (revived > 0) console.log(`[auto-revive] 已自动拉起 ${revived} 个有未完成待办的托管会话`);
+  // observe3 R1（B 审 1.3 P2）：#275R 陈年待办聚合通知前置到档位分支之前——stale-todos
+  // 是「需人决策」面（点行跳会话卡手动恢复），observe 档不得双盲（原 observe return 0
+  // 先于此块=观察档下陈年待办既无通知也无 observe 记录）。auto/observe 两档共用。
   if (staleTodoSkipped.length > 0) {
     try {
       // revision 用天级时间桶（审查 A/B-P1 同报）：静态键会让通知冻结在首 Fire 的
@@ -61,6 +56,35 @@ export function autoReviveManaged(mgr: any, limit = 3): number {
       });
     } catch { /* 通知面尽力而为 */ }
   }
+  // observe3（revive 族 observe 档干跑）：候选研判照常（reviveEligible 全链照跑，含
+  // stale-todos 拦截聚合），resume 动作不执行——逐候选记 observe 账本+聚合通知账一行式
+  //（day-bucket 防刷屏，revive-stale-todos 先例同款）。
+  if (reviveTier === "observe") {
+    const picked = candidates.slice(0, limit);
+    for (const c of picked) recordWouldDo(mgr.cfg.dataDir, "revive", "auto-revive", "resume", `${c.s.state.title || c.s.state.session_id.slice(0, 8)}（有未完成待办）`);
+    if (picked.length > 0) {
+      console.log(`[auto-revive][observe] 将拉起 ${picked.length} 个有未完成待办的托管会话（干跑未执行）`);
+      try {
+        mgr.upsertNotification("system", "observe-revive", observeBucket(), {
+          title: "[observe] 自动拉活干跑：将拉起 " + picked.length + " 个会话",
+          body: `revive 档=observe（研判通过不执行）。将拉起：${picked.slice(0, 3).map((c) => c.s.state.title || c.s.state.session_id.slice(0, 8)).join("、")}${picked.length > 3 ? " 等" : ""}——转 auto 档才会执行`,
+          severity: "waiting", group: "attention", actionable: false, domain: "session", returnPath: "sessions",
+        });
+      } catch { /* 通知账不可用时 observe-log 已在案 */ }
+    }
+    return 0;
+  }
+  let revived = 0;
+  for (const c of candidates) {
+    if (revived >= limit) break;
+    try {
+      mgr.resumeAgent(c.s, "[relay 自动恢复] relay 重启完成，检测到本会话仍有未完成任务。" + reviveInstruction(c.s));
+      revived++;
+    } catch (e) {
+      console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} 恢复失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (revived > 0) console.log(`[auto-revive] 已自动拉起 ${revived} 个有未完成待办的托管会话`);
   return revived;
 }
 

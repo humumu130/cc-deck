@@ -18,6 +18,7 @@ import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
 import { readDispatchLog, orgDir } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
+import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
 import type { SessionManager } from "./session-manager.js";
 
 const WORKER_STALE_MIN = 40;     // WORKING 无帧判停滞（分钟）
@@ -55,6 +56,22 @@ export class PatrolModule {
   private fullTimer: NodeJS.Timeout | null = null;
   // 去重账本：key → 上次告警文本（onset-only）
   private lastAlerts = new Map<string, string>();
+  // observe3 R1 P2⑧：observe 档独立去重账（不写 lastAlerts——防 observe→auto 切换后
+  // 同文告警被「observe 期见过」吞掉；observe 期间同文不重复记账用本账）
+  private observeSeen = new Map<string, string>();
+
+  // observe3 R1（P1-1 六面收口）：patrol 族档位面级单点——本模块一切自主动作副作用
+  // （push 推送/boardCardScan 写板+喂活+直写通知账/stale-escalate 升级/drill 演练/
+  // recon 对账/breaker 补试喂活）经 patrolObserve() 判档：observe=副作用只记 observe
+  // 账（wouldDo 单口，研判/扫描照常）。静态锁（test-observe3 E 族）断言六面引用——
+  // 新增自主动作面必须挂本单点（auto-tiers.ts 挂档纪律）。
+  private patrolObserve(): boolean {
+    return autoTierOf("patrol") === "observe";
+  }
+  private wouldDo(key: string, action: string, detail: string): void {
+    recordWouldDo(this.opts.dataDir, "patrol", key, action, detail);
+    this.appendReport(`OBSERVE [${key}] 将${action}：${String(detail).slice(0, 120)}——observe 档未执行`);
+  }
 
   constructor(
     private mgr: SessionManager,
@@ -67,6 +84,7 @@ export class PatrolModule {
     const fullMs = num(process.env.CCR_PATROL_FULL_MS, this.opts.fullMs ?? 30 * 60_000);
     this.lightTimer = setInterval(() => {
       if (!this.opts.enabled()) return;
+      if (autoTierOf("patrol") === "off") return; // observe3：patrol 族 off 档（完全黑——与配置键/应急停同义叠加）
       // #199 B1：熔断到期补试——resumeCooldownUntil 过期后若无人触发（深夜无 turn_end/
       // event），值守链会一直哑到下一事件；light 周期顺手探测「刚过期」窗口补一轮喂活
       try { this.runLight(); } catch (e) { console.log(`[patrol] light error: ${e instanceof Error ? e.message : e}`); }
@@ -74,6 +92,10 @@ export class PatrolModule {
     }, lightMs);
     this.fullTimer = setInterval(() => {
       if (!this.opts.enabled()) return;
+      // observe3 R1 P2⑥：runFull 是 converge 周期扫的宿主——两族都 off 才停摆（patrol=off
+      // +converge=auto 时循环保活，runFull 内 converge 段自带档位闸、其余 patrol 族面在
+      // converge 段后 off 早退）。light 纯 patrol 族维持单族 off 闸。
+      if (autoTierOf("patrol") === "off" && autoTierOf("converge") === "off") return;
       try { this.runFull(); } catch (e) { console.log(`[patrol] full error: ${e instanceof Error ? e.message : e}`); }
     }, fullMs);
     this.lightTimer.unref?.();
@@ -126,11 +148,18 @@ export class PatrolModule {
         for (const top of readdirSync(tmpRoot)) scan(join(tmpRoot, top), 1);
       }
       if (hit.length > CBC_PREFETCH_MAX) {
-        let freed = 0;
-        for (const d of hit) {
-          try { rmSync(d, { recursive: true, force: true }); freed++; } catch { /* 占用中的跳过 */ }
+        // observe3：cbc 清理是**破坏性自主动作**（rmSync）——observe 档必须真不删（push
+        // 拦截只挡通知，这里单独挡执行），只记 would-clean
+        if (autoTierOf("patrol") === "observe") {
+          recordWouldDo(this.opts.dataDir, "patrol", "cbc-prefetch", "clean", `将清理 ${hit.length} 个更新预取残留目录（每个约 288MB）——observe 档未执行`);
+          this.appendReport(`OBSERVE [cbc-prefetch] 将清理 ${hit.length} 个残留目录（observe 档未执行）`);
+        } else {
+          let freed = 0;
+          for (const d of hit) {
+            try { rmSync(d, { recursive: true, force: true }); freed++; } catch { /* 占用中的跳过 */ }
+          }
+          this.push("cbc-prefetch", `清理了 ${freed} 个更新预取残留目录（每个约 288MB，磁盘反复吃紧的已知源头）`);
         }
-        this.push("cbc-prefetch", `清理了 ${freed} 个更新预取残留目录（每个约 288MB，磁盘反复吃紧的已知源头）`);
       } else this.resolve("cbc-prefetch");
     } catch { /* 扫描失败不告警（非本机平台/权限） */ }
     // 事件循环漂移：500ms 定时器实际延迟 >5s = 循环被饿（CPU 烧蚀/同步阻塞前兆）
@@ -162,17 +191,54 @@ export class PatrolModule {
     // 同文去重属信息不重复推送，人机打架面已不存在）②强翻命中经回调发 board-force-close
     // 审计（converge 自由函数无 this，mgr.emitChainAudit R3 转公）③catch 补 warn 与
     // boot 侧口径对齐（长期抛错不再无感）。
+    // observe3（converge 族三档挂档点）：off=跳过收敛扫；observe=dryRun（研判/豁免照跑、
+    // 翻面不执行，wouldClose 落 observe 账本+通知账一行式——面板可见）；auto=原路径。
+    // 注意 observe 的记录走 mgr.upsertNotification 直达（不经 this.push——push 受 patrol
+    // 族档位管辖，两族独立）。
     try {
-      const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.mgr.emitChainAudit(action, detail));
-      if (converged.moved > 0 || converged.skipped > 0) {
-        const parts: string[] = [];
-        if (converged.moved > 0) parts.push(`翻正 ${converged.moved} 张陈卡（backlog+台账 done>72h 断链残留）`);
-        if (converged.skipped > 0) parts.push(`跳过 ${converged.skipped} 张疑似人工在管（hold 锁/人工重开豁免）`);
-        this.push("board-converge", `台账→看板收敛：${parts.join("，")}`);
+      const tier = autoTierOf("converge");
+      if (tier !== "off") {
+        const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.mgr.emitChainAudit(action, detail), { dryRun: tier === "observe" });
+        if (tier === "observe") {
+          const would = converged.wouldClose;
+          if (would.length > 0 || converged.skipped > 0) {
+            recordWouldDo(this.opts.dataDir, "converge", "board-converge", "force-close",
+              `将翻正 ${would.length} 张陈卡${converged.skipped > 0 ? `，另跳过 ${converged.skipped} 张疑似人工在管` : ""}：${would.slice(0, 3).map((w) => w.text).join("、")}${would.length > 3 ? " 等" : ""}——observe 档未执行`);
+            try {
+              this.mgr.upsertNotification("system", "observe-converge", observeBucket(), {
+                title: "[observe] 板收敛干跑：将翻正 " + would.length + " 张陈卡",
+                body: `converge 档=observe（研判通过不执行）。将翻正：${would.slice(0, 3).map((w) => w.text).join("、")}${would.length > 3 ? ` 等 ${would.length} 张` : ""}${converged.skipped > 0 ? `；跳过 ${converged.skipped} 张疑似人工在管` : ""}——转 auto 档才会执行`,
+                severity: "waiting", group: "attention", actionable: false, domain: "session", returnPath: "sessions",
+              });
+            } catch { /* 通知账不可用时 observe-log 已在案 */ }
+            this.appendReport(`OBSERVE [board-converge] 将翻正 ${would.length} 张陈卡（跳过 ${converged.skipped} 张人工在管）——observe 档未执行`);
+          }
+        } else if (converged.moved > 0 || converged.skipped > 0) {
+          const parts: string[] = [];
+          if (converged.moved > 0) parts.push(`翻正 ${converged.moved} 张陈卡（backlog+台账 done>72h 断链残留）`);
+          if (converged.skipped > 0) parts.push(`跳过 ${converged.skipped} 张疑似人工在管（hold 锁/人工重开豁免）`);
+          // observe3 R1 P2⑤：converge 族完成通知直达通知账——不经 this.push（push 受
+          // patrol 族档位管辖，patrol=observe+converge=auto 组合会把已执行动作的完成
+          // 通知吞进 observe 账+族别错记）。revision=文本键：同文幂等更新、计数变即新行。
+          const convText = `台账→看板收敛：${parts.join("，")}`;
+          try {
+            this.mgr.upsertNotification("system", "board-converge", convText.slice(0, 60), {
+              title: "台账→看板收敛完成",
+              body: convText.slice(0, 200),
+              severity: "info", group: "activity", actionable: false, domain: "session", returnPath: "sessions",
+            });
+          } catch { /* 通知尽力而为（审计 emitChainAudit 已在案） */ }
+          this.appendReport(`CONVERGE ${convText}`);
+        }
       }
     } catch (e) {
       console.warn(`[patrol] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
+    // observe3 R1 P2⑥ 下半：patrol 族 off 而 converge 档仍活时，converge 段跑完即退——
+    // 后续 worker 帧新鲜度/看板漂移/演练/对账皆 patrol 族面，off 不执行
+    if (autoTierOf("patrol") === "off") { this.appendReport("full: patrol off（仅 converge 段运行）"); return; }
+    // observe3 R1 P2⑦：observe 干跑告知行收口（对应族离开 observe 档即 resolved——防按天驻留）
+    try { this.mgr.resolveObserveAdvisories?.(); } catch { /* 收口尽力而为 */ }
     // boardlife 审后补（review-w-boardlife-b-1103 P1）：submitted 滞留铃——收割口漏斗
     // 兜底。done 出口=org CLI/HTTP 人工面（web/expo 无搬卡 UI，leader-harvest 纯只读），
     // PM 漏收一次=submitted 永挂（「板谎报」换「板沉默卡死」更糟）；30min 一拍扫 active
@@ -213,14 +279,19 @@ export class PatrolModule {
       // resolve 面不变。首卡 actionable 跳转，severity=waiting 提级
       const first = stale[0];
       if (first) {
-        try {
-          (this.mgr as any).upsertNotification("system", "stale-escalate", String(Math.floor(now / 60_000)), {
-            title: `会话停滞升级（${stale.length} 个 >${WORKER_STALE_MIN}min 无帧）`,
-            body: text,
-            severity: "waiting", group: "attention", actionable: true, sessionId: first.session_id, domain: "session", returnPath: "/",
-          });
-          (this.mgr as any).emitChainAudit?.("stale-escalate", text, first.session_id);
-        } catch { /* 升级尽力而为 */ }
+        // observe3 R1 P1-1（面③）：stale-escalate 绕 push 直写通知账（actionable 面更重）
+        // ——observe 档只记 observe 账不写通知账；审计行（记录非动作）两档都留
+        if (this.patrolObserve()) this.wouldDo("stale-escalate", "升级停滞通知", text.slice(0, 120));
+        else {
+          try {
+            (this.mgr as any).upsertNotification("system", "stale-escalate", String(Math.floor(now / 60_000)), {
+              title: `会话停滞升级（${stale.length} 个 >${WORKER_STALE_MIN}min 无帧）`,
+              body: text,
+              severity: "waiting", group: "attention", actionable: true, sessionId: first.session_id, domain: "session", returnPath: "/",
+            });
+          } catch { /* 升级尽力而为 */ }
+        }
+        try { (this.mgr as any).emitChainAudit?.("stale-escalate", text, first.session_id); } catch { /* 审计尽力而为 */ }
       }
     } else this.resolve(`worker-stale`);
     // ② 看板对账漂移（active 组）
@@ -309,11 +380,15 @@ export class PatrolModule {
     try {
       const mainRepo = process.env.CCR_MAIN_REPO || join(homedir(), "dev", "cc-deck");
       if (drillDue(mainRepo, this.opts.dataDir)) {
+        // observe3 R1 P1-1（面⑤：drill 向真实台账追加假任务行）：observe 档只记不跑
+        if (this.patrolObserve()) { this.wouldDo("drill", "补跑链路演练", `主仓 ${mainRepo} 链路文件变更触发（不写台账假行）`); }
+        else {
         const t = Date.now();
         const r = runDrill(this.opts.dataDir);
         if (!r.ok) this.push("drill-failed", `链路演练断点在「${r.failed_hop}」（全链 ${r.hops.length} 跳 / ${r.duration_ms}ms）——链路自身可能坏了`);
         else this.resolve("drill-failed");
         this.appendReport(`drill: ${r.ok ? "OK" : "FAIL@" + r.failed_hop} in ${Date.now() - t}ms`);
+        }
       }
     } catch (e) {
       console.log(`[patrol] drill error: ${e instanceof Error ? e.message : e}`);
@@ -321,7 +396,9 @@ export class PatrolModule {
     this.appendReport(`full: worker-stale=${stale.length} board=${boardAlerts.length ? boardAlerts.length + "项" : "OK"}`);
     // #199 D：full 周期挂三账对账 + 对账心跳查龄（PM turn-report 双触发，此处兜底——
     // PM 停帧时对账链不断）
-    try { (this.mgr as any).runLedgerRecon?.("patrol-full"); } catch { /* 尽力而为 */ }
+    // observe3 R1 P1-1（面⑥：recon 对账含 recon-autoclose 搬卡副作用）：observe 档只记不跑
+    if (this.patrolObserve()) this.wouldDo("recon", "跑三账对账", "patrol-full 周期触发（含 recon-autoclose 搬卡——不执行）");
+    else { try { (this.mgr as any).runLedgerRecon?.("patrol-full"); } catch { /* 尽力而为 */ } }
     try {
       const hb = join(this.opts.dataDir, "recon-heartbeat.json");
       const st = statSync(hb);
@@ -354,6 +431,12 @@ export class PatrolModule {
           const face = (e.text || e.id).slice(0, 24);
           const dueAt = new Date(Number(e.wakeup_at)).toLocaleString("zh-CN", { hour12: false });
           wakeHits.push(`[${g.name}] ${face}`);
+          // observe3 R1 P1-1（面①：写板清 wakeup_at+直写通知账）：observe 档零板面副作用
+          // ——wakeup_at 保留（研判可重复，observeSeen 去重防记账刷屏），只记 would-wake
+          if (this.patrolObserve()) {
+            this.wouldDo("board-wakeup", "唤醒板卡", `[${g.name}] ${face}（${dueAt}，当前 ${e.status} 泳道——不写板不清 wakeup_at）`);
+            continue;
+          }
           const r = upsertBoardEntry(g.id, { id: e.id, text: e.text, status: e.status, wakeup_at: null });
           if (r.ok) touched = true;
           try {
@@ -378,18 +461,25 @@ export class PatrolModule {
     }
     if (wakeHits.length) {
       this.push("board-wakeup", `${wakeHits.length} 张板卡 wakeup 到点：${wakeHits.slice(0, 4).join("、")}${wakeHits.length > 4 ? " 等" : ""}`);
-      try { (this.mgr as unknown as { feedPM?: (t: string) => void }).feedPM?.("board-wakeup"); } catch { /* 喂活尽力而为（无值守=纯通知面） */ }
+      // observe3 R1 P1-1（面②：feedPM 喂活 PM）：observe 档不喂活（push 侧自记 observe 账）
+      if (!this.patrolObserve()) {
+        try { (this.mgr as unknown as { feedPM?: (t: string) => void }).feedPM?.("board-wakeup"); } catch { /* 喂活尽力而为（无值守=纯通知面） */ }
+      } else this.wouldDo("board-wakeup", "喂活PM", `board-wakeup ×${wakeHits.length}（feedPM 不执行）`);
     } else this.resolve("board-wakeup");
     if (stallHits.length) {
       const text = `${stallHits.length} 张 doing 卡滞留>${staleMin}min：${stallHits.slice(0, 5).join("、")}${stallHits.length > 5 ? " 等" : ""}（提醒不自动重派——重派决策留人/PM）`;
       this.push("board-doing-stale", text);
-      try {
-        (this.mgr as any).upsertNotification("system", "board-doing-stale", String(Math.floor(now / 60_000)), {
-          title: `doing 滞留提醒（${stallHits.length} 张 >${staleMin}min 无进展）`,
-          body: text,
-          severity: "waiting", group: "attention", domain: "team", returnPath: "/",
-        });
-      } catch { /* 通知尽力而为 */ }
+      // observe3 R1 P1-1（面④：doing-stale 绕 push 直写通知账）：observe 档只走 push 的
+      // observe 记账，不落通知账
+      if (!this.patrolObserve()) {
+        try {
+          (this.mgr as any).upsertNotification("system", "board-doing-stale", String(Math.floor(now / 60_000)), {
+            title: `doing 滞留提醒（${stallHits.length} 张 >${staleMin}min 无进展）`,
+            body: text,
+            severity: "waiting", group: "attention", domain: "team", returnPath: "/",
+          });
+        } catch { /* 通知尽力而为 */ }
+      }
     } else this.resolve("board-doing-stale");
     this.appendReport(`board-card: wakeup=${wakeHits.length} doing-stale=${stallHits.length}`);
   }
@@ -398,6 +488,26 @@ export class PatrolModule {
   private push(key: string, text: string): void {
     const prev = this.lastAlerts.get(key);
     if (prev === text) return; // 同条件未变化：不重推
+    // observe3（patrol 族单咽喉）+R1 双修：observe 档干跑——研判照常、动作只记 observe
+    // 账+web 一行式。P2⑧：observe **不写 lastAlerts**（防 observe→auto 切换后同文告警
+    // 被「observe 期见过」吞掉——去重走独立 observeSeen 账）；P2①：observe 记录补
+    // upsertNotification 一行式（day-bucket+attention 组+[observe] 前缀，converge/revive
+    // 同款——「先看见再放开」对 patrol 族成立）。auto 档零变化；off 档定时器层已拦。
+    if (autoTierOf("patrol") === "observe") {
+      const seen = this.observeSeen.get(key);
+      if (seen === text) return; // observe 期间同文不重复记账（独立账，不占 auto 去重位）
+      this.observeSeen.set(key, text);
+      recordWouldDo(this.opts.dataDir, "patrol", key, "push", text);
+      try {
+        this.mgr.upsertNotification("system", "observe-patrol-" + key, observeBucket(), {
+          title: `[observe] 巡检将告警：${key}`,
+          body: `patrol 档=observe（研判通过不推送）。${text.slice(0, 140)}——转 auto 档才会推送`,
+          severity: "waiting", group: "attention", actionable: false, domain: "session", returnPath: "sessions",
+        });
+      } catch { /* 通知账不可用时 observe-log 已在案 */ }
+      this.appendReport(`OBSERVE [${key}] ${text}`);
+      return;
+    }
     this.lastAlerts.set(key, text);
     // 投递目标兜底链（与 /api/notify handleNotify 同款）：WORKING external → external → 首个
     const sessions = this.mgr.snapshot();
@@ -424,6 +534,8 @@ export class PatrolModule {
     for (const s of sm.sessions.values()) {
       if (s.resumeCooldownUntil && s.resumeCooldownUntil <= now && s.resumeCooldownUntil > now - 10 * 60_000) {
         this.breakerRetryAt = now;
+        // observe3 R1 P1-1（面⑦：breaker 补试自主拉活 PM）：observe 档只记不喂
+        if (this.patrolObserve()) { this.wouldDo("patrol-retry", "补试喂活PM", `熔断到期会话（streak=${s.resumeFailStreak ?? "?"}）——feedPM 不执行`); return; }
         this.appendReport(`BREAKER-RETRY cooldown 到期补试 feedPM（streak=${s.resumeFailStreak ?? "?"}）`);
         sm.feedPM("patrol-retry");
         return;
@@ -432,6 +544,7 @@ export class PatrolModule {
   }
 
   private resolve(key: string): void {
+    this.observeSeen.delete(key); // observe3 R1：observe 去重账同刻清（恢复后新 onset 重新记账）
     if (this.lastAlerts.delete(key)) {
       this.appendReport(`RECOVERED [${key}]`);
     }
