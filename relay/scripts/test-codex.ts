@@ -433,6 +433,14 @@ exit 0`);
   const sid = ack.session_id!;
   // hermeticity 锚（基线债③）：首调桩必须是回合 exec——登录探测泄漏（argv-1="login
   // status"）会让后续所有按 seq 定位的断言集体偏移，这里当场拦下而非连锁误报
+  // prbackflow R2（CI 红定罪·PM 拍板=测试竞态非产品回归）：COMMAND_CREATE ack ≠ 桩已
+  // 落笔——codex 工厂 spawn 异步，慢 runner 上首调桩 argv-1.txt 未写完即读=ENOENT
+  //（PR#11 CI errno -2 实证）。:374 姊妹用例同款 until 门；等「内容非空」而非仅
+  // existsSync（目录项先于写入可见，空读仍可偏移断言）、不等 startsWith("exec")
+  // 本体（那会把下方 hermeticity 断言焊成恒真——登录泄漏形态必须仍能红）
+  assert(await until(() => {
+    try { return readFileSync(join(STUB, "argv-1.txt"), "utf-8").length > 0; } catch { return false; }
+  }, 3000), "首调桩已落笔（until 竞态门——CI 慢 runner ENOENT 收口）");
   assert(readFileSync(join(STUB, "argv-1.txt"), "utf-8").startsWith("exec "), "首调桩=回合 exec（登录探测零泄漏——CODEX_HOME 钉死锚）");
 
   const created = events.find((e) => e.type === "SESSION_CREATED");

@@ -37,6 +37,7 @@ import {
 } from "./projects.js";
 import type { SeatGateContext } from "./projects.js"; // W-SMIMPL ①：席位门单源判据
 import { autoTierOf, recordWouldDo } from "./auto-tiers.js"; // observe3：自主动作三档（boot converge 挂档点）
+import { fetchPrCommentsViaGh, runPrCommentCycle, type PrComment, type PrCommentCycleResult } from "./pr-comment-trigger.js"; // W-PRBACKFLOW：PR 评论回流（纯函数面在彼，消费面在此——无环：trigger 只依赖 org/auto-tiers/subfanout）
 import { EFFECTIVE_TO_MANAGED, engineCapabilityState, evaluatePermission, normalizeLegacyPermissionMode, permDenyMessage, permissionPolicyEnabled } from "./permission-policy.js";
 import type { PermissionAuditRow } from "./permission-audit.js";
 import { catalogReadyEngines } from "./engine-catalog.js";
@@ -2172,6 +2173,42 @@ export class SessionManager {
       title: "订阅直通（跳过 PM 分诊）",
       body: `[直通] dispatch ${fan.dispatchId.slice(0, 8)}（${fan.status}）→ worker ${targetSid.slice(0, 12)}：${text.slice(0, 120)}`,
       severity: "info", group: "activity", actionable: false, sessionId: targetSid, domain: "session", returnPath: "/",
+    });
+  }
+
+  // ---------- W-PRBACKFLOW：PR 评论回流（Trigger→Subscription 直达交付 worker，DS 末跳） ----------
+  // 周期消费面挂在本类（notifyConfirm/noteSubFanout/leader 回落都在手边）；纯函数面在
+  // pr-comment-trigger.ts（收集/cursor/抓取缝）。独立 5min 档（不占 patrol 周期位），
+  // 档位挂 patrol 族（autoTierOf 单点，observe=干跑记账/off=零研判——auto-tiers 挂档纪律）。
+  private prCommentTimer: ReturnType<typeof setInterval> | null = null;
+  /** 抓取缝：生产=gh api 直拉；测试注入 fake（test-prbackflow） */
+  prCommentFetcher: (prUrl: string) => Promise<PrComment[]> = fetchPrCommentsViaGh;
+
+  startPrCommentWatch(intervalMs = 5 * 60_000): void {
+    if (this.prCommentTimer) return; // 幂等启动
+    this.prCommentTimer = setInterval(() => { void this.runPrCommentCycleOnce(); }, intervalMs);
+    this.prCommentTimer.unref?.(); // 不阻进程退出（测试/沙盒友好）
+  }
+
+  stopPrCommentWatch(): void {
+    if (this.prCommentTimer) { clearInterval(this.prCommentTimer); this.prCommentTimer = null; }
+  }
+
+  async runPrCommentCycleOnce(): Promise<PrCommentCycleResult> {
+    return runPrCommentCycle({
+      notifyConfirm: (sid, text) => this.notifyConfirm(sid, text),
+      noteSubFanout: (sid, fan, text) => this.noteSubFanout(sid, fan, text),
+      // PM 回落：leader 在岗=定向 [待确认]（PM 分诊跳）；不在岗=通知账 attention 兜底
+      pmFallback: (text, did, cid) => {
+        if (this.leaderId && this.notifyConfirm(this.leaderId, text)) return;
+        this.upsertNotification("system", `pr-comment-${did.slice(0, 8)}-${cid}`, undefined, {
+          title: "PR 评论回流（PM 回落）",
+          body: text.slice(0, 300),
+          severity: "waiting", group: "attention", actionable: true, domain: "dispatch", returnPath: "/",
+        });
+      },
+      dataDir: this.cfg.dataDir,
+      fetchComments: this.prCommentFetcher,
     });
   }
   notifyConfirm(sessionId: string, text: string): boolean {
