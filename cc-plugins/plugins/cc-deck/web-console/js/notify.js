@@ -165,7 +165,7 @@
                     }
                   }
                   if (railBadge) {
-                    railBadge.textContent = String(count);
+                    railBadge.textContent = count > 99 ? "99+" : String(count) /* visualfix（1104 V-P2-5）：659 直出=角标宽超铃铛本体遮挡——99+ 封顶（aria/title 保真全数） */;
                     railBadge.hidden = count === 0;
                     railBadge.setAttribute("aria-label", "通知有 " + count + " 项需行动");
                     railBadge.setAttribute("title", "通知 · " + count + " 项需行动");

@@ -58,12 +58,14 @@
                   // 初始化时一次性 getElementById 恒为 null，域内 toast 全链哑火（含本批快捷钮容错提示）
                   let node = null;
                   let timer = null;
-                  return (message) => {
+                  return (message, kind) => {
                     node = node || document.getElementById("toast");
                     if (!node) return;
                     const host = document.querySelector("#stage-mobile.active") ? document.querySelector(".mobile-frame") : document.querySelector(".desktop-frame");
                     if (host && node.parentElement !== host) host.append(node);
-                    node.textContent = message;
+                    node.textContent = (kind === "error" ? "⚠ " : "") + message; // W3P-P2-5：错误级前置警示符（样式随 toast-error 类）
+                    node.classList.toggle("toast-error", kind === "error"); // W3P-P2-5：错误语义样式（警示描边+可点关）
+                    node.onclick = kind === "error" ? () => node.classList.remove("show") : null; // 错误级可点关闭（中性 toast 维持不可点原行为）
                     node.classList.add("show");
                     clearTimeout(timer);
                     timer = setTimeout(() => node.classList.remove("show"), 2200);
@@ -708,6 +710,10 @@
                 }
 
                 function renderInspector(entry) {
+                  // web3p R2-P2-1（B 审 P1-2 footer 时序）：恢复下沉——正常路径与 !entry 早退都经过本函数
+                  //（原恢复仅挂 waiting&&hasData 分支，快照到达 waiting 归空后永不执行=主流冷载 footer 丢失）
+                  const footR = section.querySelector(".workspace-footer");
+                  if (footR) footR.style.display = "";
                   const actions = projectActionItems(entry);
                   if (actions.length) {
                     els.riskCount.style.display = "";
@@ -772,20 +778,32 @@
                 function render() {
                   const waiting = bridge.waitingText();
                   els.queue.dataset.relayState = bridge.hasSnapshot ? "snapshot" : bridge.connection;
-                  if (waiting) {
+                  // W3P-P1-1（1104 视觉补审定罪）：waiting 早退整页=桌面项目页 90% 空白根因——
+                  // 数据在场（SNAPSHOT 已到，仅 connection 态滞后/重连窗）时手机端照常渲染而桌面
+                  // 吞页。修=数据优先：有 projects/sessions 就走正常渲染（与手机端同源行为）；
+                  // 真无数据才进占位分支，且主区给骨架（连接态文案以左栏 banner+顶栏 hint 为
+                  // 权威位，不再三重重复），footer 收起防孤悬。
+                  const hasData = (Array.isArray(bridge.projects) && bridge.projects.length > 0) || bridge.sessions.size > 0;
+                  if (waiting && !hasData) {
                     els.queue.dataset.b2qSig = ""; // #282 三批 N2：降级分支清签（回数据态不误跳帧）
                     if (els.body) els.body.dataset.b2lSig = "";
                     els.queue.replaceChildren(bannerNode(waiting));
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
                     window.__ccDeck005SetWindowbarHint?.("project", waiting);
-                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="readonly-banner" role="status">' + escapeHtml(waiting) + "</div>"));
+                    if (els.body) els.body.replaceChildren(nodesFrom('<div class="proj-skel" role="status" aria-label="项目数据等待同步"><div class="skel-line w40"></div><div class="skel-line w90"></div><div class="skel-line w70"></div><div class="skel-cards"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div></div>'));
+                    const foot = section.querySelector(".workspace-footer");
+                    if (foot) foot.style.display = "none"; // W3P-P1-1④：desktop-only-note 等数据到位再显（防孤悬）
                     els.riskCount.style.display = "none";
                     els.riskCopy.textContent = waiting;
                     els.artifactCount.textContent = "0";
                     els.artifactRows.replaceChildren();
                     return;
                   }
+                  /* web3p R2-P2-1/P2-4（A+B converge）：本分支删除——SNAPSHOT 到达后 waitingText() 归 ""
+                     （hasSnapshot 门），主流冷载时序（占位收 footer → 快照到 → waiting=""）两分支都不进
+                     =footer 永久 display:none；且 hint 行被 renderHead :614/:618 同 tick 无条件覆写=死行。
+                     footer 恢复下沉 renderInspector 头（null 与 entry 两路全覆盖——A 审处方） */
                   const entries = deriveEntries();
                   if (!selectedKey || !entries.some((e) => e.key === selectedKey)) {
                     // W-PROJP1：默认选中优先有行动项 → 立项组卡（未立项卡默认收在折叠组里，选中看不见）
