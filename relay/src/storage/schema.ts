@@ -333,4 +333,17 @@ CREATE TABLE task_v10 (
       p.exec("CREATE INDEX idx_task_ready ON task(group_id,status,gate_reason)");
     },
   },
+  {
+    // prchip（1104 用户问「pr 审查在泳道里有体现吗」）：dispatch 表补两列（pr_url PR
+    // 地址 / pr_state PR 状态快照——orgAction pr-report 写入，词表 org-schema PR_STATES）。
+    // v4/v5/v7/v8 同款增量惯例；两列全可空（旧行/无 PR 单不带键，与 DispatchEntry
+    // 可选字段对齐——投影不再丢新字段）。板卡侧走 task.scope_json.board_entry 全字段
+    // 快照（免加列），dispatch 台账审计面走本两列。
+    version: 11,
+    name: "prchip dispatch pr_url + pr_state（PR 徽章数据源·快照值不查 GitHub）",
+    up: (p) => {
+      p.exec("ALTER TABLE dispatch ADD COLUMN pr_url TEXT");
+      p.exec("ALTER TABLE dispatch ADD COLUMN pr_state TEXT");
+    },
+  },
 ];

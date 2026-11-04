@@ -1075,6 +1075,10 @@ export function startServer(
             // confirm-decide；词表+值域闸在 orgAction case 内）。非决议类（本动作自身
             // 零副作用，副作用在 ✓ 后 applyConfirmEffects）。
             "patrol-suggest",
+            // prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 徽章上报——PM 收割/
+            // worker 交付时把 PR URL+状态快照写板卡+台账（板面 chip 数据源）。快照值
+            // 语义（relay 不查 GitHub），board-hold 同级写面非决议类。
+            "pr-report",
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

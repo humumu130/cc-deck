@@ -366,7 +366,24 @@
                   const subAllDone = !!task.__subAllDone;
                   // #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀；P2=默认档不显——显了反而噪音）+ data-priority 左缘色条（CSS）
                   const prio = /^(P0|P1)$/.test(String(task.priority || "")) ? String(task.priority) : "";
-                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + (subAllDone ? " sub-all" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + (subAllDone ? "——批次齐活（全部子卡 done）" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subDone + "/" + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + (subAllDone ? '<span class="tchip sub-all-chip" title="批次齐活：全部子任务已完成（M2b 父子联动）">批次齐活</span>' : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + planActs + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
+                  // prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 徽章 chip——审查期
+                  // PR 可见可直达。数据源=板卡 pr_url/pr_state（relay orgAction pr-report 落值，
+                  // SNAPSHOT/BOARD_UPDATED 透传，快照值不查 GitHub）；CI 点绿=ci_green/红=
+                  // ci_red/灰=其余（ci_unknown/open，状态未明不猜）；merged 加 ✓。点击走
+                  // __ccDeck005OpenUrl 统一开链（桌面 openExternal/浏览器降级复制）直达
+                  // GitHub。无 pr_url 的旧卡零渲染（降级零破坏）。色轴=既有变量（--done/
+                  // --error/--faint，禁新色）；词表锚=relay org-schema PR_STATES。
+                  const prChip = (() => {
+                    const url = String(task.pr_url || "");
+                    if (!url || !/^https:\/\//i.test(url)) return "";
+                    const st = String(task.pr_state || "ci_unknown");
+                    if (!/^(open|merged|ci_green|ci_red|ci_unknown)$/.test(st)) return ""; // 异常值零渲染（词表外宽容跳过）
+                    const dot = st === "ci_green" ? "ok" : st === "ci_red" ? "bad" : "mid";
+                    const prNo = (url.match(/\/pull\/(\d+)/) || [])[1] || "PR";
+                    const stTxt = st === "merged" ? "已合并" : st === "ci_green" ? "CI 绿" : st === "ci_red" ? "CI 红" : st === "open" ? "PR 开着" : "CI 状态未知";
+                    return '<button type="button" class="tchip pr-chip" data-board-pr="' + escape(url) + '" title="PR #' + escape(prNo) + " · " + stTxt + " · 点击直达 GitHub（状态=上报快照，非实时）" + '"><i class="pr-dot ' + dot + '"></i>PR#' + escape(prNo) + (st === "merged" ? " ✓" : "") + "</button>";
+                  })();
+                  return '<div class="task-card compact' + (isDone ? " task-done" : "") + '" data-team-task="' + escape(task.id) + '" data-stripe="' + stripe + '"' + (prio ? ' data-priority="' + prio + '"' : "") + ' title="' + escape(fullText) + '"><div class="task-title">' + (subCount ? '<button type="button" class="sub-toggle' + (task.__subRunning ? " sub-running" : "") + (subAllDone ? " sub-all" : "") + '" data-board-toggle="' + escape(task.id) + '" title="子任务折叠/展开（#G3 父子链' + (task.__subRunning ? "——内有运行中子任务" : "") + (subAllDone ? "——批次齐活（全部子卡 done）" : "") + '）">' + (subOpen ? "▾" : "▸") + " " + subDone + "/" + subCount + "</button>" : "") + '<strong>' + (isDone ? "✓ " : "") + escape(faceText) + '</strong>' + (prio ? '<span class="tchip prio-' + prio.toLowerCase() + '" title="优先级 ' + prio + '（#G3）">' + prio + "</span>" : "") + prChip + (subAllDone ? '<span class="tchip sub-all-chip" title="批次齐活：全部子任务已完成（M2b 父子联动）">批次齐活</span>' : "") + selfCheckHtml + '</div>' + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + '<div class="task-owner' + (hasOwner ? "" : " unassigned") + '">' + ownerBits.join("") + "</div>" + '<div class="task-cline">' + clineBits.join(' <i class="cline-sep">·</i> ') + "</div>" + planActs + (task.gate ? '<div class="task-flag">阻塞：' + escape(task.gate.reason || "等待人工解除") + "</div>" : "") + '<div class="task-pop"><b>' + escape(fullText) + "</b>" + (task.note ? "<p>" + escape(task.note) + "</p>" : "") + "<span>执行者：" + (hasOwner ? escape(dispName) + " · " + escape(info.role || "") : task.owner_session ? escape(dispName) + " · 失联" : "未指派") + " · 创建 " + created + " · 更新 " + updated + "</span>" + timeline + "</div>" + (subCount && subOpen ? '<div class="subtasks">' + (task.__subs || []).map((sub) => taskMarkup(sub, project)).join("") + "</div>" : "") + "</div>";
                 }
                 // W-DESIGNHUB 看板挂载图纸区（用户澄清并入）：当前组关联，匹配口径与
                 // 项目域 designSectionMarkup 同构——分词 ∩ tags 子串双向，中文项目名无空格
@@ -1777,6 +1794,15 @@
                       event.stopPropagation();
                       window.__ccDeck005B4?.railJump?.("session");
                       window.__ccDeck005B4?.selectSessionCard?.(memberSession.dataset.teamMemberSession);
+                      return;
+                    }
+                    // prchip：PR 徽章直达——统一开链（桌面 openExternal/浏览器降级复制），
+                    // stopPropagation 防误触选卡；URL 已在渲染层 https 白名单过闸
+                    const prOpen = event.target.closest("[data-board-pr]");
+                    if (prOpen) {
+                      event.stopPropagation();
+                      const prUrl = String(prOpen.dataset.boardPr || "");
+                      if (prUrl && window.__ccDeck005OpenUrl) void window.__ccDeck005OpenUrl(prUrl);
                       return;
                     }
                     // W-DESIGNHUB 看板图纸打开（HttpOrigin 拼绝对地址新窗直开，同设置/项目域口径）

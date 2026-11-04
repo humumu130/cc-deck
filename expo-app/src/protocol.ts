@@ -483,6 +483,12 @@ export interface BoardEntry {
   review_required?: boolean;
   /** 泳道迁移时间线（桌面件十九：[{status, ts}]；旧条目无此字段） */
   transitions?: { status: BoardEntryStatus; ts: number }[];
+  /** prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 徽章数据源——relay
+   *  orgAction pr-report 落值的快照对（BOARD_UPDATED/SNAPSHOT 透传；relay 不查
+   *  GitHub）。pr_state 词表=relay org-schema PR_STATES 镜像（注释锚同步：open/
+   *  merged/ci_green/ci_red/ci_unknown）。缺失=无 PR 零渲染（旧卡降级零破坏） */
+  pr_url?: string;
+  pr_state?: string;
 }
 
 // W-RULES2 团队铁律条目（relay team-rules.ts RuleEntry 端侧镜像；只读消费——手机

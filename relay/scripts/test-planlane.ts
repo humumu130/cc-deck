@@ -291,7 +291,11 @@ async function main() {
     try { port.exec("UPDATE task SET status = 'planned' WHERE id = 't1'"); } catch { v1Rejects = true; }
     assert(v1Rejects, "v1 基线 CHECK 拒 planned（对照面：迁移前确实拦）");
     const r10 = runMigrations(port, migrations);
-    assert(r10.to === 10 && ver(port) === 10, `全量迁移至 v10（applied=${j(r10.applied)}）`);
+    // prchipR1（P1·双审两行修）：天花板动态化——v10 硬编码在本批 sqlite v11 后必红
+    //（69/70 漏网：本套件不在 CI matrix，提交时没跑）。等值跟 migrations.length（全量
+    // 迁移的语义目标）+ ≥ 前基线 10 双锁（空迁移表恒真防线：length=0 时 ≥10 拒）
+    const wantV = migrations.length;
+    assert(r10.to === wantV && ver(port) === wantV && wantV >= 10, `全量迁移至 v${wantV}（applied=${j(r10.applied)}）——天花板随 migrations 动态`);
     let v10Ok = true;
     try { port.exec("UPDATE task SET status = 'planned' WHERE id = 't1'"); } catch (e) { v10Ok = false; console.error(e); }
     assert(v10Ok, "v10 后 planned 合法（CHECK 词表已扩）");

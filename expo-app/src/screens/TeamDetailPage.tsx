@@ -13,7 +13,7 @@
 // 结果兜底。对话不设 tab（A1-13）——经成员卡/看板 owner 点开成员会话即达。
 import { EngineBrandTile, EngineIcon, hasEngineIcon } from "../engine-icon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { HEAD_BASE } from "../head-unify";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -406,6 +406,30 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
               </Pressable>
             );
           })() : null}
+          {/* prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 徽章——审查期 PR
+              可见可直达。数据源=板卡 pr_url/pr_state（relay pr-report 落值快照，
+              BOARD_UPDATED/SNAPSHOT 透传，不实时查 GitHub）；CI 点绿=ci_green/红=
+              ci_red/灰=其余（状态未明不猜）；merged 加 ✓；点按 Linking 直达 GitHub。
+              无 pr_url 零渲染（旧卡降级）；色=既有主题色零新色 */}
+          {(() => {
+            const url = String(e.pr_url || "");
+            if (!url || !/^https:\/\//i.test(url)) return null;
+            const st = String(e.pr_state || "ci_unknown");
+            if (!/^(open|merged|ci_green|ci_red|ci_unknown)$/.test(st)) return null; // 词表外宽容零渲染
+            const dot = st === "ci_green" ? c.done : st === "ci_red" ? c.error : c.faint;
+            const prNo = /\/pull\/(\d+)/.exec(url)?.[1] || "PR";
+            const stTxt = st === "merged" ? "已合并" : st === "ci_green" ? "CI 绿" : st === "ci_red" ? "CI 红" : st === "open" ? "PR 开着" : "CI 状态未知";
+            return (
+              <Pressable
+                style={styles.tCardChip}
+                accessibilityLabel={`PR ${prNo} ${stTxt}，点按直达 GitHub`}
+                onPress={() => { void Linking.openURL(url).catch(() => {}); }}
+              >
+                <View style={[styles.tPrDot, { backgroundColor: dot }]} />
+                <Text style={styles.tCardChipT} numberOfLines={1}>PR#{prNo}{st === "merged" ? " ✓" : ""}</Text>
+              </Pressable>
+            );
+          })()}
           <Text style={styles.tCardTime}>{fmtMdHm(e.updated_at)}</Text>
         </View>
         {/* planlane：planned 卡操作行——排产单步；废弃两步武装（web 同款） */}
@@ -929,6 +953,8 @@ const makeStyles = (c: ThemeColors) =>
     tCardReviewNone: { color: c.faint, fontSize: 10, fontStyle: "italic", borderWidth: 1, borderColor: c.line, borderStyle: "dashed", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
     tCardTime: { color: c.faint, fontSize: 10, marginLeft: "auto", fontVariant: ["tabular-nums"], flexShrink: 0 },
     tRunDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
+    // prchip：PR 徽章 CI 点（色=主题色内联传——c.done/c.error/c.faint 零新色）
+    tPrDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
     // planlane：planned 卡操作行（排产/废弃钮——tCardChip 同族小钮）
     tPlanActs: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
     tPlanBtn: {

@@ -1549,5 +1549,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "builder-tag-coldstart", // W-ROLE-BUILDER：新建岗 tag 首派无装配观测——探测降级告警不拒收（清熟手走新会话；Builder 策展声明在档）
   "deliver-callback", // W-DELIVERCB（用户 1102 拍板）：沃克交付直达——线一线二投递/去重跳过/无目标占坑全入审计流
   "watch-feed", // W-WATCHAGENT（1104 用户令）：巡查员喂料——投递/哑然/滞留水位全入审计流（喂料链可观测面）
+  "pr-report", // prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 徽章上报落值/清除（PM 收割/worker 交付链——板卡+台账双写全入审计流）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

@@ -144,6 +144,12 @@ export interface BoardEntry {
    * 触发（actionable 通知+PM 喂活+字段消费清空防重触）。设置面=upsert 卡级写入
    *（null/清除同 parent_id 口径）；毫秒时戳。 */
   wakeup_at?: number;
+  /** prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 互审链徽章数据源——
+   * orgAction pr-report 联动落值（PM 收割/worker 上报的快照值，relay 不主动查
+   * GitHub）。pr_url=https PR 地址（端上渲 PR chip：🔗+CI 点+点击直达）；pr_state
+   * 词表=org-schema PR_STATES。缺失=无 PR（旧卡不渲 chip，降级零破坏）。 */
+  pr_url?: string;
+  pr_state?: string;
 }
 
 /** #087 经验回流（009 §4 M2）：board lessons 分区——收口回执写入，任务书按 tag 筛选
@@ -1159,6 +1165,11 @@ export type UpsertBoardEntryInput = {
   /** W-ORG-DEFECTS 件3：held 态上锁（{reason}=新锁/null=破锁）；since 由 store 层单源
    * 维护（首锁时刻，续锁不重置——48h 出口按真扣留时长计），不收外部入参。 */
   hold?: { reason: string } | null;
+  /** prchip：PR 徽章落值/清除（pr_url:null=清除——PR 关闭/收割后去徽章）；pr_state
+   * 缺省时随 pr_url 在场自动补 ci_unknown（有 PR 状态未明）。词表校验在调用侧
+   * （orgAction pr-report 单口）。 */
+  pr_url?: string | null;
+  pr_state?: string | null;
 };
 export function upsertBoardEntry(
   gid: string,
@@ -1225,6 +1236,15 @@ function upsertBoardEntryInner(
       if (entry.wakeup_at === null) delete e.wakeup_at;
       else e.wakeup_at = entry.wakeup_at;
     }
+    if (entry.pr_url !== undefined) { // prchip：null/空串=清除（PR 关闭/收割去徽章）；set=落值（pr_state 缺省自动补 ci_unknown）
+      if (entry.pr_url === null || entry.pr_url === "") { delete e.pr_url; delete e.pr_state; }
+      else {
+        e.pr_url = entry.pr_url;
+        e.pr_state = entry.pr_state || "ci_unknown";
+      }
+    } else if (entry.pr_state !== undefined && e.pr_url) { // 只更新状态（PR 在场才允许——无 PR 的 state 孤儿不落）
+      e.pr_state = entry.pr_state || "ci_unknown";
+    }
     e.updated_at = now;
   } else {
     // D18：新卡也过规则内核（建卡即完成候选=done+review_required → R2 落 submitted）；
@@ -1248,6 +1268,7 @@ function upsertBoardEntryInner(
       ...(entry.priority ? { priority: entry.priority } : {}), // #G3：缺省不落键（旧行兼容）
       ...(entry.parent_id ? { parent_id: entry.parent_id } : {}),
       ...(entry.wakeup_at ? { wakeup_at: entry.wakeup_at } : {}), // M2a：缺省不落键
+      ...(entry.pr_url ? { pr_url: entry.pr_url, pr_state: entry.pr_state || "ci_unknown" } : {}), // prchip：缺省不落键（旧卡兼容）
     };
     w.board.entries.push(e);
   }

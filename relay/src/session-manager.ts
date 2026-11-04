@@ -104,6 +104,7 @@ import { escalateClaimed, mergeBoardMirror, mirrorDiff, isMirrorMarked } from ".
 import { killTree, snapshotTree, treeCpuMs } from "./proc-tree.js";
 import { saveUploadFiles, saveUploadImages, imageRefsOf, resolveUploadImage, type UploadBlob } from "./uploads.js";
 import { normKey, taskDoneLabel, truncate } from "./summarizer.js";
+import { PR_STATES } from "./org-schema.js"; // prchip：PR 徽章状态词表（校验面单源）
 import type { AgentLike } from "./agent-adapter.js";
 
 // 上下文窗口上限：口径与证据见 context-limit.ts（#72，session-manager/history 共用）
@@ -6547,6 +6548,59 @@ ${lines.join("\n")}
           if (prev.hold) {
             this.emitChainAudit("hold-release", `卡 ${entryId}「${truncate(prev.text, 40)}」破锁（held ${Math.round((Date.now() - prev.hold.since) / 3600_000)}h，原因：${truncate(prev.hold.reason, 60)}）`);
           }
+          return { ok: true, data: { entry: u.entry } };
+        }
+        case "pr-report": {
+          // prchip（1104 用户问「pr 审查在泳道里有体现吗」）：PR 互审链交付上报——PM
+          // 收割/worker 交付时把 PR URL+状态快照写板卡（SNAPSHOT/BOARD_UPDATED 透传，
+          // 端上渲 chip）+dispatch 台账续行（审计面对账锚）。relay 不主动查 GitHub
+          //（状态是上报方带的快照值）；CI 红绿由上报链（PM gh pr checks / worker 回执）
+          // 落值，后续上报覆盖更新。
+          const dispatchId = str("dispatch_id");
+          const prUrl = String((p as { pr_url?: unknown }).pr_url ?? "").trim();
+          const prStateRaw = String((p as { pr_state?: unknown }).pr_state ?? "").trim();
+          if (!dispatchId) return { ok: false, error: "pr-report 需 dispatch_id（派单台账 id——按 id 定位板卡）" };
+          if (!prUrl && !prStateRaw) return { ok: false, error: "pr-report 需 pr_url / pr_state 至少一项（双空=无动作）" };
+          if (prUrl && !/^https:\/\//i.test(prUrl)) return { ok: false, error: "pr_url 必须是 https:// 开头的 PR 地址" };
+          if (prStateRaw && !(PR_STATES as readonly string[]).includes(prStateRaw)) {
+            return { ok: false, error: `pr_state 不在词表：${prStateRaw}（${PR_STATES.join("/")}）` };
+          }
+          // 定位板卡：显式 gid 优先（免全组扫），否则全组按 dispatch_id 找（PM 收割链
+          // 只持台账 id 的常态路径）；命中首张即止（同 id 多卡是异常态，审计面可查）
+          const gidPr = str("gid");
+          const groupsPr = gidPr ? listGroups().filter((g) => g.id === gidPr) : listGroups();
+          let hit: { gid: string; entry: ReturnType<typeof loadBoard>["entries"][number] } | null = null;
+          for (const g of groupsPr) {
+            const ent = loadBoard(g.id).entries.find((x) => x.dispatch_id === dispatchId);
+            if (ent) { hit = { gid: g.id, entry: ent }; break; }
+          }
+          if (!hit) return { ok: false, error: `未找到 dispatch_id=${dispatchId} 对应的板卡（PR 徽章挂卡面——派单建卡联动缺失时先核台账）` };
+          // pr_url 传参语义：带 URL=落值；只带状态=URL 不动（防误清——null 是显式清除
+          // 专用于后续「PR 关闭去徽章」链，本口双空已前置拒不出清除态）
+          const u = upsertBoardEntry(hit.gid, {
+            id: hit.entry.id, text: hit.entry.text,
+            ...(prUrl ? { pr_url: prUrl } : {}),
+            pr_state: prStateRaw || null,
+          });
+          if (!u.ok) return u;
+          // 台账审计续行：同 id 末行续一行带 pr_url/pr_state（append-only 状态机语义，
+          // 读侧同 id 取末行——本行成为 PR 面最新快照）。status/generation 透传末行值
+          //（状态机不动、S3 世代 CAS 链不断）；无在册行（手写卡挂 dispatch_id）跳过——
+          // 板面已是真相源，台账无行可续
+          const ledPrev = readDispatchLog().find((r) => r.id === dispatchId);
+          if (ledPrev) {
+            appendDispatch({
+              ts: Date.now(), id: ledPrev.id, tier: ledPrev.tier, target: ledPrev.target,
+              project_anchor: ledPrev.project_anchor,
+              status: ledPrev.status, session_id: ledPrev.session_id,
+              title: ledPrev.title, actor: ledPrev.actor,
+              generation: ledPrev.generation,
+              ...(ledPrev.run_ref ? { run_ref: ledPrev.run_ref } : {}), // prchipR1（P2）：run_ref 透传——终态续行防 appendDispatch 咽喉 archiveDispatchTerminal 重归档覆写 terminal-stats/events-slice（实证：done 真值 duration≈1000ms 被续行 ts 覆写成 59000ms 假时长，PM 收割上报必现）；review-ledger end 行同款口径
+              pr_url: prUrl || undefined, pr_state: prStateRaw || (prUrl ? "ci_unknown" : undefined),
+            });
+          }
+          this.emitBoard(hit.gid); // BOARD_UPDATED 广播：端上 chip 即时上屏（delta.upserts 全条目）
+          this.emitChainAudit("pr-report", `卡 ${hit.entry.id}「${truncate(hit.entry.text, 40)}」PR 徽章：${prUrl ? `${prUrl} · ${prStateRaw || "ci_unknown"}` : "清除"}`);
           return { ok: true, data: { entry: u.entry } };
         }
         case "suggest-hold": {
