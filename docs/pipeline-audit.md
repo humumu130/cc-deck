@@ -505,3 +505,4 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 | L-1029-7 | **并行会话共享 stash 栈撞车**：worktree 共享主仓 .git 的 refs/stash（stash 是 per-repo 非 per-worktree）——两会话 stash 窗口重叠时交叉互弹：A 的暂存弹进 B 工作树、B 的 147 行内容弹进 A 树顶掉 A 全部改动 | 1029 20:1x UI 批与 multica 批实测（UI 侧 fsck 认领 stash 提交恢复+20/20 复验无损；multica 内容 374 行备份 /tmp/w-uifeedback-probe/foreign-multica-content.diff，已通报两 worker 取回） | 通报+取回；经验入库（UI 批 worker 已申报 #pitfall） | 派单纪律硬条：**多会话并行期禁用 git stash**（基线对照用 worktree 内临时 commit）；根治=dispatch 任务书模板加禁令行 |
 
 | L-1029-8 | **派单→板卡状态联动断裂**：今晚 15+ 单派发建卡全停 backlog（进行中甬道空+待认领堆积——用户面板实见）；dispatch 建卡与状态翻态（claimed/doing/done）联动在假死清席/重派循环/queued→drain 路径下脱钩 | 1029 20:4x 面板实见：9 张 backlog 卡含已收割 6 单+在跑 2 单；手工归位（6→done/2→doing/删重复 1/补 2） | 手工归位+本表 | 排查 org dispatch 建卡后的状态翻态链在哪条路径丢失（重派复用既有卡时 move 缺失嫌疑大）——follow-up 查修单 |
+- E2E 绿路标记行（prreview 批真链测试：无害行，squash-merge 验证后随测试基线清理）
