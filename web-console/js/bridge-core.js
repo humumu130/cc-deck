@@ -107,6 +107,11 @@
                   pendingConfirms: [],
                   accepts: [],
                   projects: [],
+                  // [W-AWAITUSER] 待拍板三源聚合清单（SNAPSHOT.pending_user_actions 增量
+                  // PENDING_USER_ACTIONS_UPDATED 维护；null=旧 relay 能力缺席——聚合面
+                  //（通知顶格 chip/团队待办入口）降级隐藏，会话列表等输入浮顶不受影响
+                  //（那走会话帧自身状态）。单源权威：端上消费此键，不从三源各自拼）
+                  pendingUserActions: null,
                   // W-SRCMENU2 ⑥：设计图纸目录（SNAPSHOT.design_docs——W-DESIGNHUB 契约；
                   // 缺键/空数组=旧 relay 或无 docs 部署，图纸 tab 自动隐藏）
                   designDocs: [],
@@ -197,6 +202,10 @@
                   bridge.notificationsSupported = Object.prototype.hasOwnProperty.call(p, "notifications");
                   bridge.pendingConfirms = Array.isArray(p.org_confirms) ? p.org_confirms.filter((c) => c && typeof c.id === "string") : [];
                   bridge.accepts = Array.isArray(p.acceptances) ? p.acceptances.filter((a) => a && typeof a.id === "string") : [];
+                  // [W-AWAITUSER] 聚合清单（缺键=旧 relay→null 维持能力缺席态）
+                  bridge.pendingUserActions = Array.isArray(p.pending_user_actions)
+                    ? p.pending_user_actions.filter((x) => x && typeof x.key === "string" && typeof x.kind === "string" && typeof x.entity_id === "string")
+                    : null;
                   bridge.projects = Array.isArray(p.projects) ? p.projects.filter((g) => g && typeof g.id === "string") : [];
                   // W-SRCMENU2 ⑥：图纸清单（鸭子校验——path 字符串在场才算；缺键维持 []，能力位由 seen 判）
                   const dd = Array.isArray(p.design_docs) ? p.design_docs.filter((d) => d && typeof d.path === "string" && typeof d.title === "string") : null;
@@ -224,7 +233,7 @@
                     // 验收/通知）同口径按 id 并集——通知卡与项目卡聚合可见两源（用户实测空卡修复）
                     if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
                       const keepSessions = new Map(bridge.sessions);
-                      const keepLists = { projects: bridge.projects.slice(), pendingConfirms: bridge.pendingConfirms.slice(), accepts: bridge.accepts.slice(), notifications: bridge.notifications.slice(), designDocs: bridge.designDocs.slice() };
+                      const keepLists = { projects: bridge.projects.slice(), pendingConfirms: bridge.pendingConfirms.slice(), accepts: bridge.accepts.slice(), notifications: bridge.notifications.slice(), designDocs: bridge.designDocs.slice(), pendingUserActions: (bridge.pendingUserActions || []).slice() };
                       applySnapshot(frame.payload, evSource);
                       for (const [id, v] of keepSessions) if (!bridge.sessions.has(id)) bridge.sessions.set(id, v);
                       const byId = (keep, cur, idOf) => { const seen = new Set(cur.map((x) => x && idOf(x))); for (const x of keep) { const k = x && idOf(x); if (k !== undefined && k !== null && !seen.has(k)) { cur.push(x); seen.add(k); } } };
@@ -233,6 +242,7 @@
                       byId(keepLists.accepts, bridge.accepts, (x) => x.id);
                       byId(keepLists.notifications, bridge.notifications, (x) => x.key); // 通知归一化后判重键=key
                       byId(keepLists.designDocs, bridge.designDocs, (x) => x.path); // W-SRCMENU2 ⑥：图纸按 path 去重并集（聚合两源）
+                      if (Array.isArray(bridge.pendingUserActions)) byId(keepLists.pendingUserActions, bridge.pendingUserActions, (x) => x && x.key); // [W-AWAITUSER] 聚合两源按 key 并集（null 能力缺席不补集——另一源旧 relay 时保持缺席口径）
                     } else applySnapshot(frame.payload, evSource);
                     changed = true;
                   }
@@ -268,6 +278,18 @@
                     changed = true;
                   } else if (frame.type === "ACCEPTANCES_UPDATED") {
                     bridge.accepts = frame.payload && Array.isArray(frame.payload.acceptances) ? frame.payload.acceptances.filter((a) => a && typeof a.id === "string") : [];
+                    changed = true;
+                  } else if (frame.type === "PENDING_USER_ACTIONS_UPDATED") {
+                    // [W-AWAITUSER] 聚合清单增量帧（全量替换语义；消费掉立即减项=帧驱动）。
+                    // 聚合视角按 key 并集同 notifications 口径；帧到达即能力在（非 null）
+                    const items = frame.payload && Array.isArray(frame.payload.items)
+                      ? frame.payload.items.filter((x) => x && typeof x.key === "string" && typeof x.kind === "string" && typeof x.entity_id === "string")
+                      : [];
+                    if ((window.__ccDeck005SourceView && window.__ccDeck005SourceView()) === "aggregate" && evSource) {
+                      const seen = new Set(items.map((x) => x.key));
+                      for (const x of bridge.pendingUserActions || []) if (x && x.key && !seen.has(x.key)) { items.push(x); seen.add(x.key); }
+                    }
+                    bridge.pendingUserActions = items;
                     changed = true;
                   } else if (frame.type === "AUTH_REQUIRED") {
                     // #102 批 B：登录流程帧 → 引导卡（二维码/浏览器引导/转绿收卡）

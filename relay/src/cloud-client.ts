@@ -617,6 +617,9 @@ export class CloudClient {
         // #018-R1c 决策通知账（与 ws-server 直连快照同源同步，#117 教训——云桥手机
         // 通知列表同样靠快照兜底；空数组也下发）
         notifications: this.mgr.notificationsList(),
+        // [W-AWAITUSER] 待拍板三源聚合清单（与 ws-server 直连快照同源同步，#117
+        // 教训；mgr.pendingUserActionsList() 单口构建，空数组也下发=能力位）
+        pending_user_actions: this.mgr.pendingUserActionsList(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,

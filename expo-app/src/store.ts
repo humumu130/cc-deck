@@ -483,6 +483,9 @@ class RelayStore {
   private taskDoneQueue: TaskDoneReport[] = [];
 
   onWaiting: ((s: SessionState) => void) | null = null;
+  // [W-AWAITUSER]（1104 用户令）用户推送回调：relay 侧待拍板项滞留超阈值推一次
+  //（USER_NOTE 全端通道——web 旧壳/桌面既有消费；手机端本批接入）。text ≤120 字
+  onUserNote: ((text: string) => void) | null = null;
   onTaskDone: ((r: TaskDoneReport) => void) | null = null;
   // 议题①/④补偿告警（2026-09-09）：relay 侧新设备配对成功（输码/扫码/手机授权）时
   // 经 PAIRED_DEVICE 瞬态帧广播，App 弹本地通知——公共桥广播定位的 race 攻击即便
@@ -2818,6 +2821,16 @@ class RelayStore {
         if (Array.isArray(accs)) {
           conn.acceptances = accs.filter((a): a is AcceptanceSummary => !!a && typeof (a as AcceptanceSummary).id === "string" && !!(a as AcceptanceSummary).id);
         } // 畸形帧不动既有清单（relay 侧必发合法数组，防御而已）
+        break;
+      }
+      // [W-AWAITUSER] 用户推送（瞬态 seq:0 不补发）：relay DecisionNotificationWatcher
+      // 对滞留超阈值的待拍板项推一次（通知中心顶格是「看见」面，这是错过 N 分钟后的
+      // 升级腿——手机此前无 USER_NOTE 消费=推送链断点，本批接通）。离线端由通知
+      // 中心/聚合清单兜底（重连 SNAPSHOT），不重复弹
+      case "USER_NOTE": {
+        const p = msg.payload as { text?: unknown };
+        const text = typeof p?.text === "string" ? p.text.trim().slice(0, 120) : "";
+        if (text && this.onUserNote) this.onUserNote(text);
         break;
       }
       case "NOTIFICATIONS_UPDATED": {
