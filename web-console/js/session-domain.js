@@ -1183,6 +1183,10 @@
                     pinned: session.pinned === true,
                     pmStandby: session.pm_standby === true && status !== "working", // #287 值守 PM 待命态（快照派生）：替代 DONE 假死；UI 反馈批 1029 件A：pm_standby 只随 SNAPSHOT 派生（实时帧不带、MERGE_KEYS 不收），PM 开工翻 working 后陈标残留=「干活中却显待命」矛盾——闸口收非 working 态（干活期由状态点/秒计时表达，起手窗走 #291 待开工语义，闲置 DONE 恒待命）
                     standby: status === "working" && !isRealWorking(session), // #291 帧分类判活：接单未开工/挂起（灰呼吸点+待开工标，不占在跑计数）
+                    // [W-AWAITUSER]（1104 用户令）：等用户拍板位——WAITING 且带 waiting_request
+                    //（含 AskUserQuestion 四问/权限问询/仅通知形态）。「等你拍板」chip + 列表临时
+                    // 浮顶的数据位；判定走会话帧自身状态（不依赖聚合键——旧 relay 同样生效）
+                    awaitUser: status === "waiting" && !!session.waiting_request,
                     workSecs: Math.max(0, Math.floor((Date.now() - turnStart) / 1000)),
                     idle: idleDimmed(session), // #160 置灰标志（markup 拼 class；判定见上）
                   };
@@ -1316,7 +1320,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
                 // [W-RETIRED] 退休成员会话判定（renderMyList 主列表排除/归档组收集、筛选计数三处共用）——
                 // 名单来自 SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧（relay 判定源=
                 // org 两本账：非 archived 组路由在册而编制外）。null=旧 relay 零过滤兼容
@@ -1770,7 +1774,14 @@
                   // 双重作用下「已保存，点击恢复」死卡常驻列表顶显活跃（1026 用户实锤）；
                   // 置顶排序只属于活卡（用户 pin 的在册会话），休眠卡按时间自然沉底
                   const pinRank = (x) => (x.pinned === true && x.saved !== true ? 1 : 0);
+                  // [W-AWAITUSER]（1104 用户令）等用户拍板临时浮顶：WAITING×waiting_request
+                  //（含 AskUserQuestion/权限问询/仅通知形态）的会话卡浮到列表最顶（压过置顶
+                  // ——等用户=阻塞链最上游，1104 实锤正是没人注意）。「临时」语义：排序是
+                  // 每帧从 live 态派生的，不写任何持久位——处理完（状态翻走/请求消）自然
+                  // 回落原位（置顶/recency 原序），用户手动排序记忆（pin 标记+时间序）零破坏
+                  const awaitingUser = (x) => x.status === "WAITING" && !!x.waiting_request;
                   const sessions = liveNonRetired.filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x) && !remoteHiddenHas(x.session_id)).sort((a, b) => { // 1026 用户实锤：工作中会话不要跳来跳去——活跃区内按 turn_started_at（本轮恒定）稳定排序，空闲区保持 recency；#271 pinRank 防 saved 休眠卡浮置
+                    const au = Number(awaitingUser(b)) - Number(awaitingUser(a)); if (au) return au; // [W-AWAITUSER] 等拍板浮顶 > 置顶 > 活跃 recency
                     const pin = pinRank(b) - pinRank(a); if (pin) return pin;
                     const act = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
                     if (act(a) && act(b)) return (b.turn_started_at || b.updated_at || 0) - (a.turn_started_at || a.updated_at || 0);
@@ -1809,8 +1820,12 @@
                   // 同创按名稳定序）；无成员团队不出组（筛选/搜索滤空同口径——团队组跟随过滤，不绕过）。
                   // 地基 renderSessionList 不做团队分组（transient 首屏、ctx 无 projects 字段，见回执）
                   const isActive = (x) => x.status === "WORKING" || x.status === "WAITING" || x.status === "ERROR";
-                  const pinnedPool = sessions.filter((x) => x.pinned === true); // 已按置顶+recency 排
-                  const unpinned = sessions.filter((x) => x.pinned !== true);
+                  // [W-AWAITUSER] 等拍板池平铺最顶（置顶池之上）：排序比较器的 au 层只管池内
+                  // 序，两段式布局按 pinned 切池会把置顶卡再抬上来——等用户=阻塞链最上游，
+                  // 渲染分段同样先抽先赢（与置顶池同款无分组头平铺；处理完自然回落置顶/自然位）
+                  const awaitPool = sessions.filter((x) => awaitingUser(x)); // 已按 au>pin>recency 排
+                  const pinnedPool = sessions.filter((x) => x.pinned === true && !awaitingUser(x)); // 已按置顶+recency 排
+                  const unpinned = sessions.filter((x) => x.pinned !== true && !awaitingUser(x));
                   // #103 两段式重排（2026-10-14 用户拍板）：UIPOLISH3 件二的 team:{gid} 成员
                   // 会话组整链退役——编制内直列会话（置顶/选中中的 worker、PM/Leader）与外部
                   // 会话一律平铺进上段「置顶+普通统一段」（团队组默认折叠反而藏卡；团队呈现
@@ -1820,6 +1835,7 @@
                   // _slimHiddenIds 两记账，放行语义不变）。
                   const activeMarkup = unpinned.filter(isActive).map((x) => myCardMarkup(myCardItem(x))).join(""); // 不再按 reason 重排
                   const idleMarkup = unpinned.filter((x) => !isActive(x)).map((x) => myCardMarkup(myCardItem(x))).join("");
+                  const awaitMarkup = awaitPool.map((x) => myCardMarkup(myCardItem(x))).join(""); // [W-AWAITUSER] 等拍板池（临时浮顶层）
                   // 件五：置顶区平铺最顶、不带分组头（设计定夺见回执：置顶是跨组钉选非语义分组，
                   // 加头=降格成可折叠组）。恒在 DOM（不参与折叠记账）
                   const pinnedMarkup = pinnedPool.map((x) => myCardMarkup(myCardItem(x))).join("");
@@ -1858,7 +1874,7 @@
                   // W-TEAMCHIP2 ②拼装：单段平铺（置顶+活跃+闲置，.list-upper 独占滚动）——
                   // #103 两段式下段 dock 已随本批退役
                   const tpl = document.createElement("template");
-                  tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup;
+                  tpl.innerHTML = awaitMarkup + pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup; // [W-AWAITUSER] 等拍板池恒最顶（临时浮顶，处理完该层自然消失）
                   mountUpper(tpl.content);
                 }
 

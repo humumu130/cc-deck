@@ -889,6 +889,18 @@ function Shell() {
         notifyAlert("等待你的确认", tool ? `工具 ${tool}` : "会话等待确认");
       }
     };
+    // [W-AWAITUSER]（1104 用户令）滞留升级推送：relay 对等你拍板项（确认卡/等你输入
+    // 会话含四问/待回填验收单）滞留超阈值（缺省 10min）各推一次——错过首弹后仍有腿。
+    // 前台轻震（在线但没盯屏幕的场景）；后台系统通知（onWaiting 同款门控）
+    store.onUserNote = (text) => {
+      if (appState.current === "active") {
+        try {
+          Vibration.vibrate(70);
+        } catch {}
+        return;
+      }
+      notifyAlert("等你拍板", text);
+    };
     store.onTaskDone = (r) => {
       if (appState.current === "active") {
         try {
@@ -910,6 +922,7 @@ function Shell() {
     };
     return () => {
       store.onWaiting = null;
+      store.onUserNote = null;
       store.onTaskDone = null;
       store.onPairedDevice = null;
     };

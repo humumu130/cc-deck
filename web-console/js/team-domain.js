@@ -1105,10 +1105,44 @@
                     return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + cfTitle + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div>" + (cfMeta ? "<p>" + cfMeta + "</p>" : "") + cfPayloadLine + decisionButtons(confirm) + "</div>";
                   }).join("") : "";
                   tSigWrite(query("[data-team-confirms]"), "cf:" + tSigOf(confirmCards), count ? confirmCards : banner("暂无待确认事项")); // #282 三批 M2
+                  // ---------- [W-AWAITUSER]（1104 用户令）「等你拍板」聚合入口（待办分区） ----------
+                  // 数据=bridge.pendingUserActions（relay pending_user_actions 单源权威——端上
+                  // 不拼三源）；null=旧 relay 能力缺席或清单空 → 整块 hidden（能力位口径同
+                  // deliverables）。行=三源计数+直达对应面（确认卡→本域看板/会话→会话域
+                  // 浮顶区/验收单→最早一张待填单）；消费掉帧驱动即减项（onEvent 消费
+                  // PENDING_USER_ACTIONS_UPDATED 触发 render）。
+                  // 双落位：检查器栏（窄窗可折叠）+ 看板 pane 底部「待你确认」区上方（恒可见
+                  // ——检查器折叠态入口不失踪；点击委托共用 root 一处，两落位同链）
+                  let auBoardHtml = "";
+                  {
+                    const auBridge = window.__ccDeck005B4;
+                    const auItems = Array.isArray(auBridge && auBridge.pendingUserActions) ? auBridge.pendingUserActions.filter((x) => x && typeof x.kind === "string") : null;
+                    const auBlock = query("[data-awaituser-block]");
+                    if (auBlock) {
+                      if (!auItems || !auItems.length) auBlock.hidden = true;
+                      else {
+                        auBlock.hidden = false;
+                        const byKind = (k) => auItems.filter((x) => x.kind === k);
+                        const cfN = byKind("org-confirm").length, wN = byKind("waiting").length, accN = byKind("acceptance").length;
+                        const auCount = query("[data-awaituser-count]");
+                        if (auCount) { auCount.textContent = String(auItems.length); auCount.hidden = false; auCount.setAttribute("aria-label", "等你拍板 " + auItems.length + " 项"); }
+                        const auRow = (label, n, jump, title, extra) => n
+                          ? '<button type="button" class="awaitu-row" data-awaitu-jump="' + jump + '"' + (extra || "") + ' title="' + escape(title) + '"><strong>' + escape(label) + '</strong><span class="tag action">' + n + " 项</span><span class=\"chev\">›</span></button>"
+                          : "";
+                        const firstAcc = byKind("acceptance")[0];
+                        const auRowsHtml = auRow("组织确认卡", cfN, "confirm", "去团队看板下的「待你确认」区决议")
+                          + auRow("等你输入的会话", wN, "session", "去会话列表——等你拍板的会话已浮顶带角标")
+                          + auRow("待回填验收单", accN, "acceptance", "打开最早一张待填验收单", firstAcc && typeof firstAcc.entity_id === "string" ? ' data-awaitu-acc="' + escape(firstAcc.entity_id) + '"' : "");
+                        tSigWrite(query("[data-awaituser-rows]"), "au:" + tSigOf(auRowsHtml), auRowsHtml || banner("暂无待拍板事项"));
+                        auBoardHtml = '<div class="inspector-block"><div class="inspector-title"><span>等你拍板 · ' + auItems.length + '</span><span class="tag action">' + auItems.length + "</span></div>" + auRowsHtml + "</div>";
+                      }
+                    }
+                  }
                   // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
                   // 口径（name/锚点分词 ∩ tags 子串双向）。输出物原第二区已迁独立「输出」tab
                   // （W-OUTTAB，用户 1015 拍板：输出物不放看板里）
                   const boardFinal = boardMarkup(project)
+                    + auBoardHtml // [W-AWAITUSER] 看板 pane 底部聚合入口（恒可见位；检查器折叠态不失踪）
                     + (count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "")
                     + teamDesignSection(project);
                   tSigWrite(panes[1], "p1:" + tSigOf(boardFinal), boardFinal);
@@ -1315,6 +1349,9 @@
                     render();
                     return true;
                   }
+                  // [W-AWAITUSER] 聚合清单帧（数据面在 bridge.pendingUserActions 由 B4 桥维护；
+                  // 此处只触发本域 render——「等你拍板」入口/待你确认区随清单收敛，消费即减项）
+                  if (message?.type === "PENDING_USER_ACTIONS_UPDATED") { render(); return true; }
                   return false;
                 }
                 function bind({ command = null, online = false } = {}) {
@@ -1659,6 +1696,23 @@
                     if (segBtn && [...root.querySelectorAll(".segment-bar button")].indexOf(segBtn) === 1) refreshBoardFresh("tab-看板");
                   }, true);
                   root.addEventListener("click", (event) => {
+                    // [W-AWAITUSER]「等你拍板」入口行：直达对应面（数据行由 render 写入，
+                    // 点击只做跳转——确认卡→本域看板 tab（待你确认区随板）/会话→会话域
+                    //（等你拍板会话已浮顶）/验收单→直接打开最早一张待填单）
+                    const auJump = event.target.closest("[data-awaitu-jump]");
+                    if (auJump) {
+                      const kind = auJump.dataset.awaituJump;
+                      const b4 = window.__ccDeck005B4;
+                      if (kind === "confirm") {
+                        b4?.clickTab?.("#d-team .segment-bar", "看板");
+                        toast("已切到看板——待你确认区在本页下方");
+                      } else if (kind === "session") {
+                        b4?.railJump?.("session");
+                      } else if (kind === "acceptance" && auJump.dataset.awaituAcc) {
+                        b4?.openAcceptance?.(auJump.dataset.awaituAcc);
+                      }
+                      return;
+                    }
                     // FB4 团域新建：真表单（团队名/锚点/档位/成员多选），不再代理会话域新建会话弹窗
                     const newSession = event.target.closest("[data-team-new-session]");
                     if (newSession) {

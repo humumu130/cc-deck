@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process"; // C-MODE-B2 模块7：同锚差异块 git log（超时 3s 静默降级）
 import { notificationsListOf } from "./decision-ledger-projection.js";
+import { pendingUserActionsOf, type PendingUserAction } from "./pending-user-actions.js"; // [W-AWAITUSER] 三源聚合单口（源登记注释锚在该件文件头）
 import { readTitleOverrides } from "./title-derive.js";
 import { buildSnapshotLogs as buildSnapshotLogsBudget } from "./snapshot-budget.js";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -734,6 +735,9 @@ export class SessionManager {
   // 不冲突——那边管「注入会话的提醒文本」，这边管「端上通知列表的结构化数据源」
   private notifications = new Map<string, NotificationLifecycleItem>();
   private notificationsJson = ""; // 上次投影的序列化基线（值变才发帧的 dedup 锚）
+  // [W-AWAITUSER] 待拍板聚合投影基线（projectNotifications 同款值变才发纪律）
+  private pendingUserActionsJson = "";
+  private pendingUserActionsTimer: ReturnType<typeof setInterval> | null = null;
   // #102 批 C：引擎登录恢复最近执行时刻（engine → ts）——pane 轮验/verify/watch
   // 兜底三源同 ready 的幂等窗锚（10s 内同引擎只跑一轮恢复扫描）
   private authRecoverAt = new Map<SessionEngine, number>();
@@ -902,6 +906,9 @@ export class SessionManager {
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
     this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
+    // [W-AWAITUSER] 聚合投影基线（loadNotifications 同款：boot 静默锚定，防空基线
+    // 首帧误发——首个订阅者到达前的 transient 本就无人收，锚定只为口径一致）
+    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
     this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
     // #279 野生会话纳管：boot 自愈 RULES.md 镜像（写库点已随 saveRules 刷新，此处
     // 兜底镜像丢失/漂移——失败自吞，镜像非关键路径）
@@ -1130,6 +1137,38 @@ export class SessionManager {
     if (json === this.notificationsJson) return;
     this.notificationsJson = json;
     this.bus.emitTransient("NOTIFICATIONS_UPDATED", { items: JSON.parse(json) as NotificationItem[] });
+  }
+
+  // ---------- [W-AWAITUSER] 待拍板三源聚合（1104 用户令；清单与源登记见 pending-user-actions.ts） ----------
+  // 单口构建：SNAPSHOT（ws-server/cloud-client 两处快照组装）与增量帧共用本方法——
+  // 端上不各自拼（静态锁：test-awaituser.ts D 族断言两处快照都走本口）
+  pendingUserActionsList(): PendingUserAction[] {
+    return pendingUserActionsOf({
+      confirms: listPendingConfirms(),
+      sessions: this.snapshot(),
+      acceptances: listAcceptances(),
+    });
+  }
+
+  // 值变才发（projectNotifications 同款）：三源任一变化（syncWaitingNotification/
+  // emitOrgState/recordOrgConfirmNotification/ws-server 验收面）与 60s 兜底轮共用；
+  // 消费掉（确认决议/会话翻走/验收回填）立即减项——源事件驱动，不等轮询
+  refreshPendingUserActions(): void {
+    const json = JSON.stringify(this.pendingUserActionsList());
+    if (json === this.pendingUserActionsJson) return;
+    this.pendingUserActionsJson = json;
+    this.bus.emitTransient("PENDING_USER_ACTIONS_UPDATED", { items: JSON.parse(json) as PendingUserAction[] });
+  }
+
+  // 60s 兜底轮：帧驱动覆盖 in-process 源变化（waiting/org-confirm），但验收单登记
+  // 是出单 CLI 直写磁盘的 out-of-band 写面（relay 无事件）——兜底轮扫盘补增量帧
+  // （值变才发=静默零帧）；顺带对冲任何漏挂的源发射点。startStaleScan 同款启停
+  startPendingUserActionsTick(): void {
+    if (this.pendingUserActionsTimer) return;
+    this.pendingUserActionsTimer = setInterval(() => {
+      try { this.refreshPendingUserActions(); } catch { /* 尽力而为 */ }
+    }, 60_000);
+    this.pendingUserActionsTimer.unref?.();
   }
 
   // 产生源统一入口：B3a stableKey 防重——同 key 已在账即静默（重复事件/重放不双发，
@@ -1525,9 +1564,11 @@ export class SessionManager {
         domain: "session",
         returnPath: "session",
       });
+      this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点：入等即入聚合清单（含 AskUserQuestion）
       return;
     }
     this.transitionNotifications((n) => n.kind === "waiting" && n.sourceContext.sessionId === managed.state.session_id, "resolved");
+    this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点：翻走/终态即出清单（帧驱动减项）
   }
 
   // #018-R1FIX1 P1-1 org-confirm 单一产生适配口：projects.addConfirm 是全部确认单
@@ -1547,6 +1588,7 @@ export class SessionManager {
       domain: "org",
       returnPath: "org",
     });
+    this.refreshPendingUserActions(); // [W-AWAITUSER] 源①挂点：新确认卡即入聚合清单
   }
 
   // #018-R1FIX1 P2-1 superseded waiting 精确收口：按 (session, request_id) 只关旧
@@ -2116,6 +2158,17 @@ export class SessionManager {
       body: text,
       severity: "waiting", group: "attention", actionable: true, sessionId, domain: "session", returnPath: "/",
     });
+    return true;
+  }
+
+  /** [W-AWAITUSER] 用户推送通道（/api/notify mode=confirm→USER_NOTE 的进程内同源腿，
+   * patrol.sh:4 先例的常驻化）：待拍板项滞留超阈值时 DecisionNotificationWatcher 调本
+   * 方法推用户。与 notifyConfirm 的差别：不注入会话 todo、不落通知账——推送的事项本体
+   * 已在聚合清单/通知中心承载（再入账=同事项两行），这里只补「全端弹系统通知」这一跳
+   * （手机端 App.tsx USER_NOTE 消费本批接入；旧壳 index.html:5230 既有消费不变）。 */
+  emitUserNote(text: string): boolean {
+    if (!text.trim()) return false;
+    this.bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
     return true;
   }
 
@@ -7462,6 +7515,7 @@ ${lines.join("\n")}
         : {}),
     });
     this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
+    this.refreshPendingUserActions(); // [W-AWAITUSER] 源①挂点：决议/组织态写后聚合清单收敛（值变才发）
     this.emitRetiredSessions(); // [W-RETIRED]：编制面写点全收口于此，名单 delta 变化即广播
   }
 

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { OrgConfirm } from "./projects.js";
+import type { AcceptanceSummary } from "./acceptance.js";
 import type { NotificationGroup, NotificationItem, NotificationSourceContext, SessionState } from "./types.js";
 
 export type DecisionNotificationKind = "org-confirm" | "waiting" | "dispatch" | "acceptance" | "system";
@@ -24,6 +25,10 @@ export interface DecisionNotification {
   resolved_at?: number;
   handled_at?: number;
   dismissed_at?: number;
+  /** [W-AWAITUSER] 用户推送限频锚：userPush 成功时刻（持久跨重启——同项只推一次的
+   * 事实源）。与 first_sent_at（PM 注入）分轨：PM 注入依赖目标会话存活，用户推送
+   * 只依赖阈值与本项目。 */
+  user_pushed_at?: number;
   group: NotificationGroup;
   actionable: boolean;
   revision: string;
@@ -134,6 +139,7 @@ function mergeNotificationPair(current: DecisionNotification, incoming: Decision
     resolved_at: current.resolved_at ?? incoming.resolved_at,
     handled_at: current.handled_at ?? incoming.handled_at,
     dismissed_at: current.dismissed_at ?? incoming.dismissed_at,
+    user_pushed_at: current.user_pushed_at ?? incoming.user_pushed_at,
     source_context: current.source_context ?? incoming.source_context,
   };
 }
@@ -166,6 +172,12 @@ export interface DecisionNotificationWatcherOptions {
   snapshotSessions: () => SessionState[];
   leaderSessionId: () => string | null | undefined;
   notify: (sessionId: string, text: string) => boolean;
+  /** [W-AWAITUSER] 源③：未回填验收单清单（listAcceptances）。缺席=验收不入推送扫描
+   * （旧接线/部分测试形态兼容），聚合清单面不受影响（那是 pending-user-actions 单口）。 */
+  listAcceptances?: () => AcceptanceSummary[];
+  /** [W-AWAITUSER] 用户推送通道（USER_NOTE 全端弹系统通知；index 接线=
+   * mgr.emitUserNote）。返回 false=未投出，不记 user_pushed_at 下轮重试。 */
+  userPush?: (text: string) => boolean;
   now?: () => number;
 }
 
@@ -237,6 +249,7 @@ export function normalizeDecisionNotification(item: unknown): DecisionNotificati
     ...(typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {}),
     ...(typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {}),
     ...(typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {}),
+    ...(typeof x.user_pushed_at === "number" ? { user_pushed_at: x.user_pushed_at } : {}),
     group,
     actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
     revision: x.revision,
@@ -347,6 +360,13 @@ function waitingKey(session: SessionState): string {
   return stableKey("waiting", session.session_id, session.waiting_request!.request_id);
 }
 
+/** [W-AWAITUSER] 秒级时戳归一（canonical 单口=pending-user-actions.ts normMs；此处
+ * 内联同式避免与该件互引成环——stableKey 已被它引，运行时环宁少不多） */
+function msOf(v: number): number {
+  const n = Number(v) || 0;
+  return n > 0 && n < 1e11 ? n * 1000 : n;
+}
+
 function allowWaiting(session: SessionState): boolean {
   const request = session.waiting_request;
   return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
@@ -427,9 +447,14 @@ export class DecisionNotificationWatcher {
     if (!this.enabled) return;
     const confirms = this.options.listConfirms();
     const sessions = this.options.snapshotSessions();
+    const acceptances = this.options.listAcceptances?.() ?? [];
     const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
     const activeConfirmKeys = new Set<string>();
     const activeWaitingKeys = new Set<string>();
+    const activeAcceptanceKeys = new Set<string>();
+    // [W-AWAITUSER] userPush 滞留起点（per-key；秒级时戳在此归一——canonical 归一口
+    // 在 pending-user-actions.ts normMs，此处内联同式避免运行时环引）
+    const startedAtOf = new Map<string, number>();
     let changed = false;
 
     for (const confirm of confirms) {
@@ -437,6 +462,7 @@ export class DecisionNotificationWatcher {
       const existing = byKey.get(key);
       if (confirm.status === "pending") {
         activeConfirmKeys.add(key);
+        startedAtOf.set(key, msOf(confirm.created_at));
         const item = existing ?? {
           key,
           kind: "org-confirm" as const,
@@ -471,9 +497,14 @@ export class DecisionNotificationWatcher {
     }
 
     for (const session of sessions) {
-      if (!allowWaiting(session)) continue;
+      // [W-AWAITUSER] waiting 全形态入账（status=WAITING×waiting_request 即在等用户）：
+      // 生命周期与滞留起点覆盖 AskUserQuestion（questions）与 decidable=false 仅通知
+      // 形态——1104 实锤正是四问窗口无人知超时，用户推送腿不排除这些形态。PM 注入
+      // 腿（first_sent_at）维持 allowWaiting 原口径（PM 无法代答四问，注入无意义）
+      if (!(session.status === "WAITING" && session.waiting_request)) continue;
       const key = waitingKey(session);
       activeWaitingKeys.add(key);
+      startedAtOf.set(key, session.waiting_started_at ?? session.updated_at);
       const existing = byKey.get(key);
       const item = existing ?? {
         key,
@@ -489,6 +520,7 @@ export class DecisionNotificationWatcher {
         byKey.set(key, item);
         changed = true;
       }
+      if (!allowWaiting(session)) continue; // PM 注入口径不变：仅可决议形态注入
       const startedAt = session.waiting_started_at ?? session.updated_at;
       if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
         item.first_sent_at = now;
@@ -499,6 +531,63 @@ export class DecisionNotificationWatcher {
       }
     }
 
+    // [W-AWAITUSER] 源③：未回填验收单（#195 生命周期语义：submitted=已处理出扫描）。
+    // 只入账+用户推送，不做 PM 注入（验收单是用户填的表，PM 代催无意义）；
+    // revision=created_at（同 confirm 口径：重登记同 id 新单=新 key 自然区分）
+    const acceptanceTitle = new Map(acceptances.map((a) => [stableKey("acceptance", a.id), a.title]));
+    for (const acceptance of acceptances) {
+      if (acceptance.submitted) continue;
+      const key = stableKey("acceptance", acceptance.id);
+      activeAcceptanceKeys.add(key);
+      startedAtOf.set(key, msOf(acceptance.created_at));
+      const existing = byKey.get(key);
+      const item = existing ?? {
+        key,
+        kind: "acceptance" as const,
+        source_session_id: "",
+        created_at: msOf(acceptance.created_at),
+        group: "action" as const,
+        actionable: true,
+        revision: String(acceptance.created_at),
+      };
+      if (!existing) {
+        this.ledger.notifications.push(item);
+        byKey.set(key, item);
+        changed = true;
+      }
+    }
+
+    // [W-AWAITUSER] 用户推送（1104 用户令）：三源滞留≥waitMs 各推一次（USER_NOTE 全端
+    // 弹系统通知——通知中心顶格是「看见」面，这是「错过 N 分钟后仍无人理」的升级腿；
+    // 含 AskUserQuestion/waiting 全形态——PM 注入腿的 allowWaiting 排除 questions，
+    // 用户腿不排除：1104 实锤正是四问窗口无人知超时）。限频=user_pushed_at 持久锚，
+    // 同 key 只推一次（跨重启不重推）；回调 false=未投出不记锚下轮重试
+    if (this.options.userPush) {
+      const sessionsById = new Map(sessions.map((s) => [s.session_id, s]));
+      const confirmTitle = new Map(confirms.filter((c) => c.status === "pending").map((c) => [confirmKey(c), c.title]));
+      for (const [key, startedAt] of startedAtOf) {
+        if (now - startedAt < this.waitMs) continue;
+        const item = byKey.get(key);
+        if (!item || item.resolved_at !== undefined || item.user_pushed_at !== undefined) continue;
+        const minutes = Math.max(1, Math.round((now - startedAt) / 60_000));
+        let text: string;
+        if (item.kind === "org-confirm") {
+          text = `[等你拍板] 确认卡《${compact(confirmTitle.get(key) ?? "", 24) || "未命名确认"}》已等 ${minutes} 分钟`;
+        } else if (item.kind === "waiting") {
+          const s = sessionsById.get(item.source_session_id);
+          const w = s?.waiting_request;
+          const verb = w?.questions?.length ? "等你作答" : `等你批准 ${compact(w?.tool_name || "", 16) || "操作"}`;
+          text = `[等你拍板] 会话「${compact(s?.title || s?.initial_prompt || item.source_session_id.slice(0, 8), 20)}」${verb}已等 ${minutes} 分钟`;
+        } else {
+          text = `[等你拍板] 验收单《${compact(acceptanceTitle.get(key) ?? "", 24) || "未命名单"}》待回填已等 ${minutes} 分钟`;
+        }
+        if (this.options.userPush(compact(text, 120))) {
+          item.user_pushed_at = now;
+          changed = true;
+        }
+      }
+    }
+
     for (const item of this.ledger.notifications) {
       if (item.resolved_at) continue;
       if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
@@ -506,6 +595,10 @@ export class DecisionNotificationWatcher {
         changed = true;
       }
       if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+      if (item.kind === "acceptance" && !activeAcceptanceKeys.has(item.key)) {
         item.resolved_at = now;
         changed = true;
       }

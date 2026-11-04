@@ -7,6 +7,7 @@ import type { AllowRule } from "./allow-rules.js";
 import type { ProjectGroup, ProjectBoard, OrgConfirm, BoardEntry, LessonEntry, BoardEntryStatus } from "./projects.js";
 import type { ExperienceEntry } from "./experience.js"; // W-EXPP2：类型-only 引用（experience.ts 不反向 import 本件，无环）
 import type { RuleEntry } from "./team-rules.js"; // W-RULES2：类型-only 引用（team-rules.ts 不反向 import 本件，无环）
+import type { PendingUserAction } from "./pending-user-actions.js"; // [W-AWAITUSER]：类型-only 引用（该件运行时反向引 types，无环纪律同上）
 
 // ---------- 事件信封 ----------
 
@@ -504,6 +505,9 @@ export interface SnapshotPayload {
   relay_name?: string;
   boards?: ProjectBoard[];
   notifications?: NotificationItem[];
+  // [W-AWAITUSER] 待拍板三源聚合清单（pending-user-actions.ts 单口构建；空数组也
+  // 下发=能力位——端上以字段存在性判断能力，缺席=旧 relay 降级隐藏聚合面）
+  pending_user_actions?: PendingUserAction[];
   source_capabilities?: SourceCapabilities;
   // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；随快照而非
   // HTTP API 下发——云桥手机无 HTTP 直连通道，WS 快照三端通吃）
@@ -649,6 +653,12 @@ export interface NotificationsUpdatedPayload {
   items: NotificationItem[];
 }
 
+// [W-AWAITUSER] 待拍板聚合清单增量帧（瞬态，NOTIFICATIONS_UPDATED 同款全量替换
+// 语义）——三源任一变化（确认卡产生/决议、会话入等/翻走、验收单登记/回填）即发
+export interface PendingUserActionsUpdatedPayload {
+  items: PendingUserAction[]; // 与 SNAPSHOT.pending_user_actions 同源（单口全量）
+}
+
 export type EventType =
   | "SESSION_CREATED"
   // W-CMDIMPL ③（#216）：发版编排事件（PROGRESS 段落级节流进持久流；DONE/FAILED 终态）
@@ -685,6 +695,7 @@ export type EventType =
   | "SETTINGS_UPDATED"
   | "RELAY_NAME_UPDATED" /* #272 源名称改名（瞬态）：relay-name 写盘成功边广播，LAN+cloud 全扇出 */
   | "NOTIFICATIONS_UPDATED"
+  | "PENDING_USER_ACTIONS_UPDATED" /* [W-AWAITUSER] 待拍板聚合清单变更（瞬态：seq:0 不落 ndjson）：三源任一变化即全量重发；离线端由 SNAPSHOT.pending_user_actions 兜底 */
   | "COLLAB_MODE_UPDATED"
   | "RETIRED_SESSIONS_UPDATED" /* [W-RETIRED] 退休成员会话名单（瞬态）：编制面写点后 delta 广播——端上会话列表默认隐藏/归档分组 */
   | "AUTH_REQUIRED"
@@ -726,6 +737,9 @@ export type EventPayloadMap = {
   // #212 记住规则变更推送（瞬态，同上语义）：删规则后广播最新全量，在线端设置页
   // 实时收敛；离线端由 SNAPSHOT.allow_rules 兜底
   ALLOW_RULES_UPDATED: AllowRulesUpdatedPayload;
+  // [W-AWAITUSER] 待拍板聚合清单（瞬态，ACCEPTANCES_UPDATED 同款语义）：items 与
+  // SNAPSHOT.pending_user_actions 同源同构（pendingUserActionsList() 全量）
+  PENDING_USER_ACTIONS_UPDATED: PendingUserActionsUpdatedPayload;
   // #26 M2 组织变更（瞬态，同 ACCEPTANCES_UPDATED 语义）：立项/状态迁移/升降级/
   // 派单入编后广播全量索引；离线端由 SNAPSHOT.projects 兜底
   PROJECTS_UPDATED: ProjectsUpdatedPayload;
