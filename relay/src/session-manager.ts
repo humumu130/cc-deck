@@ -6492,6 +6492,7 @@ ${lines.join("\n")}
               status: ledPrev.status, session_id: ledPrev.session_id,
               title: ledPrev.title, actor: ledPrev.actor,
               generation: ledPrev.generation,
+              ...(ledPrev.run_ref ? { run_ref: ledPrev.run_ref } : {}), // prchipR1（P2）：run_ref 透传——终态续行防 appendDispatch 咽喉 archiveDispatchTerminal 重归档覆写 terminal-stats/events-slice（实证：done 真值 duration≈1000ms 被续行 ts 覆写成 59000ms 假时长，PM 收割上报必现）；review-ledger end 行同款口径
               pr_url: prUrl || undefined, pr_state: prStateRaw || (prUrl ? "ci_unknown" : undefined),
             });
           }

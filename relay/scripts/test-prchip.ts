@@ -11,7 +11,7 @@
 //      +TeamDetailPage chip+Linking+tPrDot）
 // 沙盒：CCR_ORG_DIR/CCR_DATA_DIR 隔离+json 读档+fake agent（test-planlane 同款）。
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,10 +76,15 @@ const makeFakeFactory = () =>
 async function main() {
   const ORG = mkdtempSync(join(tmpdir(), "ccr-org-prchip-"));
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-prchip-"));
+  // prchipR1（P2 配套）：归档面隔离——原夹具未盖 CCR_ARTIFACTS_DIR，dispatch 终态首
+  // 归档写真实 ~/.cc-deck/artifacts/dispatch-runs/（夹具泄真目录）；本断言组要读
+  // terminal-stats，顺带把泄真修掉
+  const ART = mkdtempSync(join(tmpdir(), "ccr-art-prchip-"));
   const prev = { ...process.env };
   process.env.CCR_STORAGE_READ_MODE = "json";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_DATA_DIR = DATA;
+  process.env.CCR_ARTIFACTS_DIR = ART;
   process.env.CCR_NO_TITLE_GEN = "1";
   process.env.CCR_PM_DUTY = "0";
   delete process.env.CCR_CWD;
@@ -170,6 +175,21 @@ async function main() {
     assert(pr2.ok === true, "pr-report 只更新状态（CI 转红）");
     const after2 = loadBoard(gid).entries.find((x) => x.dispatch_id === dispatchId);
     assert(after2?.pr_state === "ci_red" && after2?.pr_url === "https://github.com/humumu130/cc-deck/pull/9", "状态覆盖更新（URL 保持）");
+    // ============ S3b prchipR1（P2）：run_ref 透传——终态续行不重归档 ============
+    // 修复前：pr-report 续行（status=done 透传）不带 run_ref → appendDispatch 终态咽喉
+    // 命中 archiveDispatchTerminal 重归档 → terminal-stats/events-slice 被续行 ts 覆写
+    //（实证 done 真值 duration≈1000ms 覆写成 59000ms 假时长，PM 收割上报必现）。
+    // 修复后：续行行透传 prev.run_ref → 咽喉 !run_ref 闸不触发 → 首归档值纹丝不动。
+    console.log("S3b run_ref 透传（终态续行不重归档）:");
+    const statsPath = join(ART, "dispatch-runs", dispatchId, "terminal-stats.json");
+    assert(existsSync(statsPath), "前置：终态首归档在案（terminal-stats 三件套——dispatch done 收口时 archiveDispatchTerminal 落盘）");
+    const statsBefore = existsSync(statsPath) ? readFileSync(statsPath, "utf-8") : "";
+    const rowAfterPr2 = readDispatchLog().filter((r) => r.id === dispatchId).at(-1);
+    assert(!!rowAfterPr2?.run_ref, "终态续行行带 run_ref（透传在位——重归档闸的防触发键）");
+    const pr3 = mgr.orgAction("pr-report", { dispatch_id: dispatchId, pr_state: "ci_green" }) as { ok: boolean };
+    assert(pr3.ok === true, "前置：再续一行（ci_green 回转，第三行续行）");
+    const statsAfter = existsSync(statsPath) ? readFileSync(statsPath, "utf-8") : "";
+    assert(statsAfter === statsBefore && statsBefore !== "", "续行后 terminal-stats 保持首归档值（重归档未触发——duration/终态读数不被续行 ts 覆写）");
 
     // ============ S4 校验拒 ============
     console.log("S4 pr-report 校验拒:");
@@ -231,6 +251,7 @@ async function main() {
     process.exitCode = fail === 0 ? 0 : 1;
   } finally {
     Object.assign(process.env, prev);
+    rmSync(ART, { recursive: true, force: true });
   }
 }
 
