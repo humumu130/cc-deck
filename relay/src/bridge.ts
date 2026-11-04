@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
+import { bootMark } from "./boot-time.js"; // W-BOOTFAST：构造器扫描族分段打点
 import { isDataDirIsolated } from "./config.js";
 import { injectText, injectEsc, injectEnter, injectShiftTab, injectPermChoice, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
 import { guardConfig, guardCompensateEnter } from "./type-guard.js";
@@ -515,13 +516,17 @@ export class Bridge {
     // 不动不来事、sessions 文件不必然存在——15585 实锤无），重启后 pid 注册回读
     // 空窗（实测 9 分钟，直到进程自己动起来才回注册）由此缩为 boot 即时
     this.reconcilePidsFromProcesses();
+    bootMark("bridge-pids"); // W-BOOTFAST：pid 三源补定位（进程表扫描在此族）
     this.healExternal();
     // W-INJECT：先回种落盘排队（revive 的重投触发要见到非空队列），再跑存活自愈
     this.loadQueueDisk();
     this.reviveAliveExternals(); // W-INJECT：重启收养误标 historical 的活 pid 自愈（先于孤儿扫描）
     this.reclaimAliveAtBoot(); // #276 P0：boot 活进程重接管（DONE+pid 活 → WORKING+转录管道补挂）
+    bootMark("bridge-heal"); // W-BOOTFAST：自愈/重接管/落盘排队回种
     this.adoptOrphans();
+    bootMark("bridge-adopt-orphans"); // W-BOOTFAST：全机孤儿扫描（~/.claude/projects 文件树）
     this.scanExternalEngines();
+    bootMark("bridge-engine-scan"); // W-BOOTFAST：引擎转录扫描（RolloutScanner scan 族）
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
     this.healTimer = setInterval(() => {
       // #113 同 boot 顺序：活证据先行，缓存兜底殿后；#257 进程扫描收尾（迟到的活恢复进程）

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process"; // C-MODE-B2 模块7：同锚差异块 git log（超时 3s 静默降级）
+import { bootMark } from "./boot-time.js"; // W-BOOTFAST：构造器细分打点
 import { notificationsListOf } from "./decision-ledger-projection.js";
 import { pendingUserActionsOf, type PendingUserAction } from "./pending-user-actions.js"; // [W-AWAITUSER] 三源聚合单口（源登记注释锚在该件文件头）
 import { readTitleOverrides } from "./title-derive.js";
@@ -914,10 +915,12 @@ export class SessionManager {
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
     this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
+    bootMark("ctor-notifications"); // W-BOOTFAST：构造器细分（大账还原）
     // [W-AWAITUSER] 聚合投影基线（loadNotifications 同款：boot 静默锚定，防空基线
     // 首帧误发——首个订阅者到达前的 transient 本就无人收，锚定只为口径一致）
     this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
     this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
+    bootMark("ctor-orphan-confirms"); // W-BOOTFAST：构造器细分（确认单对账）
     // #279 野生会话纳管：boot 自愈 RULES.md 镜像（写库点已随 saveRules 刷新，此处
     // 兜底镜像丢失/漂移——失败自吞，镜像非关键路径）
     try { writeRulesMirror(); } catch { /* 尽力而为 */ }

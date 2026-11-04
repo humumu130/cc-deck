@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
+import { bootMark, bootDone } from "./boot-time.js"; // W-BOOTFAST：listen 打点+boot 分解汇总
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
 import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
@@ -1544,7 +1545,12 @@ export function startServer(
     console.error(`[relay] server error: ${err.message}`);
     process.exit(1);
   });
-  server.listen(cfg.port, opts.onReady);
+  server.listen(cfg.port, () => {
+    // W-BOOTFAST：listen=HTTP 可用时刻（硬指标①终点）——boot 分解汇总在此出 stdout 一行
+    bootMark("listen");
+    bootDone();
+    opts.onReady?.();
+  });
 
   return {
     port: cfg.port,

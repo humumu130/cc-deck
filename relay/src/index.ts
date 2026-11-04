@@ -1,3 +1,4 @@
+import { bootMark, bootDone } from "./boot-time.js"; // W-BOOTFAST：boot 分段打点（首行锚定 t0）
 import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
 import { networkInterfaces, homedir, hostname, tmpdir } from "node:os";
@@ -297,6 +298,7 @@ if (cliArgs.has("--stop")) {
 //（read-mode.ts viaReadMode），这里 boot 即探测：降级发生时横幅必出现在启动日志最前
 //（不等首个读入口触发）；正常路径零输出、零行为变化（mac sqlite 档照常）。
 probeSqliteDriverAtBoot();
+bootMark("probe-sqlite");
 
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");
@@ -321,6 +323,7 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 // reduceHistory 的等价合并；41MB 级 events 下消除 prior 全量数组驻留与重复 parse，
 // 等价契约由 test-history-stream.ts 锁死）
 const boot = await bootReplayFile(persistPath);
+bootMark("replay-events");
 const kept = boot.kept;
 if (boot.compacted) rewriteFile(persistPath, kept); // 启动时压缩
 // #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
@@ -382,7 +385,9 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
 }
 
 const bus = new EventBus({ preload: kept, persistPath });
+bootMark("bus-ctor"); // W-BOOTFAST 细分：EventBus preload 索引 vs SessionManager 构造
 const mgr = new SessionManager(bus, cfg);
+bootMark("bus+mgr-ctor");
 // W-ACTIVATOR 事件驱动自动复活（停摆杜绝第三刀）：liveness 门守投递咽喉，本激活器
 // 守「死了没人投递」的死角（SESSION_ERROR/派单失败触发）。CCR_NO_ACTIVATOR=1 逃生阀。
 attachAgentActivator(bus, mgr);
@@ -406,6 +411,7 @@ for (const s of mgr.snapshot()) {
 // 清单内会话只标 saved（可见不可操作、卡片「已保存」），用户点卡发 COMMAND_RESUME_SESSION
 // 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
 const pinned = mgr.applyPinned();
+bootMark("adopt+broadcast");
 
 // #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
 // 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
@@ -414,6 +420,7 @@ const pinned = mgr.applyPinned();
 //（首建即 spawn，见 org.ts 引导注释）；org 目录不可用时只横幅点名，不阻断 relay
 // 其余功能（下次启动重试）
 const leader = mgr.ensureLeader();
+bootMark("pinned+leader");
 
 const decisionNotify = new DecisionNotificationWatcher({
   dataDir: cfg.dataDir,
@@ -456,6 +463,7 @@ try {
   console.warn(`[headcount-trim] boot 首轮失败（下轮定时重试）: ${e instanceof Error ? e.message : String(e)}`);
 }
 mgr.startHeadcountTrim();
+bootMark("notify+parked+trim");
 // W-RESTARTDESIGN F2 钉死顺序：adopt(:311)→applyPinned(:330)→ledger 回灌→reload
 // ——saved（pin 休眠）会话照灌（flushResumeBacklog 恢复时消费）；失败只 warn 队列按空
 try {
@@ -602,6 +610,7 @@ if (cfg.cloudUrls.length) {
 // pairCodes 仅云桥启用时下发（无云桥时配对码无处消费，领了也白领）
 // #175 验收单云通道回流（公司网提交走 CF Worker→KV，relay 每 60s 拉回+通知）
 startAcceptanceCloudPoll(cfg, mgr, bus);
+bootMark("cloud+backfill");
 // W-PATROL 巡检哨兵（内置定时模块）：30min 全巡（worker 帧新鲜度/看板漂移）+ 5min 轻探针
 // （磁盘/dataDir 可写/事件循环漂移）。开关=plugin-config 第十键 patrol（默认开）+
 // CCR_PATROL=0 应急停；异常经 notifyDone 推用户（/api/notify 绿框同通道）。
@@ -631,6 +640,7 @@ if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && read
     enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
   }).start();
 }
+bootMark("patrol+watchfeed");
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...(cloudClients.length ? { pairCodes } : {}),
