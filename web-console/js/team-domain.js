@@ -3,6 +3,16 @@
                 const lanes = [["planned", "规划中"], ["backlog", "待认领"], ["claimed", "进行中"], ["submitted", "审查中"], ["ready_to_install", "待收单"], ["done", "完成"]]; /* 1014 用户定版词表；boardlife R2：submitted「待审查」→「审查中」（用户 1103 点名「甬道为什么叫待审查」——进行时态与卡面 chip「审查中 · PM」对齐）；planlane 批（1104 用户想法）加 planned 规划中最前——PM 轻量化/攒批类缓做想法的冰盒层，不可认领（dispatch 路由跳过）。【词表锚】泳道词表与 relay org-schema.ts BOARD_ENTRY_STATUSES 同源，加态先改 relay 单点再同步此处/RN OrgZone BOARD_LANES/session-domain TEAM_DRAWER_LANES/老壳 index.html BOARD_LANE 四处 */
                 // #G3 板卡富模型：父子链折叠态（展开的父卡 id 集；模块级——render 重建存活）
                 const boardExpanded = new Set(); // 1014 用户定版词表：待认领/进行中/审查中/待收单/完成（批4b 改向作废；boardlife R2 submitted 改词）
+                // lanefold（1104 用户令三修·抽屉折叠）：可折叠泳道=规划中/完成两条（纯历史
+                // 最低频+冰盒缓做层）；其余四核心泳道不加把手（避免过度设计）。fold 态
+                // localStorage 按 (boardId, status) 键控记忆；首见默认=planned 展开（test.97
+                // 刚上正在用）/done 收起（保 1440 档四核心列完整——硬指标 4）。laneLastCounts
+                // 供计数徽章变化轻弹（render 间比对，键含 gid 防跨板串）。
+                const LANE_FOLDABLE = new Set(["planned", "done"]);
+                const laneFoldKey = (gid, status) => "lanefold:" + (gid || "?") + ":" + status;
+                const laneFoldOpen = (gid, status) => { try { const v = localStorage.getItem(laneFoldKey(gid, status)); if (v === "1") return true; if (v === "0") return false; } catch {} return status === "planned"; };
+                const laneFoldSet = (gid, status, open) => { try { localStorage.setItem(laneFoldKey(gid, status), open ? "1" : "0"); } catch {} };
+                const laneLastCounts = new Map();
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
                 const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"], ["headcount-trim-first", "编制清理"]]); // [W-SEAT-SEMANTICS] 首裁确认卡标签（缺席时卡面裸显 kind 串）
@@ -504,7 +514,17 @@
                     }
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
-                    const lane = '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + (body || (laneLoading ? '<div class="lane-skel" aria-hidden="true"><i></i><i></i><i></i></div>' : '<div class="lane-empty">' + (status === "planned" ? "暂无规划——缓做想法（攒批/待评估）记在这里，排产后进待认领" : "暂无任务") + "</div>")) + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架；planlane：规划泳道空态带去向指引 */
+                    const inner = body || (laneLoading ? '<div class="lane-skel" aria-hidden="true"><i></i><i></i><i></i></div>' : '<div class="lane-empty">' + (status === "planned" ? "暂无规划——缓做想法（攒批/待评估）记在这里，排产后进待认领" : "暂无任务") + "</div>");
+                    // lanefold：可折叠两条（规划中/完成）——头=抽屉把手（标题+计数徽章+chevron），
+                    // 卡片区入 .lane-drawer（grid 0fr↔1fr 平滑开合）；计数徽章变化轻弹一次。
+                    const foldable = LANE_FOLDABLE.has(status);
+                    const gid = project?.id || "";
+                    const ck = gid + ":" + status;
+                    const popCls = foldable && laneLastCounts.has(ck) && laneLastCounts.get(ck) !== visibleN ? " pop" : "";
+                    laneLastCounts.set(ck, visibleN);
+                    const lane = foldable
+                      ? (open => '<div class="lane lane-' + status + ' lane-fold ' + (open ? "lane-open" : "lane-closed") + '"><div class="lane-head lane-fold-head' + (open ? "" : " collapsed") + '" data-lane-fold="' + status + '" data-lane-gid="' + escape(gid) + '" role="button" tabindex="0" aria-expanded="' + open + '"><span class="lane-title">' + headLabel + '</span><span class="lane-badge' + popCls + '">' + visibleN + '</span><i class="lane-chev" aria-hidden="true"></i></div><div class="lane-drawer"><div class="lane-drawer-in">' + inner + "</div></div></div>")(laneFoldOpen(gid, status))
+                      : '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + inner + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架；planlane：规划泳道空态带去向指引；lanefold 折叠两条（1104） */
                     // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
                     // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
                     // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
@@ -1750,6 +1770,29 @@
                     const segBtn = event.target && event.target.closest ? event.target.closest(".segment-bar button") : null;
                     if (segBtn && [...root.querySelectorAll(".segment-bar button")].indexOf(segBtn) === 1) refreshBoardFresh("tab-看板");
                   }, true);
+                  // lanefold（1104）：泳道头=抽屉把手——点击/Enter/空格 开合；开=记忆+卡片轻上浮
+                  // （just-opened 一次性类，260ms 后自摘——render 重建不重播）；合=记忆+焦点保留。
+                  const laneFoldToggle = (head) => {
+                    const lane = head.closest(".lane-fold");
+                    if (!lane) return;
+                    const status = head.dataset.laneFold, gid = head.dataset.laneGid || "";
+                    const open = !lane.classList.contains("lane-open");
+                    lane.classList.toggle("lane-open", open);
+                    lane.classList.toggle("lane-closed", !open);
+                    head.classList.toggle("collapsed", !open);
+                    head.setAttribute("aria-expanded", String(open));
+                    laneFoldSet(gid, status, open);
+                    if (open) { const din = lane.querySelector(".lane-drawer-in"); if (din) { din.classList.add("just-opened"); setTimeout(() => din.classList.remove("just-opened"), 260); } }
+                  };
+                  root.addEventListener("click", (event) => {
+                    const head = event.target && event.target.closest ? event.target.closest(".lane-fold-head") : null;
+                    if (head) laneFoldToggle(head);
+                  });
+                  root.addEventListener("keydown", (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    const head = event.target && event.target.closest ? event.target.closest(".lane-fold-head") : null;
+                    if (head) { event.preventDefault(); laneFoldToggle(head); }
+                  });
                   root.addEventListener("click", (event) => {
                     // [W-AWAITUSER]「等你拍板」入口行：直达对应面（数据行由 render 写入，
                     // 点击只做跳转——确认卡→本域看板 tab（待你确认区随板）/会话→会话域
