@@ -351,6 +351,239 @@ const hookEnv = (home: string): NodeJS.ProcessEnv => {
   assert(!b.deadSweepAt.has(id) && !b.resumeAnnouncedAt.has(id) && !b.deadGrowNoteAt.has(id), "T11b forget 后三 Map 无残留键（deadSweepAt/resumeAnnouncedAt/deadGrowNoteAt——B 审攻点4）");
 }
 
+// T12 hookloop 刀1：挂起形态不判死——hooked+静默超窗+终端进程活 → 不判死不播报
+//（21h 会话乒乓判死侧根除；修前=15min 静默即判「hook 失联兜底」误收活回合）
+{
+  const live12 = await spawnLive();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t12", prompt: "挂起守卫", cli_pid: live12 });
+  await wait(150);
+  assert(st("clidead-t12").status === "WORKING", "T12 starts WORKING");
+  // 三时钟压旧（16min>900s 窗；idleSince=max(lastGrow,lastHookAt,updated_at) 全旧才满窗）
+  const old12 = Date.now() - 16 * 60_000;
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t12"), old12);
+  (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.set(extId("clidead-t12"), old12);
+  (mgr.getExternal(extId("clidead-t12")) as unknown as { updated_at: number }).updated_at = old12;
+  sweep();
+  const deadNotes = () => JSON.stringify(mgr.getExternalLogs(extId("clidead-t12"))).split("hook 失联兜底").length - 1;
+  assert(st("clidead-t12").status === "WORKING", "T12 静默窗满但终端进程活：不判死（hookloop 刀1——进程活=回合可能还在）");
+  assert(deadNotes() === 0, `T12 零「hook 失联兜底」播报（实 ${deadNotes()}——21h 刷屏判死侧根除）`);
+  // 面 B 次级门：CLI 自写状态报 idle 且超双窗（31min>30min）→ 允许判（防 hook 永久失联卡 WORKING）
+  const { homedir } = await import("node:os");
+  const idleFile = join(homedir(), ".claude", "sessions", `${live12}.json`);
+  mkdirSync(join(homedir(), ".claude", "sessions"), { recursive: true });
+  writeFileSync(idleFile, JSON.stringify({ status: "idle" }), "utf-8");
+  sleepers.push({ kill: () => { try { rmSync(idleFile, { force: true }); } catch {} } });
+  const old12b = Date.now() - 31 * 60_000;
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t12"), old12b);
+  (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.set(extId("clidead-t12"), old12b);
+  (mgr.getExternal(extId("clidead-t12")) as unknown as { updated_at: number }).updated_at = old12b;
+  sweep();
+  assert(st("clidead-t12").status === "DONE", "T12b 进程活+CLI 自报 idle+超双窗：照常判（次级门——守卫不是免死金牌）");
+  assert(deadNotes() === 1, `T12b 判死播报恰一条（实 ${deadNotes()}）`);
+}
+
+// T12c hookloop 真死回归（红线）：进程死+hook 失联 → 真死收殓一次不循环
+{
+  const dead12c = await spawnDead();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t12c", prompt: "真死回归", cli_pid: dead12c });
+  await wait(150);
+  const old12c = Date.now() - 16 * 60_000;
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t12c"), old12c);
+  (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.set(extId("clidead-t12c"), old12c);
+  (mgr.getExternal(extId("clidead-t12c")) as unknown as { updated_at: number }).updated_at = old12c;
+  sweep();
+  assert(st("clidead-t12c").done_reason === "disconnected", "T12c 进程死：走真死收殓（disconnected——刀1 不拦权威死证）");
+  assert(alarmed("clidead-t12c"), "T12c 「CLI 进程已退出」报文在场（真死报一次）");
+  // 死 pid 无活可寻：水合穿孔翻活不生效（循环断链）+二扫不重报
+  (bridge as unknown as { reviveOnHydrate(id: string): void }).reviveOnHydrate(extId("clidead-t12c"));
+  assert(st("clidead-t12c").status !== "WORKING", "T12c 死 pid：reviveOnHydrate 不翻活（无进程证据不翻——循环断）");
+  const notesBefore = JSON.stringify(mgr.getExternalLogs(extId("clidead-t12c"))).split("CLI 进程已退出").length - 1;
+  sweep();
+  const notesAfter = JSON.stringify(mgr.getExternalLogs(extId("clidead-t12c"))).split("CLI 进程已退出").length - 1;
+  assert(notesAfter === notesBefore, `T12c 二扫不重报（前 ${notesBefore} 后 ${notesAfter}——真死只报一次）`);
+}
+
+// T13 hookloop 刀2：循环检测冻结——判死↔翻活 1h 内 ≥3 对 → 冻结+告警一次+静默翻活抑制
+{
+  const live13 = await spawnLive();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t13", prompt: "循环冻结", cli_pid: live13 });
+  await wait(150);
+  const b13 = bridge as unknown as { noteLoopEvent(id: string, kind: "death" | "revive"): void; loopFrozen(id: string): boolean; reviveOnHydrate(id: string): void };
+  const alarmNotes = () => JSON.stringify(mgr.getExternalLogs(extId("clidead-t13"))).split("判死-接管循环").length - 1;
+  for (let i = 0; i < 2; i++) { b13.noteLoopEvent(extId("clidead-t13"), "death"); b13.noteLoopEvent(extId("clidead-t13"), "revive"); }
+  assert(!b13.loopFrozen(extId("clidead-t13")), "T13 前置：2 对未冻结（阈值 3）");
+  assert(alarmNotes() === 0, "T13 前置：未到阈值零告警");
+  b13.noteLoopEvent(extId("clidead-t13"), "death");
+  b13.noteLoopEvent(extId("clidead-t13"), "revive");
+  assert(b13.loopFrozen(extId("clidead-t13")), "T13 1h 内 3 对：冻结生效");
+  assert(alarmNotes() === 1, `T13 冻结告警恰一条（实 ${alarmNotes()}）`);
+  // 冻结抑制静默翻活：DONE+活 pid 直调 reviveOnHydrate → 不翻不播
+  mgr.setExternalStatus(extId("clidead-t13"), "DONE", "T13 先落");
+  b13.reviveOnHydrate(extId("clidead-t13"));
+  assert(st("clidead-t13").status === "DONE", "T13 冻结中：静默翻活被抑制（状态定格——以进程为凭）");
+  const reviveNotes = () => JSON.stringify(mgr.getExternalLogs(extId("clidead-t13"))).split("重启后检测到终端进程仍在运行").length - 1;
+  assert(reviveNotes() === 0, `T13 冻结中接管播报零（实 ${reviveNotes()}——复活侧刷屏根除）`);
+  // 解冻①：hook 恢复 → 台账清 → 静默翻活复活（自愈链不破坏）
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t13", prompt: "hook 回来了", cli_pid: live13 });
+  await wait(150);
+  assert(!b13.loopFrozen(extId("clidead-t13")), "T13 hook 恢复：冻结解除（循环前提消失）");
+  mgr.setExternalStatus(extId("clidead-t13"), "DONE", "T13 再落");
+  b13.reviveOnHydrate(extId("clidead-t13"));
+  assert(st("clidead-t13").status === "WORKING", "T13 解冻后：接管翻活照常（#276/#50 自愈链保持）");
+  assert(reviveNotes() === 1, `T13 解冻后接管播报恰一条（实 ${reviveNotes()}）`);
+}
+
+// T14 hookloop 刀3：判死播报限频——5min 带内二次判死零新播报
+{
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t14", prompt: "限频" }); // 无 cli_pid：进程探测无果 → 判死路径可达（无 disconnected 分流）
+  await wait(150);
+  const old14 = Date.now() - 16 * 60_000;
+  const clockOld = () => {
+    (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(extId("clidead-t14"), old14);
+    (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.set(extId("clidead-t14"), old14);
+    (mgr.getExternal(extId("clidead-t14")) as unknown as { updated_at: number }).updated_at = old14;
+  };
+  clockOld();
+  sweep();
+  const deadNotes14 = () => JSON.stringify(mgr.getExternalLogs(extId("clidead-t14"))).split("hook 失联兜底").length - 1;
+  assert(deadNotes14() === 1, `T14 首次判死播报一条（实 ${deadNotes14()}）`);
+  // 翻回 WORKING+时钟再压旧 → 带内二次判死：状态照收、播报静默
+  mgr.setExternalStatus(extId("clidead-t14"), "WORKING", "竞速翻回模拟");
+  clockOld();
+  sweep();
+  assert(deadNotes14() === 1, `T14 带内二次判死零新播报（实 ${deadNotes14()}——限频只限播报）`);
+  assert(st("clidead-t14").status === "DONE", "T14 二次判死状态照收（限频不限判定）");
+}
+
+// T14b hookloop 台账 forget 清账（防防抖账无界涨——cliflap R2-P2-2 同纪律）
+{
+  const id = extId("clidead-t14");
+  const b = bridge as unknown as { hookLoopPairs: Map<string, number[]>; hookLoopFrozenAt: Map<string, number>; pendingDeathAt: Map<string, number>; sysRate: Map<string, { at: number; n: number; total: number }>; forget(id: string): void };
+  b.hookLoopPairs.set(id, [Date.now()]);
+  b.hookLoopFrozenAt.set(id, Date.now());
+  b.pendingDeathAt.set(id, Date.now());
+  b.sysRate.set(id + "|hook-dead", { at: Date.now(), n: 1, total: 1 });
+  b.sysRate.set(id + "|revive-takeover", { at: Date.now(), n: 1, total: 1 });
+  assert(b.hookLoopPairs.has(id) && b.hookLoopFrozenAt.has(id) && b.sysRate.size >= 2, "T14b 前置：四台账键在场");
+  b.forget(id);
+  assert(!b.hookLoopPairs.has(id) && !b.hookLoopFrozenAt.has(id) && !b.pendingDeathAt.has(id), "T14b forget 后三 Map 无残留键");
+  assert(!b.sysRate.has(id + "|hook-dead") && !b.sysRate.has(id + "|revive-takeover"), "T14b forget 后 sysRate 前缀键无残留（id|tag 扫描清）");
+}
+
+// ============ hookloop R2（1104 双审）：冻结可持续/口序/第四对 ============
+
+// T15 R2-P1 冻结可持续：陈旧冻结条目（>1h）不再阻断二次冻结——过期删账+!loopFrozen 再触发
+{
+  const b = bridge as unknown as { hookLoopPairs: Map<string, number[]>; hookLoopFrozenAt: Map<string, number>; pendingDeathAt: Map<string, number>; noteLoopEvent(id: string, kind: "death" | "revive"): void; loopFrozen(id: string): boolean };
+  const d15 = await spawnDead();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t15", prompt: "冻结可持续", cli_pid: d15 });
+  await wait(150);
+  const id = extId("clidead-t15");
+  // 场景：首冻 2h 前（已过期），台账残留陈旧冻结条目——修前 get()!==undefined 恒阻断二次冻结
+  b.hookLoopFrozenAt.set(id, Date.now() - 2 * 3_600_000);
+  b.hookLoopPairs.delete(id);
+  assert(b.loopFrozen(id) === false, "T15 陈旧冻结条目已过期（loopFrozen=false——读时顺手删账）");
+  assert(!b.hookLoopFrozenAt.has(id), "T15 过期冻结条目读时被删（陈旧账不滞留）");
+  // 1h 内再造 3 对 → 二次冻结必须触发（修前=永不触发，乒乓零制动复发）
+  for (let i = 0; i < 3; i++) {
+    b.noteLoopEvent(id, "death");
+    b.noteLoopEvent(id, "revive");
+  }
+  assert(b.hookLoopFrozenAt.has(id) && b.loopFrozen(id) === true, "T15 过期后 3 对再冻结触发（冻结可持续——非 1h 定时炸弹）");
+  const fzLog = JSON.stringify(mgr.getExternalLogs(id)).split("静默判定已冻结").length - 1;
+  assert(fzLog === 1, `T15 再冻结告警播一次（实 ${fzLog}——告警重播口径随再冻结成立）`);
+  b.hookLoopFrozenAt.delete(id); b.hookLoopPairs.delete(id); b.pendingDeathAt.delete(id);
+}
+
+// T16 R2-P2-1 口序：冻结中进程换代 → 解冻并翻活（修前=冻结闸先挡，换代清账不可达）
+{
+  const dead16 = await spawnDead();
+  const live16 = await spawnLive();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t16", prompt: "口序", cli_pid: dead16 });
+  await wait(150);
+  const id16 = extId("clidead-t16");
+  const b16 = bridge as unknown as { hookLoopFrozenAt: Map<string, number>; reviveOnHydrate(id: string): void };
+  mgr.setExternalStatus(id16, "DONE", "判死态");
+  b16.hookLoopFrozenAt.set(id16, Date.now()); // 冻结中
+  (mgr.getExternal(id16) as unknown as { cli_pid: number }).cli_pid = dead16; // 旧代（死 pid）
+  // findAliveCliProcess 第二源：pid cache 注入活 pid（sid=relay_session_id||去 ext- 前缀）= 换代形态
+  const cacheFile = join(TDATA, "cli-pids.json");
+  writeFileSync(cacheFile, JSON.stringify({ "clidead-t16": live16 }), "utf-8");
+  b16.reviveOnHydrate(id16);
+  await wait(150);
+  assert(!b16.hookLoopFrozenAt.has(id16), "T16 冻结中进程换代：清账先于冻结闸（口②真实可达——冻结条目随换代清除）");
+  assert(st("clidead-t16").status === "WORKING", "T16 换代后翻活（修前=冻结闸先挡永不翻）");
+  try { rmSync(cacheFile, { force: true }); } catch {}
+}
+
+// T16b R2-P2-1 反面：冻结中同代（pid 不变）仍抑制
+{
+  const live16b = await spawnLive();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t16b", prompt: "同代", cli_pid: live16b });
+  await wait(150);
+  const id16b = extId("clidead-t16b");
+  const b16b = bridge as unknown as { hookLoopFrozenAt: Map<string, number>; reviveOnHydrate(id: string): void };
+  mgr.setExternalStatus(id16b, "DONE", "判死态");
+  b16b.hookLoopFrozenAt.set(id16b, Date.now());
+  (mgr.getExternal(id16b) as unknown as { cwd: string }).cwd = process.cwd();
+  (mgr.getExternal(id16b) as unknown as { cli_pid: number }).cli_pid = live16b; // 同代活 pid
+  b16b.reviveOnHydrate(id16b);
+  await wait(100);
+  assert(st("clidead-t16b").status === "DONE", "T16b 冻结中同代：静默翻活仍抑制（抑制语义不因口序调整丢失）");
+}
+
+// T17 R2-P2-4 第四对：无 hook 会话判死侧记账+限频（修前=零记账零限频）
+{
+  const b17 = bridge as unknown as { hookLoopPairs: Map<string, number[]>; sysRate: Map<string, { at: number; n: number; total: number }> };
+  const id17 = extId("clidead-t17");
+  // 造无 hook 会话（不 POST hook——直接 setExternal 不可：测试面经 hook/ensureExternal。用 hook 建后把 lastHookAt/noHookIds 置无 hook 形态）
+  const dead17 = await spawnDead();
+  await hook({ event: "UserPromptSubmit", session_id: "clidead-t17", prompt: "第四对", cli_pid: dead17 });
+  await wait(150);
+  // 转「无 hook」形态：清 lastHookAt + 入 noHookIds + status WORKING + 双时钟压旧（>90s idle 档）
+  (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.delete(id17);
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(id17, Date.now() - 120_000);
+  (mgr.getExternal(id17) as unknown as { updated_at: number }).updated_at = Date.now() - 120_000;
+  const noHookIds = (bridge as unknown as { noHookIds: Set<string> }).noHookIds;
+  noHookIds.add(id17);
+  sweep(); // sweepWorkingIdle 死 pid 分支先收（disconnected）——无 hook 扫描不达。改走 sweepNoHookIdle？
+  // sweepWorkingIdle 对死 pid 会走 disconnected 收殓（非第四对）；第四对判死侧=sweepNoHookIdle
+  // （无 hook 会话专属扫描）。直调该扫描器：
+  const sweepNH = (bridge as unknown as { sweepNoHookIdle(): void }).sweepNoHookIdle.bind(bridge);
+  mgr.setExternalStatus(id17, "WORKING", "再造工作态");
+  noHookIds.add(id17);
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(id17, Date.now() - 120_000);
+  (bridge as unknown as { turnShape: Map<string, string> }).turnShape.set(id17, "end"); // end 档=90s 窗（gen 档 600s）
+  sweepNH();
+  const nhLog = () => JSON.stringify(mgr.getExternalLogs(id17)).split("转录静默，回合视作结束").length - 1;
+  assert(st("clidead-t17").status === "DONE", "T17 无 hook 静默判死照常（判定不因限频改变）");
+  assert(nhLog() === 1, `T17 首次判死播报一条（实 ${nhLog()}）`);
+  // 带内二次：状态翻回+时钟压旧再扫 → 播报静默但记账累积
+  mgr.setExternalStatus(id17, "WORKING", "竞速翻回");
+  noHookIds.add(id17);
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.set(id17, Date.now() - 120_000);
+  (mgr.getExternal(id17) as unknown as { updated_at: number }).updated_at = Date.now() - 120_000;
+  (bridge as unknown as { turnShape: Map<string, string> }).turnShape.set(id17, "end");
+  sweepNH();
+  assert(nhLog() === 1, `T17 带内二次判死零新播报（实 ${nhLog()}——第四对限频生效）`);
+  assert(b17.sysRate.has(id17 + "|nohook-dead"), "T17 第四对记账入 sysRate（nohook-dead tag）");
+  // 死亡侧记账与 revive 配对成对（noteLoopEvent death 入 pendingDeathAt）
+  const hasDeath = (bridge as unknown as { pendingDeathAt: Map<string, number> }).pendingDeathAt.has(id17);
+  assert(hasDeath, "T17 判死入 pendingDeathAt（与 revive 配对——第四对进乒乓台账）");
+}
+
+// T17b R2-P2-2 账对称：hook 恢复（解冻口①）三账齐清
+{
+  const id17b = extId("clidead-t17");
+  const b = bridge as unknown as { hookLoopPairs: Map<string, number[]>; hookLoopFrozenAt: Map<string, number>; pendingDeathAt: Map<string, number> };
+  b.hookLoopPairs.set(id17b, [Date.now()]);
+  b.hookLoopFrozenAt.set(id17b, Date.now());
+  b.pendingDeathAt.set(id17b, Date.now());
+  await hook({ event: "Stop", session_id: "clidead-t17", prompt: "", cli_pid: 0 });
+  await wait(150);
+  assert(!b.hookLoopPairs.has(id17b) && !b.hookLoopFrozenAt.has(id17b) && !b.pendingDeathAt.has(id17b), "T17b hook 恢复三账齐清（含 pendingDeathAt——修前漏清误配对）");
+}
+
 cleanup();
 console.log("clidead: all ok");
 process.exit(0);

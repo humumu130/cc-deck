@@ -324,6 +324,12 @@ export class Bridge {
     this.streamDeltaStop(id);
     this.pending.delete(id);
     this.turnStart.delete(id);
+    // hookloop（1104 第三对乒乓）：四新台账随 forget 清（防防抖账无界涨——同 cliflap
+    // R2-P2-2 纪律；sysRate 键=id|tag 前缀扫描）
+    this.hookLoopPairs.delete(id);
+    this.hookLoopFrozenAt.delete(id);
+    this.pendingDeathAt.delete(id);
+    for (const k of [...this.sysRate.keys()]) if (k.startsWith(id + "|")) this.sysRate.delete(k);
     this.inputQueue.delete(id);
     this.flushing.delete(id);
     this.named.delete(id);
@@ -1227,6 +1233,10 @@ export class Bridge {
     // 静默期会被 sweepNoHookIdle 误判回合结束）
     this.noHookIds.delete(this.extId(ev));
     this.lastHookAt.set(this.extId(ev), Date.now());
+    // hookloop 刀2 解冻条件①：hook 活了=循环前提消失，清乒乓台账（判死↔接管对不再记账）
+    this.hookLoopPairs.delete(this.extId(ev));
+    this.hookLoopFrozenAt.delete(this.extId(ev));
+    this.pendingDeathAt.delete(this.extId(ev)); // hookloop R2-P2-2：三账齐清——漏 pendingDeathAt 会让合法恢复后的下一次判死与陈旧翻活误配对
     const decision = await this.dispatch(ev);
     // 分发后捕获：新会话的首个事件（UserPromptSubmit/PreToolUse）在 handler 内才 ensureExternal
     if (ev.cli_pid && ev.cli_pid > 0) {
@@ -1565,7 +1575,13 @@ export class Bridge {
       const turn = this.turnStart.get(id) ?? st.started_at;
       this.turnStart.delete(id);
       this.mgr.finishExternal(id, "completed", Date.now() - turn, last); // #144 完成时刻=最后转录增长，非判定时刻
-      this.mgr.pushExternalLog(id, "system", "转录静默，回合视作结束（无 hook 会话）");
+      // hookloop R2-P2-4（第四对预防·B 审治本铁律）：无 hook 会话判死 ↔ reviveOnHydrate
+      // 翻活（转录轮转=两侧都触发）——本侧原无记账无限频，刷屏速率上限反高于第三对。
+      // 补记账+限频（与 :1697 第三对同构；guard 不加——无 hook 会话无 pid 权威活证，
+      // 静默窗本身就是该形态唯一判据）。
+      this.noteLoopEvent(id, "death");
+      const nhGate = this.sysRateGate(id, "nohook-dead");
+      if (!nhGate.limited) this.mgr.pushExternalLog(id, "system", `转录静默，回合视作结束（无 hook 会话）${nhGate.prior > 0 ? `（前带已播 ${nhGate.prior} 次——限频）` : ""}`);
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
     }
   }
@@ -1656,16 +1672,42 @@ export class Bridge {
           this.turnStart.delete(id);
           this.sweepPendingToTurnEnd(id); // #172：收回合前清扫残留排队（Done 后无人再清）
           this.mgr.finishExternal(id, "completed", now - turn, idleSince);
-          this.mgr.pushExternalLog(id, "system", "CLI 已空闲（进程状态 idle），回合视作结束");
+          // hookloop R2-P2-4（第四对另一判死侧）：CLI 自报 idle 快回落 ↔ reviveOnHydrate
+          // 同构成环——补记账+限频（同构第三对）。
+          this.noteLoopEvent(id, "death");
+          const idleGate = this.sysRateGate(id, "cli-idle-dead");
+          if (!idleGate.limited) this.mgr.pushExternalLog(id, "system", `CLI 已空闲（进程状态 idle），回合视作结束${idleGate.prior > 0 ? `（前带已播 ${idleGate.prior} 次——限频）` : ""}`);
           if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
         }
         continue;
+      }
+      // hookloop 刀1（1104 用户实锤 P0·第三对乒乓：21h 会话「静默判死↔接管复活」每轮
+      // 两条×数十轮）：静默窗满只证明「转录+事件无信」，不证明「回合结束」——终端进程
+      // 活着（无退出证据）时回合可能还在（长思考/长工具/hook 断链三态静默 15min+ 皆
+      // 常态；终端一直在跑=每轮判死皆误判）。守卫：进程活且非「CLI 自报 idle 且超双窗」
+      // → 不判死不播报（真收尾由 Stop hook / 进程退出分支收——进程死=唯一权威死证；
+      // 双窗 idle 次级门防 hook 永久失联永久卡 WORKING）。乒乓冻结（刀2）时更强抑制。
+      if (hooked) {
+        const aliveNow = s.cli_pid ? cliHostAlive(s.cli_pid) : !!this.findAliveCliProcess(id);
+        const idleLong = !!s.cli_pid && cliSessionIdle(s.cli_pid) && now - idleSince > effWin * 2;
+        if (aliveNow && (!idleLong || this.loopFrozen(id))) {
+          const gAt = this.deadGrowNoteAt.get(id) ?? 0;
+          if (now - gAt > 600_000) {
+            if (this.deadGrowNoteAt.size > 200) this.deadGrowNoteAt.clear(); // 会话量上限兜底（同 cliflap 纪律）
+            this.deadGrowNoteAt.set(id, now);
+            console.log(`[bridge] idle-sweep 跳过：sid=${id.slice(0, 12)} 静默窗满但终端进程活（hook 失联兜底不判死——hookloop 刀1${this.loopFrozen(id) ? "·乒乓冻结中" : ""}）`);
+          }
+          continue;
+        }
       }
       const turn = this.turnStart.get(id) ?? s.started_at;
       this.turnStart.delete(id);
       this.sweepPendingToTurnEnd(id); // #172：收回合前清扫残留排队（Done 后无人再清）
       this.mgr.finishExternal(id, "completed", now - turn, idleSince);
-      this.mgr.pushExternalLog(id, "system", "转录与事件均静默超时，回合视作结束（hook 失联兜底）");
+      // hookloop 刀2/3：判死记账（与翻活配对成乒乓对）+播报限频带（5min 带内静默计数）
+      this.noteLoopEvent(id, "death");
+      const deadGate = this.sysRateGate(id, "hook-dead");
+      if (!deadGate.limited) this.mgr.pushExternalLog(id, "system", `转录与事件均静默超时，回合视作结束（hook 失联兜底）${deadGate.prior > 0 ? `（前带已播 ${deadGate.prior} 次——限频）` : ""}`);
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
     }
   }
@@ -2831,6 +2873,63 @@ export class Bridge {
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   private transcriptOffsets = new Map<string, number>();
 
+  // hookloop（1104 用户实锤 P0·第三对乒乓）：判死↔翻活循环台账（1h 滚动窗对计数）
+  // +冻结时刻 +播报限频带（与 cliflap deadSweepAt/cliStatusAt 家族同精神独立带）
+  private hookLoopPairs = new Map<string, number[]>(); // 相邻判死→翻活对时间戳（1h 滚动）
+  private hookLoopFrozenAt = new Map<string, number>(); // 冻结时刻（1h 内 ≥3 对触发，1h 自然过期）
+  private pendingDeathAt = new Map<string, number>(); // 最近判死时刻（death→revive 配对用）
+  private sysRate = new Map<string, { at: number; n: number; total: number }>(); // (id|tag) -> 5min 播报限频带
+
+  /** 刀2 记账：death/revive 入账；相邻 death→revive（1h 内）配成对，窗内 ≥3 对 →
+   *  冻结静默判定（判死守卫强化+静默翻活抑制）并播告警一次（告警本身只此一条）。 */
+  private noteLoopEvent(id: string, kind: "death" | "revive"): void {
+    const now = Date.now();
+    if (this.pendingDeathAt.size > 200) this.pendingDeathAt.clear(); // 会话量上限兜底
+    if (kind === "death") {
+      this.pendingDeathAt.set(id, now);
+      return;
+    }
+    const deathAt = this.pendingDeathAt.get(id) ?? 0;
+    this.pendingDeathAt.delete(id);
+    if (!deathAt || now - deathAt > 3_600_000) return; // 无近期判死=正常接管（pm-resume 等），非循环对
+    if (this.hookLoopPairs.size > 200) this.hookLoopPairs.clear();
+    const pairs = (this.hookLoopPairs.get(id) ?? []).filter((t) => now - t <= 3_600_000);
+    pairs.push(now);
+    this.hookLoopPairs.set(id, pairs);
+    if (pairs.length >= 3 && !this.loopFrozen(id)) { // R2-P1：!loopFrozen（含过期删账）——陈旧冻结条目不再阻断二次冻结
+      if (this.hookLoopFrozenAt.size > 200) this.hookLoopFrozenAt.clear();
+      this.hookLoopFrozenAt.set(id, now);
+      this.mgr.pushExternalLog(id, "system", `检测到判死-接管循环（1h 内 ${pairs.length} 对），静默判定已冻结：以终端进程为准，hook 恢复或进程换代后自动解冻`);
+    }
+  }
+
+  private loopFrozen(id: string): boolean {
+    const at = this.hookLoopFrozenAt.get(id);
+    if (at === undefined) return false;
+    // hookloop R2-P1（B 审·冻结一次性）：过期顺手删账——陈旧条目会让 re-freeze 条件
+    // （!loopFrozen）与全部抑制点同时失效后永不自愈（乒乓零制动复发）。删账后冻结可
+    // 随新对再次触发（冻结可持续，非 1h 定时炸弹）。
+    if (Date.now() - at >= 3_600_000) { this.hookLoopFrozenAt.delete(id); return false; }
+    return true;
+  }
+
+  /** 刀3 播报限频带：同 (id,tag) 5min 带内静默计数（limited=true 应跳过播报），
+   *  带首播正文；prior=历史已播带数（正文可附提示仍在循环）。 */
+  private sysRateGate(id: string, tag: string): { limited: boolean; prior: number } {
+    const key = `${id}|${tag}`;
+    const band = this.sysRate.get(key);
+    const now = Date.now();
+    if (this.sysRate.size > 500) this.sysRate.clear(); // 会话量上限兜底
+    if (!band || now - band.at > 300_000) {
+      const prior = band?.total ?? 0;
+      this.sysRate.set(key, { at: now, n: 1, total: prior + 1 });
+      return { limited: false, prior };
+    }
+    band.n++;
+    band.total++;
+    return { limited: true, prior: band.n };
+  }
+
   // #73 外部转录流式快照折叠：同一 message.id 的多行转录 = 同一条逻辑消息的增长
   // 快照（2026-09-19 实测：58 行 assistant 仅 19 个唯一 id，同 id 行文本逐行增长；
   // 个别尾行文本为空的分块 flush 伪影）。按 (sid, msgId, kind) 复用稳定日志 id 让
@@ -2871,10 +2970,28 @@ export class Bridge {
     if (st.status !== "DONE" && st.status !== "ERROR") return;
     const alivePid = this.findAliveCliProcess(id);
     if (!alivePid) return; // 无进程证据不翻（死卡/盲卡保持终态语义）
+    // hookloop R2-P2-1（A+B converge·口序）：pid 换代清账先于冻结闸——原序冻结中换代
+    // 不能解冻，而冻结告警承诺「进程换代后自动解冻」（口②名存实亡）。换代=新生命周期，
+    // 上一代循环台账不跨代记账；清账后再判冻结（同代残留循环仍抑制）。
+    if (st.cli_pid && st.cli_pid !== alivePid) {
+      this.hookLoopPairs.delete(id);
+      this.hookLoopFrozenAt.delete(id);
+      this.pendingDeathAt.delete(id);
+    }
+    // hookloop 刀2：乒乓冻结抑制——判死↔接管 1h 内 ≥3 对即冻结静默翻活（状态定格，
+    // 以进程为凭）。冻结只抑制「静默证据」翻活；「转录在写」硬活证据路径（pushAssistantTexts
+    // 增量分支）不受冻结——pm-resume/接管自愈链（#276/#50）保持完整。
+    if (this.loopFrozen(id)) {
+      console.log(`[bridge] revive-on-hydrate 抑制：sid=${id.slice(0, 12)} 乒乓冻结中（静默翻活停摆——hookloop 刀2）`);
+      return;
+    }
     if (st.cli_pid !== alivePid) this.mgr.setExternalCliPid(id, alivePid);
     if (st.historical) st.historical = false;
     this.mgr.setExternalStatus(id, "WORKING", "重启接管：终端进程仍在运行");
-    this.mgr.pushExternalLog(id, "system", "重启后检测到终端进程仍在运行，恢复会话接管（状态翻活＋定位重绑）");
+    // hookloop 刀2/3：翻活记账（与判死配对成乒乓对）+播报限频带
+    this.noteLoopEvent(id, "revive");
+    const gate = this.sysRateGate(id, "revive-takeover");
+    if (!gate.limited) this.mgr.pushExternalLog(id, "system", `重启后检测到终端进程仍在运行，恢复会话接管（状态翻活＋定位重绑）${gate.prior > 0 ? `（前带已播 ${gate.prior} 次——限频）` : ""}`);
   }
 
   // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
