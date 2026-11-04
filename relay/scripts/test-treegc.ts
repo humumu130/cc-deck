@@ -11,6 +11,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { acquireWorktreeLock, scanClearWorktreeLocks, writeWorktreeLock, readWorktreeLock } from "../src/dispatch-lock.js";
+import { readFileSync as rfSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+const srcOf = (p: string): string => rfSync(new URL(p, import.meta.url), "utf-8");
 import { inspectWorktree, quarantineWorktree, sweepStaleWorktrees, readGcAudit, worktreeDirty, healPrunableWorktrees } from "../src/worktree-gc.js";
 
 let pass = 0, fail = 0;
@@ -109,6 +112,42 @@ const mkPlain = (name: string): string => {
   const quarantined = s.filter((e) => e.verdict === "quarantined");
   ok(quarantined.length > 0, "D1 批量清扫隔离龄外树（含 B 场景守卫树——龄到统一收殓，保 48h）");
   ok(!readdirSync("/private/tmp").some((n) => n.startsWith("cc-deck-quarantine-") && n.includes("-cc-deck-quarantine-")), "D2 隔离区目录不被自噬（排除规则在）");
+}
+
+// ---------- treegc R1（A 审 P1×3 收割前必修）----------
+{
+  // 套件头已导入 worktreeDirty/fs/execFileSync 直调；R1 计数并入全局 pass/fail
+  const r1assert = (cond: boolean, name: string): void => {
+    if (cond) { pass++; console.log("  ok - " + name); }
+    else { fail++; console.error("  FAIL - " + name); }
+  };
+  const assert = r1assert;
+  // R1-P1-1：非 cc-deck 仓 worktree 带锁文件不判脏（滤 .cc-deck-lock）
+  {
+    const wt = mkdtempSync(join(tmpdir(), "treegc-r1-lock-"));
+    try {
+      execFileSync("git", ["-C", wt, "init", "-q"]); // 空仓即可（porcelain 对 untracked 非空——无需 commit/用户配置）
+      writeFileSync(join(wt, ".cc-deck-lock"), JSON.stringify({ dispatch: "d1", at: Date.now() }), "utf-8");
+      assert(worktreeDirty(wt) === false, "P1-1 锁文件不判脏（.cc-deck-lock 滤除——org 锚指任意项目仓的锁不假阳）");
+      writeFileSync(join(wt, "real-change.txt"), "x", "utf-8");
+      assert(worktreeDirty(wt) === true, "P1-1 真改动仍判脏（滤锁不滤真——守卫谓词保真）");
+    } finally { rmSync(wt, { recursive: true, force: true }); }
+  }
+  // R1-P1-2：两路告警 ledger 直达键唯一（源码锚+键式断言——塌缩回归锁）
+  {
+    const sm = srcOf("../src/session-manager.ts");
+    assert(sm.includes("zero-receipt-${e.id}") || sm.includes('zero-receipt-${e.id}'.replace("'", '"')), "P1-2 零回执 hook 直达键 zero-receipt-<id>（样板=receipt-gate :9281）");
+    assert(sm.includes("wt-guard-${e.id}-"), "P1-2 wt-guard 直达键 wt-guard-<id>-<dir>（批量关单 N 单=N 条——stableKeyHint 塌缩根除）");
+    const zeros = (sm.match(/zero-receipt-\$\{e\.id\}/g) || []).length;
+    assert(zeros >= 1, "P1-2 直达键在 upsert 调用位（非注释）");
+  }
+  // R1-P1-3：hook 在 writeFileSync 之后（源码序锚）
+  {
+    const org = srcOf("../src/org.ts");
+    const writeAt = org.indexOf('writeFileSync(dispatchLogPath(d)');
+    const hookAt = org.indexOf("dispatchClosedHook?.(e);");
+    assert(writeAt > 0 && hookAt > writeAt, "P1-3 hook 后置于落账（writeFileSync 先行——I4 副作用先存后做，拒写路径零幽灵告警）");
+  }
 }
 
 console.log(`\n== test-treegc 汇总：${pass} ok / ${fail} FAIL ==`);

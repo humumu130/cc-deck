@@ -932,9 +932,15 @@ export class SessionManager {
     setDispatchClosedHook((e) => {
       if (e.drill === true) return;
       if (!e.receipt || !e.receipt.trim()) {
-        this.notifyLeaderSystem(
-          `dispatch ${e.id.slice(0, 8)}（${(e.title ?? "").slice(0, 30) || "无题"}）${e.status === "done" ? "done" : "failed"} 关单但零回执——交付物失踪（W-TREEGC 关单防线）：核对 worktree 隔离区/git 分支/PR 后人工收口`,
-        );
+        // treegc R1-P1-2（A 审）：ledger 直达键带 dispatch 全 id——原 notifyLeaderSystem
+        // 单发走 stableKeyHint（去空白前 6 字符「dispat」恒定）=所有单共用一个 key，
+        // upsertNotification 静默丢弃后续（W-GATEFIX-2 塌缩同类回归：批量关单 N 单失踪
+        // 只出 1 条）。对齐 :9281 receipt-gate 样板：直达唯一键+notify 推送双发。
+        const txt = `dispatch ${e.id.slice(0, 8)}（${(e.title ?? "").slice(0, 30) || "无题"}）${e.status === "done" ? "done" : "failed"} 关单但零回执——交付物失踪（W-TREEGC 关单防线）：核对 worktree 隔离区/git 分支/PR 后人工收口`;
+        this.upsertNotification("system", `zero-receipt-${e.id}`, this.leaderId ?? "leaderless", {
+          title: "关单零回执", body: txt, severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "/",
+        });
+        this.notifyLeaderSystem(txt);
       }
     });
     // W-EXPP2：经验库 GC 轮收口回调（单槽，experience.ts notifyGcRound 递出）——
@@ -5269,9 +5275,19 @@ ${lines.join("\n")}
       });
       if (cleared.length) this.emitChainAudit("dispatch-close", `worktree 锁随收口释放: ${cleared.map((d) => d.split("/").pop()).join(",")}`);
       if (guarded.length) {
-        for (const d of guarded) this.emitChainAudit("wt-guard", `脏树不清锁（未提交改动在树，锁留守 48h 防裸奔）：${d}——收口单 ${e.id.slice(0, 8)}（${truncate(receipt, 40)}）`);
+        for (const d of guarded) this.emitChainAudit("wt-guard", `脏树不清锁（未提交改动在树，锁留守 2h 防裸奔）：${d}——收口单 ${e.id.slice(0, 8)}（${truncate(receipt, 40)}）`);
         // 交付物失踪告警：中断/无交付收口 × 脏树 = 稿件悬空（任务书改动④）
-        this.notifyLeaderSystem(`[交付物失踪] 单 ${e.id.slice(0, 8)} ${status}（${truncate(receipt, 40)}）但 worktree ${guarded.map((d) => d.split("/").pop()).join(",")} 有未提交改动——锁已留守，48h 内可从 ${guarded.join(", ")} 抢救（W-TREEGC）`);
+        // treegc R1-P1-2（A 审）：ledger 直达键 wt-guard-<id>-<dir 尾>（原 stableKeyHint
+        // 「[交付物失」恒定=多单塌缩一条——批量关单 N 单失踪只出 1 条）；notify 推送保留。
+        // R1-P2① 随批：锁窗文案 48h→2h 失真订正（dispatch-lock worktreeLockWindowMs=2h，
+        // 过期即他人可接管——PM 依 48h 文案延迟抢救=重新暴露）。
+        const wtTxt = `[交付物失踪] 单 ${e.id.slice(0, 8)} ${status}（${truncate(receipt, 40)}）但 worktree ${guarded.map((d) => d.split("/").pop()).join(",")} 有未提交改动——锁已留守（2h 锁窗内），尽快从 ${guarded.join(", ")} 抢救（W-TREEGC）`;
+        for (const d of guarded) {
+          this.upsertNotification("system", `wt-guard-${e.id}-${(d.split("/").pop() || "wt")}`, this.leaderId ?? "leaderless", {
+            title: "脏树稿件悬空", body: wtTxt, severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "/",
+          });
+        }
+        this.notifyLeaderSystem(wtTxt);
       }
     } catch { /* 尽力而为 */ }
     this.emitChainAudit("dispatch-close", `id=${e.id.slice(0, 8)} status=${status} worker=${workerSessionId.slice(0, 12)} receipt=${truncate(receipt, 60)}`); /* #92 W-NOTIFY2 C：回执收口入审计流（通知面全链既有——transient/decision-ledger/upsert/failed 单注入 PM） */

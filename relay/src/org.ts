@@ -537,11 +537,6 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
   }
   // W-TREEGC 关单防线（1104 夜双事故：linkquality f49ec8ae 22:11 零提交静默关单树清；
   // 域不变量 I4「副作用先存后做」对位）：终态行落账即通知挂载方——org 纯底座无环，
-  // 只回调不 import（setConfirmCreatedHook 同款单槽形态）。「零回执=交付物失踪」告警
-  // 判定在挂载侧（session-manager 构造器注册）。
-  if (e.status === "done" || e.status === "failed") {
-    try { dispatchClosedHook?.(e); } catch { /* 告警面异常不反噬台账写 */ }
-  }
   // S3-P4 入队幂等咽喉（relfix-s，multica「入队幂等=存储约束」的写侧单点形态；
   // 续作修订=与 S2 同步收窄到非组锚）：新**开单**行（dispatched/queued）落账前查
   // 同锚活单——不同 id 且活（dispatched/running/queued）→ 拒写。与 S2（dispatchWorker
@@ -579,6 +574,13 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
     // （段链语义由 importer 权威执行；不经直写 SQL，避免腐蚀重投段链的冻结终态根行）。
     // 文件保留为审计原始账；checkpoint 与 append 同步推进=库即写源。
     writeDispatchToDb(); // 内部自兜错（文件已写成功=降级安全）
+    // treegc R1-P1-3（A 审）：hook 触发点移到落账成功后——原在 schema 校验/writeFileSync
+    // 之前，拒写/fs 失败时账上无行而告警已出（幽灵告警）=违反本支自引 I4「副作用先存
+    // 后做」（:528 注释「终态行落账后触发」与实现相反——现一致化）。回调不 import
+    // （setConfirmCreatedHook 同款单槽形态；告警判定在 session-manager 挂载侧）。
+    if (e.status === "done" || e.status === "failed") {
+      try { dispatchClosedHook?.(e); } catch { /* 告警面异常不反噬台账写 */ }
+    }
     return true;
   } catch (e2) {
     console.warn(`[org] 台账写入失败: ${e2 instanceof Error ? e2.message : String(e2)}`);

@@ -60,11 +60,14 @@ export function newestMtimeWithin(dir: string, depth = 2): number {
   return newest;
 }
 
-/** git 脏判定（status --porcelain 非空=脏）。非 git 目录=干净（无未提交概念）。 */
+/** git 脏判定（status --porcelain 非空=脏）。非 git 目录=干净（无未提交概念）。
+ * treegc R1-P1-1（A 审）：滤 `.cc-deck-lock` 行——锁文件只进 cc-deck 仓 .gitignore，
+ * org 组锚可指任意项目仓（锁=untracked）→ 非过滤则恒判脏=每次收口假阳（审计刷屏+
+ * 锁不清+树被永久判活 GC 永不收殓）。逐字对齐 leader-harvest:168 既有口径。 */
 export function worktreeDirty(dir: string): boolean {
   try {
     const out = execFileSync("git", ["-C", dir, "status", "--porcelain"], { encoding: "utf-8", timeout: 10_000 });
-    return out.trim().length > 0;
+    return out.split("\n").some((line) => line.trim() && !/\.cc-deck-lock$/.test(line.trim()));
   } catch {
     return false;
   }
