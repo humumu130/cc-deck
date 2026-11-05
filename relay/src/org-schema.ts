@@ -166,6 +166,8 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   priority: { type: "enum", enumTable: BOARD_PRIORITIES },
   /** W-SMIMPL ②：回执契约可见化——done 无结果行标记（读侧宽容忽略，旧行缺省=有回执） */
   receipt_missing: { type: "boolean" },
+  /** [W-CARDLIFE-R3 P1-2] 资格位拦截标：done 收口被回执闸拦（板不动留原态）——converge 据此跳过强翻 */
+  receipt_gate: { type: "boolean" },
   /** S3 世代 CAS（relfix-s）：dispatched 行世代戳=行 ts；收口侧比对防旧引用覆盖新世代 */
   generation: { type: "number" },
   /** S3 IssueSnapshot 基线（relfix-s）：认领既有板卡派单时的关键字段快照（收口对比用） */

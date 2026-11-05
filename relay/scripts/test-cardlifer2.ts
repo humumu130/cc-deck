@@ -177,16 +177,100 @@ async function main() {
       f.cleanup();
     }
 
+    // ===== R3 组：资格位三洞返修（t-076acfc1，A 审 P1×3） =====
+    console.log("R3 资格位三洞（400 窗误拦/converge 裸翻/迟写补翻）:");
+    {
+      const f = mkEnv();
+      const pc = f.mgr.orgAction("project-create", { name: "clr2r3 组", anchor: "/tmp/clr2r3", tier: "轻立项" }) as { ok: boolean; data?: { needsConfirm?: boolean; confirm?: { id: string }; group?: { id: string } } };
+      const gid = pc.data?.group?.id ?? "pg-clr2r3";
+      if (pc.data?.needsConfirm) f.mgr.orgAction("confirm-decide", { confirm_id: pc.data.confirm?.id ?? "", approve: true, by: "u" });
+      const attachR3 = (textPrefix: string, dispatchId: string) => {
+        const bp = join(f.ORG, "boards", `${gid}.json`);
+        const b = JSON.parse(readFileSync(bp, "utf-8")) as { entries: Array<{ id: string; text: string; dispatch_id?: string }> };
+        const ent = b.entries.find((x) => x.text.startsWith(textPrefix));
+        if (!ent) throw new Error(`attachR3 卡未找到: ${textPrefix}`);
+        ent.dispatch_id = dispatchId;
+        writeFileSync(bp, JSON.stringify(b), "utf-8");
+      };
+      const closeAs = (sid: string, dispatchId: string, receiptPath: string | undefined) => {
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier: "轻立项", target: "manual", status: "running", session_id: sid, title: `R3 ${dispatchId}` });
+        (f.mgr as unknown as { openDispatches: Map<string, unknown[]> }).openDispatches.set(sid, [{ id: dispatchId, tier: "轻立项", gid, ...(receiptPath ? { receiptPath } : {}) }]);
+        (f.mgr as unknown as { closeOpenDispatches: (...a: unknown[]) => void }).closeOpenDispatches(sid, "done", "交付：R3");
+      };
+      const cardOf = (dispatchId: string) => loadBoard(gid).entries.find((x) => x.dispatch_id === dispatchId);
+      // R3-A1 >400 字长回执（A 审实锤形态：412 字被 400 窗切掉军规行）→行锚放行
+      f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3A：长回执卡", status: "claimed" });
+      attachR3("W-CLR2R3A", "d-r3a");
+      const longReceipt = join(f.ART, "w-r3a.md");
+      writeFileSync(longReceipt, "# 回执\n\n" + "正文段落。".repeat(120) + "\n\n结果：长回执交付（>400 字军规行仍在——行锚放行）｜改动文件：a.ts、b.ts\n", "utf-8");
+      closeAs("s-r3a", "d-r3a", longReceipt);
+      await sleep(100);
+      const cA = cardOf("d-r3a");
+      ok(cA?.status === "submitted", `R3-A1 >400 字长回执→行锚放行 submitted（实 ${cA?.status}——R2 slice(-400) 此形态误拦 27% 真实回执）`);
+      // R3-A2 后置补记形态（军规行后有 PR 补记节——w-linkquality 先例）→末个合规行锚命中
+      f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3A2：补记形态卡", status: "claimed" });
+      attachR3("W-CLR2R3A2", "d-r3a2");
+      const appendReceipt = join(f.ART, "w-r3a2.md");
+      writeFileSync(appendReceipt, "# 回执\n\n结果：补记形态交付｜改动文件：c.ts\n\n---\n\n## PR 落地补记（后置节）\n\nhttps://github.com/x/y/pull/9 已 squash。\n", "utf-8");
+      closeAs("s-r3a2", "d-r3a2", appendReceipt);
+      await sleep(100);
+      ok(cardOf("d-r3a2")?.status === "submitted", "R3-A2 军规行后置补记节→末个合规行命中（跳过补记扫全文行锚）");
+      // R3-B converge 保护：不合规回执收口→台账 receipt_gate:true→converge 跳过+催收清单
+      f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3B：拦中卡", status: "claimed" });
+      attachR3("W-CLR2R3B", "d-r3b");
+      const badReceipt = join(f.ART, "w-r3b.md");
+      writeFileSync(badReceipt, "# 回执\n\n写了但没写军规行（尾行不合规形态）\n", "utf-8");
+      closeAs("s-r3b", "d-r3b", badReceipt);
+      await sleep(100);
+      ok(cardOf("d-r3b")?.status === "claimed", "R3-B1 拦中卡留 claimed（板不动）");
+      const logB = readFileSync(join(f.ORG, "dispatch-log.ndjson"), "utf-8").split("\n").filter((l) => l.includes('"d-r3b"'));
+      const gatedRow = logB.filter((l) => { try { return (JSON.parse(l) as { status?: string; receipt_gate?: boolean }).status === "done"; } catch { return false; } });
+      ok(gatedRow.some((l) => { try { return (JSON.parse(l) as { receipt_gate?: boolean }).receipt_gate === true; } catch { return false; } }), "R3-B2 台账收口行落 receipt_gate:true（拦截事实账面化）");
+      const { convergeBoardsWithDispatchLog } = await import("../src/projects.js");
+      const conv = convergeBoardsWithDispatchLog(f.ORG);
+      ok(conv.receiptGated.some((x) => x.dispatchId === "d-r3b"), `R3-B3 converge 跳过拦中卡+催收清单（清单 ${conv.receiptGated.length} 张含 d-r3b——不再 ≤30min 裸翻 done）`);
+      ok(cardOf("d-r3b")?.status === "claimed", "R3-B4 converge 后卡仍 claimed（零审查裸翻根除）");
+      // R3-C 迟写补翻：回执补齐军规行→runReceiptCheck 复查→补翻 submitted
+      writeFileSync(badReceipt, "# 回执\n\n补齐了。\n\n结果：迟写补齐交付｜改动文件：d.ts\n", "utf-8");
+      (f.mgr as unknown as { runReceiptCheck: (e: { id: string; gid: string; title: string; receiptPath?: string }) => void }).runReceiptCheck({ id: "d-r3b", gid, title: "W-CLR2R3B", receiptPath: badReceipt });
+      ok(cardOf("d-r3b")?.status === "submitted", `R3-C1 回执迟写补齐→90s 复查补翻 submitted（实 ${cardOf("d-r3b")?.status}——遗留项「回调翻卡未接」接上）`);
+      const auditC = (() => { try { return readFileSync(join(f.DATA, "chain-audit.jsonl"), "utf-8"); } catch { return ""; } })();
+      ok(auditC.includes("cardlife-receipt-late"), "R3-C2 补翻审计在（cardlife-receipt-late）");
+      // R3-D note 拼接：前代卡带旧打回 note→同链闭链不洗
+      f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3D：带痕前代", status: "claimed" });
+      attachR3("W-CLR2R3D", "d-r3d0");
+      {
+        const bp = join(f.ORG, "boards", `${gid}.json`);
+        const b = JSON.parse(readFileSync(bp, "utf-8")) as { entries: Array<{ text: string; note?: string; ts?: number }> };
+        const e0 = b.entries.find((x) => x.text.startsWith("W-CLR2R3D"));
+        if (e0) { e0.note = "[R1 打回] 证据不足退回"; e0.ts = Date.now() - 3600_000; }
+        writeFileSync(bp, JSON.stringify(b), "utf-8");
+      }
+      f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3D-R1：终代", status: "claimed" });
+      attachR3("W-CLR2R3D-R1：", "d-r3d1");
+      {
+        const bp = join(f.ORG, "boards", `${gid}.json`);
+        const b = JSON.parse(readFileSync(bp, "utf-8")) as { entries: Array<{ text: string; status?: string; dispatch_id?: string }> };
+        const e1 = b.entries.find((x) => x.dispatch_id === "d-r3d1");
+        if (e1) e1.status = "submitted";
+        writeFileSync(bp, JSON.stringify(b), "utf-8");
+      }
+      f.mgr.orgAction("pr-report", { dispatch_id: "d-r3d1", pr_url: "https://github.com/x/y/pull/10", pr_state: "merged" });
+      const cD = cardOf("d-r3d0");
+      ok((cD?.note ?? "").includes("[R1 打回]") && (cD?.note ?? "").includes("同链闭卡"), `R3-D note 拼接保留（前代打回留痕不被闭链覆写洗掉：${(cD?.note ?? "").slice(0, 60)}）`);
+      f.cleanup();
+    }
+
     // ===== C 组：静态锁 =====
     console.log("C 静态锁（降级标注/接线/词表）:");
     {
       const hv = readFileSync(join(process.cwd(), "..", "cc-plugins", "plugins", "cc-deck", "bin", "leader-harvest"), "utf-8");
       ok(hv.includes("W-CARDLIFE-R2") && hv.includes("降级路径"), "C1 harvest 降级路径标注在（relay 在位后机械手=兼容兜底）");
-      ok(hv.includes("--merge"), "C1b harvest --merge 硬闸维持（R1 行为不变）");
+      ok(hv.includes("同链悬空卡拒收割") && hv.includes("cardlife-pr-merged/chain-close"), "C1b harvest 硬闸功能锚（同链悬空卡拒收割+降级路径指向 relay 状态机——R1 行为不变）");
       const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
       ok(sm.includes("cardlife-pr-merged") && sm.includes("cardlife-chain-close") && sm.includes("cardlife-receipt-gate"), "C2 relay 三挂点接线（merged 翻/链闭/资格位）");
       const ty = readFileSync(new URL("../src/types.ts", import.meta.url), "utf-8");
-      ok(["cardlife-pr-merged", "cardlife-chain-close", "cardlife-pr-merged-blocked", "cardlife-flip-degraded", "board-flip-degraded", "cardlife-receipt-gate"].every((k) => ty.includes(`"${k}"`)), "C3 审计词表六词在");
+      ok(["cardlife-pr-merged", "cardlife-chain-close", "cardlife-pr-merged-blocked", "cardlife-flip-degraded", "board-flip-degraded", "cardlife-receipt-gate", "cardlife-receipt-late"].every((k) => ty.includes(`"${k}"`)), "C3 审计词表七词在（R3 补 cardlife-receipt-late）");
     }
 
     console.log(`\ncardlifer2: ${pass}/${pass + fail}${fail ? "（有红）" : ""}`);

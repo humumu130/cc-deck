@@ -212,6 +212,18 @@ export class PatrolModule {
       const tier = autoTierOf("converge");
       if (tier !== "off") {
         const converged = convergeBoardsWithDispatchLog(undefined, (action, detail) => this.mgr.emitChainAudit(action, detail), { dryRun: tier === "observe" });
+        // W-CARDLIFE-R3 P1-2：资格位拦中卡催收告警（converge 跳过+清单直达通知账——
+        // 拦截事实与档位无关，observe/auto 双档都出；90s 迟写补翻成功后该 id 自然出清）
+        if (converged.receiptGated.length > 0) {
+          try {
+            this.mgr.upsertNotification("system", "converge-rgate", String(converged.receiptGated.length), {
+              title: `资格位拦中 ${converged.receiptGated.length} 张卡（催收中，不收敛）`,
+              body: `回执未合规被拦的卡 ${converged.receiptGated.slice(0, 3).map((x) => x.entryId).join("、")}${converged.receiptGated.length > 3 ? " 等" : ""}——等回执军规行补齐（90s 复查自动补翻 submitted），对账器已跳过`,
+              severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/",
+            });
+          } catch { /* 通知尽力而为 */ }
+          this.appendReport(`RGATE 拦中 ${converged.receiptGated.length} 张（converge 跳过催收）：${converged.receiptGated.slice(0, 3).map((x) => x.entryId).join(",")}`);
+        }
         if (tier === "observe") {
           const would = converged.wouldClose;
           if (would.length > 0 || converged.skipped > 0) {

@@ -1587,5 +1587,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "cardlife-flip-degraded", // pr-report 翻卡写失败（板冻结等）——degraded 告警
   "board-flip-degraded", // 收口翻卡 3 次重试失败——degraded 留痕+告警卡（回落裸设兜底）
   "cardlife-receipt-gate", // 收口 done 但回执尾行不合规——资格位把守板不动（不进 submitted）
+  "cardlife-receipt-late", // W-CARDLIFE-R3 P1-2：回执迟写补翻——90s 复查军规行合规，被拦卡自动补位 submitted
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];
