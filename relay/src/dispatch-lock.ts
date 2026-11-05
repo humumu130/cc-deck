@@ -25,6 +25,10 @@ export interface WorktreeLock {
   /** 持有派单 id（bash 侧预建时尚未生成——空串=派单前哨锁，dispatchWorker 认领时补写） */
   dispatch_id?: string;
   session_id?: string;
+  /** W-SESSIONMUTEX：持锁进程 pid（sid+pid 级细粒度）——认领边 pid 就绪时回写；
+   * 同 sid 异 pid 进树=换代/接管语义（读侧 pid 差异可见，供孪生裁决——显式接管
+   * 流在 treegc 域 wt-gc takeover 口，本层只做身份可见不做自动接管） */
+  cli_pid?: number;
   created_at: number;
   expires_at: number;
 }
@@ -46,6 +50,7 @@ function buildLockBody(lock: Omit<WorktreeLock, "created_at" | "expires_at"> & {
     slug: lock.slug,
     ...(lock.dispatch_id ? { dispatch_id: lock.dispatch_id } : {}),
     ...(lock.session_id ? { session_id: lock.session_id } : {}),
+    ...(typeof lock.cli_pid === "number" && lock.cli_pid > 0 ? { cli_pid: lock.cli_pid } : {}),
     created_at: now,
     expires_at: lock.expires_at ?? now + worktreeLockWindowMs(),
   };
@@ -133,7 +138,7 @@ export function readWorktreeLock(worktree: string, now = Date.now()): WorktreeLo
     if (typeof raw.expires_at !== "number" || typeof raw.created_at !== "number") return null;
     if (raw.expires_at <= now) return null; // 过期=陈锁（文件留存由覆写/收割清）
     if (typeof raw.slug !== "string" || !raw.slug) return null;
-    return { slug: raw.slug, ...(raw.dispatch_id ? { dispatch_id: raw.dispatch_id } : {}), ...(raw.session_id ? { session_id: raw.session_id } : {}), created_at: raw.created_at, expires_at: raw.expires_at };
+    return { slug: raw.slug, ...(raw.dispatch_id ? { dispatch_id: raw.dispatch_id } : {}), ...(raw.session_id ? { session_id: raw.session_id } : {}), ...(typeof raw.cli_pid === "number" && raw.cli_pid > 0 ? { cli_pid: raw.cli_pid } : {}), created_at: raw.created_at, expires_at: raw.expires_at };
   } catch {
     return null;
   }
@@ -156,6 +161,7 @@ export function writeWorktreeLock(worktree: string, lock: Omit<WorktreeLock, "cr
     slug: lock.slug,
     ...(lock.dispatch_id ? { dispatch_id: lock.dispatch_id } : {}),
     ...(lock.session_id ? { session_id: lock.session_id } : {}),
+    ...(typeof lock.cli_pid === "number" && lock.cli_pid > 0 ? { cli_pid: lock.cli_pid } : {}),
     created_at: now,
     expires_at: lock.expires_at ?? now + worktreeLockWindowMs(),
   };

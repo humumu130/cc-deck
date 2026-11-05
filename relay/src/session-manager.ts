@@ -77,7 +77,7 @@ import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, saniti
 import { adoptReplayed } from "./lifecycle/adopt.js"; // W-SPLIT-S5①：收养域出舱（类面留壳）
 import { transitionLegal } from "./lifecycle/transition.js"; // W-SMIMPL ③：状态转移断言层（纯观测；SessionStatus 用 types.js 既有 import）
 import * as reviveMod from "./lifecycle/revive.js"; // W-SPLIT-S5②：autoRevive/激活器协调出舱
-import { pmKeepaliveEligible, PM_KEEPALIVE_DELAY_MS } from "./lifecycle/revive.js"; // #287 PM 常驻化保活判定（纯函数，schedule/fire 双查同源）
+import { pmKeepaliveEligible, PM_KEEPALIVE_DELAY_MS, sessionTwinWhy } from "./lifecycle/revive.js"; // #287 PM 常驻化保活判定（纯函数，schedule/fire 双查同源）；W-SESSIONMUTEX 同 sid 单活守卫单点
 import { ingestLinkEvents, linkSummary } from "./link-quality.js"; // [W-LINKQUALITY-R1] 补报帧单口（校验+去重+summary）
 import { setExternalUsage as setExtUsageMod, ctxWatchdogOnContext as ctxWdOnCtx, ctxWatchdogOnTurnBoundary as ctxWdOnBoundary } from "./lifecycle/context-link.js"; // W-SPLIT-S5③：上下文链出舱
 import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT-S3c
@@ -3919,6 +3919,9 @@ export class SessionManager {
         if (!this.sessions.has(s.state.session_id)) return; // 已删卡（deleteSession 已清 timer，双保险）
         if (s.agent && !s.agent.ended) return; // 调度窗内消息先到/他路已换流——活流在场不扰
         if (!check()) return; // 换届/熔断/互斥在火时重查
+        // W-SESSIONMUTEX：孤儿进程面火时重查（调度窗内外部实例可能已起——不叠加）
+        const twinFire = sessionTwinWhy(s);
+        if (twinFire && twinFire !== "resume-in-flight") { this.emitChainAudit("session-twin-blocked", `keepalive 跳过：${s.state.session_id.slice(0, 12)} ${twinFire}（W-SESSIONMUTEX）`); return; }
         s.pmKeepaliveStreak += 1;
         this.pushExternalLog(s.state.session_id, "system", "PM 常驻保活：空闲自动拉起待命（#287）");
         this.reviveSaved(s); // 无消息拉起：onInit 无积压落 DONE 待命态（#26 待命化同语义）
@@ -3950,6 +3953,20 @@ export class SessionManager {
   // prompt：每轮 duty 重推导队列重新生成）。可再生消息失败即丢弃：不进 unacked
   // 重放账（fresh 回退/看门狗接管/冷却补投全部跳过），下一轮 duty 注入全新 prompt
   private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[], opts?: { renewable?: boolean }): void {
+    // W-SESSIONMUTEX（撞车三部曲根治）：同 sid 单活守卫——全拉起路径兜底闸（reviveEligible
+    // 前置已拦候选面，此处拦旁路：dispatchWorker 熟手复拉/手动 COMMAND_RESUME/激活器）。
+    // 孤儿进程面=内存无 agent 但 cli_pid 探测活（relay 重启后外部进程仍在工作）——此刻
+    // spawn 新实例=双活并行接活写树（bootfast 1331/81905/2223 三实例实锤形态）。
+    // renewable 放行：有意换代语义（reinjection 引擎 resume 自带杀旧，非叠加）。
+    // 守卫在 sdkId 检查**之前**（孪生拦截优先于可恢复性判定——无 sdk 的孪生也该被
+    // 记账拦下而非落「无 SDK 记录」误导排障方向）。
+    if (!opts?.renewable) {
+      const twin = sessionTwinWhy(s);
+      if (twin && twin !== "resume-in-flight") {
+        this.emitChainAudit("session-twin-blocked", `${s.state.session_id.slice(0, 12)} resume 被拒（${twin}）——同 sid 已有活进程，不叠加实例（W-SESSIONMUTEX）`);
+        throw new Error(`同 sid 已有活进程（${twin}）——拒绝叠加第二实例（W-SESSIONMUTEX）；外部实例结束或显式接管后再拉`);
+      }
+    }
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");

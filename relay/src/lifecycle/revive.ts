@@ -115,6 +115,10 @@ export function resumeLeaderAfterReboot(mgr: any): number {
   if (mgr.isRetiredMember && mgr.isRetiredMember(id)) { console.log("[pm-resume] Leader 已退休（编制除名）——不拉"); return 0; }
   if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) { console.log("[pm-resume] resume 互斥窗内——本轮不拉（防双进程）"); return 0; }
   if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) { console.log("[pm-resume] resume 熔断冷却中——本轮不拉（防死循环）"); return 0; }
+  // W-SESSIONMUTEX：孤儿进程面（本通道不走 reviveEligible——独立闸面补单点判据；
+  // 席位豁免不豁此道：PM 孤儿活着时拉第二实例=双值守双接活，正是撞车形态）
+  const twinWhy = sessionTwinWhy(s);
+  if (twinWhy && twinWhy !== "resume-in-flight") { console.log(`[pm-resume] 同 sid 活进程在（${twinWhy}）——不叠加实例，等其结束/重连`); return 0; }
   const wasWorking = s.state.pre_reboot_status === "WORKING";
   s.state.pre_reboot_status = undefined; // 清标防 #36 通道双拉（席位通道先跑）
   try {
@@ -281,9 +285,41 @@ export function todoStaleDays(): number {
   return Number.isFinite(n) && n >= 0 ? n : 3;
 }
 
+// W-SESSIONMUTEX（1105 晨，撞车三部曲根治——bootfast 1331/81905/2223 三活进程同
+// resume 互踩/boardpolish 孪生半成品/pmseat 双投递三实锤）：同 sid 单活进程守卫
+// 单点。判据（拦真不拦接管）：
+//   ① resumePending 窗内 = 拉起在途（原调用侧互斥统一收口到单点，纵深）
+//   ② **孤儿进程面（今晚根因形态）**：内存无 agent（relay 重启后对象丢）但
+//      s.state.cli_pid 探测活 = 外部进程仍在工作——此刻 resume 新实例 = 双活实例
+//      并行接活写树。resumeAgent 原语义「接管杀旧」只能杀内存对象自己的 childPid，
+//      杀不到重启前遗留的孤儿——这正是 autoRevive 叠加实例的通道。
+//   内存 agent 在场（!ended）**不算孪生**：那是接管换代语义（原代码自带杀旧，
+//   renewable/reinjection 合法路径），拦了会破坏 PMRESUME/激活器。
+// 返回 null=可拉起；串=拦截因。pid 探测 process.kill(pid,0)（mac darwin 实测有效；
+// CCR_TWIN_PROBE=0 测试逃生阀）。resumeAgent 头部+reviveEligible 前置+PMRESUME/
+// keepalive 调用侧四挂点全走本单点。
+export function sessionTwinWhy(s: any, now = Date.now()): string | null {
+  if (!s) return null;
+  if (s.resumePending && now - s.resumePending < resumePendingWindowMs()) return "resume-in-flight";
+  if (process.env.CCR_TWIN_PROBE === "0") return null;
+  if (!s.agent && s.state?.cli_pid) {
+    try {
+      process.kill(s.state.cli_pid, 0);
+      return `orphan-alive:${s.state.cli_pid}`;
+    } catch {
+      /* pid 已死=无孤儿，放行 */
+    }
+  }
+  return null;
+}
+
 export function reviveEligible(mgr: any, s: any): string | null {
   if (s.state.external) return "external";
   if (s.agent) return "agent-alive";
+  // W-SESSIONMUTEX：同 sid 单活守卫前置（autoRevive/#36/激活器候选研判即跳——
+  // 孤儿进程活着的会话不选入拉起名单，不浪费一轮 throw）
+  const twin = sessionTwinWhy(s);
+  if (twin) return twin === "resume-in-flight" ? "resume-in-flight" : "session-twin";
   // #26 M3 审查修正：挂起退休成员不自动拉起——组挂起=编制退休释放（板冻结）
   if (s.state.org_parked) return "org-parked";
   if (s.state.project_gid) {
