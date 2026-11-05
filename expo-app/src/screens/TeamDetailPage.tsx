@@ -161,11 +161,14 @@ export const LANE_RENDER_ORDER: readonly string[] = [
 ];
 // 总览条比例（v3 .prog 五色分段）：各泳道 count / 全量，min 4% 防细段不可点不可见；
 // 全空板返回空数组（总览条整块不渲染）
+// boardpolish（1105 用户实测，与 web 同款）：done 剥离出比例条——完成量级（千级）碾压
+// 活跃态（个位数）致条全绿、活跃分布不可辨。条内只分布五活跃态（分母同去 done），
+// 完成计数由消费端 ✓ N 徽章独立承载（--p-done 同源绿）。
 export function laneSharesOf(counts: Record<string, number>): { st: string; pct: number; n: number }[] {
-  const total = LANE_RENDER_ORDER.reduce((s, st) => s + (counts[st] ?? 0), 0);
+  const total = LANE_RENDER_ORDER.reduce((s, st) => s + (st === "done" ? 0 : (counts[st] ?? 0)), 0);
   if (total <= 0) return [];
   return LANE_RENDER_ORDER
-    .filter((st) => (counts[st] ?? 0) > 0)
+    .filter((st) => st !== "done" && (counts[st] ?? 0) > 0)
     .map((st) => ({ st, n: counts[st] ?? 0, pct: Math.max(4, Math.round(((counts[st] ?? 0) / total) * 100)) }));
 }
 // 成员状态五色词（v3 五态：工作中/空闲/阻塞/出错/关闭——双信号=会话状态灯）。
@@ -580,6 +583,8 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
     for (const e of ents) counts[e.status] = (counts[e.status] ?? 0) + 1;
     return laneSharesOf(counts);
   }, [ents]);
+  // boardpolish：完成计数独立承载（比例条剥离后 ✓ N 徽章数据源）
+  const doneN = useMemo(() => ents.filter((e) => e.status === "done").length, [ents]);
 
   // ---------- 成员卡（编制折叠组，UPOLISH3 显示规则全量 + W-MV8A v3 五色状态词） ----------
   const memberCard = ({ m, s }: { m: NonNullable<ProjectGroup["headcount"]>[number]; s: SessionState | undefined }) => {
@@ -724,10 +729,18 @@ export function TeamDetailPage({ srcId, gid, name, onClose, onOpenSession, highl
                   {freshLabel ? <Text style={styles.freshStamp}>{freshLabel}</Text> : null}
                   {!boardEmpty && g?.tier !== "轻立项" && laneShares.length ? (
                     <View style={styles.ovBox}>
-                      <View style={styles.ovProg}>
-                        {laneShares.map(({ st, pct }) => (
-                          <View key={st} style={{ flex: pct, height: 8, backgroundColor: laneColorOf(st, mode) }} />
-                        ))}
+                      <View style={styles.ovProgRow}>
+                        <View style={styles.ovProg}>
+                          {laneShares.map(({ st, pct }) => (
+                            <View key={st} style={{ flex: pct, height: 8, backgroundColor: laneColorOf(st, mode) }} />
+                          ))}
+                        </View>
+                        {/* boardpolish：完成剥离比例条——✓ N 徽章独立承载（done 同源绿） */}
+                        {doneN > 0 ? (
+                          <Text style={[styles.ovDone, { color: laneColorOf("done", mode) }]} accessibilityLabel={`完成 ${doneN}，已移出比例条`}>
+                            ✓ {doneN}
+                          </Text>
+                        ) : null}
                       </View>
                       <View style={styles.ovLeg}>
                         {laneShares.map(({ st, n }) => (
@@ -904,7 +917,10 @@ const makeStyles = (c: ThemeColors) =>
     freshNote: { marginBottom: 6, paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderColor: c.line, borderRadius: 7, backgroundColor: c.hover, color: c.dim, fontSize: 11, alignSelf: "flex-start" }, // boardfresh 离线横幅（复用灰轴）
     freshStamp: { marginBottom: 4, color: c.faint, fontSize: 10, fontVariant: ["tabular-nums"] }, // boardfresh 龄戳行
     ovBox: { gap: 0, marginBottom: 8 },
-    ovProg: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2 },
+    // boardpolish：比例条行（条+完成徽章同行）；ovProg 占余、✓ N 徽章不换行
+    ovProgRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+    ovProg: { flexDirection: "row", flex: 1, height: 8, borderRadius: 4, overflow: "hidden", gap: 2 },
+    ovDone: { fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
     ovLeg: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 7 },
     ovChip: {
       flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 7,
