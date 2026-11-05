@@ -25,6 +25,8 @@
                 // observe3（1104 用户令·注意力经济学）：动态组（已处理/已读=健康态）默认折叠
                 // ——「健康态零占位」纪律；组头可点开合（会话内记忆，不持久化——重开面板回默认收起）。
                 let dynamicCollapsed = true;
+                // W-NOTIFYPOLISH ①B1：同质聚合展开态（aggKey 集合——入 render 签名，开合必重渲）
+                const aggOpenKeys = new Set();
                 // #B3-17 新通知入场动画：仅首见行挂 .enter（首帧存量不动画，防整列闪烁）
                 const seenNotifyKeys = new Set();
                 let notifySeenInit = false;
@@ -200,10 +202,17 @@
                       + (jump.teamAction ? ' data-notify-team-action="' + escapeHtml(jump.teamAction) + '"' : ""))
                   : "";
 
-                // #119 V3 行标记：icon + 标题（不硬裁）+ 一行摘要（body 首行 · 相对时间）+
+                // #119 V3 行标记：标题（不硬裁）+ 一行摘要（body 首行 · 相对时间）+
                 // act 行动钮（直达来源域；无跳转的 actionable 行给「知道了」轻动作）+ × 清除。
                 // 组别类：alert=需你行动（红）/warn=注意（琥珀）/read=动态（已读降噪）。
-                function rowMarkup(row) {
+                // W-NOTIFYPOLISH（1105 三路审查落地）：
+                //   ④A1+B4 减熵——.ic 图标列退役（三套符号→两套，腾 26px 给标题）；
+                //     userPending 行 kind 徽章不输出（「等你拍板」chip 独扛紧急度语义）。
+                //   ①B1 同质聚合——同 kind+title 聚为代表行，aggN>1 时 L1 出 ×N 展开钮
+                //     （点击展开其余子项 .nrow.sub；子项含独立 dismiss/act——逐条处置不拦）。
+                //   ②B2 active 行整行可点=执行 jump（click 代理卡身分支；×/chip/agg 钮
+                //     天然 stopPropagation——button 先命中）。
+                function rowMarkup(row, isSub) {
                   const jump = jumpOf(row) || (row.kind === "acceptance" && row.source && row.source.id ? { acceptance: row.source.id, label: "打开验收单" } : null); /* W-NOTIFYFIX：过时验收单按钮保留——退役≠不可查（jumpOf 对非 active 恒 null 的旁路） */
                   const km = kindMetaOf(row.kind);
                   const cls = row.active ? "alert" : row.unresolved ? "warn" : "read";
@@ -219,11 +228,13 @@
                   const engMark = row.engine && window.__ccDeck005EngineMarkHtml
                     ? '<span class="nrow-eng" title="会话引擎">' + window.__ccDeck005EngineMarkHtml(row.engine) + "</span>"
                     : "";
-                  // A6 行栅格 12px：[icon 16+gap10]+内容列（L1 badge+时间右贴 / L2 标题
-                  // clamp2+tooltip / L3 摘要+内联操作）+右侧 act/× 列；» 引导符退役
-                  return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
-                    + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + (row.staleWhy ? '<span class="nbadge stale-chip" title="' + (row.staleWhy === "version" ? "验收单对应版本已被新版取代——已退役归档，不计需行动" : row.staleWhy === "dup" ? "同名单的早期重复生成——已归档" : "超过 7 天未处理的陈年通知——已归档，不计需行动") + '">过时</span>' : "") + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
+                  const aggBtn = row.aggN > 1
+                    ? '<button class="agg-n" type="button" data-notify-agg-toggle="' + escapeHtml(row.aggKey) + '" title="同款 ' + row.aggN + ' 条（重复生成）——展开逐条查看/处置">×' + row.aggN + "</button>"
+                    : "";
+                  // A6 行栅格 12px：内容列（L1 badge+agg+时间右贴 / L2 标题 clamp2+tooltip /
+                  // L3 摘要+内联操作）+右侧 act/× 列
+                  return '<div class="nrow ' + cls + (isSub ? " sub" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
+                    + '<div class="t"><div class="l1">' + (row.userPending ? "" : '<span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + "</span>") + (row.staleWhy ? '<span class="nbadge stale-chip" title="' + (row.staleWhy === "version" ? "验收单对应版本已被新版取代——已退役归档，不计需行动" : row.staleWhy === "dup" ? "同名单的早期重复生成——已归档" : "超过 7 天未处理的陈年通知——已归档，不计需行动") + '">过时</span>' : "") + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + aggBtn + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
                     + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + (act ? '<span class="act-slot">' + act + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪 */
                     + x + "</div>";
                 }
@@ -235,16 +246,14 @@
                 }
 
                 let lastCount = -1;
-                function syncCounts(count) {
-                  // A1 计数单源：头部 badge 与 rail badge 同源（Σ需你行动组）；变化时 pop
-                  // （B4 计数 crossfade 220ms spring）。A1 内容 bug 修复：waiting/降级分支
-                  // 恒走 syncCounts(0)——头部与组头不再打脸（旧头部 0/组头 5 并存）
+                function syncCounts(count, earliestTs) {
+                  // W-NOTIFYPOLISH ③A3+B3：头部计数 pill 退役——843 双显口径不一（头部不封顶
+                  // vs rail 99+）且与组头计数三处两零差；计数单源=组头 cnt+rail（99+ 封顶）。
+                  // 头部腾位改增量信息：最早一条需行动距现在多久（「最早 16 小时前」——
+                  // 用户不看数字也能感知积压深度）。
                   if (headSub) {
-                    const next = count + " 项需行动";
-                    if (headSub.textContent !== next) {
-                      headSub.textContent = next;
-                      if (lastCount >= 0) { headSub.classList.remove("notify-badge-pop"); void headSub.offsetWidth; headSub.classList.add("notify-badge-pop"); }
-                    }
+                    const next = earliestTs ? "最早需行动 " + notifyRelTime(earliestTs) : (count ? "" : "无待办");
+                    if (headSub.textContent !== next) headSub.textContent = next;
                   }
                   if (railBadge) {
                     railBadge.textContent = count > 99 ? "99+" : String(count) /* visualfix（1104 V-P2-5）：659 直出=角标宽超铃铛本体遮挡——99+ 封顶（aria/title 保真全数） */;
@@ -286,7 +295,9 @@
                     + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length
                     + (dynamicCollapsed ? "#dyn-collapsed" : "#dyn-open") // observe3：折叠态入签名（切换必重渲）
                     // [W-AWAITUSER] userPending 位入签名（顶格/chip 变化必重渲）
-                    + "#au:" + rows.filter((r) => r.userPending).map((r) => r.key).join(",");
+                    + "#au:" + rows.filter((r) => r.userPending).map((r) => r.key).join(",")
+                    // W-NOTIFYPOLISH ①：聚合态入签名（簇大小变化/开合切换必重渲）
+                    + "#agg:" + [...aggOpenKeys].join(",") + "|" + rows.map((r) => r.kind + "`" + r.title).sort().join(";");
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
@@ -305,6 +316,22 @@
                   const actionRows = rows.filter((r) => r.active);
                   const attentionRows = rows.filter((r) => !r.active && r.unresolved);
                   const dynamicRows = rows.filter((r) => !r.unresolved);
+                  // W-NOTIFYPOLISH ①B1+B6：组内同质聚合（kind+title 同簇——843 重复单实锤形态）。
+                  // 代表行=簇内最新（rows 已 ts 降序，首见即最新）；aggN 入 L1 ×N 展开钮；
+                  // 时间归聚=代表行时刻即簇最新（同簇同刻的逐行重复时间列随之消解）；
+                  // 子项展开=其余 N-1 条缩进行（各自独立 dismiss/act——逐条处置不拦）。
+                  const aggregate = (items) => {
+                    const out = [];
+                    const idx = new Map();
+                    for (const r of items) {
+                      const ak = r.kind + "`" + r.title;
+                      const rep = idx.get(ak);
+                      if (rep) { rep.aggN++; rep.aggChildren.push(r); }
+                      else { const cp = { ...r, aggN: 1, aggKey: ak, aggChildren: [] }; idx.set(ak, cp); out.push(cp); }
+                    }
+                    return out;
+                  };
+                  const rowsOf = (agg) => agg.flatMap((rep) => (rep.aggN > 1 && aggOpenKeys.has(rep.aggKey) ? [rep, ...rep.aggChildren.map((c) => ({ ...c, isSub: true }))] : [rep]));
                   // V3 三级分组：ndot r/y/n = 需你行动/注意/动态（组头带计数）
                   // A7 组头 v2：11px/600/.05em+语义点+计数 badge+组级清空（hover 显）；
                   // 需你行动组红点带脉冲（B5 唯一脉冲位——面板开时 CSS 停）
@@ -316,14 +343,14 @@
                       + '<span class="caret">' + (collapsible ? (dynamicCollapsed ? "▸" : "▾") : "") + '</span>'
                       + '<span class="cnt">' + items.length + "</span>"
                       + (grpClear && (!collapsible || !dynamicCollapsed) ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
-                      + "</div>" + (collapsible && dynamicCollapsed ? "" : items.map(rowMarkup).join(""))
+                      + "</div>" + (collapsible && dynamicCollapsed ? "" : items.map((r) => rowMarkup(r, r.isSub === true)).join(""))
                     : "";
                   if (rows.length) {
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
-                    const flatHtml = group("需你行动", "r", actionRows, "")
-                      + group("注意", "y", attentionRows, "y")
-                      + group("动态", "n", dynamicRows, "n", true); // observe3：健康态默认折叠零占位，组头点开
+                    const flatHtml = group("需你行动", "r", rowsOf(aggregate(actionRows)), "")
+                      + group("注意", "y", rowsOf(aggregate(attentionRows)), "y")
+                      + group("动态", "n", rowsOf(aggregate(dynamicRows)), "n", true); // observe3：健康态默认折叠零占位，组头点开
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
@@ -340,7 +367,7 @@
                       // 头部计数恒停旧值。收口两分支共用尾部（counts/seen/首见标记）
                       for (const r of rows) seenNotifyKeys.add(r.key);
                       notifySeenInit = true;
-                      syncCounts(actionRows.length);
+                      syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0)); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发 */
                       return;
                     }
                     panelBody.replaceChildren(nodesFrom(flatHtml));
@@ -349,7 +376,7 @@
                   }
                   for (const r of rows) seenNotifyKeys.add(r.key);
                   notifySeenInit = true;
-                  syncCounts(actionRows.length);
+                  syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0)); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发 */
                 }
 
                 // #018-W1b 轻动作：COMMAND_NOTIFICATION_ACK{notification_key, action:"handled"}。
@@ -521,6 +548,13 @@
                   if (grpClear) { clearGroupNotifications(grpClear.dataset.notifyGrpClear === "y" ? "y" : "n"); return; } // p2-batch2：按组精确清（y=注意/n=动态）
                   const grpToggle = target.closest("[data-notify-grp-toggle]");
                   if (grpToggle) { dynamicCollapsed = !dynamicCollapsed; render(); return; } // observe3：健康态折叠开合（组头空白区点击）
+                  const aggBtn = target.closest("[data-notify-agg-toggle]"); // W-NOTIFYPOLISH ①：同质簇展开/收起（button 先命中=不与整行 jump 冲突）
+                  if (aggBtn) {
+                    const ak = aggBtn.dataset.notifyAggToggle;
+                    if (aggOpenKeys.has(ak)) aggOpenKeys.delete(ak); else aggOpenKeys.add(ak);
+                    render();
+                    return;
+                  }
                   const dismissButton = target.closest("[data-notify-dismiss]"); // FB18：行级 ✕ 先于跳转判定
                   if (dismissButton) { dismissRowByKey(dismissButton.dataset.notifyDismiss); return; }
                   const ackButton = target.closest("[data-notify-ack]");
@@ -538,16 +572,24 @@
                   const jump = target.closest("[data-notify-jump]");
                   if (jump) { focusSource(jump); return; }
                   const card = target.closest("[data-notify-card]");
+                  // W-NOTIFYPOLISH ②B2：active 行整行可点=执行 jump（act 链保留为键盘/读屏
+                  // 焦点位——视觉不再是唯一可达面；×/chip/聚合钮皆 button 先命中不误触）
+                  if (card && !target.closest("button") && card.dataset.notifyActive === "true") {
+                    const act = card.querySelector(".act");
+                    if (act) { act.click(); return; }
+                  }
                   if (card && !target.closest("button") && card.dataset.notifyActive !== "true") toast("历史动态 · 已归档，无需处理");
                 });
-                // A8 底栏「查看全部通知」：面板过短时展开（70%↔90vh 一档 toggle，再点回落）
+                // A8 底栏：面板过短时展开（70%↔90vh 一档 toggle，再点回落）。
+                // W-NOTIFYPOLISH ①B5：标签诚实化——旧「查看全部通知」名实不符（只是
+                // 高度切换非全量视图）；聚合后子项已可逐条展开，本钮只管高度
                 section.addEventListener("click", (event) => {
                   if (!event.target.closest("[data-notify-expand]")) return;
                   // p2-batch2 修（notify 审 P2-10 死类）：np-full 类在 CSS 无定义（死类）——状态改 dataset 承载
                   const full = panel.dataset.full === "1";
                   panel.dataset.full = full ? "" : "1";
                   panel.style.maxHeight = full ? "" : "min(90vh, calc(100% - 72px))";
-                  event.target.textContent = full ? "查看全部通知" : "收起面板";
+                  event.target.textContent = full ? "展开面板" : "收起面板";
                 });
 
                 bridge.subscribe(() => { const g = window.__ccDeck005DeskRender; if (g) g.run(render); else render(); }); // W-MOBILE-PERF：桌面台不在视跳渲记脏（回桌面 flush 补渲）
