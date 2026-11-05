@@ -7,7 +7,7 @@
 //   B 并发帽：8 单帽 6→2 排队（queued:true+队列长度+台账 queued 行）→空位放行（drain 后
 //     队列减一+新单真派出）。
 // 环境：CCR_ORG_DIR 沙盒+CCR_WORKER_CONCURRENCY_CAP=6+CCR_RATE_LIMIT_BASE_MS=50（短退避）。
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -25,6 +25,7 @@ process.env.CCR_STORAGE_READ_MODE = "json";
 process.env.CCR_WORKER_CONCURRENCY_CAP = "6";
 process.env.CCR_RATE_LIMIT_BASE_MS = "50"; // 退避短值（50ms 起：50→100→200…测试可等）
 
+const io_read = (rel: string) => readFileSync(rel, "utf8");
 let pass = 0, fail = 0;
 const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " + n); } else { fail++; console.error("FAIL: " + n); } };
 
@@ -77,7 +78,7 @@ mgr.setAgentFactory(((_cwd: string, _m: string, cb: AgentCallbacks): AgentLike =
 // 用 fire429/fireOk 驱动回合终态。
 {
   const r = mgr.dispatchWorker({ anchor: DATA, prompt: "A 组夹具会话：429 退避验证", title: "rl-a" });
-  ok(r.ok && !("queued" in r) === (r.ok && !(r as { queued?: boolean }).queued), "A1 夹具单派出（无并发占用）");
+  ok(r.ok === true && !(r as { queued?: boolean }).queued, `A1 夹具单派出（ok 实值=${r.ok} 直派【R1 修真：原同义反复恒真】）`);
   await wait(80);
   ok(spawned.length >= 1, "A2 假 agent 拉起");
 }
@@ -140,8 +141,60 @@ const fix = spawned[0];
     if (mgr.activeManagedCount() < 6) break;
     inner.sessions.delete(fid);
   }
-  const r9 = mgr.dispatchWorker({ anchor: DATA, prompt: "B 空位后第 9 单应直派", title: "rl-q9" });
-  ok((r9 as { queued?: boolean }).queued !== true, `B5 空位后新单直派不再排队（workers=${mgr.activeManagedCount()}）`);
+  const B5_ANCHOR = mkdtempSync(join(tmpdir(), "rl-b5-")); // R1：独立锚——原 DATA 锚有排队单在队（无 drain 边未出队），目录锁拒同锚新单是正确保护，与「空位直派」语义无关
+  const r9 = mgr.dispatchWorker({ anchor: B5_ANCHOR, prompt: "B 空位后第 9 单应直派", title: "rl-q9" });
+  ok(r9.ok === true, `B5 空位后新单直派不再排队（ok=${r9.ok} err=${(r9 as { error?: string }).error ?? ""} workers=${mgr.activeManagedCount()}【R1 修真：原对拒收恒真】）`);
+}
+
+
+// ---------- R1 断言组（P0 双桶排水+B2 failed 行+B1 过闸/落盘+B4 护栏+文本锚）----------
+{
+  console.log("R1-P0 无 gid 排水/必败 failed/过闸/文本锚:");
+  const readSrc = io_read("src/session-manager.ts");
+  ok(readSrc.includes("?? this.dispatchQueueItems.find((x) => !(x.input as { gid?: string }).gid)"), "R1-e 双桶排水文本锚（P0：无 gid 桶每次 drain 顺带——六触发点零改动覆盖）");
+  ok(readSrc.includes("排队重放拒收"), "R1-f drain ok:false failed 行文本锚（B2 全族兜口：台账收敛+trigger 锁释放）");
+  ok(!readSrc.includes("!input.queue_replay && this.activeManagedCount()"), "R1-g queue_replay 不再豁免全局闸（B1-a 反锚——重启重放过帽）");
+  ok(readSrc.includes("rate-limit-backoff.json"), "R1-h 退避态落盘文本锚（B1-b）");
+  ok(readSrc.includes("this.emitUpdated(managed, true); // R1（A-P1）"), "R1-i 退避摘要即时帧（A-P1 可见性）");
+  ok(readSrc.includes("rateLimitBackoffUntil: this.backoffUntilOf"), "R1-j keepalive 退避钳（A-P1-2）");
+  ok(readSrc.includes("backoffUntilOf(s.state.session_id) > Date.now()) continue"), "R1-k 选席退避钳（B3）");
+  ok(readSrc.includes("if (s.rateLimitTimer) { clearTimeout(s.rateLimitTimer); s.rateLimitTimer = null; this.persistRateLimitBackoff"), "R1-l 删卡清退避定时器（A-P2-4）");
+  ok(readSrc.includes("全局排队满仓（200）"), "R1-d 200 满仓护栏（B4）");
+  ok(readSrc.includes('if (s.rateLimitTimer) { clearTimeout(s.rateLimitTimer); s.rateLimitTimer = null; }\n    this.persistRateLimitBackoff'), "R1-m retireSession 清定时器（B7）");
+  ok(readSrc.includes('if (s.state.action_summary === "wd-stall") continue;'), "R1-n wd-stall 不占帽（B6）");
+  // 行为断言：无 gid 单占满帽→排队→释放→出队（真链）
+  const CAP = 6;
+  const sessMap = (mgr as unknown as { sessions: Map<string, { state: { session_id: string } }> }).sessions;
+  for (const k of [...sessMap.keys()]) sessMap.delete(k); // 清场
+  const busy: string[] = [];
+  for (let i = 0; i < CAP; i++) {
+    const r = mgr.dispatchWorker({ anchor: mkdtempSync(join(tmpdir(), "rl-r1-anchor-")), prompt: `占帽 ${i}`, title: `rl-occ2-${i}` }) as { ok: boolean; queued?: boolean; session_id?: string };
+    if (!r.ok || r.queued) break;
+    busy.push(r.session_id ?? "");
+  }
+  ok(busy.length >= 1, `占帽就位（busy=${busy.length} active=${mgr.activeManagedCount()}）`);
+  const rNg = mgr.dispatchWorker({ anchor: mkdtempSync(join(tmpdir(), "rl-r1-anchor2-")), prompt: "R1 无 gid 排水验证单", title: "rl-ng2" }) as { ok: boolean; queued?: boolean; dispatch_id?: string };
+  ok(rNg.ok === true && rNg.queued === true, `R1-a 无 gid 单入队（ok=${rNg.ok} queued=${rNg.queued}）`);
+  const ngId = rNg.dispatch_id ?? "";
+  // 释放槽（真路径：摘会话腾位+close 触发 drain）。双桶 FIFO——rNg 之前可能还有
+  // 早段残留无 gid 单（r8 等）先出队（先来先服务=正确序），轮询多轮直到 rNg 出队。
+  let round = 0;
+  let queueNow = (mgr as unknown as { dispatchQueueItems: Array<{ dispatch_id: string }> }).dispatchQueueItems;
+  while (queueNow.some((x) => x.dispatch_id === ngId) && round < 10) {
+    const victim = busy[round] ?? [...sessMap.keys()][0];
+    if (!victim) break;
+    sessMap.delete(victim);
+    (mgr as unknown as { closeOpenDispatches: (k: string, s: string, r: string) => void }).closeOpenDispatches(victim, "done", `释放槽-R1-r${round}`);
+    await wait(80);
+    queueNow = (mgr as unknown as { dispatchQueueItems: Array<{ dispatch_id: string }> }).dispatchQueueItems;
+    round++;
+  }
+  const qItems = queueNow;
+  const stillInQueue = qItems.some((x) => x.dispatch_id === ngId);
+  ok(!stillInQueue, `R1-b 无 gid 排队单出队（队列无此 id【P0 主断言：原六触发点 string 键控永不排水】）`);
+  const logRows = readDispatchLog(ORG).filter((e) => e.id === ngId);
+  const converged = logRows.some((e) => e.status === "dispatched" || e.status === "running" || e.status === "done" || e.status === "failed");
+  ok(converged, `R1-b2 台账行收敛（终态/dispatched【P0：原 queued 永悬+目录锁永锁锚】）`);
 }
 
 console.log(`\n== test-ratelimit429 汇总：${pass} ok / ${fail} FAIL ==`);

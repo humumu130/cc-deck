@@ -4999,6 +4999,11 @@ export class SessionManager {
         });
       } catch { /* 微任务调度失败不阻断收口主路径 */ }
     }
+    // R1（A-P0）：无 gid 桶补排——收口边 drain 全 gid 键控，无 gid 单收口本不触发任何
+    // 排水；双桶逻辑需至少一次 drain 调用（任意 gid/空串）才顺带无 gid 桶。无条件补一次。
+    queueMicrotask(() => {
+      try { this.drainDispatchQueue(""); } catch { /* 尽力而为 */ }
+    });
   }
 
   // ===== W-LEADFIX resume 熔断与自动恢复闸门 =====
