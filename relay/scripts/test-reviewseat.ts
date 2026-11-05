@@ -179,7 +179,7 @@ async function main() {
   ok(!readReviewSeatConfig().team_override["pg-aaa"] && readReviewSeatConfig().team_override["pg-bbb"] === 1, "E1b 0=删键（单键删除不伤他键）");
   // E2（P1-5）pickVeteranEligible 排 reviewer：评审席路由记录在册→实施单不落席
   const { recordRoutingResult, routingFor } = await import("../src/routing.js");
-  recordRoutingResult("g-e5", "sm-e5-rv", "done", "审查回执", "reviewer");
+  recordRoutingResult("g-e5", "sm-e5-rv", "done", "审查回执", undefined, "reviewer"); // R3：role 尾插位（第 6 参）
   ok(routingFor("g-e5").some((x: { session_id: string; role?: string }) => x.session_id === "sm-e5-rv" && x.role === "reviewer"), "E2a 路由记录带 role=reviewer（收口角色维）");
   // E2b：pickVeteranEligible 排除行源码锚（判错力=删排除即红；真链行为面被 roster 夹具
   // 成本挡住——字段断言 E2a+本锚双锁，转岗/池席跨组场景由 e.role 历史维承接）

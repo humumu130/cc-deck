@@ -5049,7 +5049,7 @@ export class SessionManager {
         if (recordRouting) {
           // W-REVIEWSEAT-R1 P1-5：评审席收口现判带角色（评审单路由史标 reviewer——
           // pickVeteranEligible 历史维排除依据，运行态 isReviewerSeat 之外的兜底）
-          recordRoutingResult(e.gid, key, status, receipt, this.isReviewerSeat(key) ? "reviewer" : undefined);
+          recordRoutingResult(e.gid, key, status, receipt, undefined, this.isReviewerSeat(key) ? "reviewer" : undefined); // R3：role 尾插位（第 6 参），dir 显式 undefined 占位
           // #92 W-NOTIFY2 E：失败升级链——worker 连败（failed≥阈值 且 failed>count，无成功
           // 穿插的计数近似）不只进台账：action 桶可操作通知直达用户（retire/换人/重派决策）
           if (status === "failed") this.escalateWorkerFailures(e.gid, key);

@@ -77,8 +77,12 @@ export function recordRoutingResult(
   sessionId: string,
   status: "done" | "failed",
   receipt?: string,
-  role?: string,
   dir?: string,
+  // W-REVIEWSEAT-R1 P1-5 角色维（评审单收口带 "reviewer"）。**尾插位**（R3 CI 实锤）：
+  // dev 侧调用（test-routing/test-projects 及 closeOpenDispatches）以位置参数传 dir
+  //（第 5 位）——role 插在 dir 前会让 dir 落进 role、账写错目录（CI test:routing/
+  // test:projects 三红根因）。新增参数一律尾插，不动既有位置约定。
+  role?: string,
 ): RoutingEntry | null {
   if (!gid || !sessionId) return null;
   const s = load(dir);
