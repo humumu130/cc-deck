@@ -2465,12 +2465,21 @@
        absolute（footer 上方右侧不遮输入框）、透明度+位移淡入淡出（替代 hidden 硬切）、
        离底期间有新消息点亮未读点（点击/滚近底熄灭） */
     .workspace { position: relative; }
-    .back-to-bottom { position: absolute; right: 18px; bottom: 122px; z-index: 20; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface2); color: var(--dim); cursor: pointer; box-shadow: var(--card-shadow); opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .18s ease, visibility .18s ease, transform .18s ease, border-color .15s ease, color .15s ease; }
+    .back-to-bottom { position: absolute; right: 18px; bottom: 122px; z-index: 20; display: grid; place-items: center; grid-auto-flow: column; gap: 0; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface2); color: var(--dim); cursor: pointer; box-shadow: var(--card-shadow); opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .18s ease, visibility .18s ease, transform .18s ease, border-color .15s ease, color .15s ease; }
     .back-to-bottom.show { opacity: 1; visibility: visible; transform: translateY(0); }
     .back-to-bottom:hover { border-color: var(--brand); color: var(--brand); }
     .back-to-bottom .icon-inline { width: 16px; height: 16px; }
     .back-to-bottom .unread-dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); border: 2px solid var(--bg1); opacity: 0; transform: scale(.5); transition: opacity .15s ease, transform .15s ease; }
     .back-to-bottom.has-unread .unread-dot { opacity: 1; transform: scale(1); }
+    /* W-SCROLLFIX：离底新消息 chip 形态——has-unread 时圆钮变胶囊「N 条新消息 ↓」（贴消息区
+       底居中浮层语义不变，此处右下原位升级）；文本 150ms 淡入（reduced-motion 静态显示） */
+    .back-to-bottom .unread-n { display: none; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+    .back-to-bottom.has-unread { width: auto; min-width: 40px; height: 32px; padding: 0 12px; gap: 6px; border-radius: 99px; color: var(--fg1); opacity: 0; visibility: hidden; }
+    .back-to-bottom.has-unread.show { opacity: 1; visibility: visible; }
+    .back-to-bottom.has-unread .unread-n { display: inline; animation: ccFadeIn .15s ease; }
+    .back-to-bottom.has-unread .unread-dot { display: none; } /* 胶囊文本即计数，圆点退役防双示 */
+    @keyframes ccFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .back-to-bottom.has-unread .unread-n { animation: none; } }
     /* 行变量三档语义（原 --density-card-* 卡变量改造为行变量；档位循环与设置键不变）：
        紧凑=压缩两行（头像 26px/字号降档，对齐手机「简洁列表」）——见上方 body 三条 */
     /* 组头 sticky（旧版 #78 同拍板）：滚动时组名钉在列表顶，底色盖住穿行的行淡底 */

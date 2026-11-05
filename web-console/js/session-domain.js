@@ -101,6 +101,7 @@
                   retiredIds: null, // [W-RETIRED]：SNAPSHOT.retired_session_ids（Set|null；null=旧 relay 零过滤兼容）——退休成员会话默认隐藏沉「已退休成员」归档组（编制退休≠会话删除，历史可查）
                   retiredEntries: null, // [W-SEAT-SEMANTICS]：SNAPSHOT.retired_entries 富化面（Map sid→{cause,since,detail}|null；null=旧 relay 回落泛词组名「已退休成员」，在场=组名改「离席成员」+成因三拆副标签）
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
+                  newBelow: 0, _chipSid: "", _convGrowAt: 0, // W-SCROLLFIX：离底期新消息计数（跟随门没滚时才计——判据同源）+ chip 会话粒度 + 渲染窗外变高度补偿时间戳
                   tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
@@ -3100,6 +3101,9 @@
                   // 会让滚动容器塌缩→scrollTop 归零。v3 用 top-anchor（距顶）：对话前缀稳定（历史只尾增），
                   // 距顶恢复天然免疫 bottom-anchor 的 clamp 折损（回涨高度把位置拖进贴底窗的链式失效）。
                   const scrollAnchor = UI.body ? { top: UI.body.scrollTop } : null;
+                  // W-SCROLLFIX：chip 会话粒度——选中会话变化即清零（切换重置；单点收口，
+                  // 三条选中链 :1677/:4881/#B3-17 不逐个挂）
+                  if (S._chipSid !== S.selected) { S._chipSid = S.selected; S.newBelow = 0; syncChip(); }
                   openProcGrp = null;
                   const s = curSession();
                   // #282 四批 S4 深度 keyed：timeline 条目进稳定内层宿主 [data-conv-body]，单口按
@@ -3173,6 +3177,7 @@
                     syncWaitCard(true);
                     autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
                     S.forceScroll = false; // 审查 P2-1（review-282d-a）：一次性强滚标志复位与旧路径对齐
+                    S._convGrowAt = Date.now(); snapConvAnchor(); // W-SCROLLFIX：渲染窗时间戳+锚快照（ResizeObserver 补偿管道的渲染窗跳过依据）
                     return;
                   }
                   // ---- rk 缺席兜底：旧全量重灌逐字节保留（零删） ----
@@ -3222,6 +3227,7 @@
                   syncWaitCard(true);
                   autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
                   S.forceScroll = false;
+                  S._convGrowAt = Date.now(); snapConvAnchor(); // W-SCROLLFIX：渲染窗时间戳+锚快照
                 }
                 function autoScroll(force, anchor, saved) {
                   // 件十九+二十统一滚动状态机 v3（top-anchor）：
@@ -3238,6 +3244,38 @@
                   const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
                   if (force || S.userPinnedBottom === true || (anchor ? false : near)) { el.scrollTop = el.scrollHeight; return; }
                   if (anchor) restoreTop(anchor.top);
+                }
+                // W-SCROLLFIX：chip 单口同步（计数文本+has-unread 形态+aria）——计数点
+                //（applyDomLog 离底增量/onScroll 近底清零/点击回底/会话切换重置）都走这里。
+                // 定义在外层 IIFE 作用域（renderConversation/applyDomLog/onScroll 三面共用；
+                // 2202 前车之鉴：ready() 内定义的函数外部不可见=ReferenceError 首渲染即毁）。
+                function syncChip() {
+                  const b = document.querySelector(".back-to-bottom");
+                  if (!b) return;
+                  const n = S.newBelow;
+                  const t = b.querySelector(".unread-n");
+                  if (t) t.textContent = n > 0 ? n + " 条新消息" : "";
+                  b.classList.toggle("has-unread", n > 0);
+                  const label = n > 0 ? n + " 条新消息，跳到底部" : "跳到最新消息";
+                  b.setAttribute("aria-label", label);
+                  b.title = label;
+                }
+                // W-SCROLLFIX 变高度锚定（任务书边界：图片/代码块晚到撑高不得顶走离底视口）：
+                // ResizeObserver 盯对话 pane 内容高度，变化时按「视口顶部锚节点」的位移补偿
+                // scrollTop——尾部 append（锚不动=delta 0）不补、上方撑高（锚下移）同向跟移，
+                // 视觉内容恒定。渲染管线自身的尺寸变化（全量重建/增量 append）由 autoScroll 的
+                // top-anchor 同步恢复管，RO 回调内 120ms 渲染窗跳过防双重补偿；锚节点被删
+                //（重建）快照失效跳过待窗后重建。只补锚位移，不猜增长来源（方向安全）。
+                let convAnchorSnap = null; // {n, top}（n=锚节点引用，top=当时距视口顶）
+                function snapConvAnchor() {
+                  if (!UI || !UI.body || !UI.convPane) { convAnchorSnap = null; return; }
+                  if (S.userPinnedBottom !== false) { convAnchorSnap = null; return; } // 贴底态无需锚定（跟随门管）
+                  const vpTop = UI.body.getBoundingClientRect().top;
+                  for (const n of UI.convPane.children) {
+                    const r = n.getBoundingClientRect();
+                    if (r.bottom > vpTop + 1) { convAnchorSnap = { n, top: r.top }; return; }
+                  }
+                  convAnchorSnap = null;
                 }
                 // #166 等待行动卡（双态分离 + 三级按钮 + remember 范围选择 + elapsed 计时 + 焦点感提升）
                 let waitElapsedTimer = null;
@@ -3496,11 +3534,16 @@
                   }
                   syncWaitCard(false);
                   if (S.userPinnedBottom !== false) autoScroll(); // 件十九：跟底走用户贴底态（几何 near 被 SNAPSHOT 中间态污染=跳底真凶），离底绝不拉
-                  // 件十一：新消息落地而用户离底超一屏（正读历史）→ FAB 点亮未读点
-                  // （点击回底/滚近底由 btb 侧熄灭）；近底跟随场景不点
-                  if (UI.body && UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight > UI.body.clientHeight) {
-                    document.querySelector(".back-to-bottom")?.classList.add("has-unread");
+                  // W-SCROLLFIX（1105 用户实锤「上滑看历史被新消息顶走」双端治理）：
+                  // 跟随门（上一行）没滚 = 用户离底正读历史 → 计数 +1 并浮「N 条新消息 ↓」
+                  // chip（点击回底）。判据与跟随门同源（userPinnedBottom===false）——门不滚
+                  // 必计数、门滚必不计数，两态互斥无中间缝。接替件十一的「超一屏才点未读点」
+                  // （离底不足一屏同样有新消息该提示；近底跟随场景天然不计数）。
+                  if (S.userPinnedBottom === false) {
+                    S.newBelow += 1;
+                    syncChip();
                   }
+                  S._convGrowAt = Date.now(); snapConvAnchor(); // W-SCROLLFIX：渲染窗时间戳+锚快照
                 }
 
                 // ---------- 渲染：任务 tab（todosTabHtml 四组制 + VERIFY_RE） ----------
@@ -5252,13 +5295,29 @@
 
                   // 回到底部 FAB（件十一升级：40px 圆钮+icon+淡入淡出+未读点；离底 >80px
                   // 停 300ms 复核浮现——显隐走 .show 类不再用 hidden 硬切）
+                  // W-SCROLLFIX：升级胶囊形态——离底期新消息计数>0 时变「N 条新消息 ↓」
+                  //（点击回底+清零），样式见 base.css .back-to-bottom.has-unread。
                   const btb = document.createElement("button");
                   btb.type = "button";
                   btb.className = "back-to-bottom";
                   btb.setAttribute("aria-label", "跳到最新消息");
                   btb.title = "跳到最新消息";
-                  btb.innerHTML = '<svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-down"></use></svg><span class="unread-dot" aria-hidden="true"></span>';
+                  btb.innerHTML = '<span class="unread-n" aria-hidden="true"></span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-down"></use></svg><span class="unread-dot" aria-hidden="true"></span>';
                   UI.workspace.appendChild(btb);
+                  // W-SCROLLFIX 变高度锚定：RO 挂载（snapConvAnchor/convAnchorSnap/syncChip
+                  // 定义在外层 IIFE——autoScroll 后；ready 前的渲染调用安全走 null 快照早退）
+                  if ("ResizeObserver" in window && UI.convPane) {
+                    new ResizeObserver(() => {
+                      if (!UI || !UI.body) return;
+                      if (Date.now() - S._convGrowAt < 120) { snapConvAnchor(); return; } // 渲染窗内：anchor 管道负责，仅刷新快照
+                      const snap = convAnchorSnap;
+                      if (!snap || !snap.n.isConnected) { snapConvAnchor(); return; }
+                      const newTop = snap.n.getBoundingClientRect().top;
+                      const delta = newTop - snap.top;
+                      if (Math.abs(delta) > 0.5) UI.body.scrollTop += delta; // 上方撑高 delta>0 跟移；上方塌缩（罕见）同式回收
+                      snapConvAnchor();
+                    }).observe(UI.convPane);
+                  }
                   let settleTimer = 0;
                   const nearBottom = () => UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight < 80;
                   const sessionActive = () => !!document.querySelector("#stage-desktop.active #d-session.active");
@@ -5269,15 +5328,18 @@
                       const k = UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight;
                       if (S.selected) S.scrollKeep.set(S.selected, { top: UI.body.scrollTop, bottom: k < 120 });
                       S.userPinnedBottom = k < 120;
+                      // W-SCROLLFIX：回到底（与跟随门同阈 120）=恢复跟随+chip 清零
+                      if (k < 120 && S.newBelow) { S.newBelow = 0; syncChip(); }
+                      snapConvAnchor(); // 变高度锚定快照随滚动位置刷新
                     }
                     if (!sessionActive()) { btb.classList.remove("show", "has-unread"); return; }
                     btb.classList.remove("show");
                     clearTimeout(settleTimer);
                     if (!nearBottom()) settleTimer = setTimeout(() => { if (!nearBottom() && sessionActive()) btb.classList.add("show"); }, 300);
-                    else btb.classList.remove("has-unread"); // 滚近底：未读点熄灭
+                    else { btb.classList.remove("has-unread"); if (S.newBelow) { S.newBelow = 0; syncChip(); } } // 滚近底：跟随恢复+计数熄灭
                   };
                   UI.body.addEventListener("scroll", onScroll);
-                  btb.addEventListener("click", () => { btb.classList.remove("show", "has-unread"); UI.body.scrollTo({ top: UI.body.scrollHeight, behavior: "smooth" }); });
+                  btb.addEventListener("click", () => { btb.classList.remove("show", "has-unread"); S.newBelow = 0; syncChip(); UI.body.scrollTo({ top: UI.body.scrollHeight, behavior: "smooth" }); });
 
                   // 1s 本地计时：dock 回合计时 + 自建列表卡的运行秒数
                   setInterval(() => {
