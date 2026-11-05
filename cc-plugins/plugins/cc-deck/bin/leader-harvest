@@ -22,13 +22,15 @@ usage() { grep '^# ' "$0" | sed 's/^# //; s/^#$//' >&2; }
 die() { echo "leader-harvest：$2" >&2; exit "$1"; }
 need_value() { [ -n "${2:-}" ] || die 2 "选项 $1 缺值"; }
 
-did=""; rc_opt=""; wt_opt=""; br_opt=""; base_opt=""
+did=""; rc_opt=""; wt_opt=""; br_opt=""; base_opt=""; DO_MERGE=""; REJECT_REASON=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --receipt) need_value "$1" "${2:-}"; rc_opt="$2"; shift 2 ;;
     --worktree) need_value "$1" "${2:-}"; wt_opt="$2"; shift 2 ;;
     --branch) need_value "$1" "${2:-}"; br_opt="$2"; shift 2 ;;
     --base) need_value "$1" "${2:-}"; base_opt="$2"; shift 2 ;;
+    --merge) DO_MERGE="1"; shift ;; # W-CARDLIFE：闸全绿后同链全世代卡联动翻 done
+    --reject) need_value "$1" "${2:-}"; REJECT_REASON="$2"; shift 2 ;; # W-CARDLIFE：审查打回 note（跳收割闸）
     -h|--help) usage; exit 0 ;;
     -*) die 2 "未知选项: $1" ;;
     *) [ -z "$did" ] || die 2 "多余参数: $1（只收一个 dispatch-id）"; did="$1"; shift ;;
@@ -121,6 +123,117 @@ if ! python3 "$lock_bin" hlock acquire "$hlock" --pid "$$" --dispatch-id "${did:
 fi
 trap 'rm -f "$hlock"' EXIT
 
+# ---------- W-CARDLIFE 板卡生命周期联动翻转（1105 用户军令：每个节点都要翻转） ----------
+# 断链形态③同链前代卡滞留的机械手收口：收割（--merge）时按派单账同 slug 寻址链上
+# 全部世代卡（R0..Rn），凡非 done 卡联动翻 done 且 note 记链闭标记——经 relay
+# /api/org（board 在 HTTP 白名单）单写口落板，不直写板仓 JSON。--reject：审查打回
+# 节点的状态表达（A 审打回动作工具化）——在审卡 note 追加「R<N> 打回：<原因>」，
+# 状态不动（由后续收割链闭统一翻），不新增板状态枚举。
+# 寻址键=ledger 的 slug（leader-dispatch 派生确定性）；板仓=<org>/boards/<gid>.json。
+cardlife_chain_cards() { # 输出待处理卡清单：每行 <gid>\t<entry_id>\t<dispatch_id>\t<text>\t<note>（JSON 转义由调用方 python 解）
+  python3 - "$ledger" "$org_dir" "$did" <<'PY'
+import json, sys, os
+ledger, org_dir, did = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    rows = [json.loads(r) for r in open(ledger, encoding="utf-8") if r.strip()]
+except OSError:
+    rows = []
+me = [r for r in rows if r.get("dispatch_id") == did]
+if not me:
+    sys.exit(0)
+me = me[-1]
+slug = str(me.get("slug") or "")
+gid = str(me.get("gid") or "")
+if not slug or not gid:
+    sys.exit(0)
+# 同链世代：同 slug 且同 gid 的全部 dispatch（含本单）；世代序=账行序（leader-dispatch 追加写）
+# W-CARDLIFE-R1 P2-1（链窗）：slug=title 前 24 字符可被新线复用（同题重派跨月形态）——
+# 同链还需 ts 邻近：距本单行 <CCR_CARDLIFE_CHAIN_WINDOW_DAYS 天（缺省 14；env 可调）。
+# 老线滞留卡（ts 距离超窗）不进 chain_set=不被新线 --merge 翻（误伤绝迹）。
+import time as _t
+_me_ts = float(me.get("ts") or 0) or _t.time() * 1000
+_win_days = float(os.environ.get("CCR_CARDLIFE_CHAIN_WINDOW_DAYS") or 14)
+_win_ms = _win_days * 86400 * 1000
+chain = [r.get("dispatch_id") for r in rows
+         if r.get("slug") == slug and r.get("gid") == gid and r.get("dispatch_id")
+         and abs((float(r.get("ts") or 0) or _me_ts) - _me_ts) < _win_ms]
+chain_set = set(filter(None, chain))
+bp = os.path.join(org_dir, "boards", gid + ".json")
+try:
+    board = json.load(open(bp, encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+for e in board.get("entries", []):
+    d = e.get("dispatch_id")
+    if d in chain_set:
+        print("\t".join([gid, str(e.get("id") or ""), str(d), json.dumps(e.get("text") or "", ensure_ascii=False), json.dumps(e.get("note") or "", ensure_ascii=False), str(e.get("status") or "")]))
+PY
+}
+cardlife_round() { # 世代轮次（0-based）：本单在同 slug 链中的位置
+  python3 - "$ledger" "$did" <<'PY'
+import json, sys
+ledger, did = sys.argv[1], sys.argv[2]
+try:
+    rows = [json.loads(r) for r in open(ledger, encoding="utf-8") if r.strip()]
+except OSError:
+    rows = []
+me = [r for r in rows if r.get("dispatch_id") == did]
+if not me:
+    print("0"); sys.exit(0)
+slug = str(me[-1].get("slug") or ""); gid = str(me[-1].get("gid") or "")
+chain = [r.get("dispatch_id") for r in rows if r.get("slug") == slug and r.get("gid") == gid and r.get("dispatch_id")]
+print(chain.index(did) if did in chain else 0)
+PY
+}
+org_post() { # relay /api/org（python3 urllib 直连——本地 relay 恒禁代理；curl 在部分环境对 node http 有 0 字节悬挂怪癖，换标准库）
+  local port="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
+  local token="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
+  PORT_V="$port" TOKEN_V="$token" BODY_V="$1" python3 <<'PY'
+import json, os, urllib.request
+port, token = os.environ.get("PORT_V", ""), os.environ.get("TOKEN_V", "")
+body = os.environ["BODY_V"].encode("utf-8")
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本地 relay 恒直连（防 PM 壳代理 env 污染 127.0.0.1）
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/org?token={token}", data=body, headers={"content-type": "application/json"}, method="POST")
+try:
+    print(opener.open(req, timeout=25).read().decode())
+except Exception as e:
+    print(json.dumps({"ok": False, "error": f"post-failed: {e}"}, ensure_ascii=False))
+PY
+}
+
+
+fails=0
+if [ "$REJECT_REASON" != "" ]; then
+  # --reject：审查打回 note（状态不动——卡留在当前态等返修收割链闭）
+  echo "== 审查打回（W-CARDLIFE 审查节点表达）=="
+  rnd="$(cardlife_round)"
+  cards="$(cardlife_chain_cards)"
+  n=0
+  while IFS=$'\t' read -r g eid ddisp dtext dnote dstatus; do
+    [ -z "$eid" ] && continue
+    [ "$ddisp" != "$did" ] && continue # 只动本单卡（打回对象=被返修单）
+    # W-CARDLIFE-R1 P3-1（幂等）：note 已含同理由打回标记（「打回：REASON」子串——代次号
+    # 每次新生成不参比）则跳过追加——重复运行不重复录
+    if printf '%s' "$dnote" | grep -qF "打回：${REJECT_REASON}"; then
+      echo "· 卡 $eid note 已含本理由打回标记——幂等跳过（R${rnd}）"
+      n=$((n+1))
+      continue
+    fi
+    newnote="$(printf '%s' "$dnote" | REASON="R${rnd} 打回：${REJECT_REASON}（1105 审查节点表达——状态不动，返修收割时链闭）" python3 -c 'import json,os,sys
+old=json.loads(sys.stdin.read() or "\"\"")
+add=os.environ["REASON"]
+print(json.dumps((old+"\n" if old else "")+add, ensure_ascii=False))')"
+    resp="$(org_post "$(printf '%s\t%s\t%s\t%s' "$g" "$eid" "$dtext" "$newnote" | python3 -c 'import json,sys
+g,eid,text,note=sys.stdin.read().split("\t",3)
+print(json.dumps({"action":"board","op":"upsert","gid":g,"entry_id":eid,"text":json.loads(text),"note":json.loads(note)},ensure_ascii=False))')")"
+    if printf '%s' "$resp" | grep -q '"ok":true'; then echo "✓ 卡 $eid note 追加 R${rnd} 打回（状态 ${dstatus:-（原态缺省）} 保持）"; n=$((n+1)); else echo "✗ 卡 $eid note 追加失败：$resp"; fails=$((fails+1)); fi
+  done <<< "$cards"
+  [ "$n" -eq 0 ] && { echo "✗ 未找到本单（dispatch_id=$did）板卡——打回对象缺位"; fails=$((fails+1)); }
+  echo "RESULT reject=$did fails=${fails}（R${rnd} 打回：${REJECT_REASON}）"
+  [ "$fails" -gt 0 ] && exit 1
+  exit 0
+fi
+
 echo "== 收割单 ${did:0:8} =="
 echo "标题：${title:-（账无标题）}"
 echo "会话：${sid:0:12}${sid:+…}"
@@ -198,10 +311,40 @@ if [ "$fails" -gt 0 ]; then
   echo "RESULT harvest=$did fails=${fails}（闸有 ✗，处置后重跑）"
   exit 1
 fi
+
+if [ "$DO_MERGE" = "1" ]; then
+  # --merge：同链全世代卡联动翻 done（用户军令「每个节点都要翻转」——前代卡不再悬空）
+  echo "== 同链联动翻转（W-CARDLIFE 主靶）=="
+  cards="$(cardlife_chain_cards)"
+  flipped=0
+  while IFS=$'\t' read -r g eid ddisp dtext dnote dstatus; do
+    [ -z "$eid" ] && continue
+    [ "$dstatus" = "done" ] && { echo "· 卡 $eid（${ddisp:0:8}）已 done——跳过"; continue; }
+    newnote="$(printf '%s' "$dnote" | MARK="由 ${did:0:8} 收割链闭（W-CARDLIFE：同链前代卡联动翻转，1105 用户军令）" python3 -c 'import json,os,sys
+old=json.loads(sys.stdin.read() or "\"\"")
+add=os.environ["MARK"]
+print(json.dumps((old+"\n" if old else "")+add, ensure_ascii=False))')"
+    resp="$(org_post "$(printf '%s\t%s\t%s\t%s' "$g" "$eid" "$dtext" "$newnote" | python3 -c 'import json,sys
+g,eid,text,note=sys.stdin.read().split("\t",3)
+print(json.dumps({"action":"board","op":"upsert","gid":g,"entry_id":eid,"text":json.loads(text),"status":"done","note":json.loads(note)},ensure_ascii=False))')")"
+    if printf '%s' "$resp" | grep -q '"ok":true'; then echo "✓ 卡 $eid（dispatch ${ddisp:0:8}）→ done，note 链闭"; flipped=$((flipped+1)); else echo "✗ 卡 $eid 翻转失败：$resp"; fails=$((fails+1)); fi
+  done <<< "$cards"
+  echo "同链翻转 ${flipped} 张（含前代滞留卡——12 张里 10 张陈卡形态绝迹）"
+fi
+
 # W-ORG-DEFECTS 件2：闸全绿=单终态，顺手清 worktree 互斥锁（relay 收口边/harvest 收尾/2h
 # 过期三路清锁之二；fails>0 时保留锁——单未收口，同树仍需互斥）。
+# W-CARDLIFE-R1（A 审 P1）：守卫真落地——原注释称「fails>0 保留」但 rm 无条件+exit 0
+# 无条件（死端口受控实验：RESULT fails=1 而 EXIT_CODE=0+锁被清——relay 重启窗常见的
+# 非边缘形态，翻转失败即锁失守=同树可再派）。--reject 面早已 [ fails>0 ] && exit 1，
+# 本面与其对称收口。
+if [ "${fails:-0}" -gt 0 ]; then
+  echo "· 翻转/闸有红（fails=${fails}）——worktree 锁保留（${worktree:-（无树）}），单未收口同树仍互斥"
+  echo "RESULT harvest=$did fails=${fails}（机器闸${fails} 红请处置；人工判断项见上，勿跳过）${DO_MERGE:+ 同链翻转见上}"
+  exit 1
+fi
 if [ -n "$worktree" ] && [ -d "$worktree" ] && [ -f "$worktree/.cc-deck-lock" ]; then
   rm -f "$worktree/.cc-deck-lock" && echo "✓ worktree 互斥锁已清（$worktree/.cc-deck-lock）"
 fi
-echo "RESULT harvest=$did fails=0（机器闸全绿；人工判断项见上，勿跳过）"
+echo "RESULT harvest=$did fails=${fails}（机器闸${fails:-0} 红请处置；人工判断项见上，勿跳过）${DO_MERGE:+ 同链翻转见上}"
 exit 0
