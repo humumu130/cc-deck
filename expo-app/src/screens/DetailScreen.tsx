@@ -1486,6 +1486,14 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   // 回到底部浮钮（#322 第四轮定位，用户拍板）：对话区顶部居中小胶囊（ChatGPT 手机端
   // 样式，带下箭头），上滑离开底部即出现，吸顶浮动不占布局、不与 App 壳悬浮钮打架
   const [showJump, setShowJump] = useState(false);
+  // W-SCROLLFIX（1105 用户实锤「上滑看历史被新消息顶走」）：离底期新消息计数——跟随门
+  //（atBottom && !touching，:1913 effect）没滚时计数+1，回底浮钮升「N 条新消息 ↓」胶囊
+  //（点击回底+清零）。判据与跟随门同源：门滚必不计数、门不滚必计数，两态互斥无中间缝。
+  // 流式同条变长（lastLen 增长）不计——只对条目数增长（pageShown.length）计数，与桌面
+  //（session-domain applyDomLog 增量条目计数）同口径。
+  const [newBelow, setNewBelow] = useState(0);
+  const lastShownLen = useRef(0);
+  useEffect(() => { setNewBelow(0); lastShownLen.current = 0; }, [sid]); // 会话切换重置（无 key 重挂，state 需显式清）
   // W-MOTION：浮钮显隐走 opacity 过渡（常驻挂载+pointerEvents 门控——原条件渲染瞬跳）
   const jumpOp = useRef(new Animated.Value(0)).current;
   // 回到底部浮钮（第五轮）：滚动中隐藏、停止 ~300ms 后浮现；atBottom/jumpScrollable 由 onScroll 维护
@@ -1912,6 +1920,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
     const ref = view === "msg" ? scrollRef.current : null;
+    // W-SCROLLFIX：新条目到达而离底 → 计数（跨 view 也计——切 tab 期间的新消息回对话页
+    // 该有提示；跟随（scrollToEnd）仍只在 msg 视图，口径不变）
+    const grew = pageShown.length - lastShownLen.current;
+    if (grew !== 0) lastShownLen.current = pageShown.length;
+    if (grew > 0 && !atBottom.current && !touching.current) setNewBelow((n) => n + grew);
     if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
   }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING", myEcho.length]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
@@ -2929,6 +2942,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
           const near = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
           atBottom.current = near;
+          if (near) setNewBelow((n) => (n > 0 ? 0 : n)); // W-SCROLLFIX：滚到底=恢复跟随+chip 计数清零（同值 bail 零渲染扰动）
           jumpScrollable.current = contentSize.height - layoutMeasurement.height > 300;
           // 用户拍板：滚动进行中立即隐藏，停止 ~300ms 后才浮现（防滚动期间闪现）
           setShowJump(false);
@@ -3065,14 +3079,16 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
       {/* W-MOTION：显隐 150ms opacity 过渡（常驻挂载，pointerEvents 随显隐——隐藏态不挡触达） */}
       <Animated.View pointerEvents={showJump && view === "msg" ? "auto" : "none"} style={[d.jumpFabHost, { opacity: jumpOp }]}>
         <Pressable
-          style={d.jumpFab}
+          style={[d.jumpFab, newBelow > 0 ? d.jumpFabWide : null]}
           android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 17 }}
           onPress={() => {
             if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current);
             scrollRef.current?.scrollToEnd({ animated: true });
+            setNewBelow(0); // W-SCROLLFIX：点击回底=恢复跟随+计数清零
             setShowJump(false);
           }}
         >
+          {newBelow > 0 ? <Text style={d.jumpFabCount}>{newBelow} 条新消息</Text> : null}
           <Text style={d.jumpFabT}>↓</Text>
         </Pressable>
       </Animated.View>
