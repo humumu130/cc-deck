@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import { homedir } from "node:os";
+import { appendLinkEvent } from "./link-quality.js"; // [W-LINKQUALITY] 段②遥测（家 Mac↔CF 桥生命周期记账）
 import { REPLAY_FAST_MAX, type EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
@@ -53,6 +54,8 @@ export const COMMAND_TYPES = new Set([
   "COMMAND_EXT_STOP",
   // X1 多机编排：密封 xmsg 发送命令面（三口汇流；与 ws-server 白名单逐字一致纪律）
   "COMMAND_XMSG",
+  // [W-LINKQUALITY-R1] 遥测补报帧命令（与 ws-server COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_TELEMETRY_LINK",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -144,6 +147,11 @@ export class CloudClient {
   // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
   private wanDropLoggedAt = 0;
   private delayMs = 1000;
+  // [W-LINKQUALITY] 段②记账态：connect 计时/断点/存活起点/断因标注（boot-guard 等非 close 路径）
+  private lqConnectAt = 0;
+  private lqDropAt = 0;
+  private lqOpenAt = 0;
+  private lqDropReason = "";
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastRecv = 0;
@@ -241,9 +249,11 @@ export class CloudClient {
       // 构造即抛（URL 异常等）：不修补会断掉 close→重试链，relay 从此离线到重启
       console.log(`[cloud] bridge connect throw: ${err instanceof Error ? err.message : err}, retry in ${this.delayMs}ms`);
       this.timer = setTimeout(() => this.connect(), this.delayMs);
-      this.delayMs = Math.min(this.delayMs * 2, 30_000);
+      this.delayMs = Math.min(this.delayMs * 2, 15_000) /* [W-LINKQUALITY] 提速②：封顶 30→15s（断连风暴防护由 hookloop 限频兜底，退避长尾是「重连慢」主源之二） */;
+      try { appendLinkEvent(this.cfg.dataDir, { ts: Date.now(), src: "bridge", kind: "retry-fail", reason: ("construct-throw: " + String(err instanceof Error ? err.message : err)).slice(0, 120) }); } catch { /* 遥测尽力而为 */ }
       return;
     }
+    this.lqConnectAt = Date.now(); // [W-LINKQUALITY] connect 计时起点
     this.ws = ws;
     // CONNECT 悬死看门狗（2026-09-17）：公司网络丢 SYN/防火墙黑洞时 close 永不
     // 触发，readyState 停在 CONNECTING——心跳跳过（非 OPEN）、重试链断，relay
@@ -252,12 +262,21 @@ export class CloudClient {
     const bootGuard = setTimeout(() => {
       if (this.ws === ws && ws.readyState === WebSocket.CONNECTING) {
         console.log("[cloud] bridge connect timeout (15s CONNECTING), terminating for retry");
+        this.lqDropReason = "boot-guard-15s"; // [W-LINKQUALITY] 断因标注（CONNECT 悬死非 close 路径）
         ws.terminate();
       }
     }, 15_000);
     ws.on("open", () => {
       clearTimeout(bootGuard);
       this.delayMs = 1000;
+      // [W-LINKQUALITY] 段②记账：connect 耗时（链路建立质量代理——无应用层 RTT 探针的
+      // 降级口径）+ 断后恢复（downtime+断因；首连只记 connect）
+      try {
+        const now = Date.now();
+        if (this.lqConnectAt > 0) appendLinkEvent(this.cfg.dataDir, { ts: now, src: "bridge", kind: "connect", downtimeMs: now - this.lqConnectAt });
+        if (this.lqDropAt > 0) appendLinkEvent(this.cfg.dataDir, { ts: now, src: "bridge", kind: "reconnect", downtimeMs: now - this.lqDropAt, ...(this.lqDropReason ? { reason: this.lqDropReason } : {}) });
+        this.lqDropAt = 0; this.lqDropReason = ""; this.lqOpenAt = now;
+      } catch { /* 遥测尽力而为 */ }
       this.lastRecv = Date.now();
       this.lastHbAt = 0; // #146：新连接立即发首枚 hb（同时清 miss 计数）
       this.hbMiss = 0;
@@ -328,7 +347,15 @@ export class CloudClient {
         }
         this.ws = null;
         this.timer = setTimeout(() => this.connect(), this.delayMs);
-        this.delayMs = Math.min(this.delayMs * 2, 30_000);
+        this.delayMs = Math.min(this.delayMs * 2, 15_000) /* [W-LINKQUALITY] 提速②：断线重试封顶同 15s */;
+        // [W-LINKQUALITY] 段②记账：drop（断因优先 lqDropReason——boot-guard 等；否则
+        // ws-close）+存活时长
+        try {
+          const now = Date.now();
+          appendLinkEvent(this.cfg.dataDir, { ts: now, src: "bridge", kind: "drop", reason: this.lqDropReason || "ws-close", ...(this.lqOpenAt > 0 ? { connectedMs: now - this.lqOpenAt } : {}) });
+          if (this.lqDropAt === 0) this.lqDropAt = now;
+          this.lqOpenAt = 0;
+        } catch { /* 遥测尽力而为 */ }
       }
     });
   }

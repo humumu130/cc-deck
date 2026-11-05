@@ -102,6 +102,8 @@ export function buildSessionsReconcile(mgr: SessionManager, relayName: string | 
   };
 }
 
+import { ingestLinkEvents, linkSummary } from "./link-quality.js"; // [R1] 补报单口（校验+指纹去重；调试 HTTP 口与帧命令共用）
+
 function localIps(): Set<string> {
   const out = new Set<string>();
   for (const list of Object.values(networkInterfaces())) {
@@ -296,6 +298,8 @@ export const COMMAND_TYPES = new Set([
   // X1 多机编排：密封 xmsg 发送命令面（ccops/org/会话卡按钮三口汇流；与 cloud-client
   // 白名单逐字一致纪律——#212 漏加=LAN 实机死路同款坑）
   "COMMAND_XMSG",
+  // [W-LINKQUALITY-R1] 遥测补报帧命令（与 cloud-client COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_TELEMETRY_LINK",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -870,6 +874,37 @@ export function startServer(
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr, cfg);
+      return;
+    }
+    // [W-LINKQUALITY]（1104 用户实锤×N）链路分段遥测：POST /api/telemetry/link=端侧
+    //（web/RN）断连/重连事件批量补报（断连时 ws 已死无法即时上行——补报是唯一可靠
+    // 通道；token 同 /api/artifacts 口径）；GET=24h 摘要（诊断面数据源）。src 白名单
+    // 收口（bridge 段 relay 自记——端侧伪造拒收），ts 越界（>7 天）拒行。
+    if (url.pathname === "/api/telemetry/link") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end("unauthorized"); return; }
+      if (req.method === "POST") {
+        let lqBody = "";
+        req.on("data", (c: Buffer) => { lqBody += c; });
+        req.on("end", () => {
+          try {
+            // [W-LINKQUALITY-R1]（A审 P0）：主链已改 ws 帧命令（COMMAND_TELEMETRY_LINK，
+            // web-lan/web-cloud/rn 四形态一条链）；本 HTTP 口降级为**调试口**——校验/
+            // 去重/落账与帧命令共用 ingestLinkEvents 单口（含 connect 形态收编+指纹去重）
+            const body = JSON.parse(lqBody || "{}") as { events?: unknown[] };
+            const r = ingestLinkEvents(cfg.dataDir, body.events);
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(r));
+          } catch (e) {
+            res.writeHead(400).end("bad request: " + String(e instanceof Error ? e.message : e).slice(0, 80));
+          }
+        });
+        return;
+      }
+      if (req.method === "GET") {
+        const winMs = Math.min(Math.max(Number(url.searchParams.get("windowMs")) || 86_400_000, 3_600_000), 7 * 86_400_000);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(linkSummary(cfg.dataDir, winMs)));
+        return;
+      }
+      res.writeHead(405).end("method not allowed");
       return;
     }
     // W-CMDIMPL ③（#216，设计 §3.2）：POST /api/release——发版编排三 action（主 token
