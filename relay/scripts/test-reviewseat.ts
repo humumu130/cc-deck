@@ -206,7 +206,7 @@ async function main() {
     const dr = mgr.orgAction("dispatch", { anchor, prompt: "review_only 定席单（派单缺省 role 撞名册）", gid: jia!.id, title: "rs-r2a", target_sid: w1, review_only: true }) as { ok: boolean; error?: string };
     ok(dr.ok === true, `R2-1b review_only 定席派单 ok${dr.ok ? "" : "（" + (dr.error ?? "").slice(0, 50) + "）"}`);
     await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
-    ok(findGroup(jia!.id)?.headcount.some((h) => h.session_id === w1 && (h.role === "reviewer")), "R2-1c 名册 role 保真（派单缺省 worker 未覆盖 reviewer——P1-5 击穿点闭合）");
+    ok(!!findGroup(jia!.id)?.headcount.some((h) => h.session_id === w1 && (h.role === "reviewer")), "R2-1c 名册 role 保真（派单缺省 worker 未覆盖 reviewer——P1-5 击穿点闭合）");
   }
   // P1-6 派单面按席位定权限档：reviewer 席接实施单（不带 review_only——守卫拒）；带 review_only 走 plan 落地（不 forbidden）
   {
