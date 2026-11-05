@@ -292,7 +292,7 @@ try {
     // 读前触发灌库（铁律 3；importAllForShadow 幂等快进）。P81-5 起审计写面（permission-audit
     // auditStore=ensureStore）会在链路中途建库+缓存端口，ensureStore 命中 portCache 零重扫——
     // 「冷启动全量灌」不再由 ensureStore 保证，显式快进把全链 JSON 账灌到当前再投影/对账。
-    const importFails = importAllForShadow(port, dirs);
+    const importFails = await importAllForShadow(port, dirs);
     assert(importFails.length === 0,
       `O10⓪ 七域导入零失败（快进灌账兜底；实报 ${importFails.length} 域失败）`);
     const dbDispatch = dispatchEntriesFromDb(port);

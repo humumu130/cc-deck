@@ -58,7 +58,7 @@ writeFileSync(ledgerFile, JSON.stringify([
 
 // ---------- 1. 全量导入：行数+双层字段映射（验收 1/2/3） ----------
 console.log("全量导入:");
-const r1 = importNotifications(port, dataDir);
+const r1 = await importNotifications(port, dataDir);
 assert(r1.skipped === false && r1.rescanned.length === 2, "两源全重扫（首轮无 checkpoint）");
 assert(r1.counts.notification === 4 && r1.counts.clientState === 2, `双层行数 实体 4/client 2 与 fixture 期望一致（实测 ${JSON.stringify(r1.counts)}）`);
 // k-1 跨源归并行：投影字段优先 + created_at 取较早 + ledger 专有字段进 payload
@@ -94,7 +94,7 @@ assert(listLoss(port).length === 6, "loss 总账 6 条（投影 4 + ledger 2）"
 
 // ---------- 3. 重复运行幂等（验收 4 前半） ----------
 console.log("幂等:");
-const r2 = importNotifications(port, dataDir);
+const r2 = await importNotifications(port, dataDir);
 assert(r2.skipped === true, "重复运行走 checkpoint 快进（skipped=true）");
 assert(r2.counts.notification === 4 && r2.counts.clientState === 2, "双层行数不增（幂等实证）");
 assert(listLoss(port).length === 6, "快进零写入：loss 总账不变（不重复落账）");
@@ -116,7 +116,7 @@ writeFileSync(projFile, JSON.stringify({
   ],
 }, null, 2) + "\n");
 utimesSync(projFile, new Date(Date.now() + 10), new Date(Date.now() + 10)); // 防同毫秒 mtime 巧合
-const r3 = importNotifications(port, dataDir);
+const r3 = await importNotifications(port, dataDir);
 assert(r3.skipped === false && r3.rescanned.includes(projFile) && r3.rescanned.includes(ledgerFile), "投影源失效→域重扫（两源都重灌）");
 assert(r3.counts.notification === 4 && r3.counts.clientState === 2, `重灌后行数与新期望一致 实体 4/client 2（实测 ${JSON.stringify(r3.counts)}）`);
 assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM notification WHERE condition_key = 'k-2'")[0]?.n === 0, "旧数据不残留：已删的 k-2 实体行随域清消失");
@@ -131,7 +131,7 @@ assert(port.query("PRAGMA foreign_key_check").length === 0, "重扫后仍零悬�
 console.log("坏 JSON 保护:");
 writeFileSync(ledgerFile, "{ 这不是 JSON");
 utimesSync(ledgerFile, new Date(Date.now() + 20), new Date(Date.now() + 20));
-const r4 = importNotifications(port, dataDir);
+const r4 = await importNotifications(port, dataDir);
 assert(r4.skipped === false, "ledger 失效触发重扫");
 assert(r4.counts.notification === 3, "坏 JSON 源的实体（仅 ledger 的 k-6）随域清消失，投影源 3 行照常");
 assert(r4.counts.clientState === 2, "投影源 per-client 读态不受坏源影响");
@@ -151,7 +151,7 @@ writeFileSync(projFile, JSON.stringify({
   ],
 }, null, 2) + "\n");
 utimesSync(projFile, new Date(Date.now() + 100), new Date(Date.now() + 100));
-const r6 = importNotifications(port, dataDir);
+const r6 = await importNotifications(port, dataDir);
 assert(r6.skipped === false && r6.counts.notification === 2, `同条目重复 client_id 不炸域：导入成功实体 2 行（修复前 UNIQUE 抛异常整域回滚，实际 ${r6.counts.notification}）`);
 const dupRows = port.query<{ client_id: string; read_at: number | null; dismissed_at: number | null }>(
   "SELECT client_id, read_at, dismissed_at FROM notification_client_state WHERE notification_id = ?", [ntfId("k-dup")]);

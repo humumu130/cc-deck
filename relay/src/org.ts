@@ -14,7 +14,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
 import { archiveDispatchTerminal } from "./dispatch-run-archive.js"; // M1 run 留档终态钩子（模块无环：只依赖 node/config/artifacts）
-import { readDispatchFromDbCached, resolveDirs, viaReadMode, dispatchEntriesFromDb } from "./storage/read-mode.js";
+import { readDispatchFromDbCached, resolveDirs, viaReadMode, dispatchEntriesFromDb, advanceOrgSourceCheckpoint } from "./storage/read-mode.js";
 import { writeDispatchToDb } from "./storage/write-dispatch.js"; // #292 cutover 批1 v2：append 后同步落库
 import { atomicWriteJson } from "./fs-safe.js";
 import { applyOrgChange } from "./org-schema.js";
@@ -477,7 +477,12 @@ export function writeOrgAnchor(a: OrgAnchor, dir?: string): boolean {
   try {
     const d = dir ?? orgDir();
     mkdirSync(d, { recursive: true });
-    return atomicWriteJson(orgFilePath("org.json", d), JSON.stringify(a, null, 2) + "\n");
+    const ok = atomicWriteJson(orgFilePath("org.json", d), JSON.stringify(a, null, 2) + "\n");
+    // bootfast3（t-e23febf2）：org 源写面推进 import_checkpoint——防 orgRescanPending
+    // 失配联动十表全清+全域重灌（实产源变更后重启 HTTP 阻塞 1-2.5min 根因，详见
+    // read-mode.ts advanceOrgSourceCheckpoint 头注）。失败只 warn（停旧=重扫幂等）。
+    if (ok) advanceOrgSourceCheckpoint(orgFilePath("org.json", d));
+    return ok;
   } catch (e) {
     console.warn(`[org] 锚写入失败: ${e instanceof Error ? e.message : String(e)}`);
     return false;
