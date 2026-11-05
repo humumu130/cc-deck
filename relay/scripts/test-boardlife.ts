@@ -58,10 +58,12 @@ const makeFakeFactory = () =>
 async function main() {
   const ORG = mkdtempSync(join(tmpdir(), "ccr-org-boardlife-"));
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-boardlife-"));
+  const ART = mkdtempSync(join(tmpdir(), "ccr-art-boardlife-")); // W-CARDLIFE-R2：ART 沙盒（缺省回落生产 artifacts——资格位读回执会读穿生产）
   const prev = { ...process.env };
   process.env.CCR_STORAGE_READ_MODE = "json";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_DATA_DIR = DATA;
+  process.env.CCR_ARTIFACTS_DIR = ART;
   process.env.CCR_NO_TITLE_GEN = "1";
   process.env.CCR_PM_DUTY = "0";
   delete process.env.CCR_CWD;
@@ -86,7 +88,14 @@ async function main() {
     // ============ ①生命周期全链 ============
     console.log("①生命周期（交付→submitted→重派打回→再交付→收割 done）:");
     const title = "boardlife 全链验证单";
-    const d1 = mgr.orgAction("dispatch", { anchor, prompt: "首单", gid, title }) as { ok: boolean; dispatch_id?: string };
+    // W-CARDLIFE-R2 件③随批：交付资格位——收口翻 submitted 需回执尾行合规（「结果：…
+    // ｜改动文件：…」）。title slug=boardlife 可预测→派单前预写约定回执（w-boardlife.md，
+    // 派单/需修重派两单同 slug 同回执——收口时均在场面合规）
+    try {
+      const art = process.env.CCR_ARTIFACTS_DIR;
+      if (art) writeFileSync(join(art, "w-boardlife.md"), "# W-BOARDLIFE 回执（夹具预置）\n\n结果：全链验证交付｜改动文件：无\n");
+    } catch { /* 预置失败由 waitFor 超时显形 */ }
+    const d1 = mgr.orgAction("dispatch", { anchor, prompt: "首单（回执：~/.cc-deck/artifacts/w-boardlife.md）", gid, title }) as { ok: boolean; dispatch_id?: string };
     assert(d1.ok === true, "派单");
     await waitFor(() => readDispatchLog().some((e) => e.id === d1.dispatch_id && e.status === "done"));
     const c1 = loadBoard(gid).entries.find((e) => e.dispatch_id === d1.dispatch_id);
@@ -103,7 +112,7 @@ async function main() {
     assert(t2.join(",") === "claimed,submitted", `transitions 留痕 claimed→submitted（实 ${JSON.stringify(t2)}）`);
 
     // 需修重派（审查发现问题 R2 续单——同题无 entry_id）→接卡打回 claimed
-    const d2 = mgr.orgAction("dispatch", { anchor, prompt: "需修重派", gid, title }) as { ok: boolean; dispatch_id?: string };
+    const d2 = mgr.orgAction("dispatch", { anchor, prompt: "需修重派（回执：~/.cc-deck/artifacts/w-boardlife.md）", gid, title }) as { ok: boolean; dispatch_id?: string };
     assert(d2.ok === true, "需修重派派发");
     await waitFor(() => {
       const c = loadBoard(gid).entries.find((e) => e.dispatch_id === d2.dispatch_id);

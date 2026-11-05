@@ -3,6 +3,10 @@
 # 机器闸只核机械事实：回执存在性+必需节 / 派单台账终态 / 分支新提交清单 / 未提交改动 / squash 命令建议打印。
 # 判断不自动化（SSOT 不可自动化内核，docs/design/ssot-decision.md 拍板表）：
 #   diff 抽查、自测证据核验、真机分级、是否执行 squash——全部留 PM（界面层 .claude/commands/harvest.md 有人工清单）。
+# [W-CARDLIFE-R2 1105] --merge 同链翻/--reject/退出码守卫=**降级路径**：relay 在位后
+#   pr-report MERGED 事件内建状态机自动翻当轮+同链前代卡（session-manager pr-report
+#   case cardlife-pr-merged/chain-close）——本脚本翻卡保留给老 relay 兼容期与新 relay
+#   板写 degraded 时的手动兜底；硬闸（同链悬空卡拒收割）维持 R1 行为不变。
 # 用法：
 #   leader-harvest <dispatch-id> [选项]
 # 选项（缺省按派单账 leader-dispatches.ndjson 寻址；手工覆盖用于账外单）：
