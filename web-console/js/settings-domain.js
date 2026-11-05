@@ -825,27 +825,43 @@ function connectLan(ctx) {
       // 桌面→ccDeck.openExternal（失败 catch 降级复制）；浏览器→window.open 探路，被拦（返回 null）
       // 再合成 a[target=_blank noopener noreferrer] 点击并复制链接兜底——弹窗拦截器吞掉时用户至少
       // 拿到「链接已复制」反馈。幂等挂 window，消费点（B4 验收单/地基更新与诊断/mobile 下载）点击期解析。
+      // W-NOTIFYFIX（1105 用户实锤「打开验收单」死钮）：降级链五段此前后任一段都可能静默——
+      // 裸 sharedToast 对 #toast 缺失形态 `if(!t) return` 零反馈、a.click 被吞无感知、壳侧非
+      // http(s) 校验静默 Ok（配套 main.rs 已改 Err）。本批纪律：**任何降级都必须可见反馈**
+      // ——统一走 bridge toast()（__ccDeck005B4 惰性查节点+错误级样式，release-domain 同款
+      // 消费面）+console.error 留痕（devtools/日志侧可查），#toast 缺失兜底 body 直挂。
       if (!window.__ccDeck005OpenUrl) {
-        const sharedToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(sharedToast._t); sharedToast._t = setTimeout(() => t.classList.remove("show"), 2600); };
+        const sharedToast = (msg, isError) => {
+          try { console.error("[openUrl]", msg); } catch (_) {}
+          const viaBridge = window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function";
+          if (viaBridge) { window.__ccDeck005B4.toast(msg, isError ? "error" : undefined); return; }
+          // bridge 未就绪兜底（本 helper 幂等挂载先于 B4 暴露的极端时序）：自挂 toast 节点
+          let t = document.getElementById("toast");
+          if (!t) { t = document.createElement("div"); t.id = "toast"; (document.body || document.documentElement).appendChild(t); }
+          t.textContent = (isError ? "⚠ " : "") + msg;
+          t.classList.add("show");
+          clearTimeout(sharedToast._t);
+          sharedToast._t = setTimeout(() => t.classList.remove("show"), 3200);
+        };
         const copyLink = async (url) => {
           try { await navigator.clipboard.writeText(url); sharedToast("链接已复制 · 可粘贴到浏览器打开"); return true; }
-          catch (_) { sharedToast("打开被拦截 · 链接：" + url); return false; }
+          catch (e) { sharedToast("打开被拦截 · 链接：" + url, true); return false; }
         };
         window.__ccDeck005OpenUrl = async function openExternalUrl(url) {
           const u = String(url || "");
-          if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接"); return false; }
+          if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接（非 http/https）：" + u.slice(0, 80), true); return false; }
           if (window.ccDeck && typeof window.ccDeck.openExternal === "function") {
             try { await window.ccDeck.openExternal(u); return true; }
-            catch (_) { return copyLink(u); }
+            catch (e) { sharedToast("系统浏览器打开失败，已转复制兜底：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); return copyLink(u); }
           }
           let opened = null;
-          try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (_) { opened = null; }
+          try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (e) { opened = null; }
           if (opened) { try { opened.opener = null; } catch (_) {} return true; }
           // window.open 被拦：合成 a 点击（沙箱禁 window.open 但放行锚点导航的场景）+ 复制兜底
           const a = document.createElement("a");
           a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
           document.body.appendChild(a);
-          try { a.click(); } catch (_) {}
+          try { a.click(); } catch (e) { sharedToast("锚点导航失败：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); }
           a.remove();
           return copyLink(u);
         };
@@ -3625,6 +3641,12 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       window.__ccDeck005SourceState = () => ({ view: viewSource(), shellCloud: !!shellCloud, cloudMode: !!cloudMode,
         cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status, cloudRelayName: String(cloudCtx.relayName || ""),
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
+        // W-ENGINESOURCE（1105 用户实锤）：云源 engine_catalog 只读口——「创建到」选远程时
+        // 新建弹引擎下拉按源取数（本机视角下不能再沿用本机探测结果串台）。数据面=
+        // #236 B 双槽 lastSnapshotPayload（云 SNAPSHOT 完整 payload，各 relay 探测自己
+        // 宿主机的目录在此）；cloudHasSnapshot 供端上区分「获取中/旧 relay 无目录」占位态
+        cloudEngineCatalog: (() => { const caps = cloudCtx.lastSnapshotPayload && cloudCtx.lastSnapshotPayload.source_capabilities; return caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; })(),
+        cloudHasSnapshot: !!cloudCtx.hasSnapshot,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
         lanRelayName: String(ctx.relayName || ""), // #110：B2 域建卡打源标读点（跨 script 块不可直引 ctx；S.relayName 会被后到云快照覆写，LAN 名必须取链上真值）
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });

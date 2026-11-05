@@ -25,7 +25,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: expo-app/package-lock.json
+          # W-RELAYFRESHCI：relay lock 入缓存键（下方重建步在 relay 目录 npm ci）
+          cache-dependency-path: |
+            expo-app/package-lock.json
+            relay/package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -61,6 +64,23 @@ jobs:
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" app.json
           echo "stamped: $V"
 
+      - name: Rebuild embedded relay bundle + freshness gate（W-RELAYFRESHCI）
+        # 同 desktop.yml（test.98/99 陈账事故治本，2026-11-05）：APK 本身不内嵌
+        # relay bundle（expo-app 无消费面），本步是纯闸位——① 同一 tag 触发的
+        # 所有出包 job 一致强制过闸：tag==VERSION 断言让「打了 tag 但 VERSION
+        # 没 bump」在 android 面也红（与 desktop 面互为冗余证词）；② 当场重建
+        # 保证本 job 工作区与 desktop job 同源（未来 APK 若嵌 relay，闸已在位）。
+        # relay npm ci 在 ubuntu 上拉的 better-sqlite3/esbuild 为 linux-x64，
+        # 仅进本 job 工作区闭包，APK 不消费，无平台影响。
+        # 闸须在本步内重建后立即跑（下方无烙印步再碰 web-console，无顺序冲突）。
+        working-directory: relay
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build-plugin.mjs
+          ARGS=""
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then ARGS="--expect-tag ${GITHUB_REF_NAME#v}"; fi  # W-RELAYFRESHCI-R1 P2：REF_TYPE 判 tag（v 开头分支 dispatch 不误传）
+          node scripts/check-embedded-freshness.mjs $ARGS
+
       - name: Build release APK
         working-directory: expo-app/android
         # 2026-10-11 用户拍板 nova 变体 → 1103 W-NOVAONLY 收敛：nova 已是唯一通道
@@ -94,10 +114,18 @@ jobs:
           - [ ] 手机端装机后「关于」显示完整通道版本（latest-test.json 已更新）
           - [ ] 桌面侧部署面同步（若同批有桌面出包）
           CHK
+      - name: Artifact name suffix（分支名含 / 会炸 upload-artifact）
+        # 对齐 desktop.yml 同名步（其 2026-09 实锤先例）：workflow_dispatch 跑分支时
+        # ref_name 含 / 是 artifact 名非法字符必炸——2026-11-05 W-RELAYFRESHCI
+        # dispatch 分支验证 android 首跑实锤（Upload artifact 步 error）；tag 触发
+        #（tag 名无 /）不受影响
+        shell: bash
+        run: echo "REF_SLUG=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Deck-${{ github.ref_name }}
+          name: CC-Deck-${{ env.REF_SLUG }}
           path: |
             expo-app/android/app/build/outputs/apk/release/*.apk
             DEPLOY-CHECKLIST.md

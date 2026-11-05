@@ -167,12 +167,18 @@ async fn probe_local() -> Option<Value> {
 }
 
 /// 外链转系统浏览器（等价 Electron 的 setWindowOpenHandler + shell.openExternal）：
-/// 只放行 http/https，其余协议静默忽略——壳内不导航到任意站点
+/// 只放行 http/https，其余协议**响亮拒绝**（仍不导航——壳内不导航到任意站点不变）。
+/// W-NOTIFYFIX（1105 用户死钮实锤配套）：原先非 http(s) 静默 `return Ok(())`——调用方
+/// （web openUrl 链）把 Ok 当「已开浏览器」，用户侧零反馈=死钮形态之一。改 Err 后 web 侧
+/// catch 走复制兜底+toast 可见反馈（防降级链静默纪律）。
 #[tauri::command]
 fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let lowered = url.to_ascii_lowercase();
     if !(lowered.starts_with("http://") || lowered.starts_with("https://")) {
-        return Ok(());
+        // W-NOTIFYFIX-R1 P1（A 审 rustc 实证）：字节切片 &url[..60] 在多字节 URL 上 panic
+        //（byte60 落中文等字符内 → not a char boundary；release panic=abort 整壳崩）。
+        // get(..60) 按 char boundary 安全截断（不足 60 字节整串返回）——中文图纸名常态可达。
+        return Err(format!("blocked non-http(s) url: {}", url.get(..60).unwrap_or("")));
     }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
