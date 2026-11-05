@@ -15,6 +15,10 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
+  // W-SCROLLFIX：离底新消息 chip 形态——计数>0 时圆钮变胶囊「N 条新消息 ↓」（数组后置
+  // 覆盖 jumpFab 的定宽；样式与桌面 base.css .back-to-bottom.has-unread 同语言）
+  jumpFabWide: { width: "auto", minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 12, flexDirection: "row", gap: 5 },
+  jumpFabCount: { color: c.text, fontSize: 12, fontWeight: "600", lineHeight: 14 },
   jumpFabT: { color: c.dim, fontSize: 16, fontWeight: "700", lineHeight: 18, marginTop: -1 },
   // 头部（用户拍板口径）：R1 = 返回+标题；R2 = 元信息行（源·ctx 一句话左聚 + 胶囊簇右锚）。
   // #159 方案A：标题↔元信息视觉间距 6→9pt（marginTop 3→6），head paddingVertical 6→4

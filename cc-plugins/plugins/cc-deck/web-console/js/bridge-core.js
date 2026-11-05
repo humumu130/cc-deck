@@ -250,6 +250,13 @@
                     } else applySnapshot(frame.payload, evSource);
                     changed = true;
                   }
+                  else if (frame.type === "REVIEW_SEAT_UPDATED") {
+                    // W-REVIEWSEAT-R1 P2-2：评审席配置帧合并进快照缓存——他端设置卡即时
+                    // 刷新（原无消费者=空闲系统无 SNAPSHOT 时他端无限期陈旧；操作端靠
+                    // set 后显式 get 自愈只通半程）。payload=reviewSeatSnapshotPayload 同构。
+                    if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.review_seat = frame.payload || null;
+                    changed = true;
+                  }
                   else if (frame.type === "COLLAB_MODE_UPDATED") {
                     // W-MODE：切换帧合并进快照缓存（设置域开关回显数据源；bridge.sessions
                     // 同步增删防锚卡残留——通知域跳转/selectSessionCard 消费桥缓存）
