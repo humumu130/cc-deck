@@ -101,10 +101,13 @@
                 //（W-AWAITUSER 语义：等用户拍板的行不因龄退役）。
                 const STALE_MS = 7 * 86400000;
                 const versionOfText = (t) => { const m = String(t || "").match(/v?(\d+\.\d+\.\d+)(?:-test\.(\d+))?/); return m ? { major: m[1], test: m[2] ? Number(m[2]) : null } : null; };
+                // W-NOTIFYFIX-R1 P2-2：主三段数值化比较——字典序在 0.7.10 及以后失效
+                //（"0.7.9"<"0.7.10"=false → 0.7.9 误判不退役）；本版已升段 0.7.10 必然到来。
+                const verLt = (a, b) => { const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0); } return false; };
                 const currentVer = versionOfText(window.__ccDeck005Version || "");
                 const verObsolete = (titleVer) => {
                   if (!titleVer || !currentVer) return false; // 提不出/无烙印（旧壳）不判——fail-open 保守
-                  if (titleVer.major !== currentVer.major) return titleVer.major < currentVer.major; // 主三段字典序（0.7.0<0.7.1）
+                  if (titleVer.major !== currentVer.major) return verLt(titleVer.major, currentVer.major); // 主三段数值序（0.7.9<0.7.10 正确）
                   if (currentVer.test === null) return titleVer.test !== null; // 当前正式版：一切 test 单过时
                   if (titleVer.test === null) return false; // 当前 test 版：无 test 序号的标题不比（罕见形态）
                   return titleVer.test < currentVer.test; // 同主段比 test 序号

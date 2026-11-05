@@ -388,7 +388,8 @@
     .queue { min-width: 235px; width: var(--queue-w, 235px); flex: 0 0 auto; } /* #201 件⑤：钳制下限与 JS（cc-deck-queue-w-shared 235–420）对齐——跨页单键已在 #201⑨，此处补 CSS 侧防挤压一致性 */
     .queue-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
     .queue-resizer:hover::after, .queue-resizer:active::after { background: var(--border-strong); }
-    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } /* W-NOTIFYFIX 件二（1105 用户问「间距是不是太大」）：13→8px 收档对齐面板节奏（session-list-tools 10px 相邻档；标题→搜索框垂直紧邻面） */
+    .queue-head { display: flex; align-items: center; gap: 13px; margin-bottom: 13px; } /* 基线档回填（W-NOTIFYFIX-R1 P2-1：件二全局收窄退役——见下行限定版） */
+    #d-session .queue-head { gap: 8px; margin-bottom: 8px; } /* W-NOTIFYFIX 件二+R1 收窄（1105 用户问「间距是不是太大」）：13→8px **限定会话面板**（原全局选择器五面板齐伤：团队/项目/设置/#d-notify 标题全收=commit 叙事「会话面板」与实现不符——A 审 P2-1，任务书本意即会话面板；session-list-tools 10px 相邻档） */
     .queue-head h2 {flex: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-D);}
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
     /* W-UIFB ⑨：第二列列头「＋」美化（i=11）——去边框、加号增大增粗（悬停淡底兜可发现性）；

@@ -175,7 +175,10 @@ async fn probe_local() -> Option<Value> {
 fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let lowered = url.to_ascii_lowercase();
     if !(lowered.starts_with("http://") || lowered.starts_with("https://")) {
-        return Err(format!("blocked non-http(s) url: {}", &url[..url.len().min(60)]));
+        // W-NOTIFYFIX-R1 P1（A 审 rustc 实证）：字节切片 &url[..60] 在多字节 URL 上 panic
+        //（byte60 落中文等字符内 → not a char boundary；release panic=abort 整壳崩）。
+        // get(..60) 按 char boundary 安全截断（不足 60 字节整串返回）——中文图纸名常态可达。
+        return Err(format!("blocked non-http(s) url: {}", url.get(..60).unwrap_or("")));
     }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
