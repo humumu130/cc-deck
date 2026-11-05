@@ -53,7 +53,7 @@
 export type NormalizedMode = "ask" | "plan" | "edit-auto" | "full-auto";
 export type EffectiveMode = NormalizedMode | "forbidden";
 export type CapabilityState = "confirmed" | "unverified" | "unsupported";
-export type PolicyRole = "team_pm" | "worker" | "review_pm";
+export type PolicyRole = "team_pm" | "worker" | "review_pm" | "watchdog";
 
 import type { ManagedPermissionMode, PermissionCapabilitySummary } from "./types.js";
 
@@ -117,7 +117,7 @@ export function normalizeLegacyPermissionMode(value: string | null | undefined):
 }
 
 const ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"] as const;
-const ROLES: readonly PolicyRole[] = ["team_pm", "worker", "review_pm"];
+const ROLES: readonly PolicyRole[] = ["team_pm", "worker", "review_pm", "watchdog"];
 const CAPS: readonly CapabilityState[] = ["confirmed", "unverified", "unsupported"];
 const CONSERV: Record<NormalizedMode, number> = { ask: 0, plan: 1, "edit-auto": 2, "full-auto": 3 };
 
@@ -128,6 +128,11 @@ const CEILING: Record<PolicyRole, Record<string, NormalizedMode>> = {
   team_pm: { 咨询: "edit-auto", 随手办: "full-auto", 轻立项: "full-auto", 正经立项: "full-auto", 暂缓: "plan", 看门狗: "plan" },
   worker: { 咨询: "edit-auto", 随手办: "full-auto", 轻立项: "full-auto", 正经立项: "full-auto", 暂缓: "ask", 看门狗: "ask" },
   review_pm: { 咨询: "plan", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan", 看门狗: "plan" },
+  // W-WATCHDOGPERM（t-a86739fd，1105 用户实锤「观察员没看到」=dispatch role=watchdog 被
+  // 词表拒）：巡查员=只读巡查主体——**全 tier 恒 plan 上限**（plan=只读档：禁写产品码/禁改
+  // 配置，与巡查员岗位 rows 纪律同构；对照 worker 全线收窄到最保守档）。任何写档请求
+  //（edit-auto/full-auto/bypass）恒 above_role_tier_ceiling 拒=越权面根。
+  watchdog: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" },
 };
 
 /** §5.2 tier×角色「默认」列（policy_source=tier_default 时物化 requested；轻立项/看门狗
@@ -136,6 +141,7 @@ const TIER_DEFAULT: Record<PolicyRole, Record<string, NormalizedMode>> = {
   team_pm: { 咨询: "plan", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan", 看门狗: "plan" },
   worker: { 咨询: "ask", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "ask", 看门狗: "ask" },
   review_pm: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" },
+  watchdog: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" }, // W-WATCHDOGPERM：上岗恒 plan（只读巡查档）
 };
 
 export interface PolicyInput {
@@ -234,8 +240,9 @@ export function evaluatePermission(input: PolicyInput): PolicyResult {
   if (requested === null) {
     if (source === "mixed_team_default") {
       // §5.3.1/§5.2 混编新开卡：PM/worker 服务端物化 bypassPermissions（=full-auto）写审计；
-      // review_pm 例外不继承（§5.3.3→plan）
-      if (input.role === "review_pm") {
+      // review_pm 例外不继承（§5.3.3→plan）；watchdog 同例外（W-WATCHDOGPERM：只读主体
+      // 不继承任何 bypass 物化——恒 plan 上岗）
+      if (input.role === "review_pm" || input.role === "watchdog") {
         requested = "plan";
         normalized = "plan";
         materialized = "mixed_team_default_review_pm_excluded";
