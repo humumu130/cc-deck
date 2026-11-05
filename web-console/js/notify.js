@@ -324,6 +324,10 @@
                     const out = [];
                     const idx = new Map();
                     for (const r of items) {
+                      // W-NOTIFYPOLISH-R1 P1-2（A 审+PM 拍板）：stale 行豁免聚合——过时
+                      // 归档单要一眼看到总量、逐张可核销（notifyfix「过时可查」承诺不因
+                      // 聚合静默改写）；聚合只用于活跃同题降噪。stale 行照原样逐行出。
+                      if (r.staleWhy) { out.push(r); continue; }
                       const ak = r.kind + "`" + r.title;
                       const rep = idx.get(ak);
                       if (rep) { rep.aggN++; rep.aggChildren.push(r); }
@@ -338,19 +342,23 @@
                   // p2-batch2 修（notify 审 P2-组清空越组）：grpClear 带组别（y=注意/n=动态）
                   // ——旧版两组合用 "soft" 调 clearSoftNotifications（清全部非 active=点「注意」
                   // 把「动态」也清了）；本版按组精确清
-                  const group = (label, dot, items, grpClear, collapsible) => items.length
+                  // W-NOTIFYPOLISH-R1 P1-1（A 审实锤）：组头 cnt 单源=原始组行数（与 rail
+                  // badge 同源 actionRows.length 口径）——旧 cnt 吃 rowsOf(aggregate()) 长度，
+                  // 收起=簇数/展开=簇+子项，同屏与 rail 打架（收起「4」vs rail「7」、展开跳 7）。
+                  // cnt 由调用方显式传原始长度；缺省回落 items.length（兼容旧口）。
+                  const group = (label, dot, items, grpClear, collapsible, cnt) => items.length
                     ? '<div class="ngrp' + (collapsible ? " ngrp-fold" : "") + '"' + (collapsible ? ' data-notify-grp-toggle="1" role="button" tabindex="0" title="展开/收起已处理动态"' : "") + ' data-notify-grp="' + (dot === "r" ? "r" : dot) + '"><i class="ndot ' + dot + (dot === "r" ? " np-pulse" : "") + '"></i>' + escapeHtml(label)
                       + '<span class="caret">' + (collapsible ? (dynamicCollapsed ? "▸" : "▾") : "") + '</span>'
-                      + '<span class="cnt">' + items.length + "</span>"
+                      + '<span class="cnt">' + (cnt ?? items.length) + "</span>"
                       + (grpClear && (!collapsible || !dynamicCollapsed) ? '<button class="grp-clr" type="button" data-notify-grp-clear="' + grpClear + '" title="清空本组">清空</button>' : "")
                       + "</div>" + (collapsible && dynamicCollapsed ? "" : items.map((r) => rowMarkup(r, r.isSub === true)).join(""))
                     : "";
                   if (rows.length) {
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
-                    const flatHtml = group("需你行动", "r", rowsOf(aggregate(actionRows)), "")
-                      + group("注意", "y", rowsOf(aggregate(attentionRows)), "y")
-                      + group("动态", "n", rowsOf(aggregate(dynamicRows)), "n", true); // observe3：健康态默认折叠零占位，组头点开
+                    const flatHtml = group("需你行动", "r", rowsOf(aggregate(actionRows)), "", false, actionRows.length) /* R1 P1-1：cnt=原始组行数（rail 同源），不随聚合/开合变 */
+                      + group("注意", "y", rowsOf(aggregate(attentionRows)), "y", false, attentionRows.length)
+                      + group("动态", "n", rowsOf(aggregate(dynamicRows)), "n", true, dynamicRows.length); // observe3：健康态默认折叠零占位，组头点开
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
