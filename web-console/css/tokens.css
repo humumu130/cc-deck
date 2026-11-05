@@ -166,7 +166,7 @@
       --radius: 10px;
       --radius-sm: 7px;
       --radius-lg: 14px;
-      --mono: Consolas, "Cascadia Mono", "JetBrains Mono", "Microsoft YaHei", monospace;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", "JetBrains Mono", "Microsoft YaHei", monospace; /* W-NOTIFYPOLISH ⑥C5：ui-monospace 前置——Mac 全 app 落 SF Mono（旧 Windows 序 Mac 落 Courier；.nid 里的 fallback 因 var 已定义永不生效） */
       --sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     }
     html[data-theme="light"] {
