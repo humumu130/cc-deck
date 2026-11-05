@@ -1666,8 +1666,7 @@ function connectLan(ctx) {
             const d = Number(tg.getAttribute("data-review-seat-d"));
             const cur = { ...((rs && rs.team_override) || {}) };
             const next = Math.max(0, Math.min(8, (cur[gid] ?? 0) + d));
-            if (next === 0) delete cur[gid]; else cur[gid] = next;
-            body = { team_override: cur };
+            body = { team_override: { ...cur, [gid]: next } }; // W-REVIEWSEAT-R2：删行=显式发 0（store 逐键合并 0=删）——整表省键在合并语义下=旧值保留（R1 回归实锤）
           }
           if (!body) return;
           tg.disabled = true;

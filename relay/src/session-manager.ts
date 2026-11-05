@@ -7965,7 +7965,7 @@ ${lines.join("\n")}
             if (seat.reason === "leader") return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
             return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
           }
-          const r = addMember(gid, sid, role, selection);
+          const r = addMember(gid, sid, role, selection, undefined, { explicitRole: true }); // W-REVIEWSEAT-R2 P1-5：用户口=显式改岗（可覆盖既有标注）；派单入编无此令=保真
           if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
           this.emitOrgState();
           // P0 编制排队排水：手动复拉若腾出/占回名额面变化，试排一轮（幂等，无队列 no-op）
@@ -8913,8 +8913,16 @@ ${lines.join("\n")}
       return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm/reviewer）` };
     }
     // P81-9 off：perm=null 跳过求值与 forbid 面；spawnMode 恢复 P81 前硬传 bypass
+    // W-REVIEWSEAT-R2 P1-6（R1 验收死链实锤）：派单面硬请求 bypassPermissions 使
+    // plan 天花板 role（reviewer/watchdog）恒 above_role_tier_ceiling→全组型恒
+    // forbidden、engine_role=reviewer 不可达（六行模板链断在第一环）。修：按 bizRole
+    // 档位定 requested——plan 天花板 role 走 requested=null（tier_default/mixed 物化
+    // 分支接管，reviewer/watchdog 恒 plan 落地）；其余 role 维持 #232「派单=授权」
+    // bypass 语义不变（user_authorized_bypass 生产闸照旧）。
+    const PLAN_CEILING_ROLES = new Set(["reviewer", "watchdog", "review"]);
+    const dispatchRequested = (bizRole && PLAN_CEILING_ROLES.has(bizRole)) ? null : "bypassPermissions" as const;
     const perm = policyOn ? evaluatePermission({
-      requested_mode: "bypassPermissions",
+      requested_mode: dispatchRequested,
       engine: engineForPolicy,
       role: bizRole ?? "worker", // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
       tier,

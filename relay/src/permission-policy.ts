@@ -239,10 +239,14 @@ export function evaluatePermission(input: PolicyInput): PolicyResult {
     if (source === "mixed_team_default") {
       // §5.3.1/§5.2 混编新开卡：PM/worker 服务端物化 bypassPermissions（=full-auto）写审计；
       // review_pm 例外不继承（§5.3.3→plan）
-      if (input.role === "review_pm") {
+      if (input.role === "review_pm" || input.role === "reviewer" || input.role === "watchdog") {
+        // W-REVIEWSEAT-R2 P1-6：plan 天花板 role（reviewer/watchdog 同 review_pm 例外）
+        // ——混编物化 bypass 会撞 above_role_tier_ceiling 且物化前缀不匹配降级分支→
+        // forbidden 死链；与 review_pm 同款排除（plan 落地，materialized 前缀保
+        // mixed_team_default_* 命中降级安全网）。
         requested = "plan";
         normalized = "plan";
-        materialized = "mixed_team_default_review_pm_excluded";
+        materialized = input.role === "review_pm" ? "mixed_team_default_review_pm_excluded" : `mixed_team_default_${input.role}_plan_ceiling`;
       } else {
         requested = "bypassPermissions";
         normalized = "full-auto";

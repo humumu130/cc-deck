@@ -196,6 +196,38 @@ async function main() {
   // E6（P1-4）dispatch_hint：route 响应池席带落席指引（源码锚+文案新口径）
   ok(smSrc.includes("dispatch_hint") && smSrc.includes("勿用项目组 gid 派池席"), "E6 池席落席指引（gid=池组+anchor=项目仓——三跳第 3 跳闭环文档化）");
 
+  // ================= R2 三断言（P1-5 名册保真/P1-6 派单面 plan+模板/设置页删键）=================
+  console.log("R2 组：");
+  // P1-5 名册 role 保真：member-add 设 reviewer → review_only 定席派单 → 名册 role 仍 reviewer
+  {
+    addMember(jia!.id, w1, "reviewer", undefined, undefined, { explicitRole: true }); // 用户显式改岗 w1→reviewer
+    ok(teamReviewerSeats(jia!.id).some((x) => x.session_id === w1), "R2-1a 显式改岗生效（w1→reviewer）");
+    await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
+    const dr = mgr.orgAction("dispatch", { anchor, prompt: "review_only 定席单（派单缺省 role 撞名册）", gid: jia!.id, title: "rs-r2a", target_sid: w1, review_only: true }) as { ok: boolean; error?: string };
+    ok(dr.ok === true, `R2-1b review_only 定席派单 ok${dr.ok ? "" : "（" + (dr.error ?? "").slice(0, 50) + "）"}`);
+    await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
+    ok(findGroup(jia!.id)?.headcount.some((h) => h.session_id === w1 && (h.role === "reviewer")), "R2-1c 名册 role 保真（派单缺省 worker 未覆盖 reviewer——P1-5 击穿点闭合）");
+  }
+  // P1-6 派单面按席位定权限档：reviewer 席接实施单（不带 review_only——守卫拒）；带 review_only 走 plan 落地（不 forbidden）
+  {
+    const g7 = mgr.orgAction("dispatch", { anchor, prompt: "评审席审查单（plan 落地链）", gid: jia!.id, title: "rs-r2b", target_sid: w1, review_only: true }) as { ok: boolean; error?: string };
+    ok(g7.ok === true, `R2-2a reviewer 席 review_only 派单 ok（plan 天花板落地非 forbidden——P1-6 死链闭合）${g7.ok ? "" : "（" + (g7.error ?? "").slice(0, 60) + "）"}`);
+    await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
+    const perm = (mgr as any).sessions.get(w1)?.state?.permission_mode;
+    ok(perm === "plan" || perm === "default", `R2-2b 落地权限档=plan 系（实测 ${perm}）`);
+    const imp = mgr.orgAction("dispatch", { anchor, prompt: "实施单撞 reviewer 席（守卫）", gid: jia!.id, title: "rs-r2c", target_sid: w1 }) as { ok: boolean; error?: string };
+    ok(imp.ok === false && (imp.error ?? "").includes("只读守卫"), "R2-2c 实施单仍被守卫拒（名册保真后 isReviewerSeat 恒真）");
+    // 模板注入（派单面真实形状：wrapDispatchPromptAt 前置 reviewBlock——从源码静态锚+回读 created 无口——用 reviewOnlyBlock 含量+收口后 logs 检索）
+    ok((mgr as any).reviewOnlyBlock().includes("review-*.md"), "R2-2d 纪律段 review-* 回执格式在（六行模板真实注入源）");
+  }
+  // 设置页删键真删：writeReviewSeatConfig({team_override:{pg-x:0}}) → 键被删
+  {
+    writeReviewSeatConfig({ team_override: { "pg-del1": 2, "pg-del2": 3 } });
+    ok(readReviewSeatConfig().team_override["pg-del1"] === 2 && readReviewSeatConfig().team_override["pg-del2"] === 3, "R2-3a 两键先在场");
+    writeReviewSeatConfig({ team_override: { "pg-del1": 0 } }); // 设置页删行新语义（显式 0）
+    const after = readReviewSeatConfig().team_override;
+    ok(!("pg-del1" in after) && after["pg-del2"] === 3, "R2-3b 删键真删+他键保留（三口同构闭合——P1-3 回归修复）");
+  }
   console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
   process.exit(fail > 0 ? 1 : 0);
 }
