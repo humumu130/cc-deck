@@ -12,7 +12,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -175,6 +175,55 @@ async function main(): Promise<void> {
     assert(outD.includes("RESULT harvest=d-noslug-x fails=0") || outD.includes("RESULT harvest=d-noslug-x"), "D① 无 slug 账行 --merge 零翻转不炸（链寻址空=无操作）");
     const r2Final = loadBoard(gid).entries.find((e) => e.dispatch_id === did2);
     assert(r2Final?.status === c2Before?.status, "D② R2 卡不受边界跑动（仍待返修态）");
+
+    // ---------- E R1 返修：退出码守卫+链窗+reject 幂等 ----------
+    console.log("E R1 返修：");
+    // E 前置：D 组整文件覆写了 ledger——重建 did1/did2 账行（E 组自洽夹具）
+    writeFileSync(join(dataD, "leader-dispatches.ndjson"), ledgerRow(did1, "R1 返修") + "\n" + ledgerRow(did2, "R2 二次返修") + "\n", "utf-8");
+    // E①（P1）死端口：env 覆盖 CCR_PORT 打向死口——org_post 全拒→翻转失败→exit 1+锁保留
+    const wtLock = join(root, "wt-cardlife", ".cc-deck-lock");
+    // 先造活锁形态：直接写锁文件（leader-dispatch 语义——树锁在场）
+    writeFileSync(wtLock, JSON.stringify({ slug: SLUG, dispatch_id: did1, session_id: "s-cardlife", created_at: Date.now(), expires_at: Date.now() + 7200_000 }), "utf-8");
+    const deadPort = 18790; // 与沙盒 relay 错开的死口（E 组专用——复用 runBash 但改 env port）
+    let deadOut = "";
+    try {
+      const r = await execFileAsync("bash", [harvestBin, did1, "--merge"], { encoding: "utf-8", env: { ...process.env, CCR_PORT: String(deadPort), CCR_TOKEN: tok, CCR_ORG_DIR: orgD, CCR_DATA_DIR: dataD }, maxBuffer: 8 * 1024 * 1024 });
+      deadOut = r.stdout;
+    } catch (e) {
+      const err = e as { stdout?: string; code?: number };
+      deadOut = (err.stdout ?? "") + `\n(bash exit ${err.code ?? "?"})`;
+    }
+    console.log(deadOut.split("\n").filter((l) => /RESULT|锁|exit|✗/.test(l)).map((l) => "  | " + l).join("\n"));
+    assert(/\(bash exit 1\)$/.test(deadOut.trim()) || deadOut.includes("(bash exit 1)"), `E① 死端口 EXIT_CODE=1（修前 exit 0——A 审受控实验复现）`, deadOut.slice(-120));
+    assert(/RESULT harvest=\S+ fails=[1-9]/.test(deadOut), `E② fails>0 RESULT 响亮（闸红/翻红任一路径——修前死端口 exit 0 静默）`, deadOut.slice(-160));
+    assert(existsSync(wtLock), "E③ 锁文件物理在场（rm 未执行）");
+    // E④ 修复后（活端口）锁正常清+exit 0（对照组）
+    const outE4 = await runBash([did1, "--merge"]);
+    assert(!existsSync(wtLock), "E④ 活端口闸全绿（卡已 done）→锁正常清（对照）");
+    assert(!outE4.includes("(bash exit"), `E④b 对照 exit 0（${outE4.slice(-60).trim()}）`);
+    // E⑤（P2-1）链窗：ledger 追加同 slug 老线行（ts=20 天前）+新线卡——老线卡不被新线翻
+    const oldTs = Date.now() - 20 * 86400 * 1000;
+    const oldRow = JSON.stringify({ dispatch_id: "d-oldline", id: "d-oldline", title: "R0 初代（老线复用同题）", session_id: "s-cardlife", slug: SLUG, gid, type: "fix", branch: "fix/cardlife", base_sha: baseSha, worktree: wt, receipt, gate: "ok", ts: oldTs });
+    const ledNow = readFileSync(join(dataD, "leader-dispatches.ndjson"), "utf-8");
+    writeFileSync(join(dataD, "leader-dispatches.ndjson"), ledNow + oldRow + "\n", "utf-8");
+    // 老线卡造册（板仓直插 submitted 形态——夹具权限在测试进程内）
+    const boardNow = loadBoard(gid);
+    const boardPath = join(orgD, "boards", gid + ".json");
+    const rawBoard = JSON.parse(readFileSync(boardPath, "utf-8")) as { entries: Array<Record<string, unknown>> };
+    rawBoard.entries.push({ id: "e-oldline", text: "cardlife 老线卡（20 天前同题）", status: "submitted", dispatch_id: "d-oldline", updated_at: oldTs });
+    writeFileSync(boardPath, JSON.stringify(rawBoard), "utf-8");
+    const outE5 = await runBash([did1, "--merge"]);
+    const oldCard = JSON.parse(readFileSync(boardPath, "utf-8")) as { entries: Array<{ id: string; status?: string; dispatch_id?: string }> };
+    const eOld = oldCard.entries.find((x) => x.dispatch_id === "d-oldline");
+    assert(eOld?.status === "submitted", `E⑤ 老线卡（ts 距 20 天>窗 14）不被新线翻（实 ${eOld?.status}——误伤绝迹）`);
+    assert(!outE5.includes("e-oldline"), "E⑤b 老线卡零触碰输出");
+    // E⑥（P3-1）reject 幂等：同理由二次 --reject 不重复录
+    const outE6a = await runBash([did2, "--reject", "幂等验证理由"]);
+    const outE6b = await runBash([did2, "--reject", "幂等验证理由"]);
+    const c2n = loadBoard(gid).entries.find((e) => e.dispatch_id === did2);
+    const hits = ((c2n?.note ?? "").match(/打回：幂等验证理由/g) ?? []).length;
+    assert(outE6b.includes("幂等跳过"), `E⑥ 二次运行幂等跳过（${outE6b.includes("幂等跳过") ? "在" : "缺"}）`);
+    assert(hits === 1, `E⑥b note 打回标记恰一次（实 ${hits}——修前每次运行+1）`, (c2n?.note ?? "").slice(-160));
 
     await server.close();
     console.log(`\n========== cardlife 套件：${pass} 通过 / ${fail} 失败 ==========`);

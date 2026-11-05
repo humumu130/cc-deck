@@ -147,7 +147,16 @@ gid = str(me.get("gid") or "")
 if not slug or not gid:
     sys.exit(0)
 # 同链世代：同 slug 且同 gid 的全部 dispatch（含本单）；世代序=账行序（leader-dispatch 追加写）
-chain = [r.get("dispatch_id") for r in rows if r.get("slug") == slug and r.get("gid") == gid and r.get("dispatch_id")]
+# W-CARDLIFE-R1 P2-1（链窗）：slug=title 前 24 字符可被新线复用（同题重派跨月形态）——
+# 同链还需 ts 邻近：距本单行 <CCR_CARDLIFE_CHAIN_WINDOW_DAYS 天（缺省 14；env 可调）。
+# 老线滞留卡（ts 距离超窗）不进 chain_set=不被新线 --merge 翻（误伤绝迹）。
+import time as _t
+_me_ts = float(me.get("ts") or 0) or _t.time() * 1000
+_win_days = float(os.environ.get("CCR_CARDLIFE_CHAIN_WINDOW_DAYS") or 14)
+_win_ms = _win_days * 86400 * 1000
+chain = [r.get("dispatch_id") for r in rows
+         if r.get("slug") == slug and r.get("gid") == gid and r.get("dispatch_id")
+         and abs((float(r.get("ts") or 0) or _me_ts) - _me_ts) < _win_ms]
 chain_set = set(filter(None, chain))
 bp = os.path.join(org_dir, "boards", gid + ".json")
 try:
@@ -203,6 +212,13 @@ if [ "$REJECT_REASON" != "" ]; then
   while IFS=$'\t' read -r g eid ddisp dtext dnote dstatus; do
     [ -z "$eid" ] && continue
     [ "$ddisp" != "$did" ] && continue # 只动本单卡（打回对象=被返修单）
+    # W-CARDLIFE-R1 P3-1（幂等）：note 已含同理由打回标记（「打回：REASON」子串——代次号
+    # 每次新生成不参比）则跳过追加——重复运行不重复录
+    if printf '%s' "$dnote" | grep -qF "打回：${REJECT_REASON}"; then
+      echo "· 卡 $eid note 已含本理由打回标记——幂等跳过（R${rnd}）"
+      n=$((n+1))
+      continue
+    fi
     newnote="$(printf '%s' "$dnote" | REASON="R${rnd} 打回：${REJECT_REASON}（1105 审查节点表达——状态不动，返修收割时链闭）" python3 -c 'import json,os,sys
 old=json.loads(sys.stdin.read() or "\"\"")
 add=os.environ["REASON"]
@@ -318,6 +334,15 @@ fi
 
 # W-ORG-DEFECTS 件2：闸全绿=单终态，顺手清 worktree 互斥锁（relay 收口边/harvest 收尾/2h
 # 过期三路清锁之二；fails>0 时保留锁——单未收口，同树仍需互斥）。
+# W-CARDLIFE-R1（A 审 P1）：守卫真落地——原注释称「fails>0 保留」但 rm 无条件+exit 0
+# 无条件（死端口受控实验：RESULT fails=1 而 EXIT_CODE=0+锁被清——relay 重启窗常见的
+# 非边缘形态，翻转失败即锁失守=同树可再派）。--reject 面早已 [ fails>0 ] && exit 1，
+# 本面与其对称收口。
+if [ "${fails:-0}" -gt 0 ]; then
+  echo "· 翻转/闸有红（fails=${fails}）——worktree 锁保留（${worktree:-（无树）}），单未收口同树仍互斥"
+  echo "RESULT harvest=$did fails=${fails}（机器闸${fails} 红请处置；人工判断项见上，勿跳过）${DO_MERGE:+ 同链翻转见上}"
+  exit 1
+fi
 if [ -n "$worktree" ] && [ -d "$worktree" ] && [ -f "$worktree/.cc-deck-lock" ]; then
   rm -f "$worktree/.cc-deck-lock" && echo "✓ worktree 互斥锁已清（$worktree/.cc-deck-lock）"
 fi
