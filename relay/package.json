@@ -114,6 +114,7 @@
     "test:prreview": "tsx scripts/test-prreview.ts",
     "test:prbackflow": "tsx scripts/test-prbackflow.ts",
     "test:dutywire": "tsx scripts/test-dutywire.ts",
+    "test:cardlife": "tsx scripts/test-cardlife.ts",
     "test:pmseat": "tsx scripts/test-pmseat.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
     "test:pmresume": "tsx scripts/test-pmresume.ts",
