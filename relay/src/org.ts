@@ -297,6 +297,8 @@ interface DutyFile {
   pm_override?: PmOverride | null;
   pm_appoint?: DutyAppoint | null;
   appoint_rejected?: AppointRejected[];
+  /** [W-DUTYWIRE] 值守位空窗期的关键事件待投队列（claim/回活补投；cap 20 截旧） */
+  duty_feed_pending?: DutyFeedPendingItem[];
 }
 // [W-PMSEAT] 缓存按解析目录键控（Map<orgDir, DutyFile>）：同进程多沙盒并存（测试
 // 夹具逐块换 CCR_ORG_DIR——CI 实锤：前夹具 approve 落的 override 带测试进程 pid 恒活，
@@ -405,6 +407,44 @@ export function recordAppointRejected(sessionId: string, cliPid = 0, dir?: strin
   const rest = readAppointRejected(dir).filter((r) => r.session_id !== sessionId);
   const next = [{ session_id: sessionId, cli_pid: Number(cliPid) || 0, ts: Date.now() }, ...rest].slice(0, 50);
   writeDutyFile({ ...cur, appoint_rejected: next }, dir);
+}
+
+// ---------- [W-DUTYWIRE] 值守唤醒 pending 队列（1105 断档第三现治本） ----------
+// 值守位空时关键事件（收割完成/审查回执落盘/PM 失联）入队，席位落位/回活时补投——
+// 「空窗期事件不丢、claim 即达」。cap 20 截旧（事件文本自含时序，旧事件唤醒价值
+// 递减；审计全量在 duty-feed.ndjson，此处只承载待投语义）。
+export interface DutyFeedPendingItem { ts: number; kind: string; text: string; }
+
+function readDutyFeedPendingRaw(dir?: string): DutyFeedPendingItem[] {
+  const v = readDutyFile(dir).duty_feed_pending;
+  if (!Array.isArray(v)) return [];
+  return v.filter((r) => r && typeof r === "object" && typeof r.ts === "number" && typeof r.kind === "string" && typeof r.text === "string") as DutyFeedPendingItem[];
+}
+
+export function readDutyFeedPending(dir?: string): DutyFeedPendingItem[] {
+  return readDutyFeedPendingRaw(dir);
+}
+
+export function appendDutyFeedPending(item: DutyFeedPendingItem, dir?: string): void {
+  const next = [...readDutyFeedPendingRaw(dir), item].slice(-20);
+  writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: next }, dir);
+}
+
+/** 取走全部待投（清队列原子于 duty.json 单写口；投递失败由调用方决定重入队） */
+export function takeDutyFeedPending(dir?: string): DutyFeedPendingItem[] {
+  const out = readDutyFeedPendingRaw(dir);
+  if (out.length) writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: [] }, dir);
+  return out;
+}
+
+/** R1（A 审 P1-1）：批量重入队——take 的对称体。投递失败（目标不在册=断档/重启
+ *  收编窗）时全量保序回写（append 逐条×N 次读写盘且各自 slice 截尾有乱序险，
+ *  批量单写口一次落）。cap 20 同 append 口径（溢出截尾保最新）。 */
+export function restoreDutyFeedPending(items: DutyFeedPendingItem[], dir?: string): void {
+  const clean = items.filter((r) => r && typeof r === "object" && typeof r.ts === "number" && typeof r.kind === "string" && typeof r.text === "string");
+  if (!clean.length) return;
+  const next = [...readDutyFeedPendingRaw(dir), ...clean].slice(-20);
+  writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: next }, dir);
 }
 
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会
@@ -765,6 +805,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rate <gid> <sid> <good|bad>                熟手评价（M3 路由表；bad=下次派单避开）
 #   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
 #   org member-retire <gid> <sid> [reason]         成员级退休（编制除名；本组悬账按中断收口，路由档案保留）
+#   org review-seat status|set …                  评审池配置（W-REVIEWSEAT：enabled/size/ov——热生效）
 #   org member-add <gid> <sid> [role] [engine] [model] [provider]  复拉入编（可覆盖引擎选择）
 #   org exp append <text> <kind> [role] [project]  经验申报（W-EXPP1 团队经验库；kind=pitfall|practice|preference|fact|term，role/project 缺省 any/global；term=术语解码条目免自动淘汰）
 #   org exp list [status|kind|role|/path]          经验库查询（参数按形状识别：active/retired、五 kind、角色名、锚路径）
@@ -806,6 +847,47 @@ abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
 case "$action" in
   status)
     body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    ;;
+  review-seat)
+    # W-REVIEWSEAT（1105 用户拍板）：评审池配置 CLI 口（与设置页同 orgAction 双口）。
+    #   org review-seat status                    —— 配置+池现状+模型分布+团队 override
+    #   org review-seat set <k=v> [k=v …]         —— k ∈ enabled=1|0 / size=1-8 / ov:<gid>=0-8（热生效）
+    #   席位增删走 org member-add/remove（组=评审池 pg- 查 status 输出）
+    case "\${1:-}" in
+      status)
+        body="$(python3 -c 'import json;print(json.dumps({"action":"review-seat-get"},ensure_ascii=False))')"
+        ;;
+      set)
+        shift || true
+        [ $# -ge 1 ] || { echo "用法: org review-seat set enabled=0|1 / size=1-8 / ov:<gid>=0-8（可多键）" >&2; exit 1; }
+        body="$(python3 - "$@" <<'PYRS'
+import json, sys
+d = {"action": "review-seat-set"}
+for a in sys.argv[1:]:
+    k, _, v = a.partition("=")
+    if k == "enabled":
+        d["enabled"] = v.strip() in ("1", "true", "on")
+    elif k == "size":
+        n = int(v) if v.strip().isdigit() else 0
+        if not (1 <= n <= 8): raise SystemExit("size 取值 1-8")
+        d["default_size"] = n
+    elif k.startswith("ov:"):
+        gid = k[3:]
+        n = int(v) if v.strip().isdigit() else -1
+        if not (0 <= n <= 8): raise SystemExit("ov 取值 0-8")
+        ov = d.get("team_override") or {}
+        if n == 0: ov.pop(gid, None)
+        else: ov[gid] = n
+        d["team_override"] = ov
+    else:
+        raise SystemExit("未知键 " + k + "（enabled / size / ov:<gid>）")
+print(json.dumps(d, ensure_ascii=False))
+PYRS
+)"
+        ;;
+      *)
+        echo "用法: org review-seat status | set <enabled=0|1|size=1-8|ov:gid=0-8 …>" >&2; exit 1 ;;
+    esac
     ;;
   join)
     # X0 件2（PRD §4.7 C+#4）：本机会话自荐入编——CLI 侧无 session 身份，带 cwd+ppid

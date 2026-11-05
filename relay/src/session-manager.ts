@@ -27,7 +27,9 @@ import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
   clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
+  appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
+import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
@@ -106,6 +108,8 @@ import type { EmployeeHomeSettingsPayload
 import { cronTasksKey, readCronTasks } from "./cron.js";
 // W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排缺陷 P0 批）：worktree 互斥锁底座 + 审计词表
 import { claimWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther } from "./dispatch-lock.js";
+// W-REVIEWSEAT（1105 用户拍板）：全局评审池 store + 三跳路由数据源
+import { readReviewSeatConfig, writeReviewSeatConfig, ensureReviewPoolGroup, reviewPoolSnapshot, teamReviewerSeats, reviewPoolGid, reviewSeatSnapshotPayload } from "./review-seat.js";
 import { worktreeDirty } from "./worktree-gc.js"; // W-TREEGC：收口清锁守卫（脏树不清锁防裸奔）
 // W-DELIVERCB（用户 1102 拍板）：沃克交付 Callback 三线机制——去重账+文案（纯 fs 模块）
 import { amendFailedReport, appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js"; // domstep1r1：amendFailedReport=failed 六态修正行单点（P2-A③）
@@ -998,6 +1002,8 @@ export class SessionManager {
     c.unref();
     const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
     r.unref();
+    this.startDutyLostWatch(); // [W-DUTYWIRE]：值守失联观测拍（60s）+pending 补投顺拍（重启窗收口）
+    this.flushDutyFeedPending(); // [W-DUTYWIRE]：重启补投——席位经活跃度凭证判活存活时，空窗期积压事件即达
   }
 
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
@@ -5045,7 +5051,9 @@ export class SessionManager {
         // recordRouting=false = 挂起联动收口：回合中断是用户决策不是 worker 干砸，
         // 熟手评价无感
         if (recordRouting) {
-          recordRoutingResult(e.gid, key, status, receipt);
+          // W-REVIEWSEAT-R1 P1-5：评审席收口现判带角色（评审单路由史标 reviewer——
+          // pickVeteranEligible 历史维排除依据，运行态 isReviewerSeat 之外的兜底）
+          recordRoutingResult(e.gid, key, status, receipt, undefined, this.isReviewerSeat(key) ? "reviewer" : undefined); // R3：role 尾插位（第 6 参），dir 显式 undefined 占位
           // #92 W-NOTIFY2 E：失败升级链——worker 连败（failed≥阈值 且 failed>count，无成功
           // 穿插的计数近似）不只进台账：action 桶可操作通知直达用户（retire/换人/重派决策）
           if (status === "failed") this.escalateWorkerFailures(e.gid, key);
@@ -5438,6 +5446,11 @@ ${lines.join("\n")}
   }
 
   private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string, interrupted = false): void {
+    // [W-DUTYWIRE]（1105 断档第三现）：收割完成（done 且非中断口径）入 duty feed——
+    // 值守 PM 被唤醒跟进后续（板面收敛/下一单分诊）；空位入 pending。尽力而为不阻断收口。
+    if (status === "done" && !interrupted) {
+      try { this.emitDutyFeedEvent("harvest-done", `派单 ${e.id.slice(0, 8)} 收割完成（${truncate(receipt, 120)}）`); } catch { /* 尽力而为 */ }
+    }
     // W-ORG-DEFECTS 件2：收口清 worktree 锁——该单持有的 .cc-deck-lock 随终态释放
     //（worker「退出收尾清锁」的机制面；leader-harvest 收尾/2h 过期为另两路兜底）。
     // 尽力而为：CCR_WT_ROOT 扫描失败不阻断收口主路径。
@@ -5729,7 +5742,7 @@ ${lines.join("\n")}
     // 用户 ✓ 才落位——未确认期间零喂活（防「先斩后奏」），✗ 记 appoint_rejected
     // 不再自动提名。候选现算搬 dutyCandidateId（提案专用，消费面不碰）。
     const ov = readPmOverride();
-    if (ov && ov.cli_pid > 0 && readCollabMode(this.cfg.dataDir) === "no-leader") {
+    if (ov && readCollabMode(this.cfg.dataDir) === "no-leader") { // [W-DUTYWIRE]：cli_pid>0 门撤——外部席位（pid=0）经 pmOverrideLiveness 活跃度分支判活（原门=外部席位隐形恒空转）
       // R1-B-F2/A-P1① 复合判活（原纯 kill(0)）：pid 活但 ov.session_id 在册且其当前
       // cli_pid ≠ ov.cli_pid（CLI 重启换 pid，旧 pid 已回收/被占位）= 假阳视死清档——
       // 纯 pid 探测的「死 PM 锁席（pid 回收占位→互斥闸恒拒+candidate 恒 null 两出口
@@ -5749,6 +5762,12 @@ ${lines.join("\n")}
    * "stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）/"dead"=pid 死。
    * stale 与 dead 同清档（读路径顺手清档语义维持），区别只在审计措辞与定性。 */
   private pmOverrideLiveness(ov: { cli_pid: number; session_id: string }): "alive" | "stale" | "dead" {
+    // [W-DUTYWIRE]（1105 断档第三现）：外部 SDK 会话席位（cli_pid=0）无进程可探——
+    // 活跃度凭证判定（events.ndjson 最近帧在活跃窗内=活）。窗=CCR_DUTY_ACTIVITY_MIN
+    // 缺省 15min（claim 资格/席位判活/候选提名三口同窗，duty-feed.ts 单点）
+    if (!(ov.cli_pid > 0)) {
+      return sessionActiveByEvents(this.cfg.dataDir, ov.session_id) ? "alive" : "dead";
+    }
     try { process.kill(ov.cli_pid, 0); } catch { return "dead"; }
     const s = this.sessions.get(ov.session_id);
     if (s?.state.cli_pid && s.state.cli_pid > 0 && s.state.cli_pid !== ov.cli_pid) return "stale";
@@ -5763,7 +5782,7 @@ ${lines.join("\n")}
   private dutyCandidateId(): string | null {
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return null;
     const ov = readPmOverride();
-    if (ov && ov.cli_pid > 0) {
+    if (ov) { // [W-DUTYWIRE]：cli_pid>0 门撤（外部席位同判活——pmOverrideLiveness 活跃度分支）
       // R1-B-F2 同款复合判活（防 override pid 回收假活→候选恒 null 永不出任命卡）
       if (this.pmOverrideLiveness(ov) === "alive") return null;
       clearPmOverride(); // dead/stale：清档后可提新名
@@ -5778,8 +5797,10 @@ ${lines.join("\n")}
       if (this.leaderId && s.state.session_id === this.leaderId) continue;
       if (rejected.has(s.state.session_id)) continue; // [W-PMSEAT] 否决档跳过
       const pid = s.state.cli_pid;
-      if (!pid) continue;
-      try { process.kill(pid, 0); } catch { continue; }
+      // [W-DUTYWIRE]：外部会话（无 CLI pid）同权入候选——活跃度凭证判活（与 claim 同窗
+      // 同单点）。SDK 会话常驻心跳（5s/帧），15min 窗内无帧≈会话确已停摆
+      if (pid && pid > 0) { try { process.kill(pid, 0); } catch { continue; } }
+      else if (!(pid && pid > 0) && !sessionActiveByEvents(this.cfg.dataDir, s.state.session_id)) continue; // [W-DUTYWIRE] 外部会话（无 pid）活跃度凭证同权
       const at = s.state.updated_at || 0;
       const isExt = !!s.state.external;
       if (at > bestAt || (isExt && !bestIsExternal)) { bestAt = at; best = s.state.session_id; bestIsExternal = isExt; }
@@ -5807,6 +5828,7 @@ ${lines.join("\n")}
         const pid = Number(c.payload.cli_pid) || 0;
         let alive = !!sid && pid > 0;
         if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+        else if (sid) { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：pid=0 卡（外部会话形态）活跃度判——原恒判死=外部 claim 卡被 auto 消卡用户永不可见
         if (!alive) {
           decideConfirm(c.id, false, "auto:pm-dead");
           // R1-A-P1②：auto:pm-dead **不入否决档**——「pid 死」常态=CLI 重启换 pid
@@ -5982,6 +6004,105 @@ ${lines.join("\n")}
               ? { hint: `值守任命待用户决议：候选会话 ${pendingAppoint.session_id.slice(0, 8)}（${pendingAppoint.origin === "claim" ? "主动认领" : "自动提名"}）——批准后开始值守喂活，否决不认领` }
               : { hint: "值守位空（no-leader 无确认任命）——外部会话活跃时自动提名出任命卡，或 org pm claim 主动认领（未决零喂活）" }),
     };
+  }
+
+  // ---------- [W-DUTYWIRE] 值守唤醒链（1105 断档第三现治本）：关键事件→duty feed→值守 PM ----------
+  /** 关键事件入 feed：值守位非空→notifyConfirm 直推值守 PM（[待确认] todo+USER_NOTE
+   *  +通知账三面——awaituser 实战验证过的最轻既有跨会话唤醒通道，不造新通道）；空位
+   *  →pending 队列（claim/回活补投——空窗期事件不丢）。审计 duty-feed.ndjson 全量留痕。
+   *  事件源（事件驱动主链）：收割完成=notifyDispatchClosed done 边（非中断）；审查回执
+   *  落盘=/api/deliver 登记边（review-*.md）；PM 失联=下方 watch 拍。 */
+  emitDutyFeedEvent(kind: DutyFeedKind, text: string): void {
+    try {
+      // R1 P1-2（A 审）：leader 模式（生产缺省）无值守位概念——dutyTargetId 在该模式
+      // 返回 leaderId=收割事件直推 Leader 自我（纯噪音）+失联拍误报轰炸用户的根源。
+      // feed 事件在 leader 模式零路由零 pending（该模式永远不会有值守位，pending 积压
+      // 无消费方）；审计留痕 routed:"skipped-mode" 保可观测。
+      if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") {
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), routed: "skipped-mode" });
+        return;
+      }
+      const target = this.dutyTargetId();
+      if (target) {
+        // R1 P1-1（A 审）：直推按投递真值记审计 + false 落 pending——原实现先记
+        // routed:"delivered" 再忽略 notifyConfirm 返回值：目标不在注册表（断档/重启
+        // 收编窗）时事件静默丢且审计谎报 delivered。notifyConfirm false = 目标会话
+        // 不在册，落 pending 等收编/回活后 flush 补投（零丢失主战场路径）。
+        const ok = this.notifyConfirm(target, `[值守唤醒] ${text}`);
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), target, routed: ok ? "delivered" : "pending" });
+        if (!ok) appendDutyFeedPending({ ts: Date.now(), kind, text: truncate(text, 200) });
+      } else {
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), routed: "pending" });
+        appendDutyFeedPending({ ts: Date.now(), kind, text: truncate(text, 200) });
+      }
+    } catch { /* 唤醒链尽力而为——绝不阻断事件主路径 */ }
+  }
+
+  /** pending 补投（任命 ✓ 落位 / relay 重启回活时）：合并单条推（逐条推=todo 轰炸） */
+  flushDutyFeedPending(): void {
+    try {
+      // R1 P1-2：leader 模式不补投（emit 侧已不积压，历史遗留 pending 留队等模式
+      // 切回 no-leader——不推 Leader 自我）
+      if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") return;
+      const target = this.dutyTargetId();
+      if (!target) return;
+      const items = takeDutyFeedPending();
+      if (!items.length) return;
+      // R1 P2-3：slice(-10) 撤——cap 20 的队列补投只带 10 条=静默丢。全量计数披露+
+      // 尾窗展示：标题如实「N 条（最近 M 条）」，正文取最新 12 条完整拼行（truncate
+      // 400 兜底只裁最旧——最新事件优先可见，丢弃由计数披露=非静默）
+      const show = items.length > 12 ? items.slice(-12) : items;
+      const lines = show.map((it) => `${new Date(it.ts).toLocaleTimeString("sv-SE")} ${it.text}`).join("；");
+      // R1 P1-1（A 审 主战场实锤）：投递真值——notifyConfirm false（目标不在册=断档/
+      // 重启收编窗，构造器 :1005 flush 恰在 adopt 前注册表必空）时**全量保序重入队**
+      // （原 take 清队后静默丢=本特性主战场路径丢数据）；审计如实记 pending。
+      const ok = this.notifyConfirm(target, `[值守唤醒·补投 ${items.length} 条${items.length > show.length ? `（显示最近 ${show.length} 条）` : ""}] ${truncate(lines, 400)}`);
+      if (!ok) {
+        restoreDutyFeedPending(items);
+        appendDutyFeedLog({ ts: Date.now(), kind: "flush", text: `补投未达（目标 ${target.slice(0, 8)} 不在册——断档/收编窗），${items.length} 条重入队`, target, routed: "pending" });
+        return;
+      }
+      appendDutyFeedLog({ ts: Date.now(), kind: "flush", text: `补投 ${items.length} 条空窗期积压事件`, target, routed: "delivered" });
+    } catch { /* 尽力而为 */ }
+  }
+
+  private dutyLostTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPmLostAlertAt = 0;
+  /** P2 断档可观测（用户=最终兜底人）：值守 PM 帧龄超阈（CCR_DUTY_LOST_MIN 缺省 20min）
+   *  → 推用户通知面（通知账 attention 组=手机通知中心可见）+ feed 审计 routed=user；
+   *  1h 节流防持续失联轰炸。60s 拍=事件驱动主链之外的可观测兜底（巡检只兜底军律）；
+   *  顺拍 flushDutyFeedPending（重启/席位回活窗补投）。 */
+  private startDutyLostWatch(): void {
+    if (this.dutyLostTimer) return;
+    this.dutyLostTimer = setInterval(() => {
+      try {
+        // R1 P1-2（A 审）：leader 模式（生产缺省）不拍失联——dutyTargetId 在该模式
+        // 返回 leaderId，帧龄判定对 Leader 会话失真=每小时误报轰炸用户手机的根源。
+        // 观测拍只在 no-leader（值守位语义存在的唯一模式）运行。
+        if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") return;
+        const target = this.dutyTargetId();
+        if (!target) { this.flushDutyFeedPending(); return; }
+        const v = Number(process.env.CCR_DUTY_LOST_MIN);
+        const lostMin = Number.isFinite(v) && v >= 1 ? v : 20;
+        const at = lastFrameAtFromEvents(this.cfg.dataDir, target);
+        const now = Date.now();
+        if (at !== null && now - at <= lostMin * 60_000) { this.flushDutyFeedPending(); return; }
+        this.flushDutyFeedPending();
+        if (now - this.lastPmLostAlertAt < 3600_000) return;
+        this.lastPmLostAlertAt = now;
+        const mins = at === null ? "∞" : Math.round((now - at) / 60_000);
+        appendDutyFeedLog({ ts: now, kind: "pm-lost", text: `值守 PM 会话 ${target.slice(0, 8)} 帧龄 ${mins}min（阈 ${lostMin}min）——推用户兜底`, routed: "user" });
+        try {
+          this.upsertNotification("system", "duty-pm-lost", target, {
+            title: "值守 PM 疑似失联",
+            body: `值守 PM 会话 ${target.slice(0, 8)} 已 ${mins} 分钟无帧（阈值 ${lostMin} 分钟）——断档窗口内的派单/回执可能无人跟进，请检查 PM 会话或改派值守。`,
+            severity: "waiting", group: "attention", actionable: true,
+            sessionId: target, domain: "org", returnPath: "/",
+          });
+        } catch { /* 通知尽力而为 */ }
+      } catch { /* 拍面尽力而为 */ }
+    }, 60_000);
+    this.dutyLostTimer.unref?.();
   }
 
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
@@ -7154,7 +7275,12 @@ ${lines.join("\n")}
           const self = this.locateSelfSession(str("cwd"), Number(str("pid")) || 0);
           if (!self) return { ok: false, error: "未定位到你的会话——请在项目目录内运行 org pm claim" };
           const pid = self.state.cli_pid;
-          if (!pid) return { ok: false, error: "会话无 CLI pid（外部会话需在终端活跃时 claim）" };
+          // [W-DUTYWIRE]（1105 断档第三现治本）：外部 SDK 会话（无 CLI pid）claim 资格
+          // 从「有 pid」改「活跃度凭证」——events.ndjson 最近帧在活跃窗内即可（与 CLI
+          // 会话同权；窗=CCR_DUTY_ACTIVITY_MIN 缺省 15min，三口同窗单点）
+          if (!pid && !sessionActiveByEvents(this.cfg.dataDir, self.state.session_id)) {
+            return { ok: false, error: `会话无 CLI pid 且近 ${dutyActivityWindowMin()} 分钟无帧（活跃度凭证不足）——外部会话活跃后重试（CCR_DUTY_ACTIVITY_MIN 可调窗）` };
+          }
           // 幂等：已是确认值守位本人 → 直接收执（重复 claim 无害）
           const cur = this.pmDutyStatus();
           if (cur.alive && cur.session_id === self.state.session_id) {
@@ -7189,7 +7315,7 @@ ${lines.join("\n")}
             return { ok: true, data: { needsConfirm: true, confirm: ownPending, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
           }
           // 提案：写 duty.json pm_appoint 镜像 + 出 pm-appoint 确认卡（不写 override）
-          setDutyAppoint({ session_id: self.state.session_id, cli_pid: pid, cwd: self.state.cwd || "", origin: "claim", proposed_at: Date.now() });
+          setDutyAppoint({ session_id: self.state.session_id, cli_pid: pid || 0, cwd: self.state.cwd || "", origin: "claim", proposed_at: Date.now() }); // [W-DUTYWIRE]：外部会话 pid=0（活跃度凭证形态）
           const confirm = addConfirm({
             kind: "pm-appoint",
             title: `值守 PM 认领：${self.state.title ? truncate(self.state.title, 24) : self.state.session_id.slice(0, 8)}`,
@@ -7262,6 +7388,7 @@ ${lines.join("\n")}
             slug: str("slug") || undefined,
             target_sid: str("target_sid") || undefined, // W-PRREVIEW：显式定席（review-route 路由结果落席）
             exclude_sessions: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined, // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话）
+            review_only: p.review_only === true ? true : undefined, // W-REVIEWSEAT：审查单标记（评审席只读守卫+纪律注入）
           });
         }
         // W-PRREVIEW（期一④ PR 互审，1104 拍板）：互审员路由查询——只路由零派发零
@@ -7269,6 +7396,38 @@ ${lines.join("\n")}
         // PM 子代理（不自动开新会话顶位）。count 钳 1..3=审查档位上限（档位由 PM 按
         // 全局审查纪律定——一行 1 审/常规 2 审其一反方/重大 3 审，本口不代定档，
         // 审查员是 worker 还是子代理不影响档位规则）。
+        // W-REVIEWSEAT（1105 用户拍板「评审席产品化」）：评审池配置面——get=配置+池组
+        // 现状+模型分布+各团队 override 生效值（设置页数据源，SNAPSHOT 同构）；
+        // set=动态调整（enabled/default_size/team_override 三键任意子集）——写 store+
+        // 池组 cap 同步+REVIEW_SEAT_UPDATED 全端广播（热生效：路由每次现读 store，零重启）。
+        case "review-seat-get": {
+          // W-REVIEWSEAT-R1 P2-5：get 纯读——ensureReviewPoolGroup（建组+弃确认卡+激活）
+          // 副作用移到 set 面；get 只读快照（首次部署前 get 不再产生「评审池被拒」历史噪音）
+          return { ok: true, data: { config: reviewSeatSnapshotPayload() } };
+        }
+        case "review-seat-set": {
+          const enabled = typeof p.enabled === "boolean" ? p.enabled : undefined;
+          const size = typeof p.default_size === "number" ? p.default_size : undefined;
+          const ovIn = p.team_override;
+          const team_override = ovIn && typeof ovIn === "object" && !Array.isArray(ovIn)
+            ? Object.fromEntries(Object.entries(ovIn as Record<string, unknown>).filter(([k, v]) => typeof k === "string" && k.startsWith("pg-") && Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 8).map(([k, v]) => [k, Math.floor(Number(v))]))
+            : undefined;
+          if (enabled === undefined && size === undefined && team_override === undefined) return { ok: false, error: "无有效字段（enabled:boolean / default_size:1-8 / team_override:{gid:0-8}）" };
+          try { ensureReviewPoolGroup(); } catch { /* 幂等 */ }
+          // W-REVIEWSEAT-R1 P1-2：写失败真抛→orgAction 返 fail（不广播假成功/不落「已更新」
+          // 审计——原链 writeReviewSeatConfig 吞错后照发 REVIEW_SEAT_UPDATED+toast 热生效）
+          let next;
+          try {
+            next = writeReviewSeatConfig({ ...(enabled !== undefined ? { enabled } : {}), ...(size !== undefined ? { default_size: size } : {}), ...(team_override !== undefined ? { team_override } : {}) });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.emitChainAudit("pm-wake", `review-seat 配置写盘失败（未生效）：${msg}`);
+            return { ok: false, error: msg };
+          }
+          this.bus.emitTransient("REVIEW_SEAT_UPDATED", reviewSeatSnapshotPayload());
+          this.emitChainAudit("pm-wake", `review-seat 配置更新：enabled=${next.enabled} size=${next.default_size} override=${JSON.stringify(next.team_override)}（热生效）`);
+          return { ok: true, data: { config: next } };
+        }
         case "review-route": {
           const gid = str("gid");
           if (!gid) return { ok: false, error: "gid 必填" };
@@ -7281,7 +7440,19 @@ ${lines.join("\n")}
             exclude: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined,
             anchorKey: g.anchor_dir,
           });
-          return { ok: true, data: { routed: rr.routed, reviewers: rr.reviewers, ...(rr.reason ? { reason: rr.reason } : {}) } };
+          // W-REVIEWSEAT-R1 P1-4：池席落席指引——routeReviewers 的池跳命中席不在项目组
+          // 编制（池组跨团队），PM 按项目 gid 派单会被编制闸拒（定席不在组内）。响应按
+          // source 附落席组合：pool 席→gid=池组 gid + anchor=项目仓（dispatchWorker 编
+          // 制闸按池组过+worktree 锚定项目仓）；peer 席→目标所在组 gid。落席闭环文档化
+          // （原组合「能用但无文档无提示无测试」=三跳断在第 3 跳——A 审 P1-4）。
+          const poolGid = (rr.reviewers ?? []).some((x) => x.source === "pool") ? readReviewSeatConfig().pool_gid : undefined;
+          return {
+            ok: true,
+            data: {
+              routed: rr.routed, reviewers: rr.reviewers, ...(rr.reason ? { reason: rr.reason } : {}),
+              ...(poolGid ? { dispatch_hint: `池席落席：leader-dispatch --gid ${poolGid} --anchor ${g.anchor_dir}（gid=评审池组[编制闸过]，anchor=项目仓[worktree 锚定]）——勿用项目组 gid 派池席` } : {}),
+            },
+          };
         }
         // W-PRREVIEW：PR 互审台账段行——原单链 in_review（审查发起，phase=begin）/
         // done（squash-merge 收割收口，phase=end）段，时序证据链落权威台账。幂等：
@@ -7973,7 +8144,7 @@ ${lines.join("\n")}
             if (seat.reason === "leader") return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
             return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
           }
-          const r = addMember(gid, sid, role, selection);
+          const r = addMember(gid, sid, role, selection, undefined, { explicitRole: true }); // W-REVIEWSEAT-R2 P1-5：用户口=显式改岗（可覆盖既有标注）；派单入编无此令=保真
           if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
           this.emitOrgState();
           // P0 编制排队排水：手动复拉若腾出/占回名额面变化，试排一轮（幂等，无队列 no-op）
@@ -8211,6 +8382,7 @@ ${lines.join("\n")}
           if (!sid) return fail("任命生效", { error: "卡载荷缺 sid（陈旧卡）" });
           let alive = pid > 0;
           if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+          else { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：外部席位（pid=0）活跃度凭证决议时复核（与 claim 同窗——防「提案后停摆又 ✓」落死席）
           if (!alive) {
             // R1-A-P1②：死席**不入否决档**（系统推断≠用户否决——CLI 重启换 pid 正是
             // 「pid 死」常态，入档=同席 resume 复活后被永久逐出自动提名）。防刷闸
@@ -8235,7 +8407,7 @@ ${lines.join("\n")}
             clearPmOverride(); // 现任死/stale：清档腾位（与 dutyTargetId 读路径同语义）
           }
           const cand = this.sessions.get(sid);
-          if (!cand || !cand.state.cli_pid || cand.state.cli_pid !== pid) {
+          if (pid > 0 && (!cand || !cand.state.cli_pid || cand.state.cli_pid !== pid)) { // [W-DUTYWIRE]：pid=0 外部形态跳过 pid 一致性复核（无 pid 可比，活跃度已判）
             // 在册但 pid 已换代（提名到决议间 CLI 重启）＝卡载 pid 已失效——按死席同款
             // 作废（不入否决档）；不在册（挤出/冷窗）则放行 pid 探活结果（外部会话常态）
             if (cand) {
@@ -8254,6 +8426,7 @@ ${lines.join("\n")}
           if (!r.ok) return fail("任命生效", r);
           clearDutyAppoint(sid);
           this.emitChainAudit("pm-appoint-approved", `session=${sid.slice(0, 8)} pid=${pid} origin=${typeof c.payload.origin === "string" ? c.payload.origin : "auto"}——值守喂活恢复`);
+          this.flushDutyFeedPending(); // [W-DUTYWIRE]：席位落位即补投空窗期积压事件（claim 后首拍可见）
           break;
         }
         case "dispatch-closeout": {
@@ -8590,7 +8763,7 @@ ${lines.join("\n")}
     });
   }
 
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string; /** W-REVIEWSEAT：审查单标记——目标席为评审席（本组 reviewer/全局池成员）时必须 true（只读守卫）；true 时注入评审席纪律段 */ review_only?: boolean }):
     { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string; /** domstep1：幂等命中时的在途单 id（回执对账键） */ duplicate_of?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // W-RATELIMIT429：全局并发闸——在编活 worker（managed 且 agent 在）≥帽
@@ -8645,7 +8818,18 @@ ${lines.join("\n")}
         }
       }
     }
-    const role = input.role?.trim() || "worker";
+    let role = input.role?.trim() || "worker"; // let：R3 P1-2 席位维度推导可补 reviewer（下方）
+    // W-REVIEWSEAT-R3 P1-2（A 审实锤接线缺口）：席位维度推导——全部生产派单口
+    //（leader-dispatch/dispatch_hint/web-console）都不传 role，review_only 定席单
+    // 仍走 worker 档（bypass/full-auto）＝「按席位角色定 requested」未兑现。修：
+    // input.role 缺省（"worker" 缺省形态）且（review_only===true 或 target_sid 名册
+    // isReviewerSeat）→ role 补 "reviewer"（真权限轴：plan 天花板+纪律段，不靠 prompt）。
+    // P2-2 口径：显式 role 打存量 worker 席**不升格名册**（席升格唯一正口=member-add
+    //——显式 role 只影响本单权限档；名册 role 保真见 R2 P1-5）。
+    if (role === "worker" && (input.review_only === true || (typeof input.target_sid === "string" && input.target_sid && this.isReviewerSeat(input.target_sid)))) {
+      role = "reviewer";
+    }
+
     if (input.engine !== undefined && !isSessionEngine(input.engine)) return { ok: false, error: `未知引擎: ${String(input.engine)}` };
     const roleDefault = group?.role_defaults?.[role];
     const planned = {
@@ -8755,6 +8939,14 @@ ${lines.join("\n")}
     // tags，test-dispatch D13「skills 命中越过熟练序」语义保留），装配探测只对
     //「无标签证据的回落席」把关——两层正交：tags=策展声明，装配观测=实测并集，
     // 回落席（声明了 skills 但无人带标签）才是公司侧「装配故障静默降级」风险面。
+    // W-REVIEWSEAT 只读守卫（1105）：显式定席为评审席（本组 reviewer/全局池成员）时
+    // 只接 review 类单——非 review_only 派给评审席=实施类单越权（评审员 never edits
+    // 产品码的结构保障）。拒=响亮（调用方改派 worker 或补 review_only）+审计帧。
+    if (typeof input.target_sid === "string" && input.target_sid && this.isReviewerSeat(input.target_sid) && input.review_only !== true) {
+      this.emitChainAudit("dispatch-reroute", `review-seat 守卫拒派：评审席 ${input.target_sid.slice(0, 12)} 不接实施类单（review_only 缺）——改派 worker 或补 review_only`);
+      return { ok: false, error: `评审席不接实施类单（W-REVIEWSEAT 只读守卫）：${input.target_sid.slice(0, 8)} 为评审席，实施单请派 worker；审查单请带 review_only:true` };
+    }
+    const reviewBlock = input.review_only === true ? this.reviewOnlyBlock() : undefined;
     // W-PRREVIEW（期一④ PR 互审）：显式定席优先——review-route 路由结果的确定性
     // 落席（互审单派给指定 worker 会话）：跳过下方选席/复拉/装配探测序（路由决策
     // 已由 review-route 用同款全链判据做出，探测清席换新会话=违背确定性），安全闸
@@ -8775,7 +8967,7 @@ ${lines.join("\n")}
       if ((this.openDispatches.get(t)?.length ?? 0) > 0)
         return { ok: false, error: `定席会话有在途单未收口: ${t.slice(0, 8)}——稍后重跑 review-route` };
       if (input.gid && !(findGroup(input.gid)?.headcount ?? []).some((h) => h.session_id === t))
-        return { ok: false, error: `定席会话不在组 ${input.gid} 编制内: ${t.slice(0, 8)}（互审员=在编 worker，非编制走 PM 子代理）` };
+        return { ok: false, error: `定席会话不在组 ${input.gid} 编制内: ${t.slice(0, 8)}（池席跨团队：review-route 响应 dispatch_hint 带「gid=评审池组+anchor=项目仓」落席组合；或成员 member-add 入组）` };
     }
     // C-MODE-B2 模块10 复拉优先于新开（C 模式「席位常驻+会话可换」的选席序补档）：routing
     // 高分熟手已被退休（roster 无）而编制有空位时，先 member-add 拉回再重跑选席——上下文
@@ -8919,7 +9111,7 @@ ${lines.join("\n")}
     //（bizRole 占位 "worker" 不消费）、求值/forbidden/审计全跳、spawnMode 硬传 bypass
     //（恢复 P81 前两处 create 硬传点原样）
     const policyOn = permissionPolicyEnabled();
-    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : role === "watchdog" ? "watchdog" : null; // W-WATCHDOGPERM：watchdog=只读巡查主体（permission-policy 全 tier 恒 plan——上岗即只读档）
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : role === "reviewer" ? "reviewer" : role === "watchdog" ? "watchdog" : null; // R3 解并：reviewer+watchdog 双岗并集（各自恒 plan 只读档——W-REVIEWSEAT P1-6+W-WATCHDOGPERM）
     const auditRow = (p: {
       requested_mode: string | null; normalized_mode: string | null; effective_mode: string; native_mode: string | null;
       capability_state: string | null; engine: string | null; reason: string; policy_source: string | null;
@@ -8933,15 +9125,19 @@ ${lines.join("\n")}
         capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy,
         reason: "unknown_role_mapping", policy_source: null,
       }, null));
-      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm/watchdog）` };
+      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm/reviewer/watchdog）` }; // R3 解并：双岗并集
     }
     // P81-9 off：perm=null 跳过求值与 forbid 面；spawnMode 恢复 P81 前硬传 bypass
+    // W-REVIEWSEAT-R2 P1-6（R1 验收死链实锤）：派单面硬请求 bypassPermissions 使
+    // plan 天花板 role（reviewer/watchdog）恒 above_role_tier_ceiling→全组型恒
+    // forbidden、engine_role=reviewer 不可达（六行模板链断在第一环）。修：按 bizRole
+    // 档位定 requested——plan 天花板 role 走 requested=null（tier_default/mixed 物化
+    // 分支接管，reviewer/watchdog 恒 plan 落地）；其余 role 维持 #232「派单=授权」
+    // bypass 语义不变（user_authorized_bypass 生产闸照旧）。
+    const PLAN_CEILING_ROLES = new Set(["reviewer", "watchdog", "review_pm"]); // R3 P2-1：死键 "review"（bizRole 词域无此值——review/review_pm 派单恒 forbidden）修为 review_pm 入集合（§5.3.3 通道恢复可达）
+    const dispatchRequested = (bizRole && PLAN_CEILING_ROLES.has(bizRole)) ? null : "bypassPermissions" as const;
     const perm = policyOn ? evaluatePermission({
-      // W-WATCHDOGPERM（t-a86739fd）：watchdog 请求 plan 而非 bypass——只读主体对 plan
-      // ceiling 请求 bypass 恒 above_role_tier_ceiling 拒（上岗即断链）；plan=只读巡查档
-      //（spawn 收 plan 实参，EFFECTIVE_TO_MANAGED["plan"]="plan"）。其余岗位 §5.3.1 物
-      // bypass 语义零变。
-      requested_mode: bizRole === "watchdog" ? "plan" : "bypassPermissions",
+      requested_mode: dispatchRequested, // R3 解并二选一：留 PLAN_CEILING_ROLES null-request 一套（reviewer/watchdog 同机制——显式 plan 请求分支退役，A 审建议口径）
       engine: engineForPolicy,
       role: bizRole ?? "worker", // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
       tier,
@@ -9022,7 +9218,7 @@ ${lines.join("\n")}
     };
     // C-MODE-B2 模块8：taskRefHead 并入任务尾区（task_ref id 每单必变——置 prompt 头=前缀
     // cache 恒 miss；尾区不损「四处同键」——prompt 内在场即可）
-    const wrapDispatchPromptAt = (withContinuity: boolean) => wrapDispatchPrompt(tier, taskRefHead + "\n" + input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined, {
+    const wrapDispatchPromptAt = (withContinuity: boolean) => wrapDispatchPrompt(tier, (reviewBlock ? reviewBlock + "\n" : "") + taskRefHead + "\n" + input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined, {
       ...(withContinuity ? { continuity: continuityBlockOf() } : {}),
       sinceLast: this.buildSinceLastBlock(anchor, dispatchId),
     });
@@ -9465,37 +9661,95 @@ ${lines.join("\n")}
    * routed=false 自行回落 PM 子代理；审查档位（1/2/3 审）同样由 PM 按全局纪律定，
    * 本口只按请求数路由（count 钳 1..3=档位上限，不代定档）。 */
   routeReviewers(gid: string, opts: { count?: number; skills?: string[]; exclude?: string[]; anchorKey?: string }):
-    { ok: true; routed: boolean; reviewers: { session_id: string; tag_hit: boolean }[]; reason?: string } {
+    { ok: true; routed: boolean; reviewers: { session_id: string; tag_hit: boolean; source: "peer" | "team-seat" | "pool" }[]; reason?: string } {
     const count = Math.max(1, Math.min(3, Math.floor(opts.count ?? 1)));
     const exclude = new Set((opts.exclude ?? []).filter((x) => typeof x === "string" && x));
     const wanted = (opts.skills ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean);
     const tagFilter = wanted.length
       ? (tags: string[]) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w))
       : null;
-    const reviewers: { session_id: string; tag_hit: boolean }[] = [];
+    const reviewers: { session_id: string; tag_hit: boolean; source: "peer" | "team-seat" | "pool" }[] = [];
+    // W-REVIEWSEAT 三跳（1105 用户拍板「评审席产品化」）：互审（worker 互审，本组
+    // reviewer 席不进候选——评审员只接审查单不做互审交付）→ 本组专属评审席（team
+    // override 的编制落点）→ 全局评审池（跨团队，异构模型优先——已选集缺的 engine
+    // 先补，防同质化）。三跳共 exclude 互异；每席标注 source（回执/审计可见归属）。
+    const cfg = readReviewSeatConfig();
+    const reviewerSids = new Set<string>(teamReviewerSeats(gid).map((x) => x.session_id));
+    const poolSeats = cfg.enabled ? reviewPoolSnapshot().seats.filter((x) => x.session_id !== "") : [];
+    const chosenEngines = new Set<string>();
+    const seatAlive = (sid: string): boolean => {
+      const ms = this.sessions.get(sid);
+      if (!ms || !ms.state.relay_session_id || ms.state.external) return false;
+      if (ms.state.status === "WORKING" || ms.state.status === "WAITING") return false;
+      if (this.isLeaderSession(sid)) return false;
+      if (this.routeLivenessSkip(sid, ms)) return false;
+      if (ms.resumePending && Date.now() - ms.resumePending < resumePendingWindowMs()) return false;
+      return true;
+    };
     for (let i = 0; i < count; i++) {
+      // ── 跳1：本组 worker 互审（reviewer 席排除；pickVeteranEligible 全链判据）──
       let sid: string | null = null;
       let tagHit = false;
+      let source: "peer" | "team-seat" | "pool" = "peer";
+      const peerExclude = new Set<string>([...exclude, ...reviewerSids]);
       if (tagFilter) {
-        // 标签命中席两轮（亲和→普通，pickVeteranDetail 语义同款）
-        const h = this.pickVeteranEligible(gid, tagFilter, undefined, opts.anchorKey, true, exclude)
-          ?? this.pickVeteranEligible(gid, tagFilter, undefined, undefined, undefined, exclude);
+        const h = this.pickVeteranEligible(gid, tagFilter, undefined, opts.anchorKey, true, peerExclude)
+          ?? this.pickVeteranEligible(gid, tagFilter, undefined, undefined, undefined, peerExclude);
         if (h) { sid = h; tagHit = true; }
       }
       if (!sid) {
-        sid = this.pickVeteranEligible(gid, null, undefined, opts.anchorKey, true, exclude)
-          ?? this.pickVeteranEligible(gid, null, undefined, undefined, undefined, exclude);
+        sid = this.pickVeteranEligible(gid, null, undefined, opts.anchorKey, true, peerExclude)
+          ?? this.pickVeteranEligible(gid, null, undefined, undefined, undefined, peerExclude);
+      }
+      // ── 跳2：本组专属评审席（活席、未被排除、未选过）──
+      if (!sid && cfg.enabled) {
+        const seat = teamReviewerSeats(gid).find((x) => !exclude.has(x.session_id) && !reviewers.some((r) => r.session_id === x.session_id) && seatAlive(x.session_id));
+        if (seat) { sid = seat.session_id; source = "team-seat"; }
+      }
+      // ── 跳3：全局评审池（异构优先：先补 chosenEngines 缺的 engine；同 engine 按席序）──
+      if (!sid && cfg.enabled && poolSeats.length) {
+        const alive = poolSeats.filter((x) => !exclude.has(x.session_id) && !reviewers.some((r) => r.session_id === x.session_id) && seatAlive(x.session_id));
+        const hetero = alive.find((x) => !chosenEngines.has(x.engine || "claude"));
+        const pick = hetero ?? alive[0];
+        if (pick) { sid = pick.session_id; source = "pool"; }
       }
       if (!sid) break;
-      reviewers.push({ session_id: sid, tag_hit: tagHit });
+      const ms = this.sessions.get(sid);
+      chosenEngines.add((ms?.state as { engine?: string } | undefined)?.engine || "claude");
+      reviewers.push({ session_id: sid, tag_hit: tagHit, source });
       exclude.add(sid); // 互异：已选入排除集再选下一位
     }
     return {
       ok: true,
       routed: reviewers.length > 0,
       reviewers,
-      ...(reviewers.length === 0 ? { reason: "无在编可承接 worker（全忙/全死/全被排除）——回落 PM 子代理（审查席位来源是 PM 决策位）" } : {}),
+      ...(reviewers.length === 0 ? { reason: `三跳皆空（互审候选全忙/全死/被排除；专属席与全局池${cfg.enabled ? "无活席" : "已停用（enabled=false）"}）——回落 PM 子代理（审查席位来源是 PM 决策位）` } : {}),
     };
+  }
+
+  /** W-REVIEWSEAT：sid 是否评审席（本组 reviewer 席或全局池成员）——dispatchWorker
+   * 只读守卫的路由判据（评审席只接 review 类单：input.review_only 必须为 true）。 */
+  isReviewerSeat(sid: string): boolean {
+    const poolGid = reviewPoolGid();
+    if (poolGid) {
+      const pool = findGroup(poolGid);
+      if (pool?.headcount?.some((h) => h.session_id === sid)) return true;
+    }
+    for (const g of listGroups()) {
+      if (g.headcount?.some((h) => h.session_id === sid && ((h.role || "").toLowerCase() === "reviewer" || h.role === "评审员"))) return true;
+    }
+    return false;
+  }
+
+  /** W-REVIEWSEAT：审查单只读纪律段（review_only 派单注入——与岗位/经验块同谱系，
+   * 纪律优先尾注由 wrapDispatchPrompt 统一收口）。 */
+  reviewOnlyBlock(): string {
+    return [
+      "—— 评审席纪律（W-REVIEWSEAT 只读结构保障）——",
+      "- 本单为审查单（review only）：禁止修改产品代码/配置——只读审阅，产出审查回执。",
+      "- 回执写 review-*.md（根因/改动核对/自测复跑/验收点/遗留），末行固定「结果：…｜改动文件：无（纯审查）」。",
+      "- 审查发现分级 P0-P3 带路径:行号锚；修复由 PM 另派实施单，评审席不代修。",
+    ].join("\n");
   }
 
   private pickVeteranDetail(gid: string, skills?: string[], selfWorktree?: string, anchorKey?: string, exclude?: Set<string> | null): { sid: string; tagHit: boolean } | null {
@@ -9539,6 +9793,11 @@ ${lines.join("\n")}
     );
     for (const e of routingFor(gid)) {
       if (exclude?.has(e.session_id)) continue; // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话——全过滤链最前置）
+      // W-REVIEWSEAT-R1 P1-5：评审席排除——运行态权威（isReviewerSeat=池/peer 评审席
+      // 在册）+历史记录兜底（e.role==="reviewer"：评审单收口写的路由记录，转岗/池席
+      // 跨组场景运行态可能查不到，记录在即排除）。原链只查 roster 资不查角色=实施单
+      // 可零守卫落评审席（A 审 P1-5：团队专属席互审单 gid=项目组即写路由史）。
+      if (e.role === "reviewer" || this.isReviewerSeat(e.session_id)) continue;
       if (e.rating === "bad") continue;
       if (e.failed >= 2 && e.failed > e.count) continue;
       if (!roster.has(e.session_id)) continue;

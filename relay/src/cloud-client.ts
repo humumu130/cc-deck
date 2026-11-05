@@ -19,6 +19,7 @@ import { listAcceptances } from "./acceptance.js";
 import { listBoards, listGroups, listPendingConfirms } from "./projects.js";
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 云通道同源携带
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 云通道同源携带
+import { reviewSeatSnapshotPayload } from "./review-seat.js";
 import { listModels } from "./models.js";
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
@@ -601,7 +602,8 @@ export class CloudClient {
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
-        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: ((this as any).__lastSnapSessions as unknown[] | undefined)?.length ?? 0 }, // bootfast2-r1 P2-3：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
+        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: ((this as any).__lastSnapSessions as unknown[] | undefined)?.length ?? 0 }, // bootfast2-r1 P2-3
+        review_seat: reviewSeatSnapshotPayload(), // W-REVIEWSEAT：云通道快照同键（#117 教训——云桥手机同享评审池配置面）：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
@@ -1196,7 +1198,8 @@ export class CloudClient {
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
-        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: ((this as any).__lastSnapSessions as unknown[] | undefined)?.length ?? 0 }, // bootfast2-r1 P2-3：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
+        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: ((this as any).__lastSnapSessions as unknown[] | undefined)?.length ?? 0 }, // bootfast2-r1 P2-3
+        review_seat: reviewSeatSnapshotPayload(), // W-REVIEWSEAT：云通道快照同键（#117 教训——云桥手机同享评审池配置面）：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         models: listModels(this.mgr.cfg.model),
         ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),
         ...(this.extra?.relayName?.() ? { relay_name: this.extra.relayName() } : {}),

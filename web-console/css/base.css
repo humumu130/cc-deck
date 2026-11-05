@@ -3026,10 +3026,10 @@
       font-size: 14px; font-weight: 600; color: var(--text-strong);
     }
     .notifpanel .np-head .nsub {
-      margin-left: auto; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
-      color: var(--brand-strong, var(--brand)); background: transparent; background: color-mix(in srgb, var(--brand) 14%, transparent);
-      border: 1px solid transparent; border-color: color-mix(in srgb, var(--brand) 24%, transparent);
-      border-radius: 9px; padding: 1px 7px; line-height: 16px; white-space: nowrap;
+      /* W-NOTIFYPOLISH ③A3：计数 pill 退役（843 双显口径不一+三处计数两零差）——
+         降纯文字承载增量信息（「最早需行动 16 小时前」），计数单源=组头+rail 99+ */
+      margin-left: auto; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums;
+      color: var(--dim); background: none; border: 0; padding: 0; line-height: 16px; white-space: nowrap;
     }
     .notifpanel .np-head .n-x { flex: none; margin-left: 4px; }
     /* A8 滚动容器：上下渐隐 mask + 主题滚动条（宽 8/thumb 14% hover 24%） */
@@ -3053,11 +3053,14 @@
     /* p2-batch2 修（notify 审 A7 残）：组间距 20~24px（首组除外——贴头部） */
     .ngrp + .nrow + .ngrp, .np-body > .ngrp:nth-of-type(n+2) { margin-top: 22px; }
     .ngrp {
-      /* P1-1 重落：sticky 撤（平铺组头同钉叠加；首落随 worktree 误删遗失） */
-      font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .05em;
-      margin: 0; padding: 8px 12px 6px; display: flex; align-items: center; gap: 6px;
+      /* P1-1 重落：sticky 撤（平铺组头同钉叠加；首落随 worktree 误删遗失）。
+         W-NOTIFYPOLISH ⑦A8：CJK 字距 .05em→0+左缘 padding 14px 对齐行缘（2px 错位根修）。
+         W-NOTIFYPOLISH ⑤C3：backdrop-filter 退役——非 sticky 组头的 blur 是视觉死代码
+        （背后只有面板底），且 WKWebView blur 冻结是 1101 P0 先例族（防复发）；实底
+         color-mix 分层承担组头底。 */
+      font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: 0;
+      margin: 0; padding: 8px 12px 6px 14px; display: flex; align-items: center; gap: 6px;
       background: var(--surface1); background: color-mix(in srgb, var(--surface1) 86%, transparent);
-      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--line-soft);
       border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent);
     }
@@ -3078,49 +3081,55 @@
     .ngrp:hover .grp-clr, .ngrp .grp-clr:focus-visible { opacity: 1; }
     .ngrp .grp-clr:hover { color: var(--text-strong); }
     .ndot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex: none; }
-    .ndot.r { background: #F87171; } .ndot.y { background: #FBBF24; } .ndot.n { background: var(--faint); }
-    /* A5/A6 去卡片化行流（对齐 Linear）：透明底+行间 1px 分隔；hover 提亮；语义=左缘 2px 色条 */
+    .ndot.r { background: var(--error); } .ndot.y { background: var(--working); } .ndot.n { background: var(--faint); } /* W-NOTIFYPOLISH ⑧C6：硬码色→语义 token（随主题域走） */
+    /* A5/A6 去卡片化行流（对齐 Linear）：透明底+行间 1px 分隔；hover 提亮。
+       W-NOTIFYPOLISH ④A1+B4：.ic 图标列退役——icon+kind 徽章+chip 三套符号→两套
+      （色相只留红组点/琥珀 chip/橙链三件），16px+gap10 腾给标题列；行栅格两列。
+       W-NOTIFYPOLISH ②B2：active 行整行可点（cursor 显意——jump 可达面=全行）。 */
     .nrow {
-      position: relative; display: grid; grid-template-columns: 16px 1fr auto; gap: 10px;
+      position: relative; display: grid; grid-template-columns: 1fr auto; gap: 10px;
       padding: 10px 12px 10px 14px; border: 0; border-radius: 0; margin: 0;
       border-bottom: 1px solid var(--line-soft);
       border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent);
       font-size: var(--fs-B); background: transparent; align-items: start;
       transition: background var(--dur-fast) var(--ease-out);
     }
+    .nrow[data-notify-active="true"] { cursor: pointer; }
     .nrow:hover { background: var(--hover); background: color-mix(in srgb, var(--text-strong) 4%, transparent); }
     .nrow::before { /* 用户实锤 1101 晚：左缘语义色条退役（kind 徽章已带色，双重编码别扭）——alert/warn 色语义只留徽章 */
       content: none;
     }
-    .nrow .ic { grid-column: 1; flex: none; margin-top: 2px; display: inline-flex; color: var(--dim); }
-    .nrow .ic .icon-inline { width: 16px; height: 16px; }
-    .nrow.alert .ic { color: #F87171; } .nrow.warn .ic { color: #FBBF24; }
-    /* A3 kind badge 六色体系（bg 14%/字亮色/border 24%） */
+    /* W-NOTIFYPOLISH ①：同质簇子项——缩进一级（代表行右缘对齐主列），降一档存在感 */
+    .nrow.sub { padding-left: 26px; opacity: .92; }
+    /* A3 kind badge。
+       W-NOTIFYPOLISH ④A2+B4 中性化：六色体系退役——kind 是低价值维度（来源分类），
+       色相编码让一屏四色族打架+红组内躺绿「验收」反冲；整体 dim+6% 底单条规则。
+       色相预算收敛到三件：红组点（ndot.r）/琥珀 chip（awaitu）/橙链（act）。 */
     .nbadge {
       display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px;
       font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; vertical-align: 1px;
+      color: var(--dim); background: color-mix(in srgb, var(--text-strong) 6%, transparent);
+      border: 1px solid color-mix(in srgb, var(--text-strong) 10%, transparent);
     }
-    .nbadge-waiting { color: #FBBF24; background: rgba(245, 158, 11, .14); border: 1px solid rgba(245, 158, 11, .24); }
-    .nbadge-confirm { color: #C4B5FD; background: rgba(167, 139, 250, .14); border: 1px solid rgba(167, 139, 250, .24); }
-    .nbadge-dispatch { color: #93C5FD; background: rgba(96, 165, 250, .14); border: 1px solid rgba(96, 165, 250, .24); }
-    .nbadge-acceptance { color: #6EE7B7; background: rgba(52, 211, 153, .14); border: 1px solid rgba(52, 211, 153, .24); }
-    .nbadge-system { color: #CBD5E1; background: rgba(148, 163, 184, .14); border: 1px solid rgba(148, 163, 184, .24); }
-    .nbadge-alarm { color: #FCA5A5; background: rgba(248, 113, 113, .14); border: 1px solid rgba(248, 113, 113, .24); }
-    /* [W-AWAITUSER] 等你拍板 chip：橙=待动作既有语义色轴（与 nbadge-waiting 同
-       amber 族，禁新色纪律），实底 dot 脉冲一行内唯一动效——「等你拍板」与
-       kind badge 并列（kind 说来源，chip 说紧急度） */
+    /* [W-AWAITUSER] 等你拍板 chip：橙=待动作既有语义色轴（amber 族，禁新色纪律）。
+       W-NOTIFYPOLISH ④A1：userPending 行 kind 徽章不输出（rowMarkup 门控）——chip 独扛
+       紧急度语义，双胶囊堆叠零信息熵根修。W-NOTIFYPOLISH ⑧A5：dot 静态实点——脉冲
+       只留组点（6 脉冲源违反「唯一脉冲位」纪律；reduced 钳闸随 animation 删除自愈） */
     .awaitu-chip { color: #FBBF24; background: rgba(245, 158, 11, .18); border: 1px solid rgba(245, 158, 11, .38); gap: 5px; }
     .stale-chip { color: var(--faint); background: transparent; border: 1px solid var(--line); } /* W-NOTIFYFIX：过时徽章（版本退役/重复/陈年三因）——弱化灰系（过时≠行动） */
-    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; animation: awaitu-pulse 2.2s ease-in-out infinite; }
-    @keyframes awaitu-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; }
     html[data-theme="light"] .awaitu-chip { color: #B45309; }
     html[data-theme="light"] .awaitu-chip .awaitu-dot { background: #B45309; }
-    @media (prefers-reduced-motion: reduce) { .awaitu-chip .awaitu-dot { animation: none; } }
-    html[data-theme="light"] .nbadge-waiting { color: #B45309; } html[data-theme="light"] .nbadge-confirm { color: #7C3AED; }
-    html[data-theme="light"] .nbadge-dispatch { color: #2563EB; } html[data-theme="light"] .nbadge-acceptance { color: #059669; }
-    html[data-theme="light"] .nbadge-system { color: #64748B; } html[data-theme="light"] .nbadge-alarm { color: #DC2626; }
-    /* A6 行栅格：L1（badge+时间右贴）/L2 标题 clamp2/L3 摘要+内联操作 */
-    .nrow .t { grid-column: 2; min-width: 0; }
+    /* W-NOTIFYPOLISH ①：聚合 ×N 展开钮（小计数 chip——button 语义，非徽章） */
+    .agg-n {
+      border: 0; background: none; font: 600 11px/1 inherit; color: var(--dim); cursor: pointer;
+      font-variant-numeric: tabular-nums; padding: 2px 5px; border-radius: 5px; white-space: nowrap;
+      transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast);
+    }
+    .agg-n:hover, .agg-n:focus-visible { background: color-mix(in srgb, var(--text-strong) 8%, transparent); color: var(--text-strong); }
+    /* A6 行栅格：L1（badge+聚合钮+时间右贴）/L2 标题 clamp2/L3 摘要+内联操作。
+       W-NOTIFYPOLISH ④：ic 列退役→.t 升 grid-column 1 */
+    .nrow .t { grid-column: 1; min-width: 0; }
     .nrow .t .l1 { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
     .nrow .t .l1 .nrow-time {
       margin-left: auto; flex: none; color: var(--faint); font-size: 11px;
@@ -3133,10 +3142,16 @@
     .nrow .t .s { color: var(--faint); font-size: var(--fs-C); margin-top: 2px; display: flex; align-items: baseline; min-width: 0; } /* 复审P1-2：flex 容器，裁剪下沉 s-txt */
     .nrow .t .s .s-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     /* p2-batch2 修（notify 审 P2-4 act/× 同列纵叠让位）：act 挪 L3 摘要行内联（第三列只留 ×），
-       行动链与摘要同读线=视觉让位；nid=A9 等宽（hex/版本号/单号 mono+浅底） */
-    .nrow .t .s .act-slot { margin-left: 8px; white-space: nowrap; flex: none; } /* 复审P1-2：恒可见 */
-    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: var(--fs-C); }
-    .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); }
+       行动链与摘要同读线=视觉让位；nid=A9 等宽（hex/版本号/单号 mono+浅底）。
+       W-NOTIFYPOLISH ②A6：L3 两端分离——act-slot 推右+左竖线断口（8px 贴身读成一句根修） */
+    .nrow .t .s .act-slot {
+      margin-left: auto; white-space: nowrap; flex: none; padding-left: 12px;
+      border-left: 1px solid color-mix(in srgb, var(--text-strong) 10%, transparent);
+    }
+    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: 12px; }
+    /* W-NOTIFYPOLISH ⑦A4：.nid nowrap 三连——版本号芯片（v0.7.0-test.97-nova 类长 token）
+       在窄列劈行破损根修；inline-block 让 overflow 生效，超宽走 ellipsis（title 全文有 tooltip） */
+    .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
     /* A6 操作钮降权=文字链（12px/500 强调色 hover 下划线） */
     .nrow .act {
       grid-column: 3; align-self: center; flex: none; font-size: 12px; font-weight: 500; color: var(--brand);
@@ -3165,6 +3180,25 @@
     .nrow.leaving { animation: nrow-collapse 160ms var(--ease-in) forwards; pointer-events: none; }
     @keyframes nrow-collapse { to { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; } }
     .np-head .nsub.notify-badge-pop { animation: badge-pop 220ms var(--ease-spring); }
+    /* ===== W-NOTIFYPOLISH ⑤C1+C4+⑥C2+C5（1105 三路审查·光主题材质与可读底线） =====
+       ⑤C1 浮层亮度方向修正：光主题面板比底层亮（#FAFAF8 > 页面 #F7F7F5）+浅影
+       (.06/.10/.12)+白内高光——旧值是暗主题材质漏光主题（#E5E5E5 更暗+煤烟影=灰贴纸）；
+       ⑤C4 分隔线统一 color-mix 暗线族（头部 8% 微重）+头部 2.5% 微色带=titlebar 质感；
+       ⑥C2 act 链光主题 --brand-strong（#96391A≈6.1:1——badge 族有 override 唯独 act 漏）；
+       ⑥C5 11px 次级层（时间戳/摘要）光主题统一 70% text-strong（≈#686868 达 4.5:1）。
+       暗主题零变化：本块全部 light-only override（材质恒等由探针 material.json 对照）。 */
+    html[data-theme="light"] .notifpanel {
+      background: #FAFAF8;
+      box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.12), inset 0 1px 0 rgba(255, 255, 255, .9);
+    }
+    html[data-theme="light"] .notifpanel .np-head {
+      background: color-mix(in srgb, var(--text-strong) 2.5%, transparent); /* titlebar 微色带 */
+      border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 8%, transparent);
+    }
+    html[data-theme="light"] .notifpanel .np-foot { border-top: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent); }
+    html[data-theme="light"] .notifpanel .ngrp { background: color-mix(in srgb, var(--surface1) 92%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent); }
+    html[data-theme="light"] .nrow .act { color: var(--brand-strong); }
+    html[data-theme="light"] .nrow .t .l1 .nrow-time, html[data-theme="light"] .nrow .t .s { color: color-mix(in srgb, var(--text-strong) 70%, var(--bg1)); }
     @keyframes badge-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
     .rail-btn[data-domain="notify"] .badge { transition: transform 220ms var(--ease-spring); }
     .rail-btn[data-domain="notify"] .badge.notify-badge-pop { animation: badge-pop 220ms var(--ease-spring); }
