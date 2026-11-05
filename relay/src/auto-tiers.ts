@@ -37,16 +37,19 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export type AutoTier = "off" | "observe" | "auto";
-export const AUTO_FAMILIES = ["patrol", "converge", "revive"] as const;
+export const AUTO_FAMILIES = ["patrol", "converge", "revive", "boardrecon"] as const;
 export type AutoFamily = (typeof AUTO_FAMILIES)[number];
 
-const CFG_KEY: Record<AutoFamily, string> = { patrol: "autoPatrol", converge: "autoConverge", revive: "autoRevive" };
+const CFG_KEY: Record<AutoFamily, string> = { patrol: "autoPatrol", converge: "autoConverge", revive: "autoRevive", boardrecon: "autoBoardrecon" };
 /** 旧 boolean 键 → 档位迁移源。**R1 口径修正（A-2a/B-3.2 双认）**：patrol=false 时
  *  PatrolModule 在 index.ts 实例化闸即不启动（CCR_PATROL!==0 && patrol），autoTierOf
  *  无人调用——false→observe 映射**生产不可达**（保留仅防御：未来实例化闸与布尔键解耦时
  *  生效）；实际行为=旧 false 用户维持完全关（安全向：从未启用者不会被动开启自主动作）。 */
 const LEGACY_BOOL: Partial<Record<AutoFamily, string>> = { patrol: "patrol" };
-const DEFAULT_TIER: Record<AutoFamily, AutoTier> = { patrol: "auto", converge: "auto", revive: "auto" };
+// boardrecon 缺省 observe（R1-P1-3）：三方对账器新上——孤儿/滞留判死面大（A 审 P0
+// 四证），PM 过目干跑清单后才切 auto（1105 已撤回 observe→auto 批准；与三族缺省 auto
+// 不同的安全缺省）。CCR_AUTO_TIER_BOARDRECON env 可覆盖（测试/紧急）。
+const DEFAULT_TIER: Record<AutoFamily, AutoTier> = { patrol: "auto", converge: "auto", revive: "auto", boardrecon: "observe" };
 
 function isTier(v: unknown): v is AutoTier {
   return v === "off" || v === "observe" || v === "auto";

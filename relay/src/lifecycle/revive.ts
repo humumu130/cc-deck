@@ -283,6 +283,11 @@ export function todoStaleDays(): number {
 
 export function reviveEligible(mgr: any, s: any): string | null {
   if (s.state.external) return "external";
+  // W-RATELIMIT429：API 限流退避中不自动拉起/不喂活（429 下 revive/resume 重试风暴
+  // 放大器——今晚实锤并发 ~10 会话 429 卡死等人工捞×2）。**先于 agent-alive**：429
+  // 退避的会话 agent 常还活着（回合报错≠进程死），活会话的注入/喂活族同受此闸；
+  // 到点 onTurnEnd 退避定时器自清后恢复资格
+  if (s.rateLimitBackoffUntil && Date.now() < s.rateLimitBackoffUntil) return "rate-limit-backoff";
   if (s.agent) return "agent-alive";
   // #26 M3 审查修正：挂起退休成员不自动拉起——组挂起=编制退休释放（板冻结）
   if (s.state.org_parked) return "org-parked";
@@ -391,6 +396,8 @@ export interface PmKeepaliveParams {
   resumeCooldownUntil?: number;  // W-LEADFIX 熔断冷却期不拉
   now: number;
   idleStreak: number;            // 连续「拉起后无任何回合活动即退出」计数（防死循环闸）
+  /** R1（A-P1-2）：429 退避到期时刻（退避窗内不拉——防拉起即再吃 429） */
+  rateLimitBackoffUntil?: number;
 }
 
 export function pmKeepaliveEligible(p: PmKeepaliveParams): boolean {
@@ -400,6 +407,9 @@ export function pmKeepaliveEligible(p: PmKeepaliveParams): boolean {
   if (!p.isDutyTarget) return false;
   if (p.resumePending) return false;
   if (p.resumeCooldownUntil && p.resumeCooldownUntil > p.now) return false;
+  // R1（A-P1-2）：退避窗内不拉——429 打断流形态（stream closed）恰是 keepalive 目标
+  // 形态，原判据无退避=风暴窗内 duty 会话被反复拉起再吃 429。
+  if (p.rateLimitBackoffUntil && p.rateLimitBackoffUntil > p.now) return false;
   if (p.idleStreak >= PM_KEEPALIVE_MAX_IDLE_STREAK) return false; // 拉起即退死循环闸：连续无活动退出≥2 停拉，等真实消息/回合复位（onTurnEnd 清零）
   return true;
 }

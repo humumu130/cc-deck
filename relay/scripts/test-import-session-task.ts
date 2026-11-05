@@ -133,7 +133,7 @@ function lossCount(): number {
 
 // ---------- A. 全量首跑 ----------
 console.log("全量首跑:");
-const r1 = importSessionTask(port, sources);
+const r1 = await importSessionTask(port, sources);
 assert(r1.skipped === false && r1.eventsProcessed === 11, `首跑处理 11 行 events（实际 ${r1.eventsProcessed}）`);
 assert(r1.counts.session === 2, `session 表 2 行（S1/S2；S3 未建行，实际 ${r1.counts.session}）`);
 const s1 = sess(S1);
@@ -176,7 +176,7 @@ assert(d1Mine.every((l) => !l.sourcePath.endsWith("results.json")), ".results.js
 
 // ---------- B. 幂等重跑 ----------
 console.log("幂等重跑:");
-const r2 = importSessionTask(port, sources);
+const r2 = await importSessionTask(port, sources);
 assert(r2.skipped === true && r2.eventsProcessed === 0 && r2.rescanned.length === 0, "三源命中→快进零写入");
 assert(r2.counts.session === 2 && r2.counts.task === 6, "快进后行数不增（2/6）");
 assert(listLoss(port).filter((l) => [eventsFile, tasksDir, acceptDir].includes(l.sourcePath)).length === 6, "快进后 loss 不增（仍 6）");
@@ -184,7 +184,7 @@ assert(listLoss(port).filter((l) => [eventsFile, tasksDir, acceptDir].includes(l
 // ---------- C. 行级断点续跑（回拨 offset 模拟中断） ----------
 console.log("行级断点续跑:");
 writeCheckpoint(port, { path: eventsFile, mtimeMs: Math.round(statSync(eventsFile).mtimeMs), lineCount: 11, offset: 4, schemaVersion: SESSION_TASK_IMPORT_SCHEMA_VERSION });
-const r3 = importSessionTask(port, sources);
+const r3 = await importSessionTask(port, sources);
 assert(r3.skipped === false && r3.eventsProcessed === 7, `续跑只处理余下行 5..11（实际 ${r3.eventsProcessed}）`);
 assert(r3.counts.session === 2 && r3.counts.task === 6, "续跑后行数不增零重复");
 assert(sess(S1)?.status === "WORKING" && sess(S2)?.deleted_at === 1010, "续跑后重放终态与全量一致（增量无缺位）");
@@ -197,7 +197,7 @@ console.log("task 域重灌:");
 writeTask(S1, "2", { id: "2", subject: "任务二改", description: "", status: "completed", blocks: [], blockedBy: [] });
 const t2File = join(tasksDir, S1, "2.json");
 utimesSync(t2File, new Date(statSync(t2File).mtimeMs + 10), new Date(statSync(t2File).mtimeMs + 10)); // APFS 同毫秒保护
-const r4 = importSessionTask(port, sources);
+const r4 = await importSessionTask(port, sources);
 assert(r4.skipped === false && r4.eventsProcessed === 0, "events checkpoint 有效→events 零重放");
 assert(r4.counts.task === 6, "task 域重灌后行数不增（DELETE+重灌防残留）");
 const t2b = taskByRef(`${S1}/2`);
@@ -208,12 +208,12 @@ assert(sess(S1)?.status === "WORKING", "task 重灌不碰 session 域（S1 保�
 console.log("accDir 失效重放:");
 const accSheet = join(acceptDir, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
 utimesSync(accSheet, new Date(statSync(accSheet).mtimeMs + 10), new Date(statSync(accSheet).mtimeMs + 10)); // APFS 同毫秒保护
-const r4b = importSessionTask(port, sources);
+const r4b = await importSessionTask(port, sources);
 assert(r4b.skipped === false && r4b.eventsProcessed === 0, "accDir 失效→段 2 触发且 events 仍零重放（分键后 events cp 独立）");
 assert(r4b.counts.task === 6, "accDir 失效→task 域重灌行数不增");
 const t3b = taskByRef(`${S1}/2`);
 assert(t3b !== undefined && t3b.review_required === 1 && t3b.status === "submitted", "accDir 失效→review_required 重推（sheet 集重读，submitted 保持）");
-const r4c = importSessionTask(port, sources);
+const r4c = await importSessionTask(port, sources);
 assert(r4c.skipped === true && r4c.rescanned.length === 0, "分键 checkpoint 命中→快进（#tasks-view 新键稳态，acceptance 域口径互踩消除）");
 
 // ---------- E. events 失效重放（追加行→从 0 重放+task 联动重灌） ----------
@@ -244,7 +244,7 @@ console.log("events 失效重放:");
   })());
   utimesSync(eventsFile, new Date(statSync(eventsFile).mtimeMs + 10), new Date(statSync(eventsFile).mtimeMs + 10));
 }
-const r5 = importSessionTask(port, sources);
+const r5 = await importSessionTask(port, sources);
 assert(r5.skipped === false && r5.eventsProcessed === 13, `失效→从 0 全量重放 13 行（实际 ${r5.eventsProcessed}）`);
 assert(sess(S1)?.status === "WAITING", "重放终态：S1 行12 DONE→行13 WAITING（顺序重放正确）");
 const s1Runtime = JSON.parse(String(sess(S1)?.runtime_state_json ?? "{}")) as Record<string, unknown>;
@@ -284,7 +284,7 @@ console.log("多批重放 loss 不误删:");
   writeFileSync(eventsFile, rowsF.join("\n") + "\n");
   utimesSync(eventsFile, new Date(statSync(eventsFile).mtimeMs + 10), new Date(statSync(eventsFile).mtimeMs + 10)); // APFS 同毫秒保护
 }
-const rF1 = importSessionTask(port, sources, { batchSize: 4 });
+const rF1 = await importSessionTask(port, sources, { batchSize: 4 });
 assert(rF1.skipped === false && rF1.eventsProcessed === 20, `多批首跑处理 20 行（batchSize=4×5 批，实际 ${rF1.eventsProcessed}）`);
 const fLoss1 = listLoss(port, eventsFile);
 assert(fLoss1.length === 3 && JSON.stringify(fLoss1.map((l) => `${l.lineNo}:${l.reason}`)) === JSON.stringify(["3:bad-json", "9:missing-field", "15:bad-json"]),
@@ -292,12 +292,12 @@ assert(fLoss1.length === 3 && JSON.stringify(fLoss1.map((l) => `${l.lineNo}:${l.
 assert(port.query<{ n: number }>("SELECT COUNT(*) AS n FROM session")[0]?.n === 6, "session 2 旧 + 4 新（坏行不建行不阻断后续行）");
 // ② 失效重放：mtime 变→从 0 重放（段前清账一次+三批重落），账仍全在同位
 utimesSync(eventsFile, new Date(statSync(eventsFile).mtimeMs + 10), new Date(statSync(eventsFile).mtimeMs + 10));
-const rF2 = importSessionTask(port, sources, { batchSize: 4 });
+const rF2 = await importSessionTask(port, sources, { batchSize: 4 });
 assert(rF2.skipped === false && rF2.eventsProcessed === 20, "源变失效→全量重放 20 行");
 const fLoss2 = listLoss(port, eventsFile);
 assert(fLoss2.length === 3 && fLoss2.every((l) => [3, 9, 15].includes(l.lineNo)), `重放后坏行账仍全在（3 笔同位，修复前重放批间互删同病，实际 ${fLoss2.length}）`);
 // ③ 快进不重复
-const rF3 = importSessionTask(port, sources, { batchSize: 4 });
+const rF3 = await importSessionTask(port, sources, { batchSize: 4 });
 assert(rF3.skipped === true && rF3.eventsProcessed === 0 && listLoss(port, eventsFile).length === 3, "三源命中→快进零写入，loss 不重复落（仍 3）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "多批重放后零悬空 FK");
 

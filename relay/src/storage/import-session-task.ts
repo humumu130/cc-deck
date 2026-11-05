@@ -474,14 +474,19 @@ function parseTaskFile(
  *   两源 checkpoint」——tasks 目录有真实删文件面，DELETE 防残留；accept 失效经重灌重推
  *   review_required。
  */
-export function importSessionTask(
+// bootfast3（t-e23febf2）：async 化+opts.yieldFn——events 批/task parse 批间让出事件
+// 循环（生产源变更全量重灌 29MB+2375 文件时同步霸占=实产 HTTP 000 1-2.5min 主诉根）。
+// 让出点全部在批事务（begin..commit）之外——better-sqlite3 单事务内绝不 await（事务
+// 挂起跨事件循环=写者重入+锁窗）；不传 yieldFn 时函数体等价同步（测试直调面零行为差）。
+export async function importSessionTask(
   port: StoragePort,
   sources: SessionTaskSources,
-  opts?: { schemaVersion?: number; batchSize?: number },
-): SessionTaskImportResult {
+  opts?: { schemaVersion?: number; batchSize?: number; yieldFn?: () => Promise<void> },
+): Promise<SessionTaskImportResult> {
   // #292-B4c session 域停灌闸：CCR_SESSION_IMPORT=off 时 session 表不写（直写为唯一
   // 写者——翻转后库行权威性成立的前提）；task 域照灌（任务清单与 session 实体解耦）。
   // 缺省 on（影子期投影照灌——直写与投影互覆盖 REPLACE 幂等）。
+  const yieldFn = opts?.yieldFn;
 
   const schemaVersion = opts?.schemaVersion ?? SESSION_TASK_IMPORT_SCHEMA_VERSION;
   const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -566,9 +571,15 @@ export function importSessionTask(
         }
       }
       batch.push({ ev, lineNo });
-      if (batch.length >= batchSize) flushBatch();
+      if (batch.length >= batchSize) {
+        flushBatch();
+        // bootfast3：批事务已 commit——让出一拍（生产全量重灌 28k 行=57 批，批间让出
+        // 使 HTTP/WS 回调在导入期仍有处理窗；事务外让出=原子性无涉）
+        await yieldFn?.();
+      }
     }
     flushBatch();
+    await yieldFn?.();
     if (obsEvents.lineCount === 0 && fromLine === 0) {
       // 空文件也要落 checkpoint（offset=0 全法有效），否则每次调用都失效重扫空转
       port.begin();
@@ -601,21 +612,27 @@ export function importSessionTask(
       port.query<{ id: string; project_id: string | null }>(`SELECT id, project_id FROM "group"`).map((r) => [r.id, r.project_id ?? ""]),
     );
 
+    // bootfast3：task 文件 parse（2375 文件同步读+解析=2s 事件循环块实测主构成）挪出
+    // 事务——原「DELETE→parse→INSERT 单事务」中 parse 是纯读纯算（除 losses.push 内存
+    // 操作），事务外先跑零语义变化，且 parse 窗内 task 表保留旧快照（原序 DELETE 先行
+    // =窗内表已空，改后更优）；每 200 文件让出一拍。
+    const rows: TaskRow[] = [];
+    for (let fi = 0; fi < obsTasks.files.length; fi++) {
+      const ref = obsTasks.files[fi];
+      const row = parseTaskFile(ref, sources.tasksDir, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses);
+      if (row !== null) {
+        if (!TASK_STATUS.has(row.status)) {
+          // 防御面：映射产物必须落五态词表（ submitted 含内）；不可达即映射表坏了——炸
+          throw new Error(`映射产物状态越词表（${row.taskRef} → ${row.status}）`);
+        }
+        rows.push(row);
+      }
+      if ((fi + 1) % 200 === 0) await yieldFn?.();
+    }
     port.begin();
     try {
       port.exec("DELETE FROM task WHERE origin = 'user'"); // 分区契约：只清 CLI 域行，板卡域（origin='board'）不动（头注 3）
       port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [sources.tasksDir, sources.acceptanceDir]);
-      const rows: TaskRow[] = [];
-      for (const ref of obsTasks.files) {
-        const row = parseTaskFile(ref, sources.tasksDir, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses);
-        if (row !== null) {
-          if (!TASK_STATUS.has(row.status)) {
-            // 防御面：映射产物必须落五态词表（ submitted 含内）；不可达即映射表坏了——炸
-            throw new Error(`映射产物状态越词表（${row.taskRef} → ${row.status}）`);
-          }
-          rows.push(row);
-        }
-      }
       for (const r of rows) {
         port.exec(
           `INSERT INTO task (id, project_id, group_id, session_id, parent_task_id, origin, external_sid, external_task_file_id,

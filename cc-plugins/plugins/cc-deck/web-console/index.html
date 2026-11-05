@@ -2755,7 +2755,10 @@
         <button type="button" class="gp-nav-item" data-sec="about"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</button>
       </nav>
       <div class="gp-rail-foot">
-        <div>CC Deck</div>
+        <div>CC Deck<div class="gp-card gp-rows" id="linkqCard" style="margin-top:10px">
+            <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h4l2.5-6 4 12 2.5-6h5"/></svg></span>连接质量（近 24h）<b id="linkqSummary" style="font-weight:500">…</b><span class="gp-chev">›</span></div>
+          </div>
+          </div>
         <div class="gp-rail-build">Build <span id="gpBuild"></span></div>
       </div>
     </div>
@@ -9117,7 +9120,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.7.0-test.97"; // dev 0.6.2 正式版基线并入（#222 分组等）；团队域特性未发版，随其发版再 bump
+const CONSOLE_VERSION = "0.7.1-test.1"; // dev 0.6.2 正式版基线并入（#222 分组等）；团队域特性未发版，随其发版再 bump
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;

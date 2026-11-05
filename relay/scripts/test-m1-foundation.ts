@@ -352,7 +352,7 @@ try {
   const lossTsBefore4 = lossWithTs(portAr);
   resetReadModeForTest();
   const portR = ensureStore(dirsA);
-  const fails = importAllForShadow(portR, dirsA); // 幂等双调：聚合面再跑一轮（checkpoint 全命中=近零开销）
+  const fails = await importAllForShadow(portR, dirsA); // 幂等双调：聚合面再跑一轮（checkpoint 全命中=近零开销）
   assert(fails.length === 0, `聚合入口重跑零域失败（checkpoint 全命中，实际 ${JSON.stringify(fails)}）`);
   const dataAfter = snapshotData(portR);
   if (dataAfter !== dataBefore) {

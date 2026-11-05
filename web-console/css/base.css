@@ -1558,6 +1558,11 @@
     #d-team .board-overview { flex: 0 0 auto; padding: 14px 18px 12px; border-bottom: 0; }
     #d-team .board-overview-head { display: none; } /* V8R：重头行退役（markup 已停产出，样式兜底） */
     #d-team .board-progress { display: flex; height: 8px; gap: 2px; margin-top: 0; overflow: hidden; border-radius: 4px; background: var(--bg1); }
+    /* boardpolish（1105 用户实测「完成太多导致别的类型看不出比例」）：比例条行=条+完成徽章
+       同行；✓ N 徽章独立承载完成计数（--p-done 同源绿），条内只分布五活跃态 */
+    #d-team .board-progress-row { display: flex; align-items: center; gap: 10px; }
+    #d-team .board-progress-row .board-progress { flex: 1 1 auto; min-width: 0; }
+    #d-team .ov-done { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9px; background: color-mix(in srgb, var(--p-done) 13%, transparent); color: var(--p-done); font-size: var(--fs-D); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
     #d-team .board-progress i { display: block; flex: 0 0 auto; min-width: 2px; height: 100%; transition: width .2s ease; } /* t25fix #7：段间分隔改 gap 露底实现（border-left 会占段宽，窄窗小段被分隔线吃掉=「遮挡」观感）；有任务的段 min-width 2px 保底可见（全灰=0 宽段堆叠观感之一） */
     #d-team .board-progress .backlog { background: var(--p-backlog); }
     #d-team .board-progress .planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
@@ -1605,6 +1610,9 @@
        delay 在 reduce 下把卡片钉隐最长 120ms」（B 审 CDP 实测））把 transition/animation
        连延迟钳成立即显隐——本块不另写降级。 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold { min-height: 0; }
+    /* boardpolish ①泳道横向收窄（44px 竖条）已按 PM 裁决剥离——用户否决竖条形态，
+       泳道折叠维持基线纵向 drawer（grid-rows 0fr），横向收窄方案待 lanepatterns 调研
+       结论后的泳道形态实施单重做（孪生实例实现留档于 ac267363，本工作区已撤）。 */
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head { cursor: pointer; user-select: none; -webkit-user-select: none; border-radius: 11px 11px 0 0; }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head:hover { background: color-mix(in srgb, var(--text-strong) 4%, var(--surface1)); }
     #d-team .workspace-body > .workspace-pane.board-pane .lane-fold .lane-fold-head:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: -2px; }
@@ -1623,6 +1631,25 @@
     #d-team .workspace-body > .workspace-pane.board-pane .lane-drawer-in.just-opened > *:nth-child(n+4) { animation-delay: 120ms; }
     @keyframes laneRiseKf { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
     @keyframes laneBadgePopKf { 50% { transform: scale(1.28); } }
+    /* lanehide（1105 拍板方案①「列隐藏+尾部停靠条」，Linear 同款）：done/planned 列头 ⋯ 菜单
+       →整列退出列序（四核心列 flex 吃回全宽）；板尾停靠条聚合隐藏列（⟨ 已隐藏：完成 N ▸，
+       点击临时展开=内存态刷新还原）。lanefold 折叠把手对这两列退役（status 列不折叠只隐藏）。 */
+    #d-team .lane-head { position: relative; }
+    #d-team .lane-menu-btn { flex: none; margin-left: auto; width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: var(--dim); font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .12s ease; }
+    #d-team .lane:hover .lane-menu-btn, #d-team .lane-menu-btn:focus-visible { opacity: 1; }
+    #d-team .lane-menu-btn:hover { background: color-mix(in srgb, var(--text-strong) 8%, transparent); color: var(--text-strong); }
+    #d-team .lane-menu { position: absolute; top: calc(100% + 4px); right: 8px; z-index: 30; min-width: 220px; padding: 4px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface2); box-shadow: 0 8px 24px color-mix(in srgb, #000 18%, transparent); }
+    #d-team .lane-menu-item { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-strong); font-size: var(--fs-D); text-align: left; cursor: pointer; }
+    #d-team .lane-menu-item:hover { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+    /* 临时展开列（隐藏记忆仍在）：列头描边提示「临时态——收起回停靠条」 */
+    #d-team .lane.lane-temp-shown { outline: 1px dashed color-mix(in srgb, var(--brand) 45%, transparent); outline-offset: -3px; }
+    /* 板尾停靠条（default=横条形态：板容器尾部一行，chip 逐列一枚） */
+    #d-team .lane-dock { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px dashed var(--line-soft); border-radius: 10px; background: color-mix(in srgb, var(--surface2) 60%, transparent); }
+    #d-team .lane-dock .dock-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface2); color: var(--text-strong); font-size: var(--fs-D); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
+    #d-team .lane-dock .dock-chip:hover { border-color: color-mix(in srgb, var(--brand) 45%, transparent); color: var(--brand); }
+    /* 停靠条备选形态（竖窄条：板右缘竖排——对比图让用户挑，默认横条；body.lane-dock-rail 切换） */
+    body.lane-dock-rail #d-team .lane-dock { position: absolute; top: 0; right: -40px; flex-direction: column; padding: 10px 4px; }
+    body.lane-dock-rail #d-team .lane-dock .dock-chip { writing-mode: vertical-rl; text-orientation: upright; padding: 10px 3px; }
     #d-team .workspace-body > .workspace-pane.board-pane .task-card { flex: 0 0 auto; }
     #d-team .workspace-pane .member-list { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; } /* 【退役 W-MEMBERGRID】同被后置 t25fix 定列块盖死，从未生效；权威落点见文件后段 W-MEMBERGRID 块 */
     #d-team .workspace-pane .member-card { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 11px; min-height: 142px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--surface2); } /* t25fix #8：145deg brand 渐变退役 */
@@ -2761,6 +2788,9 @@
     .team-drawer .readonly-banner.slim { margin: 2px 2px 4px; padding: 6px 8px; font-size: var(--fs-C); }
     .team-drawer .lane-bar { display: flex; gap: 2px; height: 7px; margin: 2px 2px 5px; border-radius: 4px; overflow: hidden; }
     .team-drawer .lane-bar i { min-width: 2px; border-radius: 1px; } /* 段宽走内联 flex-grow（team-domain board-progress 同语汇） */
+    .team-drawer .lane-bar-row { display: flex; align-items: center; gap: 8px; } /* sidebarbar（1105）：条+✓N 徽章同行——#d-team board-progress-row 同款（boardpolish ②视觉语言） */
+    .team-drawer .lane-bar-row .lane-bar { flex: 1 1 auto; min-width: 0; margin-right: 0; }
+    .team-drawer .ov-done { flex: 0 0 auto; display: inline-flex; align-items: center; margin: 2px 2px 5px; padding: 2px 8px; border-radius: 9px; background: color-mix(in srgb, var(--p-done) 13%, transparent); color: var(--p-done); font-size: var(--fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; } /* 完成计数独立徽章——#d-team .ov-done 同参数（字号随抽屉域 micro） */
     .team-drawer .lane-bar i.backlog { background: var(--p-backlog); }
     .team-drawer .lane-bar i.planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
     .team-drawer .lane-bar i.claimed { background: var(--p-claimed); }

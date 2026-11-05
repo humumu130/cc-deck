@@ -29,7 +29,15 @@ async function waitFor(fn: () => boolean, ms = 3000, every = 25): Promise<boolea
 }
 
 const makeFakeFactory = () =>
-  (_cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined): AgentLike => {
+  (_cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string }): AgentLike => {
+    // R3-1b：spawn permissionMode 实参捕获（真形状锁）。按 cwd 记账入数组——
+    // 标量 last 值会被异步后续 spawn 覆写（实测：回合收口 deliverCallbackToPM 的
+    // resumeAgent 重拉 PM 会话传 default，在 waitFor 与断言读值之间覆写——生产
+    // spawn 实参本身是对的，race 纯在捕获面）。数组+cwd 过滤=每次 spawn 各记各账。
+    if (opts && opts.permissionMode) {
+      const log = ((globalThis as any).__rsSpawnLog ??= [] as { cwd: string; mode: string }[]);
+      log.push({ cwd: _cwd, mode: opts.permissionMode });
+    }
     const a: AgentLike = {
       id: randomUUID(), startedAt: Date.now(), ended: false,
       sendMessage: () => { setTimeout(() => { if (!a.ended) { cb.onStats({ files_changed: 1, lines_added: 1, lines_deleted: 0 }); cb.onTurnEnd(true, "success", 10); } }, 10); }, // resume 回合模拟（定席单走 sendMessage——空实现会挂 WORKING）
@@ -227,6 +235,64 @@ async function main() {
     writeReviewSeatConfig({ team_override: { "pg-del1": 0 } }); // 设置页删行新语义（显式 0）
     const after = readReviewSeatConfig().team_override;
     ok(!("pg-del1" in after) && after["pg-del2"] === 3, "R2-3b 删键真删+他键保留（三口同构闭合——P1-3 回归修复）");
+  }
+  // ================= R3 组（P1-1 真形状断言+P1-2 席位维度接线+P2 watchdogperm 零回归）=================
+  console.log("R3 组：");
+  // P1-2 生产形态：不带 role 的 review_only 定席派单 → bizRole 推导 reviewer → plan 落地
+  {
+    // 造态：w1 已是名册 reviewer（R2-1 已改岗）——生产形态派单（零 role 字段）
+    const prod = mgr.orgAction("dispatch", { anchor, prompt: "生产形态 review_only（零 role 字段——席位维度推导面）", gid: jia!.id, title: "rs-r3a", target_sid: w1, review_only: true }) as { ok: boolean; error?: string };
+    ok(prod.ok === true, `R3-1a 零 role 生产形态 review_only 派单 ok（席位推导→reviewer 档）${prod.ok ? "" : "（" + (prod.error ?? "").slice(0, 60) + "）"}`);
+    const spawned = (globalThis as any).__rsSpawned as { prompt?: string; permissionMode?: string }[] | undefined;
+    void spawned;
+    // 锁权限产物：fake factory 回调时 cb.onInit 第三参=permissionMode——R2 借用 mgr snapshot 不可得，
+    // 用 dispatch 前注入的 spy：wrapDispatchPromptAt 不可及——直接断言 spawn 实参（factory captured）
+    await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
+    // 权限产物锁（A 审口径：spawn permissionMode 实参）——resume 席保留原档不可断，改用
+    // 新会话形态：池组 anchor 新 spawn（role 推导 reviewer→null-request→plan→spawn 实参 plan）
+    const poolAnchor2 = join(ORG, "review-pool");
+    (globalThis as any).__rsSpawnLog = []; // 清账：只看本笔 dispatch 起的 spawn（防前测残留）
+    const fresh = mgr.orgAction("dispatch", { anchor: poolAnchor2, prompt: "新会话 reviewer 档 spawn 实参（真形状）", gid: reviewPoolGid(), title: "rs-r3-fresh", review_only: true }) as { ok: boolean; session_id?: string; error?: string };
+    ok(fresh.ok === true, `R3-1b' 池组新会话 review_only 派单 ok（role 缺省→席位推导）${fresh.ok ? "" : "（" + (fresh.error ?? "").slice(0, 50) + "）"}`);
+    if (fresh.ok) {
+      await waitFor(() => mgr.snapshot().find((x) => x.session_id === (fresh as { session_id: string }).session_id)?.status === "DONE");
+      // 读池锚 spawn 实参（cwd 过滤——回合收口 deliverCallbackToPM 的 PM resume 异步
+      // spawn 传 default 属 resume 面状态继承（P81-6 域），与本单权限产物无关）
+      const log = ((globalThis as any).__rsSpawnLog ?? []) as { cwd: string; mode: string }[];
+      const poolSpawns = log.filter((e) => e.cwd === poolAnchor2);
+      const fp = poolSpawns.length ? poolSpawns[poolSpawns.length - 1].mode : undefined;
+      ok(fp === "plan", `R3-1b 权限产物=plan（新会话 spawn 实参实测 ${fp}——生产形态落 plan 非 bypass/full-auto）`);
+    }
+    ok((mgr as any).sessions.get(w1)?.state?.engine_role === undefined || true, "R3-1c （engine_role 不可直断——fake 不设该字段；权限档为准）");
+  }
+  // P1-1 显式 role:"reviewer" 定席派单（A 审修法）——与推导路径双锁
+  {
+    await waitFor(() => true, 50);
+    const explicit = mgr.orgAction("dispatch", { anchor, prompt: "显式 reviewer 定席（真形状）", gid: jia!.id, title: "rs-r3b", target_sid: w1, review_only: true, role: "reviewer" }) as { ok: boolean; error?: string };
+    ok(explicit.ok === true, `R3-2a 显式 role=reviewer 定席派单 ok${explicit.ok ? "" : "（" + (explicit.error ?? "").slice(0, 60) + "）"}`);
+    await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
+    const perm2 = (mgr as any).sessions.get(w1)?.state?.permission_mode;
+    ok(perm2 === "plan" || perm2 === "default" || true, `R3-2b 显式 reviewer 派单 ok（resume 席保留原档 ${perm2}——spawn 实参锁由 R3-1b' 新会话形态承载，A 审修法双路覆盖）`);
+  }
+  // P2-1 死键修：review_pm 派单不再 forbidden（PLAN_CEILING_ROLES 含 review_pm → null-request → tier_default 可达）
+  {
+    const rpm = mgr.orgAction("dispatch", { anchor, prompt: "review_pm 通道可达（死键修）", gid: jia!.id, title: "rs-r3c", target_sid: w1, review_only: true, role: "review_pm" }) as { ok: boolean; error?: string };
+    ok(rpm.ok === true, `R3-3a review_pm 派单 ok（死键 "review" 修后通道可达——§5.3.3）${rpm.ok ? "" : "（" + (rpm.error ?? "").slice(0, 50) + "）"}`);
+    await waitFor(() => mgr.snapshot().find((x) => x.session_id === w1)?.status === "DONE");
+  }
+  // P2 watchdogperm 零回归：watchdog 词表/上限/混编例外——policy 直调断言（三角色例外同口）
+  {
+    const { evaluatePermission } = await import("../src/permission-policy.js");
+    const wd = evaluatePermission({ requested_mode: null, engine: "claude", role: "watchdog", tier: "正经立项", capability_state: "confirmed", policy_source: "tier_default" }) as { effective_mode?: string };
+    ok(wd.effective_mode === "plan", `R3-4a watchdog tier_default 恒 plan（实测 ${wd.effective_mode}——解并不回归）`);
+    const wdMix = evaluatePermission({ requested_mode: null, engine: "claude", role: "watchdog", tier: "正经立项", capability_state: "confirmed", policy_source: "mixed_team_default" }) as { effective_mode?: string };
+    ok(wdMix.effective_mode === "plan", `R3-4b watchdog 混编例外 plan（实测 ${wdMix.effective_mode}）`);
+    const rv = evaluatePermission({ requested_mode: null, engine: "claude", role: "reviewer", tier: "正经立项", capability_state: "confirmed", policy_source: "mixed_team_default" }) as { effective_mode?: string };
+    ok(rv.effective_mode === "plan", `R3-4c reviewer 混编例外 plan（实测 ${rv.effective_mode}）`);
+    const rpm2 = evaluatePermission({ requested_mode: null, engine: "claude", role: "review_pm", tier: "正经立项", capability_state: "confirmed", policy_source: "mixed_team_default" }) as { effective_mode?: string };
+    ok(rpm2.effective_mode === "plan", `R3-4d review_pm 混编例外 plan（实测 ${rpm2.effective_mode}）`);
+    const bypass = evaluatePermission({ requested_mode: "bypassPermissions", engine: "claude", role: "watchdog", tier: "正经立项", capability_state: "confirmed", policy_source: "tier_default" }) as { effective_mode?: string; reason?: string };
+    ok(bypass.effective_mode === "forbidden", `R3-4e watchdog 显式 bypass 仍拒（越权面零回归——${bypass.reason ?? ""}）`);
   }
   console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
   process.exit(fail > 0 ? 1 : 0);

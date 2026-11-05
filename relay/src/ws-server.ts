@@ -36,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { REPLAY_FAST_MAX, type EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
+import { workerConcurrencyCap } from "./session-manager.js"; // W-RATELIMIT429：/api/state 全局帽
 import { SNAPSHOT_LOGS_LAN } from "./session-manager.js"; // W-INJECT④：LAN 快照宽窗（云端 CF 安全默认不动）
 import type { RelayConfig } from "./config.js";
 import { Bridge, parseGateTools } from "./bridge.js";
@@ -1102,6 +1103,21 @@ export function startServer(
     // M1/M2 审查轮：白名单强制上述口径——confirm-decide 属人类决议面，HTTP 放行
     // 等于允许读过 token 的进程（含 Leader/被注入的 worker）自批确认卡，绕过
     // 「用户是指挥/验收者」的确认门槛（此前只是注释声明，未强制）
+    // W-RATELIMIT429：轻量状态端点（token 鉴权）——bin 侧 leader-dispatch 派单前
+    // 并发提示数据源（workers_running=在编活 worker 数；cap=全局帽）。只读无副作用。
+    if (req.method === "GET" && url.pathname === "/api/state") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+        ok: true,
+        workers_running: mgr.activeManagedCount(),
+        cap: workerConcurrencyCap(),
+        queued: mgr.dispatchQueueSize(),
+      }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/org") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");

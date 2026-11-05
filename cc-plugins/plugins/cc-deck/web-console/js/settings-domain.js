@@ -561,14 +561,18 @@ function connectLan(ctx) {
     if (ctx.ws !== w) return;
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
+    linkQ.onOpen("lan"); // [W-LINKQUALITY] 段①记账：首连/断后恢复（downtime+attempts 随补报上行）
     setConn(ctx, "online", "已连接");
     syncTeamBind(); // #143 Leader 接线（B3-C3）：注入命令 Promise 通道；W-WINPAIR-R2：并行多源下按视角源在线性统一绑定
     window.__ccDeck005Frames.emit({ kind: "ws", state: "open", source: "lan" }); // #150 R1：总线广播连接事件（桥 connection→online）
   };
-  w.onclose = () => {
+  w.onclose = (ev) => {
     if (ctx.ws !== w) return;
     clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
-    setConn(ctx, "offline", "已断开", "transport");
+    linkQ.onDrop("lan", "close", ev && ev.code); // [W-LINKQUALITY] 段①记账+attempts 计数（重试轮每 close 递增，open 归零）
+    // [W-LINKQUALITY] 端上反馈：干转改「重连中（已尝试 N 次）」——断连可见不再是静默 offline
+    const tries = linkQ.attempts("lan");
+    setConn(ctx, "offline", tries > 1 ? "重连中 · 已尝试 " + tries + " 次" : "已断开 · 重连中", "transport");
     syncTeamBind(); // #143 Leader 接线：离线禁决议 + 飞行中命令判未达（可重试）；W-WINPAIR-R2 统一口径
     window.__ccDeck005Frames.emit({ kind: "ws", state: "close", source: "lan" }); // #150 R1：先广播断开（订阅者先结算飞行命令），再排重连
     scheduleReconnect(ctx);
@@ -1929,7 +1933,120 @@ function connectLan(ctx) {
           renderSessionList();
         }
       }
-      const RETRY_BASE_MS = 1000;
+
+// [W-LINKQUALITY]（1104 用户实锤×N）段①端侧遥测：断连/重连事件本地记（断连时 ws 已死
+// 无法即时上行——补报是唯一可靠通道）。R1（A审 P0/P1-1）补报改 **ws 帧上行**
+// （COMMAND_TELEMETRY_LINK）：不再 POST /api/telemetry/link——原链读全仓零写点的幽灵键
+// ccd_cfg（恒早退=web 两段全形态死）且 CF worker 无 /api/* 反代（云形态恒 404）；帧通道
+// 一处修通 web-lan/web-cloud（LAN ws 直发/云桥密封 shim 同命令面）。at-least-once 发送+
+// 服务端事件指纹去重（重发不双记账）。attempts 计数供「重连中（已尝试 N 次）」反馈。
+const linkQ = (() => {
+  const q = [];
+  const st = { lan: { openAt: 0, dropAt: 0, attempts: 0 }, cloud: { openAt: 0, dropAt: 0, attempts: 0 } };
+  function note(src, ev) { q.push(Object.assign({ ts: Date.now(), src }, ev)); if (q.length > 300) q.splice(0, q.length - 300); }
+  // 帧上行通道（R1）：按事件 src 分流——web-lan→ctx.ws、web-cloud→cloudCmdShim（密封）；
+  // 两源可能指向不同 relay，各记各账。通道未开=留队列（周期拍/下次 onOpen 再试）
+  const frameOf = (dest) => {
+    if (dest === "cloud") return (typeof cloudCmdShim !== "undefined" && cloudCtx.status === "online") ? cloudCmdShim : null;
+    return ctx.ws && ctx.ws.readyState === 1 ? ctx.ws : null;
+  };
+  function take(dest, n) { const out = []; for (let i = 0; i < q.length && out.length < n;) { if (q[i].src === "web-" + dest) out.push(q.splice(i, 1)[0]); else i += 1; } return out; }
+  return {
+    onOpen(chain) {
+      const s = st[chain]; const now = Date.now();
+      if (s.dropAt > 0) note("web-" + chain, { kind: "reconnect", downtimeMs: now - s.dropAt, attempts: Math.max(1, s.attempts) });
+      else note("web-" + chain, { kind: "connect" });
+      s.openAt = now; s.dropAt = 0; s.attempts = 0;
+      setTimeout(() => { try { linkQ.flush(); } catch {} }, 2500);
+    },
+    onDrop(chain, reason, code) {
+      const s = st[chain];
+      if (s.openAt > 0) { note("web-" + chain, { kind: "drop", reason: String(reason || "close").slice(0, 100), ...(code ? { code } : {}), connectedMs: Date.now() - s.openAt }); s.openAt = 0; }
+      if (s.dropAt === 0) s.dropAt = Date.now();
+      s.attempts += 1;
+    },
+    attempts(chain) { return st[chain].attempts; },
+    flush: linkQFlush, // 逃逸导出（onOpen 闭包 this 脆弱——具名函数单口，周期/可见性拍共用）
+  };
+  function linkQFlush() {
+    for (const dest of ["lan", "cloud"]) {
+      const w = frameOf(dest);
+      if (!w || !q.some((e) => e.src === "web-" + dest)) continue;
+      // 整队分批（R1·P2③：原单次 100 条+唯一触发 onOpen=长断连积压滞留；现 200/批×4 拍清，
+      // 服务端单批 200 截同口径）——fire-and-forget：发送失败 unshift 回队，下次拍重试
+      for (let guard = 0; guard < 4; guard += 1) {
+        const batch = take(dest, 200);
+        if (!batch.length) break;
+        try { w.send(JSON.stringify({ command_id: "lq-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8), type: "COMMAND_TELEMETRY_LINK", payload: { events: batch }, ts: Date.now() })); }
+        catch { q.unshift(...batch); break; }
+      }
+    }
+  }
+})();
+// R1·P2③：flush 触发补——onOpen 单次 → +30s 周期拍 + 可见性拍（长断连积压不再滞留）
+setInterval(() => { try { linkQ.flush(); } catch {} }, 30_000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { try { linkQ.flush(); } catch {} } });
+
+// [W-LINKQUALITY] 诊断卡渲染：linkqCard（index.html 骨架）——近 24h 断连/重连 P50·P95
+// 分段摘要。惰性拉取（卡片可见时一次性+点击强刷；6s 陈旧窗）；无数据如实「暂无事件」。
+(function wireLinkqCard() {
+  let at = 0, busy = false;
+  const fmt = (ms) => ms == null ? "—" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms");
+  // R1（A审 P0）：取数同改 ws 帧命令（get:"summary"→ack.data 回 LinkSummary）——原链读
+  // 幽灵键 ccd_cfg+HTTP GET（云形态 CF 无 /api/* 恒死）；帧通道 LAN 优先云兜底，ack 按
+  // command_id 从帧总线结算（与 B2 ackWaiters 同观测面），4s 超时兜底
+  function linkqSummaryFrame() {
+    if (ctx.ws && ctx.ws.readyState === 1) return ctx.ws;
+    if (typeof cloudCmdShim !== "undefined" && cloudCtx.status === "online") return cloudCmdShim;
+    return null;
+  }
+  async function fill(force) {
+    const el = document.getElementById("linkqSummary");
+    if (!el || busy) return;
+    if (!force && Date.now() - at < 6000) return;
+    busy = true;
+    try {
+      const w = linkqSummaryFrame();
+      if (!w) { el.textContent = "未连接任何源"; return; }
+      const cid = "lqsum-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      const j = await new Promise((resolve) => {
+        let off = () => {};
+        off = window.__ccDeck005Frames.subscribe((ev) => {
+          const f = ev && ev.frame;
+          if (!f || f.type !== "COMMAND_ACK" || f.command_id !== cid) return;
+          off(); clearTimeout(t); resolve(f);
+        });
+        const t = setTimeout(() => { off(); resolve(null); }, 4000);
+        try { w.send(JSON.stringify({ command_id: cid, type: "COMMAND_TELEMETRY_LINK", payload: { get: "summary" }, ts: Date.now() })); }
+        catch { off(); clearTimeout(t); resolve(null); }
+      });
+      if (!j) { el.textContent = "拉取失败（超时）"; return; }
+      if (!j.ok) { el.textContent = "拉取失败（" + (j.error || "relay 拒绝") + "）"; return; }
+      at = Date.now();
+      const d = (j && typeof j.data === "object" && j.data) ? j.data : {};
+      const bySrc = typeof d.dropsBySrc === "object" && d.dropsBySrc ? d.dropsBySrc : {};
+      const srcKeys = Object.keys(bySrc);
+      const drops = Number(d.drops) || srcKeys.reduce((n, k) => n + (Number(bySrc[k]) || 0), 0);
+      if (!drops && !Number(d.reconnects)) { el.textContent = "暂无事件（哨已布）"; return; }
+      el.textContent = "断连 " + drops + " 次 · 重连 P50 " + fmt(d.reconnectP50Ms) + " / P95 " + fmt(d.reconnectP95Ms) + (d.avgAttempts != null ? " · 均试 " + d.avgAttempts + " 次" : "");
+      const SEG_ZH = { bridge: "桥段（家 Mac↔CF）", "web-lan": "桌面·本机源", "web-cloud": "桌面·云桥源", rn: "手机" };
+      el.title = srcKeys.map((k) => (SEG_ZH[k] || k) + "：断 " + (Number(bySrc[k]) || 0) + " 次").join("\n") || "分段数据待积累";
+    } catch { el.textContent = "拉取失败"; }
+    finally { busy = false; }
+  }
+  document.addEventListener("click", (ev) => {
+    if (ev.target.closest && ev.target.closest("#linkqCard")) { void fill(true); }
+  });
+  let wired = 0;
+  const tick = setInterval(() => {
+    const el = document.getElementById("linkqSummary");
+    if (el && el.offsetParent !== null) { if (!wired) { wired = 1; void fill(false); } }
+    else wired = 0;
+  }, 4000);
+  tick.unref && tick.unref();
+})();
+
+      const RETRY_BASE_MS = 500; /* [W-LINKQUALITY] 提速①：起步 1s→0.5s（0.5/1/2/4/8/15 曲线——常见断连 ≤5s 恢复目标主刀） */
       const sessionList = document.querySelector("#d-session [data-session-list]");
       const ctx = {
         cfg: { wsUrl, token: relayToken },
@@ -2094,7 +2211,7 @@ function connectLan(ctx) {
           if (context.stopped) return; // R2-P1-1（A/B 双审同锤）：await 探针窗（≤1.5s）内停连（pagehide 唯一写点）不复活连接——healTimer await 后复查同款范式（:4541）
           connectLan(context);
         }, jitter);
-        context.reconnectDelay = Math.min(context.reconnectDelay * 2, 30000);
+        context.reconnectDelay = Math.min(context.reconnectDelay * 2, 15000); /* [W-LINKQUALITY] 提速②web 侧：封顶 30→15s（对齐 cloud-client） */
       }
 
       // ==================== 云桥链（B批移植，specs DV6g 备案） ====================
@@ -2555,6 +2672,7 @@ function connectLan(ctx) {
           opened = true;
           clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
           ctx.reconnectDelay = CLOUD_RETRY_BASE_MS; // 连上即归零退避
+          linkQ.onOpen("cloud"); // [W-LINKQUALITY] 段①记账（云 ws 生命周期——早退分支前：配对中也是连接事件）
           if (!peer || pair) {
             if (pair && !pair.rd && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); } // 无锚广播态预取发现帧（扫码空码信标路径保留 + R2-B2 输码广播需 RELAYS 补 cands 供 ack 试解）
             // R2：未配对且无 pendingPair（中毒存量 boot/静默未配对源）——原路 sendPairReq
@@ -2583,6 +2701,7 @@ function connectLan(ctx) {
           if (ctx.ws !== w) return;
           clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
           console.log("[cloud:" + cfg.name + "] ws 断开 code=" + ev.code);
+          linkQ.onDrop("cloud", "close-" + ev.code, ev && ev.code); // [W-LINKQUALITY] 段①记账+attempts（switched/poll 降级形态也计——断连事实与传输无关）
           if (switched) return;
           if (!opened) { switchToPoll("握手被拒 code=" + ev.code); return; }
           ctx.wsFails++; // 连上又断且一帧未收 → 疑似代理放行握手后掐连接
