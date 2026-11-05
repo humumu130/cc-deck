@@ -18,7 +18,7 @@ import { execFileSync } from "node:child_process"; // W-BOARDRECON-R3：dev log 
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
 import { reconcileBoardCards, harvestKeyOf } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）；R3 harvestKeyOf（已收割未翻判定）
-import { readDispatchLog, orgDir } from "./org.js";
+import { readDispatchLog, orgDir, dispatchLogPath } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
 import type { SessionManager } from "./session-manager.js";
@@ -331,11 +331,33 @@ export class PatrolModule {
       // （artifacts/w-*.md 含「结果：…｜改动文件：」即合规，slug 键与卡/台账统一）。
       const harvest = ((): Parameters<typeof reconcileBoardCards>[0]["harvest"] => {
         const doneLedger = new Map<string, { count: number; hasReceipt: boolean }>();
-        for (const row of dispatchLog) {
-          if (row.status !== "done" || !row.title) continue;
-          const key = harvestKeyOf(row.title);
+        // R1-P2-1（A 审）：台账 done 终态行不带 title（appendDispatch 只在 dispatched 首行
+        // 写——readDispatchLog 同 id 收敛取末行即丢；生产 1840 条仅 2 条带）→ 证据①恒死。
+        // 修=ndjson 原始行两段聚合（chainrecall R1 同款直读）：按 id 聚「任意行提 title+
+        // 末行判 done+任意行 receipt」，再按 slug 键聚合 count/hasReceipt。
+        const byId = new Map<string, { title?: string; done: boolean; hasReceipt: boolean }>();
+        try {
+          for (const line of readFileSync(dispatchLogPath(), "utf-8").split("\n")) {
+            const t = line.trim();
+            if (!t) continue;
+            try {
+              const r = JSON.parse(t) as { id?: string; title?: string; status?: string; receipt?: string };
+              if (typeof r.id !== "string" || !r.id) continue;
+              const cur = byId.get(r.id);
+              byId.set(r.id, {
+                title: r.title || cur?.title, // 首行（dispatched）title 保住——终态行不带
+                done: r.status === "done" || (cur?.done ?? false), // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done）
+                hasReceipt: !!r.receipt || (cur?.hasReceipt ?? false),
+              });
+            } catch { /* 损坏行跳过 */ }
+          }
+        } catch { /* 台账不可读：证据①缺席（②仍可用——R1-P1-1 后①本就是弱证） */ }
+        for (const { title, done, hasReceipt } of byId.values()) {
+          if (!done || !title) continue;
+          const key = harvestKeyOf(title);
+          if (!key) continue;
           const cur = doneLedger.get(key);
-          doneLedger.set(key, { count: (cur?.count ?? 0) + 1, hasReceipt: (cur?.hasReceipt ?? false) || !!row.receipt });
+          doneLedger.set(key, { count: (cur?.count ?? 0) + 1, hasReceipt: (cur?.hasReceipt ?? false) || hasReceipt });
         }
         if (Date.now() - this.reconDevLogCache.at > 10 * 60_000) {
           try {

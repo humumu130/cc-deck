@@ -134,6 +134,17 @@ export function reconcileBoardCards(input: {
   for (const s of input.sessions) {
     if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
   }
+  // R1-P2-2①：回落键全板唯一性索引——无 w- slug 锚的卡用前 10 字截断键，跨状态碰撞
+  //（done 卡与 submitted 卡同键，或两张 submitted 异文同键）时证据归属不可分辨
+  //（reviewseat/reviewseatr1 真板假告警实锤）。回落键仅全板无碰撞时参与证据匹配；
+  // 碰撞对一律 skip（连 advisory 都不出=消假告警噪音，人工板面本可见两卡）。
+  const fallbackKeyCounts = new Map<string, number>();
+  for (const { board: fb } of input.boards) {
+    for (const ent of fb.entries) {
+      const k = harvestKeyOf(String(ent.text || ""));
+      if (k && !k.startsWith("w-")) fallbackKeyCounts.set(k, (fallbackKeyCounts.get(k) ?? 0) + 1);
+    }
+  }
   for (const { gid, board } of input.boards) {
     // W-BOARDRECON-R3 重复卡检测（前置段——同 gid 同归一键 submitted 双卡）：告警卡提示
     // 合并不自动删（任务书口径③；本事故 sqlitefixr1 ×2 实锤）。注意在 harvested 判定前跑：
@@ -153,26 +164,40 @@ export function reconcileBoardCards(input: {
     }
     for (const e of board.entries) {
       // W-BOARDRECON-R3 判定族「已收割未翻」（手工收割断链第二现治本——1105 用户实锤
-      // 审查中 23 里 18 张已收割未翻）：submitted 滞留超阈值 + 收割证据三选一 → 翻 done；
-      // 证据多义（同键多卡）降告警卡（单键确认）不自动翻——auto 只动证据链闭合的。
+      // 审查中 23 里 18 张已收割未翻）：submitted 滞留超阈值 + 收割证据 → 翻 done。
+      // R1-P1-1（A 审）：翻卡只认②dev log（真收割证据）；①③（交付/收货时点产物）单独
+      // 在场降 advisory——在审返修/未 squash 的卡绝不被误翻。
       if (e.status === "submitted" && input.harvest) {
         const harvestStaleMs = input.harvestStaleMs ?? (Number(process.env.CCR_BOARDRECON_HARVEST_STALE_MS) || 2 * 3600_000);
         const updated = Number(e.updated_at || e.ts || 0);
         if (now - updated > harvestStaleMs) {
           const key = harvestKeyOf(String(e.text || ""));
-          const ev = input.harvest;
-          const ledgerHit = ev.doneLedger.get(key);
-          const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
-          const devHit = ev.devLogText.toLowerCase().includes(key);
-          const receiptOk = ev.receiptSlugs.has(key);
-          const hits = [ledgerOk && "台账 done+回执", devHit && "dev log 命中", receiptOk && "回执尾行合规"].filter(Boolean) as string[];
-          const dupCount = submittedByKey.get(key)?.length ?? 1;
-          if (hits.length >= 1 && dupCount === 1) {
-            actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted 陈化 ${Math.round((now - updated) / 3600_000)}h，收割证据：${hits.join(" + ")}——已收割未翻，翻 done（boardrecon auto）`, toBacklog: false, toDone: true });
-          } else if (hits.length >= 1 && dupCount >= 2) {
-            actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `证据在（${hits.join(" + ")}）但同键 ${dupCount} 卡并存——多义不自动翻，人工确认后单键翻卡`, toBacklog: false, advisory: true });
+          // R1-P2-2③：空键不参与证据匹配（includes("")/get("") 恒命中=假证据面）
+          // R1-P2-2①：回落键全板碰撞（计数>1）=证据归属不可分辨，skip 不出判定
+          if (key && !( !key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1 )) {
+            const ev = input.harvest;
+            const ledgerHit = ev.doneLedger.get(key);
+            const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
+            // R1-P2-2②：dev 命中加词边界（负向前瞻）——卡键 w-relayfreshci 不得被 log 里的
+            // w-relayfreshci-r1 超串误命中（前缀包含=假收割证据）
+            const devHit = key.startsWith("w-")
+              ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev.devLogText)
+              : ev.devLogText.toLowerCase().includes(key);
+            const receiptOk = ev.receiptSlugs.has(key);
+            // R1-P1-1（A 审）：证据分档——②=强（真收割：dev 已收）；①③=弱（交付/收货时点，
+            // 不证明进 dev）。EXECUTE 只认②；弱证单独在场=advisory「陈化在审请人工核」。
+            const weakHits = [ledgerOk && "台账 done+回执", receiptOk && "回执尾行合规"].filter(Boolean) as string[];
+            const hits = [devHit && "dev log 命中", ...weakHits].filter(Boolean) as string[];
+            const dupCount = submittedByKey.get(key)?.length ?? 1;
+            if (devHit && dupCount === 1) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted 陈化 ${Math.round((now - updated) / 3600_000)}h，收割证据：${hits.join(" + ")}（含 dev log=真收割）——已收割未翻，翻 done（boardrecon auto）`, toBacklog: false, toDone: true });
+            } else if (devHit && dupCount >= 2) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `dev log 命中但同键 ${dupCount} 卡并存——多义不自动翻，人工确认后单键翻卡`, toBacklog: false, advisory: true });
+            } else if (!devHit && weakHits.length >= 1 && dupCount === 1) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `交付/收货证据在（${weakHits.join(" + ")}）但 dev log 未命中——陈化在审请人工核（在审返修/未 squash 均此形态，不自动翻）`, toBacklog: false, advisory: true });
+            }
           }
-          // 无证据=真在审，不动（本单验收 2：5 张真在审不误翻）
+          // 无证据=真在审，不动（真在审不误翻）；空键/回落碰撞键=无可靠归一锚，同不动
         }
         continue;
       }

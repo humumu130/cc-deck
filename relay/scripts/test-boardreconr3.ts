@@ -28,9 +28,10 @@ const mkBoard = (entries: Array<Partial<ProjectBoard["entries"][number]>>): Proj
       ["w-ratelimit429", { count: 1, hasReceipt: true }],   // 证据①齐
       ["w-sqlitefixr1", { count: 1, hasReceipt: true }],    // 证据①齐但双卡（多义）
       ["w-boardrecon", { count: 1, hasReceipt: true }],
+      ["w-weakonly", { count: 1, hasReceipt: true }],        // R1-P1-1：①③齐而②缺（弱证形态）
     ]),
-    devLogText: "abc123 [任务] w-ratelimit429 限流治理\nxyz [任务] w-treegcr1 worktree gc", // 证据②
-    receiptSlugs: new Set(["w-treegcr1", "w-ratelimit429"]), // 证据③
+    devLogText: "abc123 [任务] w-ratelimit429 限流治理\nxyz [任务] w-treegcr1 worktree gc\ndef [任务] w-relayfreshci-r1 中继新鲜度修复\nghi [任务] w-devonly 仅dev证据单\njkl [任务] sqlitefixr1 sqlite 根修返修", // 证据②
+    receiptSlugs: new Set(["w-treegcr1", "w-ratelimit429", "w-weakonly"]), // 证据③
   };
   const r = reconcileBoardCards({
     boards: [{ gid: "g1", board: mkBoard([
@@ -40,6 +41,15 @@ const mkBoard = (entries: Array<Partial<ProjectBoard["entries"][number]>>): Proj
       { id: "s-treegc", text: "W-TREEGCR1：worktree GC 吃稿根治（脏树禁删）" },                  // 证据②③ → 翻
       { id: "s-live", text: "W-LIVEAUDIT：在审单（真审中无证据）", updated_at: fresh },          // 新鲜 → 不动
       { id: "s-nolive", text: "W-NOEVIDENCE：陈化但零证据（真在审）" },                          // 陈化无证据 → 不动
+      // ---- R1 返修五形态（A 审 P1 判据收敛+键碰撞三刀）----
+      { id: "s-weak", text: "W-WEAKONLY：①③齐无②（在审返修形态——dev 未进）" },               // ①③单独 → advisory
+      { id: "s-devonly", text: "W-DEVONLY：仅②（无①③——纯 dev 命中）" },                        // ②单独 → 翻
+      { id: "s-rfshort", text: "W-RELAYFRESHCI：中继新鲜度（前缀卡，dev 只有 -r1）" },           // 超串 → 不命中
+      { id: "s-rfr1", text: "W-RELAYFRESHCI-R1：中继新鲜度返修（dev 有 -r1）", updated_at: staleOld }, // 词边界正向 → 翻
+      { id: "s-empty", text: "" },                                                               // 空键 → 不参与
+      { id: "s-fb1", text: "审查席位一批：reviewseat 首巡" },                                    // 回落键碰撞对①
+      { id: "s-fb2", text: "审查席位二批：reviewseatr1 复巡" },                                  // 回落键碰撞对②（前10字同）
+      { id: "s-fbdone", text: "审查席位零批：已收割旧卡", status: "done" },                      // 同回落键 done 卡（全板计数>1）
     ]) }],
     sessions: [], dispatchLog: [], now, harvest,
   });
@@ -52,11 +62,19 @@ const mkBoard = (entries: Array<Partial<ProjectBoard["entries"][number]>>): Proj
   ok(!flip("s-nolive"), "A5 陈化但零证据不动（真在审不误翻——验收 2 判定面）");
   const dup = r.actions.find((a) => a.reason === "duplicate-card");
   ok(!!dup && dup.advisory === true && dup.detail.includes("s-sq1") && dup.detail.includes("s-sq2"), `A6 重复卡检测告警（同文本双卡：${dup?.detail.slice(0, 50)}）`);
+  // ---- R1 五形态（A 审 P1-1/P2-2）----
+  ok(!!flip("s-weak") && flip("s-weak")!.advisory === true && !flip("s-weak")!.toDone, "A9 ①③单独（无②）→advisory 不翻（在审返修形态——t-4e0a6fc2 误翻根修）");
+  ok(flip("s-weak")!.detail.includes("陈化在审请人工核"), "A9b advisory 文案（陈化在审请人工核）");
+  ok(!!flip("s-devonly") && flip("s-devonly")!.toDone === true && !flip("s-devonly")!.advisory, "A10 ②单独（无①③）→翻 done（dev=唯一真收割证据）");
+  ok(!flip("s-rfshort"), "A11 词边界：w-relayfreshci 卡不被 log 的 w-relayfreshci-r1 超串误命中（无①③即无判定）");
+  ok(!!flip("s-rfr1") && flip("s-rfr1")!.toDone === true, "A11b 词边界正向：w-relayfreshci-r1 卡真命中翻 done");
+  ok(!flip("s-empty"), "A12 空键不参与证据匹配（includes 空串恒真面封死）");
+  ok(!flip("s-fb1") && !flip("s-fb2"), "A13 回落键碰撞对（前 10 字同+板内 done 卡同键）→不出判定（假告警消音）");
   // A7 无 harvest 入参=判定族关闭（向后兼容）
   const rNoEv = reconcileBoardCards({ boards: [{ gid: "g1", board: mkBoard([{ id: "s-rl429", text: "W-RATELIMIT429：…陈化" }]) }], sessions: [], dispatchLog: [], now });
   ok(!rNoEv.actions.some((a) => a.entryId === "s-rl429"), "A7 harvest 缺席=族关闭（向后兼容）");
   // A8 键归一：无 slug 前缀回落前 10 字
-  ok(harvestKeyOf("巡查员上岗：首巡+自我介绍") === "巡查员上岗：首巡+自".slice(0, 10), `A8 归一键无 slug 回落（前 10 字符——实 ${harvestKeyOf("巡查员上岗：首巡+自我介绍")}）`);
+  ok(harvestKeyOf("巡查员上岗：首巡+自我介绍") === "巡查员上岗：首巡+自", "A8 归一键无 slug 回落（前 10 字符——字面量期望，恒等式写法已修）");
   ok(harvestKeyOf("W-RATELIMIT429：429 限流治理") === "w-ratelimit429", "A8b slug 锚大小写归一");
 }
 
