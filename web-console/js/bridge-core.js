@@ -95,6 +95,7 @@
                     resolved_at: item.resolved_at,
                     handled_at: item.handled_at,
                     dismissed_at: item.dismissed_at,
+                    snoozed_until: item.snoozed_until, // W-INBOX-V1 刀1：「稍后」到点回箱锚（relay 权威，端上只消费）
                   };
                 };
 

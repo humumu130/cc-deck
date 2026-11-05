@@ -175,6 +175,11 @@ export interface NotificationItem {
   created_at: number;
   resolved_at?: number;
   handled_at?: number;
+  /** W-INBOX-V1 刀1（收件箱 snooze 锚）：「稍后」到点回箱的 relay 侧持久锚——
+   * 毫秒时戳，now<snoozed_until 期间端上收件箱过滤该行（不计数不出组）；
+   * 到点自然回箱（端上 wake timer 重渲）。handled/dismissed/resolved 收口时清除
+   * （账已终态，锚无意义）。旧端不识别该字段零影响。 */
+  snoozed_until?: number;
 }
 
 export const SNAPSHOT_SCHEMA_VERSION = 1 as const;
