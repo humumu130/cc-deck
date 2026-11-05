@@ -2,7 +2,7 @@
   "expo": {
     "name": "CC Deck",
     "slug": "cc-deck",
-    "version": "0.7.0-test.99",
+    "version": "0.7.1-test.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -24,7 +24,7 @@
     },
     "android": {
       "package": "com.humumu.ccwatch",
-      "versionCode": 69999,
+      "versionCode": 70001,
       "adaptiveIcon": {
         "backgroundColor": "#050B12",
         "foregroundImage": "./assets/android-icon-foreground.png",
