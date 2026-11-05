@@ -418,6 +418,11 @@ export class Bridge {
   // ext id -> 最近一次 hook 事件到达时间（#211 空闲兜底的时钟之一：
   // Stop 上报被 403 丢弃时无任何事件到达，转录也不再增长 → 判定 CLI 实际空闲）
   private lastHookAt = new Map<string, number>();
+  // W-SESSIONMUTEX R1 P2-1：孪生审计限频账——ext id -> 最近已记的 pid 对+计数。
+  // 双活期间每 hook 事件一条审计会把「异常态」刷成背景噪音（每工具调用≥2 条，
+  // events.ndjson+chainAuditMirror 双落）；同 pid 对只记首条，每 100 条刷一行存续
+  // 证据（可见不刷屏）；新 pid 对（再孪生/换代）重新记首条。
+  private twinAuditPairs = new Map<string, { prev: number; ev: number; count: number }>();
 
   // 看门狗/子 Agent TTL 阈值（env 可调：测试用短值，生产默认 90s/60s/10min/30min）
   private readonly stuckAfterMs: number;
@@ -1279,8 +1284,20 @@ export class Bridge {
       if (!stalePidReport && prev?.cli_pid && prev.cli_pid !== ev.cli_pid
         && cliHostAlive(prev.cli_pid) && cliHostAlive(ev.cli_pid)) {
         try {
-          this.mgr.emitChainAudit("session-twin-detected", `${id.slice(0, 16)} 孪生实锤：记录 pid ${prev.cli_pid} 活 × 事件 pid ${ev.cli_pid} 活——两进程并行工作（W-SESSIONMUTEX，待裁决不自动处置）`);
-          this.mgr.notifyLeaderSystem(`[孪生实例] ${id.slice(0, 12)} 检测到两个活进程（pid ${prev.cli_pid} + ${ev.cli_pid}）同 sid 并行——请裁决正主（杀其一/显式接管）；relay 侧已拒新拉起（W-SESSIONMUTEX）`);
+          // W-SESSIONMUTEX R1 P2-1：限频——同 pid 对只记首条+计数（通知面 stableKey
+          // 收敛单卡不增面；审计面此前按事件粒度增账）。每 100 条刷一行存续行，
+          // 新 pid 对重记首条。
+          const rec = this.twinAuditPairs.get(id);
+          if (rec && rec.prev === prev.cli_pid && rec.ev === ev.cli_pid) {
+            rec.count += 1;
+            if (rec.count % 100 === 0) {
+              this.mgr.emitChainAudit("session-twin-detected", `${id.slice(0, 16)} 孪生持续：pid 对 ${prev.cli_pid}×${ev.cli_pid} 已吸收 ${rec.count} 条事件（W-SESSIONMUTEX 限频刷新，待裁决）`);
+            }
+          } else {
+            this.twinAuditPairs.set(id, { prev: prev.cli_pid, ev: ev.cli_pid, count: 1 });
+            this.mgr.emitChainAudit("session-twin-detected", `${id.slice(0, 16)} 孪生实锤：记录 pid ${prev.cli_pid} 活 × 事件 pid ${ev.cli_pid} 活——两进程并行工作（W-SESSIONMUTEX，待裁决不自动处置）`);
+            this.mgr.notifyLeaderSystem(`[孪生实例] ${id.slice(0, 12)} 检测到两个活进程（pid ${prev.cli_pid} + ${ev.cli_pid}）同 sid 并行——请裁决正主（杀其一/显式接管）；relay 侧已拒新拉起（W-SESSIONMUTEX）`);
+          }
         } catch { /* 暴露面尽力而为 */ }
       }
       if (!stalePidReport) {

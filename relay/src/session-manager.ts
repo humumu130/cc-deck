@@ -77,7 +77,7 @@ import { createMiscCommands, isManagedMode, PERM_MODE_ZH, sanitizeImages, saniti
 import { adoptReplayed } from "./lifecycle/adopt.js"; // W-SPLIT-S5①：收养域出舱（类面留壳）
 import { transitionLegal } from "./lifecycle/transition.js"; // W-SMIMPL ③：状态转移断言层（纯观测；SessionStatus 用 types.js 既有 import）
 import * as reviveMod from "./lifecycle/revive.js"; // W-SPLIT-S5②：autoRevive/激活器协调出舱
-import { pmKeepaliveEligible, PM_KEEPALIVE_DELAY_MS, sessionTwinWhy } from "./lifecycle/revive.js"; // #287 PM 常驻化保活判定（纯函数，schedule/fire 双查同源）；W-SESSIONMUTEX 同 sid 单活守卫单点
+import { pmKeepaliveEligible, PM_KEEPALIVE_DELAY_MS, sessionTwinWhy, twinBlockedError } from "./lifecycle/revive.js"; // #287 PM 常驻化保活判定（纯函数，schedule/fire 双查同源）；W-SESSIONMUTEX 同 sid 单活守卫单点；R1 twinBlockedError=孪生拦截 throw 统一构造（带 twinBlock 标记）
 import { ingestLinkEvents, linkSummary } from "./link-quality.js"; // [W-LINKQUALITY-R1] 补报帧单口（校验+去重+summary）
 import { setExternalUsage as setExtUsageMod, ctxWatchdogOnContext as ctxWdOnCtx, ctxWatchdogOnTurnBoundary as ctxWdOnBoundary } from "./lifecycle/context-link.js"; // W-SPLIT-S5③：上下文链出舱
 import { createNotifyCommands } from "./commands/notify-commands.js"; // W-SPLIT-S3c
@@ -97,7 +97,7 @@ import type { EmployeeHomeSettingsPayload
   , RetiredEntry } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 // W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排缺陷 P0 批）：worktree 互斥锁底座 + 审计词表
-import { claimWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther } from "./dispatch-lock.js";
+import { claimWorktreeLock, readWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther, writeWorktreeLock } from "./dispatch-lock.js";
 import { worktreeDirty } from "./worktree-gc.js"; // W-TREEGC：收口清锁守卫（脏树不清锁防裸奔）
 // W-DELIVERCB（用户 1102 拍板）：沃克交付 Callback 三线机制——去重账+文案（纯 fs 模块）
 import { amendFailedReport, appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js"; // domstep1r1：amendFailedReport=failed 六态修正行单点（P2-A③）
@@ -3451,6 +3451,36 @@ export class SessionManager {
             appendChildSession(this.cfg.dataDir, sdkId);
           }
           managed.state.relay_session_id = sdkId;
+          // W-SESSIONMUTEX R1 P0（A 审 review-w-sessionmutex-1105）：managed 会话 pid 源。
+          // 根因链：relay 自 spawn 的 CLI 带 CCR_RELAY_CHILD=1 被 bridge-hook.mjs:14 首行
+          // 短路（防双注册=设计，不解）→setExternalCliPid 无 hook 帧可调→state.cli_pid
+          // 恒 undefined→孤儿-alive 判据（sessionTwinWhy）对撞车三部曲唯一目标人群生产
+          // 不可达；子进程 pid 此前只活在内存 s.agent.childPid（重启必丢）。本边回写：
+          // onInit（pid 已就位）经 setExternalCliPid 写 state.cli_pid+SESSION_UPDATED 帧
+          // 落盘 events.ndjson——重启回放还原（history.ts:273 W-INJECT 既有链），判据
+          // 对 managed 人群自此可达。方案取舍（三选一，采①）：①本边回写落盘（与重启
+          // 恢复链直接衔接，帧驱动=幂等）；②boot 按 childSdkIds+ps argv 扫孤儿对账
+          // （开机一次性，覆盖不到重启后新 spawn 的窗）；③events 尾账兜底（cliPidFromEvents
+          // Tail 手法面向 ext 帧——managed 无帧可尾，恰是本修补的洞）。②③为补充面非源。
+          const cpid = managed.agent?.childPid;
+          if (typeof cpid === "number" && cpid > 0) {
+            this.setExternalCliPid(managed.state.session_id, cpid);
+            // W-SESSIONMUTEX R1 P1-2：树锁 pid 写入边。claim 边（dispatchWorker 派单时）
+            // 进程未生 pid 不可知→锁上 cli_pid 恒缺省=「同 sid 异 pid 进树=显式接管」
+            // 读侧识别前提永不成立（A 审 P1-2：无源管线）。本边（pid 就绪）回写自己
+            // 单的锁：cwd=worktree（worktreeBusySkip 同键口径）、锁 session_id 匹配才动
+            // （幂等重写自己锁——writeWorktreeLock 保留口径）；他人锁/无锁零动作，
+            // created_at/expires_at 原样保留（不续窗）。
+            try {
+              const wt = managed.state.cwd;
+              if (wt) {
+                const lk = readWorktreeLock(wt);
+                if (lk && lk.session_id === managed.state.session_id && lk.cli_pid !== cpid) {
+                  writeWorktreeLock(wt, { ...lk, cli_pid: cpid });
+                }
+              }
+            } catch { /* 尽力而为——锁回写失败不阻断 init 主链 */ }
+          }
           // 丢注入①（W-DELIVERCB R2；R3 接线修正 review-w-delivercb-r2-a）：PM 上线边
           // 补扫挂点=relay_session_id 回填**之后**（原挂回调体早段：bootstrap 边读 ""
           // 恒 throw 空转=军令「上线时刻」死边；resume 边读陈旧 sdkId 会把刚握手的
@@ -3964,7 +3994,7 @@ export class SessionManager {
       const twin = sessionTwinWhy(s);
       if (twin && twin !== "resume-in-flight") {
         this.emitChainAudit("session-twin-blocked", `${s.state.session_id.slice(0, 12)} resume 被拒（${twin}）——同 sid 已有活进程，不叠加实例（W-SESSIONMUTEX）`);
-        throw new Error(`同 sid 已有活进程（${twin}）——拒绝叠加第二实例（W-SESSIONMUTEX）；外部实例结束或显式接管后再拉`);
+        throw twinBlockedError(twin); // R1 P2-2：twinBlock 标记位——dispatchWorker catch 面据此走挂起待裁决分支
       }
     }
     const sdkId = s.state.relay_session_id;
@@ -4217,6 +4247,18 @@ export class SessionManager {
   // 帧「初始化超时（30s）」即出自这里的旧硬编码；大上下文 Leader 必超时），fail
   // 同时进熔断记账；用户点卡是手动意图，不受熔断压制（本函数无闸）
   private reviveSaved(s: ManagedSession): void {
+    // W-SESSIONMUTEX R1 P1-1：守卫下沉单点。reviveSaved 是与 resumeAgent 平行的独立
+    // spawn 通路，四调用方此前仅两口自带检查（keepalive fire 位内联 twinFire/PMRESUME
+    // 调前检查），两口裸奔：watchdog recoverFromStall 自动恢复+COMMAND_RESUME 手动
+    // 恢复——「全拉起路径兜底」承诺留旁路，未来新调用方默认裸奔。头部单点同
+    // resumeAgent 口径（孪生拦截优先于可恢复性判定；含审计行；调用侧既有内联检查
+    // 降级为快捷短路，保留无害）。codex 短路分支（纯状态翻面不 spawn）同受守卫：
+    // 孤儿活时翻「已恢复（等待输入）」是谎言态。
+    const twinHead = sessionTwinWhy(s);
+    if (twinHead && twinHead !== "resume-in-flight") {
+      this.emitChainAudit("session-twin-blocked", `${s.state.session_id.slice(0, 12)} reviveSaved 被拒（${twinHead}）——同 sid 已有活进程，不叠加实例（W-SESSIONMUTEX R1 单点）`);
+      throw twinBlockedError(twinHead);
+    }
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法恢复");
@@ -9057,6 +9099,18 @@ ${lines.join("\n")}
         // 重走派单链会再选中同一熔断熟手，形成重复入队循环；熔断冷却/过期席清理由
         // 重投时的 7012 闸自然承接）。
         const msg = e instanceof Error ? e.message : String(e);
+        // W-SESSIONMUTEX R1 P2-2：孪生拦截≠普通复活失败——普通失败降级新会话=同 id
+        // 亲和续跑（合法）；孪生拦截降级=**换作者**（新 sid）进同单同树，与活孤儿
+        // 进程的双作者写树面未消解（树锁不拦新 sid）——「拒新拉起」在派单语义里
+        // 变成「换作者继续」。照 failed 收口**挂起待裁决**（PM/用户杀其一或显式接管
+        // 后重派），不瞬态重试（孤儿活着，重试必再撞守卫白烧一轮）。
+        if ((e as { twinBlock?: boolean })?.twinBlock) {
+          const receipt = truncate(`熟手被孪生守卫拦（${truncate(msg, 90)}）——同 sid 活进程在，本单挂起待裁决（不换作者续跑；杀其一/显式接管后重派）`, 200);
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt, session_id: "", project_anchor: anchor, actor, failure_reason: "logic_error", ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields });
+          this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
+          console.error(`[dispatch] failed id=${dispatchId.slice(0, 8)} phase=resume 孪生守卫拦（挂起待裁决）: ${truncate(msg, 120)}`);
+          return { ok: false, error: `熟手孪生守卫拦（同 sid 活进程在，本单挂起待裁决）: ${msg}` };
+        }
         // veteran 非空 ⇒ input.gid 非空（6994 派单侧熟手必带 gid）——非空断言仅类型收窄
         const gCap = input.gid ? findGroup(input.gid) : null;
         const veteranGroupAtCap = !capReuse && !!gCap && gCap.status === "active" && genericWorkerCount(gCap.headcount) >= headcountCapOf(gCap);

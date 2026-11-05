@@ -313,6 +313,17 @@ export function sessionTwinWhy(s: any, now = Date.now()): string | null {
   return null;
 }
 
+/** W-SESSIONMUTEX R1：孪生拦截 throw 统一构造——Error 带 twinBlock 标记位。
+ * dispatchWorker 熟手 catch 面以此区分「孪生拦截≠普通复活失败」（P2-2：普通失败
+ * 降级新会话=同 id 亲和续跑；孪生拦截降级=**换作者**进同单同树，与活孤儿进程的
+ * 双作者写树面未消解——树锁不拦新 sid）。两 throw 点（resumeAgent/reviveSaved
+ * 头部守卫）共用本构造，防消息漂移导致识别失效。 */
+export function twinBlockedError(twin: string): Error {
+  const err = new Error(`同 sid 已有活进程（${twin}）——拒绝叠加第二实例（W-SESSIONMUTEX）；外部实例结束或显式接管后再拉`);
+  (err as Error & { twinBlock?: boolean }).twinBlock = true;
+  return err;
+}
+
 export function reviveEligible(mgr: any, s: any): string | null {
   if (s.state.external) return "external";
   if (s.agent) return "agent-alive";
