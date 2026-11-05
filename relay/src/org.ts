@@ -615,6 +615,15 @@ export function dispatchLogPath(dir?: string): string {
 // 尽力而为：写失败只 warn 不抛——台账是审计面，绝不阻断消息投递/回合状态主路径。
 // 无容量上限（append-only 审计语义，设计稿 §6.1 org_memory/dispatch_log 同口径）；
 // M1 量级 = 每次咨询 2 行，无需轮转。
+// W-TREEGC 关单事件回调面（单槽，setConfirmCreatedHook 同款形态）：appendDispatch
+// 终态行（done/failed）落账后触发。SessionManager 构造时注册（零回执=交付物失踪
+// 告警）；未注册（org 纯函数使用/测试）= 零行为变化
+type DispatchClosedHook = (e: DispatchEntry) => void;
+let dispatchClosedHook: DispatchClosedHook | null = null;
+export function setDispatchClosedHook(hook: DispatchClosedHook | null): void {
+  dispatchClosedHook = hook;
+}
+
 export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
   // #G5 失败分类学写侧单点：failed 行自动 failure_reason（receipt 错误串→分类器），
   // 调用方（spawn 失败/回合收口/看门狗等全部出口）零改动——全台账 failed 行带枚举
@@ -629,6 +638,8 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
     const ref = archiveDispatchTerminal(e, dir ?? orgDir());
     if (ref) e.run_ref = ref;
   }
+  // W-TREEGC 关单防线（1104 夜双事故：linkquality f49ec8ae 22:11 零提交静默关单树清；
+  // 域不变量 I4「副作用先存后做」对位）：终态行落账即通知挂载方——org 纯底座无环，
   // S3-P4 入队幂等咽喉（relfix-s，multica「入队幂等=存储约束」的写侧单点形态；
   // 续作修订=与 S2 同步收窄到非组锚）：新**开单**行（dispatched/queued）落账前查
   // 同锚活单——不同 id 且活（dispatched/running/queued）→ 拒写。与 S2（dispatchWorker
@@ -669,6 +680,12 @@ export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
     // [W-PMSEAT] 终态联检钩子：done/failed 行落账后触发（drill/审计行由 handler 自滤）
     if ((e.status === "done" || e.status === "failed") && dispatchTerminalHook) {
       try { dispatchTerminalHook(e); } catch { /* 联检尽力而为，绝不阻断台账 */ }
+    }
+    // treegc R1-P1-3（A 审）：hook 触发点在落账成功后（I4 副作用先存后做一致化——
+    // 拒写/fs 失败时账上无行而告警已出=幽灵告警，原实现与 :528 注释相反）。回调不
+    // import（setConfirmCreatedHook 同款单槽形态；告警判定在 session-manager 挂载侧）。
+    if (e.status === "done" || e.status === "failed") {
+      try { dispatchClosedHook?.(e); } catch { /* 告警面异常不反噬台账写 */ }
     }
     return true;
   } catch (e2) {

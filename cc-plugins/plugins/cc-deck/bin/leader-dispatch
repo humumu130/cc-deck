@@ -102,6 +102,10 @@ s = "-".join(runs)[:24].strip("-")
 print(s if s else "d" + datetime.datetime.now().strftime("%m%d-%H%M%S"), end="")
 PY
 )"
+# W-TREEGC：slug 兜底（1104 23:01 撞并发改写撕裂窗崩溃「slug unbound」实证——
+# 生成段被撕裂时 slug 可能未赋值，set -u 直炸。空值即死，不带空 slug 进建树段）
+slug="${slug:-}"
+[ -z "$slug" ] && die 2 "slug 生成为空（脚本撕裂/异常态）——拒绝继续，稍后重试派单"
 [ "$slug" = "ERR" ] && die 2 "--slug 只收小写字母/数字/短横线（≤41 字符，字母或数字开头）"
 wt="$wt_root/cc-deck-w-$slug"
 branch="$dtype/$slug"

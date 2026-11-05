@@ -185,8 +185,10 @@ export function clearWorktreeLock(worktree: string, dispatchId?: string): boolea
 
 /** dispatch 收口清锁扫描：CCR_WT_ROOT（缺省 /private/tmp，对齐 leader-dispatch CCR_WT_ROOT
  * 同名覆盖）下所有 *cc-deck-w* 目录的锁文件，dispatch_id 匹配收口单即清。O(目录数)——
- * worktree 数量个位数级，收口边调用可接受。坏目录/权限错误静默跳过（尽力而为，不炸收口）。 */
-export function scanClearWorktreeLocks(dispatchId: string, root?: string): string[] {
+ * worktree 数量个位数级，收口边调用可接受。坏目录/权限错误静默跳过（尽力而为，不炸收口）。
+ * W-TREEGC guard 谓词：清锁前逐目录问询（true=守卫跳过，锁留守）——脏树不清锁
+ * （1104 夜事故：relay 重启误关单→清锁→树裸奔被外部删除）。guarded 目录随 guardedOut 返回。 */
+export function scanClearWorktreeLocks(dispatchId: string, root?: string, guard?: (dir: string) => boolean, guardedOut?: string[]): string[] {
   if (!dispatchId) return [];
   const wtRoot = root ?? process.env.CCR_WT_ROOT ?? "/private/tmp";
   const cleared: string[] = [];
@@ -196,6 +198,11 @@ export function scanClearWorktreeLocks(dispatchId: string, root?: string): strin
       const dir = join(wtRoot, name);
       const p = join(dir, WORKTREE_LOCK_FILE);
       if (!existsSync(p)) continue;
+      // W-TREEGC：守卫谓词在清前拦截（锁留守=树占位牌）
+      if (guard?.(dir)) {
+        guardedOut?.push(dir);
+        continue;
+      }
       // P1-1：跳过即留痕（无 id 哨兵锁/他人锁被收窄保护——排障可见，不静默吞）
       if (clearWorktreeLock(dir, dispatchId)) cleared.push(dir);
       else console.log(`[dispatch-lock] 收口清锁跳过（非本单锁或无 id 哨兵锁，只按过期失效）: ${dir}`);
