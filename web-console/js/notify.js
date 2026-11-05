@@ -208,6 +208,21 @@
                     if (dismissedNotifyKeys.has(aKey)) continue;
                     if (bridge.notifications.some((n) => n.key === aKey)) continue;
                     rows.push({ synth: true, ledgerKey: aKey.startsWith("acceptance:"), kind: "acceptance", key: aKey, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, userPending: isUserPending(pending, "acceptance", acceptance.id), source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
+                  // W-AGGREGATE-V1 升级时机（决策表二阶）：散会话聚合建议 ≥3 天未交互且桶
+                  // 仍达阈值 → 本组单条（注意=琥珀非红；active=false 恒不进需行动组/不计
+                  // badge）。清单由项目域 renderQueue 刷新（window.__ccDeck005AggUpgrades，
+                  // 已含阈值/冷却/静默名单闸）；行可 ✗（dismissedNotifyKeys 同账）。
+                  for (const upg of (Array.isArray(window.__ccDeck005AggUpgrades) ? window.__ccDeck005AggUpgrades : [])) {
+                    const key = "agg:" + String(upg.dir || "");
+                    if (!upg || !upg.dir || dismissedNotifyKeys.has(key)) continue;
+                    rows.push({ synth: true, kind: "system", key, title: "聚合建议：" + (upg.n || 0) + " 个散会话同目录 " + String(upg.name || ""), body: String(upg.evidence || "") + " · 点项目域「未入项目」桶卡的「聚合为团队 →」可一键预填建团", ts: Number(upg.ts) || Date.now(), unresolved: true, active: false, actionable: false, userPending: false, source: upg, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                  }
+                  const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
+                  if (!hasAcceptanceChannel) {
+                    for (const acceptance of bridge.accepts) {
+                      if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
+                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, userPending: isUserPending(pending, "acceptance", acceptance.id), source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
+                    }
                   }
                   // [W-AWAITUSER] 待拍板顶格：扩同一排序器（需人优先 active 键之前加
                   // userPending 键——不造第二排序器、不改三分组结构，observe3

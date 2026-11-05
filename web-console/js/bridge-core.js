@@ -477,6 +477,64 @@
                 const PROJECT_UNFILED_KEY = "cc-deck-005-project-unfiled-collapsed";
                 let unfiledCollapsed = (() => { try { return localStorage.getItem(PROJECT_UNFILED_KEY) !== "0"; } catch (_) { return true; } })();
 
+                // ── W-AGGREGATE-V1（1105 用户令 PCS 场景；PRD prd-aggregate-recommend.md +
+                // 时机决策表 research-aggregate-product-C）：未入项目桶内联聚合推荐 ──
+                // 主时机=同目录桶会话≥3 且最旧龄≥30min，桶卡副行内联「聚合为团队 →」
+                // （零弹窗零 badge——看见了才在）；不推闸（决策表）：桶内有 WORKING（专注期
+                // 不推）/同桶指纹 24h 内已忽略/累计忽略≥3 次进静默名单/设置域总开关关。
+                // 证据行常显不藏 hover（审计美学）：cwd 前缀（桶本身）+initial_prompt/title
+                // 共享词——「同目录 ×N · 提及『词』×M」；提不出共享词只显目录维度不硬造。
+                // 推荐≠自动建（三防）：主钮=预填 openTeamCreate（team-domain ⑭ 参数位），
+                // 落点仍走既有确认/提交流程。指纹=normDir 桶键（同目录=同指纹）。
+                const AGG_MIN_SESSIONS = 3, AGG_MIN_AGE_MS = 30 * 60_000, AGG_COOLDOWN_MS = 24 * 3600_000, AGG_MAX_REJECTS = 3;
+                const AGG_PREF_KEY = "cc-deck-005-agg-prefs";
+                const aggPrefs = (() => { try { return JSON.parse(localStorage.getItem(AGG_PREF_KEY) || "{}") || {}; } catch (_) { return {}; } })();
+                const aggPrefsSave = () => { try { localStorage.setItem(AGG_PREF_KEY, JSON.stringify(aggPrefs)); } catch (_) {} };
+                const AGG_STOPWORDS = new Set(["的", "了", "和", "与", "在", "是", "一个", "这个", "以及", "然后", "任务", "会话", "问题", "修复", "处理", "继续", "推进", "进行", "需要", "请", "帮我", "任务书", "claude", "claude"]);
+                // 共享词提取：桶内各会话 title||initial_prompt 抽词（CJK 2-6 字/ASCII ≥3 字母数字），
+                // 取「出现于 ≥半数会话」的最高频词——证据行用；无则 null（不硬造）
+                const aggSharedWord = (sessions) => {
+                  const perDoc = sessions.map((s) => String(s.title || s.initial_prompt || ""));
+                  const freq = new Map();
+                  for (const doc of perDoc) {
+                    const words = new Set((doc.match(/[一-龥]{2,6}|[A-Za-z][A-Za-z0-9_-]{2,}/g) || []).map((w) => w.toLowerCase()));
+                    for (const w of words) { if (AGG_STOPWORDS.has(w)) continue; freq.set(w, (freq.get(w) || 0) + 1); }
+                  }
+                  const need = Math.max(2, Math.ceil(perDoc.length / 2));
+                  let best = null, bestN = 0;
+                  for (const [w, n] of freq) { if (n >= need && n > bestN) { best = w; bestN = n; } }
+                  return best ? { word: best, n: bestN } : null;
+                };
+                // 推荐判定：null=不显；对象=显（evidence 供证据行）
+                function aggregateHintOf(entry, now = Date.now()) {
+                  if (entry.group || entry.key.indexOf("c:") !== 0) return null; // 只挂未立项桶
+                  const sessions = entry.sessions;
+                  if (sessions.length < AGG_MIN_SESSIONS) return null;
+                  if (sessions.some((s) => s.status === "WORKING")) return null; // 专注期不推
+                  const oldest = Math.min(...sessions.map((s) => Number(s.updated_at) || 0));
+                  if (!oldest || now - oldest < AGG_MIN_AGE_MS) return null; // 最旧龄≥30min
+                  const fp = entry.anchor; // 桶键=normDir 目录=指纹
+                  const pref = aggPrefs[fp];
+                  if (pref && (pref.rejects >= AGG_MAX_REJECTS)) return null; // 静默名单
+                  if (pref && pref.ignoredAt && now - pref.ignoredAt < AGG_COOLDOWN_MS) return null; // 24h 冷却
+                  if (!pref || !pref.firstSeenAt) { aggPrefs[fp] = { ...(pref || {}), firstSeenAt: now }; aggPrefsSave(); } // 首见记账（升级时机判据用）
+                  const shared = aggSharedWord(sessions);
+                  return { dir: fp, name: basename(fp), n: sessions.length, word: shared && shared.word, wordN: shared ? shared.n : 0, firstSeenAt: aggPrefs[fp].firstSeenAt };
+                }
+                const aggEvidenceLine = (h) => "同目录 ×" + h.n + (h.word ? " · 提及「" + h.word + "」×" + h.wordN : "") + " · 未建项目";
+                // 升级时机（决策表二阶）：静默位 ≥3 天从未交互（未点建团/未忽略）且桶仍
+                // 达阈值 → 通知面「注意」组单条（琥珀非红）。清单在 renderQueue 尾部刷新
+                // （window.__ccDeck005AggUpgrades），notify 域 synth 消费——永不进需行动组/
+                // 永不计 badge（synth 行 active=false）。
+                const AGG_UPGRADE_MS = 3 * 86400_000;
+                function aggUpgradeOf(entry, hint, now = Date.now()) {
+                  if (!hint) return null;
+                  const pref = aggPrefs[hint.dir] || {};
+                  if (pref.actedAt || pref.ignoredAt) return null; // 交互过（点建团/忽略）不升级
+                  if (!pref.firstSeenAt || now - pref.firstSeenAt < AGG_UPGRADE_MS) return null;
+                  return { dir: hint.dir, name: hint.name, n: hint.n, evidence: aggEvidenceLine(hint), ts: pref.firstSeenAt };
+                }
+
                 // #158-批4a：目录归一比较兼容 \ 分隔（Windows 数据 \ 与拼 / 不匹配会让项目前缀
                 // 归组/子目录匹配失效）；展示输出统一 displayPath（桌面 Windows 形态反斜杠）
                 const displayPath = window.__ccDeck005PathUi.displayPath;
@@ -605,10 +663,21 @@
                     const openBtn = '<button class="project-open-btn" type="button" data-project-open="' + escapeHtml(nativePath) + '" aria-label="在文件夹中定位" title="在文件夹中定位 · ' + escapeHtml(displayPath(nativePath)) + '"' + (nativePath && shellOpen ? "" : ' style="display:none"') + '><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg></button>';
                     const metaBits = [entry.sessions.length + " 会话"];
                     if (working > 0) metaBits.push(working + " 进行中");
+                    // W-AGGREGATE-V1：未立项桶卡内联推荐条（主时机静默位——零弹窗零 badge，
+                    // 看见了才在）。证据行常显（审计美学不藏 hover）：目录维度+共享词维度。
+                    const aggHint = unfiled ? aggregateHintOf(entry) : null;
+                    const aggHtml = aggHint
+                      ? '<div class="agg-hint" data-agg-hint="' + escapeHtml(aggHint.dir) + '">'
+                        + '<button class="agg-btn" type="button" data-agg-create="' + escapeHtml(aggHint.dir) + '" title="打开预填好的建团弹窗——推荐只预填不代创建">聚合为团队 →</button>'
+                        + '<span class="agg-evidence">' + escapeHtml(aggEvidenceLine(aggHint)) + "</span>"
+                        + '<button class="agg-ignore" type="button" data-agg-ignore="' + escapeHtml(aggHint.dir) + '" title="本目录 24 小时内不再推荐（累计 3 次永久静默）">忽略</button>'
+                        + "</div>"
+                      : "";
                     return '<div class="queue-card pc2 pc3' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'
                       + '<div class="pc2-r1"><i class="pc3-dot ' + dot + '"></i><strong class="pc2-name">' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="cc-badge is-alert">需行动 ' + (actions > 9 ? "9+" : actions) + "</span>" : "") + "</div>"
                       + '<div class="pc2-r2"><span class="pc3-path">' + escapeHtml(pathMeta(entry.group ? entry.anchor : (entry.nativeCwd || entry.anchor))) + "</span>" + openBtn + "</div>"
                       + '<div class="pc3-meta">' + escapeHtml(metaBits.join(" · ")) + "</div>"
+                      + aggHtml
                       + "</div>";
                   };
                   const group = (label, list) => list.length ? '<div class="queue-group" data-count="' + list.length + '">' + escapeHtml(label) + "</div>" + list.map(card).join("") : ""; // W-UIV3 A7：计数右对齐（CSS ::after 消费 data-count）
@@ -620,6 +689,12 @@
                       + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
                     : "";
                   const markup = group("活跃项目", activeList) + group("待确认新建项目", pendingList) + group("挂起/归档", parkedList) + unfiledMarkup;
+                  // W-AGGREGATE-V1 升级清单刷新（notify 域 synth 消费——注意组单条）
+                  try {
+                    window.__ccDeck005AggUpgrades = unfiledList
+                      .map((e) => aggUpgradeOf(e, aggregateHintOf(e)))
+                      .filter(Boolean);
+                  } catch (_) { window.__ccDeck005AggUpgrades = []; }
                   const qSig = "q:" + bSigOf(markup); // #282 三批 N2：未变帧零重建（折叠态/hover 存活）
                   const moFirstQueue = els.queue.dataset.b2qSig === undefined; // W-UI-MOTION-BATCH：首装沿判（仅首帧 stagger，后续整队重建不重排）
                   if (els.queue.dataset.b2qSig !== qSig || !els.queue.childElementCount) {
@@ -916,7 +991,42 @@
                     return;
                   }
                   const queueCard = target.closest("[data-project-key]");
-                  if (queueCard) { selectedKey = queueCard.dataset.projectKey || ""; render(); return; }
+                  if (queueCard) {
+                    // W-AGGREGATE-V1：推荐条动作先行于选卡（条在卡内——点钮不选卡）
+                    const aggCreate = target.closest("[data-agg-create]");
+                    if (aggCreate) {
+                      const dir = String(aggCreate.dataset.aggCreate || "");
+                      const entry = deriveEntries().find((e) => e.key === "c:" + dir);
+                      const hint = entry ? aggregateHintOf(entry) : null;
+                      if (entry && hint) {
+                        const open = window.ccDeckTeam && typeof window.ccDeckTeam.openTeamCreate === "function" ? window.ccDeckTeam.openTeamCreate : null;
+                        if (!open) { toast("团队域未就绪，稍后再试"); return; }
+                        // 预填五位（teampolish ⑭ 参数位）：名=目录 basename/锚=桶目录/
+                        // 成员=活跃序预勾（含野生——观察位语义在弹窗行内标注）/
+                        // 档=轻立项（低摩擦缺省，正经立项留给用户主动升）/origin=溯源小注
+                        open({
+                          name: hint.name,
+                          anchor: dir,
+                          tier: "轻立项",
+                          members: [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0)).map((s) => s.session_id),
+                          origin: aggEvidenceLine(hint),
+                        });
+                        aggPrefs[dir] = { ...(aggPrefs[dir] || {}), actedAt: Date.now() }; aggPrefsSave(); // 已交互记账（升级时机不再打扰）
+                      }
+                      return;
+                    }
+                    const aggIgnore = target.closest("[data-agg-ignore]");
+                    if (aggIgnore) {
+                      const dir = String(aggIgnore.dataset.aggIgnore || "");
+                      const prev = aggPrefs[dir] || {};
+                      aggPrefs[dir] = { ...prev, ignoredAt: Date.now(), rejects: (prev.rejects || 0) + 1 };
+                      aggPrefsSave();
+                      toast(prev.rejects && (prev.rejects + 1) >= AGG_MAX_REJECTS ? "本目录已静默（累计忽略 " + AGG_MAX_REJECTS + " 次）" : "已忽略 · 本目录 24 小时内不再推荐");
+                      render();
+                      return;
+                    }
+                    selectedKey = queueCard.dataset.projectKey || ""; render(); return;
+                  }
                   // W-PROJIA 案C：分区「全部 N 条 ▾」就地展开/收起（超量分区才有；
                   // 展开态域内会话态记忆，render 后滚动位置随内容自然保持）
                   const psecToggle = target.closest("[data-psec-toggle]");
