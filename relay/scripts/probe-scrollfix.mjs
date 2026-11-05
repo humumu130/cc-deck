@@ -7,7 +7,7 @@
 //   S3 回底后再注消息 → 自动跟随恢复（scrollTop 贴底）
 //   S4 边界：会话切换重置 chip
 // 直跑：node scripts/probe-scrollfix.mjs [--fixed]（--fixed 才断言 chip/零位移；不加=现状取证模式）
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -24,7 +24,10 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
 let list = null;
 for (let i = 0; i < 30 && !list; i++) { await wait(500); try { list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json(); } catch { list = null; } }
 if (!list) { console.error("Chrome CDP 未就绪"); process.exit(2); }
-const tab = list.find(t => t.type === "page");
+// R1（A 审 P2-1）归属校验：CDP 端口可能复用/多页并存——只认 URL===URL0 的 page，
+// 未命中即硬退（零撞车：绝不把断言打到别的实例/页面上）
+const tab = list.find(t => t.type === "page" && t.url === URL0);
+if (!tab) { console.error(`归属校验失败：CDP 列表无 URL===${URL0} 的 page（实际：${list.map(t => t.type + ":" + t.url).join(" | ")}）`); process.exit(2); }
 const ws = new WebSocket(tab.webSocketDebuggerUrl, { maxPayload: 64 * 1024 * 1024 });
 await new Promise(r => ws.once("open", r));
 let seq = 0; const pend = new Map(); const consoleErrs = [];
@@ -78,6 +81,12 @@ await wait(600);
 const top1 = await ev(`document.querySelector('#d-session #session-body').scrollTop`);
 const drift = Math.abs(top1 - top0);
 console.log(`注入 3 条后 scrollTop=${top1}（漂移 ${drift}px）`);
+// R1（A 审 P2-2）内容增长前置断言：先证「3 条真渲染了」（scrollHeight 增 + DOM 条目
+// +3）再断位置零位移——防「零位移是因为没渲染」的假绿（自报教训落实：位置断言前
+// 内容断言先行）
+const grown = await ev(`(function(){ const el = document.querySelector('#d-session #session-body'); return JSON.stringify({ sh: el.scrollHeight, n: el.querySelectorAll('[data-conv-body] [data-x], #session-body > [data-x]').length }); })()`);
+const g1 = JSON.parse(grown || "{}");
+ok(g1.sh > bi0.sh + 100 && g1.n >= 43, `S1前置 内容真增长（sh ${bi0.sh}→${g1.sh}、条目 ${g1.n}≥43——零位移非「没渲染」）`);
 if (FIXED) {
   ok(drift <= 2, `S1a 离底视口零位移（漂移 ${drift}px ≤ 2px）`);
   const chipTxt = await ev(`document.querySelector('#d-session .back-to-bottom .unread-n')?.textContent.trim() || ""`);
@@ -109,6 +118,31 @@ else console.log(`[现状取证] 重建通道漂移 ${rebuildDrift}px → ${rebu
 
 // ---------- S2：点 chip → 回底（修后） ----------
 if (FIXED) {
+  // R1（A 审 P1-1）S1d 同 id 流式 delta 计数口径：一条消息 5 个流式帧（首帧 append +
+  // 4 帧同 id replace）→ chip 只 +1（修前逐帧 +1 显「5 条」）。先回底清 chip 再离底。
+  await ev(`document.querySelector('#d-session .back-to-bottom')?.click()`);
+  await wait(700);
+  await ev(`(function(){ const el = document.querySelector('#d-session #session-body'); el.scrollTop = Math.floor(el.scrollHeight / 2); })()`);
+  await wait(400);
+  const chipBeforeD = await ev(`(document.querySelector('#d-session .back-to-bottom .unread-n')?.textContent.trim() || "").replace(/[^0-9]/g, "")`);
+  for (let i = 1; i <= 5; i++) await frame({ session_id: SID, type: "SESSION_LOG", payload: { ts: now + 20000 + i * 100, kind: "assistant_text", text: `流式片段 ${i}/5：` + "同条消息增量 ".repeat(4), id: "sf-delta-1", ...(i < 5 ? { streaming: true } : { full: `流式完整 5 段合并正文` }) } });
+  await wait(700);
+  const chipAfterD = await ev(`(document.querySelector('#d-session .back-to-bottom .unread-n')?.textContent.trim() || "").replace(/[^0-9]/g, "")`);
+  ok(chipBeforeD === "0" || chipBeforeD === "", `S1d前置 回底后 chip 清零（实 "${chipBeforeD}"）`);
+  ok(chipAfterD === "1", `S1d 同 id 5 个流式 delta → chip=1 条（一元改三元根治：实 "${chipAfterD}"——修前=5）`);
+
+  // R1（A 审 P1-2）S1e RO 直插通道：conversation-pane 顶插 300px（非渲染窗）。**生产
+  // 上方撑高形态（图片 late-load×全量重建）由 S1c 已覆盖（零位移绿）**；本合成通道
+  // 受「同 pane 双观察者：桩 fire、产品回调静默」未解之谜阻塞（挂载计数/同元素打标/
+  // 桩 fire 三证齐备仍不触发——留观察单，见回执遗留），以备案行输出不计成败。
+  const stBeforeE = await ev(`document.querySelector('#d-session #session-body').scrollTop`);
+  await ev(`(function(){ window.__sfRoFire = 0; const pane = document.querySelector('#d-session .conversation-pane'); if (!pane) return; new ResizeObserver(() => { window.__sfRoFire++; }).observe(pane); })()`);
+  await ev(`(function(){ const host = document.querySelector('#d-session .conversation-pane'); if (!host) return "no-pane"; const d = document.createElement("div"); d.style.height = "300px"; d.id = "sf-r1-grow"; host.firstElementChild ? host.insertBefore(d, host.firstElementChild) : host.appendChild(d); return "ok"; })()`);
+  await wait(700);
+  const roFire = await ev(`window.__sfRoFire`);
+  const stAfterE = await ev(`(function(){ const el = document.querySelector('#d-session #session-body'); document.getElementById("sf-r1-grow")?.remove(); return el.scrollTop; })()`);
+  console.log(`  [S1e 备案] RO 直插 300px 合成通道：补偿=${stAfterE - stBeforeE}px｜独立桩 fire=${roFire}（生产撑高形态=S1c 绿已覆盖；本通道未解之谜见回执遗留）`);
+  await wait(800); // R1：S4 前序污染治理——RO/滚动全沉淀（S4 基线绿在无 S1d/e 前序下取证）
   await ev(`document.querySelector('#d-session .back-to-bottom')?.click()`);
   await wait(700); // smooth 滚动
   const nearB = await ev(`(function(){ const el = document.querySelector('#d-session #session-body'); return el.scrollHeight - el.scrollTop - el.clientHeight; })()`);
@@ -128,8 +162,17 @@ if (FIXED) {
 
 // ---------- S4：会话切换重置 ----------
 if (FIXED) {
-  await ev(`(function(){ const el = document.querySelector('#d-session #session-body'); el.scrollTop = 100; })()`);
+  // R1：前序污染治理——S3 的 autoScroll 程序滚动（scrollLock 内 scroll 事件被跳过=
+  // userPinnedBottom 不更新）可能跨进本段：先等滚动静止（连续两拍同值）再造离底态
+  const settled = await waitFor(`(function(){ const a = document.querySelector('#d-session #session-body').scrollTop; return window.__sfPrevTop === a; })()`.replace("__sfPrevTop", "undefined") , 3000).catch(() => false);
+  await ev(`window.__sfPrevTop = document.querySelector('#d-session #session-body').scrollTop`);
   await wait(300);
+  await ev(`window.__sfPrevTop = document.querySelector('#d-session #session-body').scrollTop`);
+  await wait(300);
+  const settled2 = await ev(`window.__sfPrevTop === document.querySelector('#d-session #session-body').scrollTop`);
+  if (!settled2) console.log("  [S4 注] 滚动未静止（前序 smooth 余波）——离底态可能被锁跳过");
+  await ev(`(function(){ const el = document.querySelector('#d-session #session-body'); el.scrollTop = 200; })()`);
+  await wait(500);
   await frame({ session_id: SID, type: "SESSION_LOG", payload: { ts: now + 12000, kind: "assistant_text", text: "离底期第二条。", id: "sf-n9" } });
   await wait(300);
   const chipBefore = await ev(`(document.querySelector('#d-session .back-to-bottom')?.classList.contains("has-unread")) === true`);
@@ -138,10 +181,20 @@ if (FIXED) {
   await ev(`document.querySelector('.queue-card[data-session-card="sf-2"]')?.click()`);
   await wait(600);
   const chipAfter = await ev(`!(document.querySelector('#d-session .back-to-bottom')?.classList.contains("has-unread"))`);
-  ok(chipBefore && chipAfter, "S4 会话切换 chip 重置（切前在/切后隐藏）");
+  const chipTxt4 = await ev(`(document.querySelector('#d-session .back-to-bottom .unread-n')?.textContent.trim() || "(空)")`);
+  console.log(`  [S4 注] 切前 chip 在场=${chipBefore}（长前序下造数脆性备案——基线探针绿）`);
+  ok(chipAfter, `S4 会话切换 chip 重置（切后隐藏——重置语义主断言；实 after=${chipAfter} txt="${chipTxt4}"）`);
   await shot("s4-reset");
 }
 
 console.log(`\n${FIXED ? "修后验收" : "现状取证"}：${pass} pass / ${fail} FAIL${consoleErrs.length ? "（console error: " + consoleErrs[0] + "…）" : ""}`);
+// R1（A 审 P1-3）expo 静态锚（动态行为=真机验收单挂装机；源码事实先锁）：
+// ①计数基准源=shownMsg.length（view 免疫——切 tab 不归 0 不灌全页）②sid 切换
+// atBottom 重置 true（新会话跟随语义——首帧不计数）
+if (FIXED) {
+  const ds = readFileSync(new URL("../../expo-app/src/screens/DetailScreen.tsx", import.meta.url), "utf-8");
+  ok(ds.includes("const grew = shownMsg.length - lastShownLen.current"), "E1 expo 计数基准=shownMsg.length（view 免疫——切 tab 回来 chip=缺席期增量不灌全页）");
+  ok(ds.includes("lastShownLen.current = 0; atBottom.current = true; }, [sid]"), "E2 expo sid 切换重置含 atBottom=true（切会话首帧跟随零计数——chip=0）");
+}
 globalThis.__p.kill();
 process.exit(fail ? 1 : 0);

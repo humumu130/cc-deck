@@ -3271,11 +3271,27 @@
                   if (!UI || !UI.body || !UI.convPane) { convAnchorSnap = null; return; }
                   if (S.userPinnedBottom !== false) { convAnchorSnap = null; return; } // 贴底态无需锚定（跟随门管）
                   const vpTop = UI.body.getBoundingClientRect().top;
-                  for (const n of UI.convPane.children) {
-                    const r = n.getBoundingClientRect();
-                    if (r.bottom > vpTop + 1) { convAnchorSnap = { n, top: r.top }; return; }
+                  // R1（A 审 P1-2）锚点下钻：生产 rk4 路径 convPane 首子即 [data-conv-body]
+                  // 宿主（全部消息在宿主内）——原锚=宿主节点，宿主 top 与 pane 顶对齐，
+                  // 上方撑高宿主 top 不动=delta 恒 0、补偿失效（探针实测 300px 顶走补偿 0）。
+                  // 下钻：沿「首个跨视口顶的子节点」深入到消息条目层（带 data-x 的条目或
+                  // 叶节点为止）——锚=视口顶真实压着的那条消息，上方任何撑高它必然下移。
+                  let n = null;
+                  for (const c of UI.convPane.children) {
+                    const r = c.getBoundingClientRect();
+                    if (r.bottom > vpTop + 1) { n = c; break; }
                   }
-                  convAnchorSnap = null;
+                  while (n && n.firstElementChild && !n.hasAttribute("data-x")) {
+                    let next = null;
+                    for (const c of n.children) {
+                      const r = c.getBoundingClientRect();
+                      if (r.bottom > vpTop + 1) { next = c; break; }
+                    }
+                    if (!next) break;
+                    n = next;
+                  }
+                  if (!n) { convAnchorSnap = null; return; }
+                  convAnchorSnap = { n, top: n.getBoundingClientRect().top };
                 }
                 // #166 等待行动卡（双态分离 + 三级按钮 + remember 范围选择 + elapsed 计时 + 焦点感提升）
                 let waitElapsedTimer = null;
@@ -3539,7 +3555,11 @@
                   // chip（点击回底）。判据与跟随门同源（userPinnedBottom===false）——门不滚
                   // 必计数、门滚必不计数，两态互斥无中间缝。接替件十一的「超一屏才点未读点」
                   // （离底不足一屏同样有新消息该提示；近底跟随场景天然不计数）。
-                  if (S.userPinnedBottom === false) {
+                  // R1（A 审 P1-1）：仅 outcome==="append" 计数——原一元判定下同一条消息的
+                  // 5 个流式 delta（replace 路径）逐帧 +1 显示「5 条新消息」（几十 delta=
+                  // 几十，与 expo 口径不一致）；tool 帧原位更新（resort/replace）同理不计数。
+                  // 一条消息只算一条：append=新条目落地才 +1。
+                  if (S.userPinnedBottom === false && outcome === "append") {
                     S.newBelow += 1;
                     syncChip();
                   }
@@ -5304,20 +5324,6 @@
                   btb.title = "跳到最新消息";
                   btb.innerHTML = '<span class="unread-n" aria-hidden="true"></span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-down"></use></svg><span class="unread-dot" aria-hidden="true"></span>';
                   UI.workspace.appendChild(btb);
-                  // W-SCROLLFIX 变高度锚定：RO 挂载（snapConvAnchor/convAnchorSnap/syncChip
-                  // 定义在外层 IIFE——autoScroll 后；ready 前的渲染调用安全走 null 快照早退）
-                  if ("ResizeObserver" in window && UI.convPane) {
-                    new ResizeObserver(() => {
-                      if (!UI || !UI.body) return;
-                      if (Date.now() - S._convGrowAt < 120) { snapConvAnchor(); return; } // 渲染窗内：anchor 管道负责，仅刷新快照
-                      const snap = convAnchorSnap;
-                      if (!snap || !snap.n.isConnected) { snapConvAnchor(); return; }
-                      const newTop = snap.n.getBoundingClientRect().top;
-                      const delta = newTop - snap.top;
-                      if (Math.abs(delta) > 0.5) UI.body.scrollTop += delta; // 上方撑高 delta>0 跟移；上方塌缩（罕见）同式回收
-                      snapConvAnchor();
-                    }).observe(UI.convPane);
-                  }
                   let settleTimer = 0;
                   const nearBottom = () => UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight < 80;
                   const sessionActive = () => !!document.querySelector("#stage-desktop.active #d-session.active");
@@ -5420,6 +5426,25 @@
                     cp.className = "conversation-pane";
                     panes[0].appendChild(cp);
                     UI.convPane = cp;
+                    // W-SCROLLFIX 变高度锚定：RO 挂载（snapConvAnchor/convAnchorSnap/syncChip
+                    // 定义在外层 IIFE——autoScroll 后；ready 前的渲染调用安全走 null 快照早退）。
+                    // R1（A 审 P1-2 挂载时序根修）：原挂载段在本函数更早处（btb 创建段）——彼时
+                    // UI.convPane 尚为 null（下方三行才赋值），挂载判定恒 false=**观察者从未挂上**
+                    //（A 审「防护实测无效」的底层真相；独立 RO 桩同 pane 插拔 fire 正常实锤）。
+                    // 挪到赋值后挂载，锚下钻（snapConvAnchor R1）才真正有消费通道。
+                    if ("ResizeObserver" in window) {
+                      new ResizeObserver(() => {
+                        if (!UI || !UI.body) return;
+                        if (Date.now() - S._convGrowAt < 120) { snapConvAnchor(); console.warn("[sf-dbg] RO:渲染窗跳过"); return; } // 渲染窗内：anchor 管道负责，仅刷新快照
+                        const snap = convAnchorSnap;
+                        if (!snap || !snap.n.isConnected) { snapConvAnchor(); console.warn("[sf-dbg] RO:snap缺重锚"); return; }
+                        const newTop = snap.n.getBoundingClientRect().top;
+                        const delta = newTop - snap.top;
+                        console.warn("[sf-dbg] RO delta=" + delta);
+                        if (Math.abs(delta) > 0.5) UI.body.scrollTop += delta; // 上方撑高 delta>0 跟移；上方塌缩（罕见）同式回收
+                        snapConvAnchor();
+                      }).observe(cp);
+                    }
                   }
                   // workspace 改 grid 三行两列——head 跨列/body+rail 同排/footer 跨列，禁 fixed）
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }

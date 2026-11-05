@@ -1493,7 +1493,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   //（session-domain applyDomLog 增量条目计数）同口径。
   const [newBelow, setNewBelow] = useState(0);
   const lastShownLen = useRef(0);
-  useEffect(() => { setNewBelow(0); lastShownLen.current = 0; }, [sid]); // 会话切换重置（无 key 重挂，state 需显式清）
+  // R1（A 审 P1-3）：会话切换重置（无 key 重挂，state 需显式清）——**atBottom 随之重置
+  // true**（新会话从底跟随语义）：原残留离底 false 会让新会话首帧 grew=全页 N 被
+  // !atBottom 放行=切会话 chip 灌全页（A 审实锤第二路）；atBottom=true 后首帧走
+  // scrollToEnd 跟随零计数，与桌面「切会话 chip=0」口径对齐。
+  useEffect(() => { setNewBelow(0); lastShownLen.current = 0; atBottom.current = true; }, [sid]);
   // W-MOTION：浮钮显隐走 opacity 过渡（常驻挂载+pointerEvents 门控——原条件渲染瞬跳）
   const jumpOp = useRef(new Animated.Value(0)).current;
   // 回到底部浮钮（第五轮）：滚动中隐藏、停止 ~300ms 后浮现；atBottom/jumpScrollable 由 onScroll 维护
@@ -1922,11 +1926,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     const ref = view === "msg" ? scrollRef.current : null;
     // W-SCROLLFIX：新条目到达而离底 → 计数（跨 view 也计——切 tab 期间的新消息回对话页
     // 该有提示；跟随（scrollToEnd）仍只在 msg 视图，口径不变）
-    const grew = pageShown.length - lastShownLen.current;
-    if (grew !== 0) lastShownLen.current = pageShown.length;
+    // R1（A 审 P1-3）基准源换 shownMsg.length：原 pageShown.length 随 view 切换归 0
+    //（非 msg 视图恒 []）→lastShownLen 被归 0→切回 grew=全页 N 全量灌 chip；shownMsg
+    // 不随 view 变（view 免疫）——切 tab 期间新消息=grew 缺席期增量（真增量），切回
+    // 自然对账不重不漏。scrollToEnd/跟随仍按 view 门不变。
+    const grew = shownMsg.length - lastShownLen.current;
+    if (grew !== 0) lastShownLen.current = shownMsg.length;
     if (grew > 0 && !atBottom.current && !touching.current) setNewBelow((n) => n + grew);
     if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
-  }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING", myEcho.length]);
+  }, [view, shownMsg.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING", myEcho.length]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
   // 六视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
   // 远跳（>1 页）飞行途中临时全渲染，防掠过的中间页闪空白
