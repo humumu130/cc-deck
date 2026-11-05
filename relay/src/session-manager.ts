@@ -8839,7 +8839,7 @@ ${lines.join("\n")}
     //（bizRole 占位 "worker" 不消费）、求值/forbidden/审计全跳、spawnMode 硬传 bypass
     //（恢复 P81 前两处 create 硬传点原样）
     const policyOn = permissionPolicyEnabled();
-    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : role === "watchdog" ? "watchdog" : null; // W-WATCHDOGPERM：watchdog=只读巡查主体（permission-policy 全 tier 恒 plan——上岗即只读档）
     const auditRow = (p: {
       requested_mode: string | null; normalized_mode: string | null; effective_mode: string; native_mode: string | null;
       capability_state: string | null; engine: string | null; reason: string; policy_source: string | null;
@@ -8853,11 +8853,15 @@ ${lines.join("\n")}
         capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy,
         reason: "unknown_role_mapping", policy_source: null,
       }, null));
-      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm）` };
+      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm/watchdog）` };
     }
     // P81-9 off：perm=null 跳过求值与 forbid 面；spawnMode 恢复 P81 前硬传 bypass
     const perm = policyOn ? evaluatePermission({
-      requested_mode: "bypassPermissions",
+      // W-WATCHDOGPERM（t-a86739fd）：watchdog 请求 plan 而非 bypass——只读主体对 plan
+      // ceiling 请求 bypass 恒 above_role_tier_ceiling 拒（上岗即断链）；plan=只读巡查档
+      //（spawn 收 plan 实参，EFFECTIVE_TO_MANAGED["plan"]="plan"）。其余岗位 §5.3.1 物
+      // bypass 语义零变。
+      requested_mode: bizRole === "watchdog" ? "plan" : "bypassPermissions",
       engine: engineForPolicy,
       role: bizRole ?? "worker", // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
       tier,
