@@ -760,6 +760,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rate <gid> <sid> <good|bad>                熟手评价（M3 路由表；bad=下次派单避开）
 #   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
 #   org member-retire <gid> <sid> [reason]         成员级退休（编制除名；本组悬账按中断收口，路由档案保留）
+#   org review-seat status|set …                  评审池配置（W-REVIEWSEAT：enabled/size/ov——热生效）
 #   org member-add <gid> <sid> [role] [engine] [model] [provider]  复拉入编（可覆盖引擎选择）
 #   org exp append <text> <kind> [role] [project]  经验申报（W-EXPP1 团队经验库；kind=pitfall|practice|preference|fact|term，role/project 缺省 any/global；term=术语解码条目免自动淘汰）
 #   org exp list [status|kind|role|/path]          经验库查询（参数按形状识别：active/retired、五 kind、角色名、锚路径）
@@ -801,6 +802,47 @@ abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
 case "$action" in
   status)
     body="$(python3 -c 'import json;print(json.dumps({"action":"status"},ensure_ascii=False))')"
+    ;;
+  review-seat)
+    # W-REVIEWSEAT（1105 用户拍板）：评审池配置 CLI 口（与设置页同 orgAction 双口）。
+    #   org review-seat status                    —— 配置+池现状+模型分布+团队 override
+    #   org review-seat set <k=v> [k=v …]         —— k ∈ enabled=1|0 / size=1-8 / ov:<gid>=0-8（热生效）
+    #   席位增删走 org member-add/remove（组=评审池 pg- 查 status 输出）
+    case "\${1:-}" in
+      status)
+        body="$(python3 -c 'import json;print(json.dumps({"action":"review-seat-get"},ensure_ascii=False))')"
+        ;;
+      set)
+        shift || true
+        [ $# -ge 1 ] || { echo "用法: org review-seat set enabled=0|1 / size=1-8 / ov:<gid>=0-8（可多键）" >&2; exit 1; }
+        body="$(python3 - "$@" <<'PYRS'
+import json, sys
+d = {"action": "review-seat-set"}
+for a in sys.argv[1:]:
+    k, _, v = a.partition("=")
+    if k == "enabled":
+        d["enabled"] = v.strip() in ("1", "true", "on")
+    elif k == "size":
+        n = int(v) if v.strip().isdigit() else 0
+        if not (1 <= n <= 8): raise SystemExit("size 取值 1-8")
+        d["default_size"] = n
+    elif k.startswith("ov:"):
+        gid = k[3:]
+        n = int(v) if v.strip().isdigit() else -1
+        if not (0 <= n <= 8): raise SystemExit("ov 取值 0-8")
+        ov = d.get("team_override") or {}
+        if n == 0: ov.pop(gid, None)
+        else: ov[gid] = n
+        d["team_override"] = ov
+    else:
+        raise SystemExit("未知键 " + k + "（enabled / size / ov:<gid>）")
+print(json.dumps(d, ensure_ascii=False))
+PYRS
+)"
+        ;;
+      *)
+        echo "用法: org review-seat status | set <enabled=0|1|size=1-8|ov:gid=0-8 …>" >&2; exit 1 ;;
+    esac
     ;;
   join)
     # X0 件2（PRD §4.7 C+#4）：本机会话自荐入编——CLI 侧无 session 身份，带 cwd+ppid

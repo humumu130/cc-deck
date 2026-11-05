@@ -48,7 +48,7 @@ export function readReviewSeatConfig(dir?: string): ReviewSeatConfig {
     if (c.team_override && typeof c.team_override === "object") {
       for (const [k, v] of Object.entries(c.team_override)) {
         const n = Number(v);
-        if (typeof k === "string" && k.startsWith("pg-") && Number.isFinite(n) && n >= 0 && n <= 8) ov[k] = Math.floor(n);
+        if (typeof k === "string" && k.startsWith("pg-") && Number.isFinite(n) && n >= 0) ov[k] = Math.min(8, Math.floor(n)); // >8 钳位（与 size 同语义，不弃值）
       }
     }
     return {
@@ -70,7 +70,15 @@ export function writeReviewSeatConfig(patch: Partial<Pick<ReviewSeatConfig, "ena
   const next: ReviewSeatConfig = {
     enabled: typeof patch.enabled === "boolean" ? patch.enabled : cur.enabled,
     default_size: typeof patch.default_size === "number" ? Math.max(1, Math.min(8, Math.floor(patch.default_size))) : cur.default_size,
-    team_override: patch.team_override && typeof patch.team_override === "object" ? patch.team_override : cur.team_override,
+    team_override: (() => {
+      if (!patch.team_override || typeof patch.team_override !== "object") return cur.team_override;
+      const ov: Record<string, number> = {};
+      for (const [k, v] of Object.entries(patch.team_override)) {
+        const n = Number(v);
+        if (typeof k === "string" && k.startsWith("pg-") && Number.isFinite(n) && n >= 0) ov[k] = Math.min(8, Math.floor(n));
+      }
+      return ov;
+    })(),
     pool_gid: typeof patch.pool_gid === "string" && patch.pool_gid.startsWith("pg-") ? patch.pool_gid : cur.pool_gid,
     updated_at: Date.now(),
   };

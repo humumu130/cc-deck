@@ -98,6 +98,8 @@ import type { EmployeeHomeSettingsPayload
 import { cronTasksKey, readCronTasks } from "./cron.js";
 // W-ORG-DEFECTS（2026-11-01 用户 1101 定性编排缺陷 P0 批）：worktree 互斥锁底座 + 审计词表
 import { claimWorktreeLock, scanClearWorktreeLocks, worktreeHeldByOther } from "./dispatch-lock.js";
+// W-REVIEWSEAT（1105 用户拍板）：全局评审池 store + 三跳路由数据源
+import { readReviewSeatConfig, writeReviewSeatConfig, ensureReviewPoolGroup, reviewPoolSnapshot, teamReviewerSeats, reviewPoolGid, reviewSeatSnapshotPayload } from "./review-seat.js";
 import { worktreeDirty } from "./worktree-gc.js"; // W-TREEGC：收口清锁守卫（脏树不清锁防裸奔）
 // W-DELIVERCB（用户 1102 拍板）：沃克交付 Callback 三线机制——去重账+文案（纯 fs 模块）
 import { amendFailedReport, appendDeliverCallback, buildDeliverCallbackPrompt, deliverCallbackSeen, undeliveredCallbacks, type DeliverCallbackVia } from "./deliver-callback.js"; // domstep1r1：amendFailedReport=failed 六态修正行单点（P2-A③）
@@ -7205,6 +7207,7 @@ ${lines.join("\n")}
             slug: str("slug") || undefined,
             target_sid: str("target_sid") || undefined, // W-PRREVIEW：显式定席（review-route 路由结果落席）
             exclude_sessions: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined, // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话）
+            review_only: p.review_only === true ? true : undefined, // W-REVIEWSEAT：审查单标记（评审席只读守卫+纪律注入）
           });
         }
         // W-PRREVIEW（期一④ PR 互审，1104 拍板）：互审员路由查询——只路由零派发零
@@ -7212,6 +7215,28 @@ ${lines.join("\n")}
         // PM 子代理（不自动开新会话顶位）。count 钳 1..3=审查档位上限（档位由 PM 按
         // 全局审查纪律定——一行 1 审/常规 2 审其一反方/重大 3 审，本口不代定档，
         // 审查员是 worker 还是子代理不影响档位规则）。
+        // W-REVIEWSEAT（1105 用户拍板「评审席产品化」）：评审池配置面——get=配置+池组
+        // 现状+模型分布+各团队 override 生效值（设置页数据源，SNAPSHOT 同构）；
+        // set=动态调整（enabled/default_size/team_override 三键任意子集）——写 store+
+        // 池组 cap 同步+REVIEW_SEAT_UPDATED 全端广播（热生效：路由每次现读 store，零重启）。
+        case "review-seat-get": {
+          try { ensureReviewPoolGroup(); } catch { /* ensure 幂等尽力 */ }
+          return { ok: true, data: { config: reviewSeatSnapshotPayload() } };
+        }
+        case "review-seat-set": {
+          const enabled = typeof p.enabled === "boolean" ? p.enabled : undefined;
+          const size = typeof p.default_size === "number" ? p.default_size : undefined;
+          const ovIn = p.team_override;
+          const team_override = ovIn && typeof ovIn === "object" && !Array.isArray(ovIn)
+            ? Object.fromEntries(Object.entries(ovIn as Record<string, unknown>).filter(([k, v]) => typeof k === "string" && k.startsWith("pg-") && Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 8).map(([k, v]) => [k, Math.floor(Number(v))]))
+            : undefined;
+          if (enabled === undefined && size === undefined && team_override === undefined) return { ok: false, error: "无有效字段（enabled:boolean / default_size:1-8 / team_override:{gid:0-8}）" };
+          try { ensureReviewPoolGroup(); } catch { /* 幂等 */ }
+          const next = writeReviewSeatConfig({ ...(enabled !== undefined ? { enabled } : {}), ...(size !== undefined ? { default_size: size } : {}), ...(team_override !== undefined ? { team_override } : {}) });
+          this.bus.emitTransient("REVIEW_SEAT_UPDATED", reviewSeatSnapshotPayload());
+          this.emitChainAudit("pm-wake", `review-seat 配置更新：enabled=${next.enabled} size=${next.default_size} override=${JSON.stringify(next.team_override)}（热生效）`);
+          return { ok: true, data: { config: next } };
+        }
         case "review-route": {
           const gid = str("gid");
           if (!gid) return { ok: false, error: "gid 必填" };
@@ -8533,7 +8558,7 @@ ${lines.join("\n")}
     });
   }
 
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string; /** W-REVIEWSEAT：审查单标记——目标席为评审席（本组 reviewer/全局池成员）时必须 true（只读守卫）；true 时注入评审席纪律段 */ review_only?: boolean }):
     { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string; /** domstep1：幂等命中时的在途单 id（回执对账键） */ duplicate_of?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
@@ -8675,6 +8700,14 @@ ${lines.join("\n")}
     // tags，test-dispatch D13「skills 命中越过熟练序」语义保留），装配探测只对
     //「无标签证据的回落席」把关——两层正交：tags=策展声明，装配观测=实测并集，
     // 回落席（声明了 skills 但无人带标签）才是公司侧「装配故障静默降级」风险面。
+    // W-REVIEWSEAT 只读守卫（1105）：显式定席为评审席（本组 reviewer/全局池成员）时
+    // 只接 review 类单——非 review_only 派给评审席=实施类单越权（评审员 never edits
+    // 产品码的结构保障）。拒=响亮（调用方改派 worker 或补 review_only）+审计帧。
+    if (typeof input.target_sid === "string" && input.target_sid && this.isReviewerSeat(input.target_sid) && input.review_only !== true) {
+      this.emitChainAudit("dispatch-reroute", `review-seat 守卫拒派：评审席 ${input.target_sid.slice(0, 12)} 不接实施类单（review_only 缺）——改派 worker 或补 review_only`);
+      return { ok: false, error: `评审席不接实施类单（W-REVIEWSEAT 只读守卫）：${input.target_sid.slice(0, 8)} 为评审席，实施单请派 worker；审查单请带 review_only:true` };
+    }
+    const reviewBlock = input.review_only === true ? this.reviewOnlyBlock() : undefined;
     // W-PRREVIEW（期一④ PR 互审）：显式定席优先——review-route 路由结果的确定性
     // 落席（互审单派给指定 worker 会话）：跳过下方选席/复拉/装配探测序（路由决策
     // 已由 review-route 用同款全链判据做出，探测清席换新会话=违背确定性），安全闸
@@ -8938,7 +8971,7 @@ ${lines.join("\n")}
     };
     // C-MODE-B2 模块8：taskRefHead 并入任务尾区（task_ref id 每单必变——置 prompt 头=前缀
     // cache 恒 miss；尾区不损「四处同键」——prompt 内在场即可）
-    const wrapDispatchPromptAt = (withContinuity: boolean) => wrapDispatchPrompt(tier, taskRefHead + "\n" + input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined, {
+    const wrapDispatchPromptAt = (withContinuity: boolean) => wrapDispatchPrompt(tier, (reviewBlock ? reviewBlock + "\n" : "") + taskRefHead + "\n" + input.prompt, expInjection?.block, roleInjection?.block, rulesInjection?.block, buildOrgDisciplineBlock(dispatchEngine) ?? undefined, {
       ...(withContinuity ? { continuity: continuityBlockOf() } : {}),
       sinceLast: this.buildSinceLastBlock(anchor, dispatchId),
     });
@@ -9381,37 +9414,95 @@ ${lines.join("\n")}
    * routed=false 自行回落 PM 子代理；审查档位（1/2/3 审）同样由 PM 按全局纪律定，
    * 本口只按请求数路由（count 钳 1..3=档位上限，不代定档）。 */
   routeReviewers(gid: string, opts: { count?: number; skills?: string[]; exclude?: string[]; anchorKey?: string }):
-    { ok: true; routed: boolean; reviewers: { session_id: string; tag_hit: boolean }[]; reason?: string } {
+    { ok: true; routed: boolean; reviewers: { session_id: string; tag_hit: boolean; source: "peer" | "team-seat" | "pool" }[]; reason?: string } {
     const count = Math.max(1, Math.min(3, Math.floor(opts.count ?? 1)));
     const exclude = new Set((opts.exclude ?? []).filter((x) => typeof x === "string" && x));
     const wanted = (opts.skills ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean);
     const tagFilter = wanted.length
       ? (tags: string[]) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w))
       : null;
-    const reviewers: { session_id: string; tag_hit: boolean }[] = [];
+    const reviewers: { session_id: string; tag_hit: boolean; source: "peer" | "team-seat" | "pool" }[] = [];
+    // W-REVIEWSEAT 三跳（1105 用户拍板「评审席产品化」）：互审（worker 互审，本组
+    // reviewer 席不进候选——评审员只接审查单不做互审交付）→ 本组专属评审席（team
+    // override 的编制落点）→ 全局评审池（跨团队，异构模型优先——已选集缺的 engine
+    // 先补，防同质化）。三跳共 exclude 互异；每席标注 source（回执/审计可见归属）。
+    const cfg = readReviewSeatConfig();
+    const reviewerSids = new Set<string>(teamReviewerSeats(gid).map((x) => x.session_id));
+    const poolSeats = cfg.enabled ? reviewPoolSnapshot().seats.filter((x) => x.session_id !== "") : [];
+    const chosenEngines = new Set<string>();
+    const seatAlive = (sid: string): boolean => {
+      const ms = this.sessions.get(sid);
+      if (!ms || !ms.state.relay_session_id || ms.state.external) return false;
+      if (ms.state.status === "WORKING" || ms.state.status === "WAITING") return false;
+      if (this.isLeaderSession(sid)) return false;
+      if (this.routeLivenessSkip(sid, ms)) return false;
+      if (ms.resumePending && Date.now() - ms.resumePending < resumePendingWindowMs()) return false;
+      return true;
+    };
     for (let i = 0; i < count; i++) {
+      // ── 跳1：本组 worker 互审（reviewer 席排除；pickVeteranEligible 全链判据）──
       let sid: string | null = null;
       let tagHit = false;
+      let source: "peer" | "team-seat" | "pool" = "peer";
+      const peerExclude = new Set<string>([...exclude, ...reviewerSids]);
       if (tagFilter) {
-        // 标签命中席两轮（亲和→普通，pickVeteranDetail 语义同款）
-        const h = this.pickVeteranEligible(gid, tagFilter, undefined, opts.anchorKey, true, exclude)
-          ?? this.pickVeteranEligible(gid, tagFilter, undefined, undefined, undefined, exclude);
+        const h = this.pickVeteranEligible(gid, tagFilter, undefined, opts.anchorKey, true, peerExclude)
+          ?? this.pickVeteranEligible(gid, tagFilter, undefined, undefined, undefined, peerExclude);
         if (h) { sid = h; tagHit = true; }
       }
       if (!sid) {
-        sid = this.pickVeteranEligible(gid, null, undefined, opts.anchorKey, true, exclude)
-          ?? this.pickVeteranEligible(gid, null, undefined, undefined, undefined, exclude);
+        sid = this.pickVeteranEligible(gid, null, undefined, opts.anchorKey, true, peerExclude)
+          ?? this.pickVeteranEligible(gid, null, undefined, undefined, undefined, peerExclude);
+      }
+      // ── 跳2：本组专属评审席（活席、未被排除、未选过）──
+      if (!sid && cfg.enabled) {
+        const seat = teamReviewerSeats(gid).find((x) => !exclude.has(x.session_id) && !reviewers.some((r) => r.session_id === x.session_id) && seatAlive(x.session_id));
+        if (seat) { sid = seat.session_id; source = "team-seat"; }
+      }
+      // ── 跳3：全局评审池（异构优先：先补 chosenEngines 缺的 engine；同 engine 按席序）──
+      if (!sid && cfg.enabled && poolSeats.length) {
+        const alive = poolSeats.filter((x) => !exclude.has(x.session_id) && !reviewers.some((r) => r.session_id === x.session_id) && seatAlive(x.session_id));
+        const hetero = alive.find((x) => !chosenEngines.has(x.engine || "claude"));
+        const pick = hetero ?? alive[0];
+        if (pick) { sid = pick.session_id; source = "pool"; }
       }
       if (!sid) break;
-      reviewers.push({ session_id: sid, tag_hit: tagHit });
+      const ms = this.sessions.get(sid);
+      chosenEngines.add((ms?.state as { engine?: string } | undefined)?.engine || "claude");
+      reviewers.push({ session_id: sid, tag_hit: tagHit, source });
       exclude.add(sid); // 互异：已选入排除集再选下一位
     }
     return {
       ok: true,
       routed: reviewers.length > 0,
       reviewers,
-      ...(reviewers.length === 0 ? { reason: "无在编可承接 worker（全忙/全死/全被排除）——回落 PM 子代理（审查席位来源是 PM 决策位）" } : {}),
+      ...(reviewers.length === 0 ? { reason: `三跳皆空（互审候选全忙/全死/被排除；专属席与全局池${cfg.enabled ? "无活席" : "已停用（enabled=false）"}）——回落 PM 子代理（审查席位来源是 PM 决策位）` } : {}),
     };
+  }
+
+  /** W-REVIEWSEAT：sid 是否评审席（本组 reviewer 席或全局池成员）——dispatchWorker
+   * 只读守卫的路由判据（评审席只接 review 类单：input.review_only 必须为 true）。 */
+  isReviewerSeat(sid: string): boolean {
+    const poolGid = reviewPoolGid();
+    if (poolGid) {
+      const pool = findGroup(poolGid);
+      if (pool?.headcount?.some((h) => h.session_id === sid)) return true;
+    }
+    for (const g of listGroups()) {
+      if (g.headcount?.some((h) => h.session_id === sid && ((h.role || "").toLowerCase() === "reviewer" || h.role === "评审员"))) return true;
+    }
+    return false;
+  }
+
+  /** W-REVIEWSEAT：审查单只读纪律段（review_only 派单注入——与岗位/经验块同谱系，
+   * 纪律优先尾注由 wrapDispatchPrompt 统一收口）。 */
+  reviewOnlyBlock(): string {
+    return [
+      "—— 评审席纪律（W-REVIEWSEAT 只读结构保障）——",
+      "- 本单为审查单（review only）：禁止修改产品代码/配置——只读审阅，产出审查回执。",
+      "- 回执写 review-*.md（根因/改动核对/自测复跑/验收点/遗留），末行固定「结果：…｜改动文件：无（纯审查）」。",
+      "- 审查发现分级 P0-P3 带路径:行号锚；修复由 PM 另派实施单，评审席不代修。",
+    ].join("\n");
   }
 
   private pickVeteranDetail(gid: string, skills?: string[], selfWorktree?: string, anchorKey?: string, exclude?: Set<string> | null): { sid: string; tagHit: boolean } | null {

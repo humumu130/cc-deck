@@ -1215,7 +1215,7 @@ function connectLan(ctx) {
 <div class="v8-setcard"><h5>会话列表</h5><div class="v8-swrow"><div class="v8-swtxt">会话卡状态行<div class="v8-swd">关闭后卡片只显标题行且高度收小；异常/错误信息仍显示</div></div><button class="toggle-switch${settingsToggleState("statusline") ? " active" : ""}" data-settings-toggle="statusline" type="button" aria-pressed="${settingsToggleState("statusline")}" title="切换会话卡状态行"></button></div><div class="v8-swrow"><div class="v8-swtxt">已隐藏的远程会话卡<div class="v8-swd">删除远程卡时选「仅本机隐藏」的记录（本机不显，源端仍在）</div></div></div><div class="settings-list" data-settings-live="hidden-remote"></div></div>
 <div class="v8-setcard"><h5>维护</h5><div class="v8-swrow"><div class="v8-swtxt">清理退休会话<div class="v8-swd">一键删除已退休成员的会话卡（会话列表归档组一并清空）；路由档案保留，复拉走成员管理</div></div><button class="secondary-btn" type="button" data-retired-purge>清理</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">各引擎接入与登录状态 · 引擎 = 可用于派单干活的 AI 编程工具（Claude/Codex/Trae…）</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><div class="v8-setcard"><h5>徽章配色</h5><div class="v8-escape">自定义各引擎/来源徽章的底色——全端（会话卡/团队域/新建弹窗/详情）同步生效；不设则用默认配色。</div><div class="settings-list" data-settings-live="badge-colors"></div></div></div>
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">本机服务 · 远程数据源 · 已连客户端</div></div><div class="v8-setcard"><h5>本机 relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard" data-conn-remote-card><h5>远程源</h5><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard"><h5>客户端 · 连到本机的终端</h5><div class="settings-list" data-settings-live="devices"></div><div class="conn-card-foot"><span class="v8-escape">踢出后需重新配对</span><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，添加手机或另一台电脑为本机客户端">＋ 配对新设备</button></div></div></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">本机服务 · 远程数据源 · 已连客户端</div></div><div class="v8-setcard"><h5>本机 relay</h5><div class="settings-list" data-settings-live="connections"></div></div><div class="v8-setcard" data-conn-remote-card><h5>远程源</h5><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard"><h5>客户端 · 连到本机的终端</h5><div class="settings-list" data-settings-live="devices"></div><div class="conn-card-foot"><span class="v8-escape">踢出后需重新配对</span><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，添加手机或另一台电脑为本机客户端">＋ 配对新设备</button></div></div><div class="v8-setcard" data-review-seat-card><h5>评审席 · 全局评审池</h5><div class="settings-list" data-review-seat-live></div><div class="conn-card-foot"><span class="v8-escape">路由：worker 互审 → 团队专属席 → 全局池（异构优先）→ PM 兜底；席位增删走 org member-add（组=评审池）</span></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">建团时的角色缺省引擎</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">模板只是初始值 · 开团可逐成员覆盖。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">随软件发行的内建能力</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载 · 停用开关待注册表就绪后生效。</div></div><details class="v8-setcard" style="padding:12px 14px"><summary style="cursor:pointer;font-weight:650;font-size:12.5px">权限声明（只读）</summary><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div></div></div></div></details>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 开源</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div><div class="v8-swd" style="margin-top:4px" data-settings-render-probe title="字体渲染环境探针（win-font-aa 批）：分数 DPR=Chromium 禁用 ClearType 子像素抗锯齿（Windows 125%/150% 缩放典型态）——发毛报告请连此行一起回报"></div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录</div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页</div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App</div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置</div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">覆盖现有设置</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><!-- 件H3：旧关于页图纸卡退役（无 live 渲染接线恒隐藏）；现行图纸入口=项目域第七 tab（W-SRCMENU2 ⑥） --></div>`;
@@ -1632,6 +1632,55 @@ function connectLan(ctx) {
         // W-MODE 协作模式分段钮：COMMAND_ORG_ACTION {action:"collab-mode"} → ACK ok 后
         // 乐观更新快照缓存并重渲（多端最终一致由 relay COLLAB_MODE_UPDATED 帧兜底；
         // 旧 relay orgAction default 拒 → toast 报错不切态）
+        // W-REVIEWSEAT（1105 用户拍板）：评审席卡——SNAPSHOT.review_seat 数据源+
+        // REVIEW_SEAT_UPDATED 增量（subscribe 随桥事件重渲）；操作走 review-seat-set
+        // （三键热生效）；旧 relay 无键=能力位缺席渲染轻提示（向前兼容）。
+        const rsRender = () => {
+          const box = section.querySelector("[data-review-seat-live]");
+          if (!box) return;
+          const rs = bridge.snapshot && bridge.snapshot.review_seat;
+          if (!rs) { box.innerHTML = '<div class="v8-escape" style="padding:8px 2px">旧 relay——升级后可用评审池配置</div>'; return; }
+          const dist = Object.entries(rs.pool?.engine_dist || {}).map(([k, n]) => k + "×" + n).join(" · ") || "（空池）";
+          const teams = (rs.teams || []).filter((t) => t.declared > 0 || t.actual > 0).map((t) =>
+            `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><span>${t.name}<span class="v8-escape">（实际 ${t.actual} 席）</span></span><span style="display:flex;gap:6px;align-items:center"><button class="row-share" data-review-seat-ov="${t.gid}" data-review-seat-d="-1" title="专属席目标数 -1">−</button><b style="min-width:14px;text-align:center">${t.declared}</b><button class="row-share" data-review-seat-ov="${t.gid}" data-review-seat-d="1" title="专属席目标数 +1">＋</button></span></div>`).join("");
+          const enabled = rs.enabled !== false;
+          box.innerHTML =
+            `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span>评审池<span class="v8-escape">（路由第 3 跳）</span></span><button class="row-share" data-review-seat-toggle="${enabled ? "0" : "1"}">${enabled ? "已启用 · 点按停用" : "已停用 · 点按启用"}</button></div>` +
+            `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><span>池大小（编制上限）<span class="v8-escape">${rs.pool?.size ?? 0} 席在编 · 引擎分布 ${dist}</span></span><span style="display:flex;gap:6px;align-items:center"><button class="row-share" data-review-seat-size="-1">−</button><b style="min-width:14px;text-align:center">${rs.default_size}</b><button class="row-share" data-review-seat-size="1">＋</button></span></div>` +
+            (teams ? `<div style="padding:3px 0 0"><div class="v8-escape" style="padding-bottom:2px">团队专属席（override——路由第 2 跳优先于池）</div>${teams}</div>` : "");
+        };
+        bridge.subscribe(rsRender);
+        rsRender();
+        document.addEventListener("click", (event) => {
+          const tg = event.target.closest("[data-review-seat-toggle],[data-review-seat-size],[data-review-seat-ov]");
+          if (!tg) return;
+          const snap = bridge.snapshot || {};
+          const rs = snap.review_seat;
+          let body = null;
+          if (tg.hasAttribute("data-review-seat-toggle")) body = { enabled: tg.getAttribute("data-review-seat-toggle") === "1" };
+          else if (tg.hasAttribute("data-review-seat-size")) {
+            const d = Number(tg.getAttribute("data-review-seat-size"));
+            body = { default_size: Math.max(1, Math.min(8, (rs?.default_size ?? 2) + d)) };
+          } else if (tg.hasAttribute("data-review-seat-ov")) {
+            const gid = String(tg.getAttribute("data-review-seat-ov"));
+            const d = Number(tg.getAttribute("data-review-seat-d"));
+            const cur = { ...((rs && rs.team_override) || {}) };
+            const next = Math.max(0, Math.min(8, (cur[gid] ?? 0) + d));
+            if (next === 0) delete cur[gid]; else cur[gid] = next;
+            body = { team_override: cur };
+          }
+          if (!body) return;
+          tg.disabled = true;
+          bridge.sendCommand("COMMAND_ORG_ACTION", { action: "review-seat-set", ...body }).then((ack) => {
+            tg.disabled = false;
+            if (ack && ack.ok) {
+              bridge.sendCommand("COMMAND_ORG_ACTION", { action: "review-seat-get" }).then((g) => {
+                if (g && g.ok && g.data && g.data.config && bridge.snapshot) { bridge.snapshot.review_seat = g.data.config; rsRender(); }
+              });
+              showToast("评审池配置已更新（热生效）");
+            } else showToast("未生效：" + ((ack && ack.error) || "relay 未确认"));
+          });
+        });
         document.addEventListener("click", (event) => {
           const btn = event.target.closest("[data-collab-mode-option]");
           if (!btn) return;
