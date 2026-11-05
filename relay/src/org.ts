@@ -297,6 +297,8 @@ interface DutyFile {
   pm_override?: PmOverride | null;
   pm_appoint?: DutyAppoint | null;
   appoint_rejected?: AppointRejected[];
+  /** [W-DUTYWIRE] 值守位空窗期的关键事件待投队列（claim/回活补投；cap 20 截旧） */
+  duty_feed_pending?: DutyFeedPendingItem[];
 }
 // [W-PMSEAT] 缓存按解析目录键控（Map<orgDir, DutyFile>）：同进程多沙盒并存（测试
 // 夹具逐块换 CCR_ORG_DIR——CI 实锤：前夹具 approve 落的 override 带测试进程 pid 恒活，
@@ -405,6 +407,44 @@ export function recordAppointRejected(sessionId: string, cliPid = 0, dir?: strin
   const rest = readAppointRejected(dir).filter((r) => r.session_id !== sessionId);
   const next = [{ session_id: sessionId, cli_pid: Number(cliPid) || 0, ts: Date.now() }, ...rest].slice(0, 50);
   writeDutyFile({ ...cur, appoint_rejected: next }, dir);
+}
+
+// ---------- [W-DUTYWIRE] 值守唤醒 pending 队列（1105 断档第三现治本） ----------
+// 值守位空时关键事件（收割完成/审查回执落盘/PM 失联）入队，席位落位/回活时补投——
+// 「空窗期事件不丢、claim 即达」。cap 20 截旧（事件文本自含时序，旧事件唤醒价值
+// 递减；审计全量在 duty-feed.ndjson，此处只承载待投语义）。
+export interface DutyFeedPendingItem { ts: number; kind: string; text: string; }
+
+function readDutyFeedPendingRaw(dir?: string): DutyFeedPendingItem[] {
+  const v = readDutyFile(dir).duty_feed_pending;
+  if (!Array.isArray(v)) return [];
+  return v.filter((r) => r && typeof r === "object" && typeof r.ts === "number" && typeof r.kind === "string" && typeof r.text === "string") as DutyFeedPendingItem[];
+}
+
+export function readDutyFeedPending(dir?: string): DutyFeedPendingItem[] {
+  return readDutyFeedPendingRaw(dir);
+}
+
+export function appendDutyFeedPending(item: DutyFeedPendingItem, dir?: string): void {
+  const next = [...readDutyFeedPendingRaw(dir), item].slice(-20);
+  writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: next }, dir);
+}
+
+/** 取走全部待投（清队列原子于 duty.json 单写口；投递失败由调用方决定重入队） */
+export function takeDutyFeedPending(dir?: string): DutyFeedPendingItem[] {
+  const out = readDutyFeedPendingRaw(dir);
+  if (out.length) writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: [] }, dir);
+  return out;
+}
+
+/** R1（A 审 P1-1）：批量重入队——take 的对称体。投递失败（目标不在册=断档/重启
+ *  收编窗）时全量保序回写（append 逐条×N 次读写盘且各自 slice 截尾有乱序险，
+ *  批量单写口一次落）。cap 20 同 append 口径（溢出截尾保最新）。 */
+export function restoreDutyFeedPending(items: DutyFeedPendingItem[], dir?: string): void {
+  const clean = items.filter((r) => r && typeof r === "object" && typeof r.ts === "number" && typeof r.kind === "string" && typeof r.text === "string");
+  if (!clean.length) return;
+  const next = [...readDutyFeedPendingRaw(dir), ...clean].slice(-20);
+  writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: next }, dir);
 }
 
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会

@@ -1086,6 +1086,12 @@ export function startServer(
           // symlink 分量（unverified——原地交付合法不拒绝，目标元数据不当文件本体
           // 口径）；标记随响应回传供调用方核对
           const respBody = r.ok && validated.unverified ? { ...r, unverified: true } : r;
+          // [W-DUTYWIRE]（1105 断档第三现）：审查回执落盘边（review-*.md 登记成功）→
+          // duty feed——值守 PM 被唤醒读审查（派单审查闸 P0/P1 修复后才收割，回执到
+          // =PM 该动了）；空位入 pending。尽力而为不阻断登记响应。
+          if (r.ok && /(^|\/)review-[^/]+\.md$/i.test(validated.path.replace(/\\/g, "/"))) {
+            try { mgr.emitDutyFeedEvent("review-receipt", `审查回执落盘：${validated.path.split("/").pop()}`); } catch { /* 尽力而为 */ }
+          }
           res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(respBody));
         } catch {
           res.writeHead(400).end("bad json");

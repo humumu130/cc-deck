@@ -27,7 +27,9 @@ import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
   clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
+  appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
+import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
 import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
@@ -1000,6 +1002,8 @@ export class SessionManager {
     c.unref();
     const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
     r.unref();
+    this.startDutyLostWatch(); // [W-DUTYWIRE]：值守失联观测拍（60s）+pending 补投顺拍（重启窗收口）
+    this.flushDutyFeedPending(); // [W-DUTYWIRE]：重启补投——席位经活跃度凭证判活存活时，空窗期积压事件即达
   }
 
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
@@ -5442,6 +5446,11 @@ ${lines.join("\n")}
   }
 
   private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string, interrupted = false): void {
+    // [W-DUTYWIRE]（1105 断档第三现）：收割完成（done 且非中断口径）入 duty feed——
+    // 值守 PM 被唤醒跟进后续（板面收敛/下一单分诊）；空位入 pending。尽力而为不阻断收口。
+    if (status === "done" && !interrupted) {
+      try { this.emitDutyFeedEvent("harvest-done", `派单 ${e.id.slice(0, 8)} 收割完成（${truncate(receipt, 120)}）`); } catch { /* 尽力而为 */ }
+    }
     // W-ORG-DEFECTS 件2：收口清 worktree 锁——该单持有的 .cc-deck-lock 随终态释放
     //（worker「退出收尾清锁」的机制面；leader-harvest 收尾/2h 过期为另两路兜底）。
     // 尽力而为：CCR_WT_ROOT 扫描失败不阻断收口主路径。
@@ -5733,7 +5742,7 @@ ${lines.join("\n")}
     // 用户 ✓ 才落位——未确认期间零喂活（防「先斩后奏」），✗ 记 appoint_rejected
     // 不再自动提名。候选现算搬 dutyCandidateId（提案专用，消费面不碰）。
     const ov = readPmOverride();
-    if (ov && ov.cli_pid > 0 && readCollabMode(this.cfg.dataDir) === "no-leader") {
+    if (ov && readCollabMode(this.cfg.dataDir) === "no-leader") { // [W-DUTYWIRE]：cli_pid>0 门撤——外部席位（pid=0）经 pmOverrideLiveness 活跃度分支判活（原门=外部席位隐形恒空转）
       // R1-B-F2/A-P1① 复合判活（原纯 kill(0)）：pid 活但 ov.session_id 在册且其当前
       // cli_pid ≠ ov.cli_pid（CLI 重启换 pid，旧 pid 已回收/被占位）= 假阳视死清档——
       // 纯 pid 探测的「死 PM 锁席（pid 回收占位→互斥闸恒拒+candidate 恒 null 两出口
@@ -5753,6 +5762,12 @@ ${lines.join("\n")}
    * "stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）/"dead"=pid 死。
    * stale 与 dead 同清档（读路径顺手清档语义维持），区别只在审计措辞与定性。 */
   private pmOverrideLiveness(ov: { cli_pid: number; session_id: string }): "alive" | "stale" | "dead" {
+    // [W-DUTYWIRE]（1105 断档第三现）：外部 SDK 会话席位（cli_pid=0）无进程可探——
+    // 活跃度凭证判定（events.ndjson 最近帧在活跃窗内=活）。窗=CCR_DUTY_ACTIVITY_MIN
+    // 缺省 15min（claim 资格/席位判活/候选提名三口同窗，duty-feed.ts 单点）
+    if (!(ov.cli_pid > 0)) {
+      return sessionActiveByEvents(this.cfg.dataDir, ov.session_id) ? "alive" : "dead";
+    }
     try { process.kill(ov.cli_pid, 0); } catch { return "dead"; }
     const s = this.sessions.get(ov.session_id);
     if (s?.state.cli_pid && s.state.cli_pid > 0 && s.state.cli_pid !== ov.cli_pid) return "stale";
@@ -5767,7 +5782,7 @@ ${lines.join("\n")}
   private dutyCandidateId(): string | null {
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return null;
     const ov = readPmOverride();
-    if (ov && ov.cli_pid > 0) {
+    if (ov) { // [W-DUTYWIRE]：cli_pid>0 门撤（外部席位同判活——pmOverrideLiveness 活跃度分支）
       // R1-B-F2 同款复合判活（防 override pid 回收假活→候选恒 null 永不出任命卡）
       if (this.pmOverrideLiveness(ov) === "alive") return null;
       clearPmOverride(); // dead/stale：清档后可提新名
@@ -5782,8 +5797,10 @@ ${lines.join("\n")}
       if (this.leaderId && s.state.session_id === this.leaderId) continue;
       if (rejected.has(s.state.session_id)) continue; // [W-PMSEAT] 否决档跳过
       const pid = s.state.cli_pid;
-      if (!pid) continue;
-      try { process.kill(pid, 0); } catch { continue; }
+      // [W-DUTYWIRE]：外部会话（无 CLI pid）同权入候选——活跃度凭证判活（与 claim 同窗
+      // 同单点）。SDK 会话常驻心跳（5s/帧），15min 窗内无帧≈会话确已停摆
+      if (pid && pid > 0) { try { process.kill(pid, 0); } catch { continue; } }
+      else if (!(pid && pid > 0) && !sessionActiveByEvents(this.cfg.dataDir, s.state.session_id)) continue; // [W-DUTYWIRE] 外部会话（无 pid）活跃度凭证同权
       const at = s.state.updated_at || 0;
       const isExt = !!s.state.external;
       if (at > bestAt || (isExt && !bestIsExternal)) { bestAt = at; best = s.state.session_id; bestIsExternal = isExt; }
@@ -5811,6 +5828,7 @@ ${lines.join("\n")}
         const pid = Number(c.payload.cli_pid) || 0;
         let alive = !!sid && pid > 0;
         if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+        else if (sid) { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：pid=0 卡（外部会话形态）活跃度判——原恒判死=外部 claim 卡被 auto 消卡用户永不可见
         if (!alive) {
           decideConfirm(c.id, false, "auto:pm-dead");
           // R1-A-P1②：auto:pm-dead **不入否决档**——「pid 死」常态=CLI 重启换 pid
@@ -5986,6 +6004,105 @@ ${lines.join("\n")}
               ? { hint: `值守任命待用户决议：候选会话 ${pendingAppoint.session_id.slice(0, 8)}（${pendingAppoint.origin === "claim" ? "主动认领" : "自动提名"}）——批准后开始值守喂活，否决不认领` }
               : { hint: "值守位空（no-leader 无确认任命）——外部会话活跃时自动提名出任命卡，或 org pm claim 主动认领（未决零喂活）" }),
     };
+  }
+
+  // ---------- [W-DUTYWIRE] 值守唤醒链（1105 断档第三现治本）：关键事件→duty feed→值守 PM ----------
+  /** 关键事件入 feed：值守位非空→notifyConfirm 直推值守 PM（[待确认] todo+USER_NOTE
+   *  +通知账三面——awaituser 实战验证过的最轻既有跨会话唤醒通道，不造新通道）；空位
+   *  →pending 队列（claim/回活补投——空窗期事件不丢）。审计 duty-feed.ndjson 全量留痕。
+   *  事件源（事件驱动主链）：收割完成=notifyDispatchClosed done 边（非中断）；审查回执
+   *  落盘=/api/deliver 登记边（review-*.md）；PM 失联=下方 watch 拍。 */
+  emitDutyFeedEvent(kind: DutyFeedKind, text: string): void {
+    try {
+      // R1 P1-2（A 审）：leader 模式（生产缺省）无值守位概念——dutyTargetId 在该模式
+      // 返回 leaderId=收割事件直推 Leader 自我（纯噪音）+失联拍误报轰炸用户的根源。
+      // feed 事件在 leader 模式零路由零 pending（该模式永远不会有值守位，pending 积压
+      // 无消费方）；审计留痕 routed:"skipped-mode" 保可观测。
+      if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") {
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), routed: "skipped-mode" });
+        return;
+      }
+      const target = this.dutyTargetId();
+      if (target) {
+        // R1 P1-1（A 审）：直推按投递真值记审计 + false 落 pending——原实现先记
+        // routed:"delivered" 再忽略 notifyConfirm 返回值：目标不在注册表（断档/重启
+        // 收编窗）时事件静默丢且审计谎报 delivered。notifyConfirm false = 目标会话
+        // 不在册，落 pending 等收编/回活后 flush 补投（零丢失主战场路径）。
+        const ok = this.notifyConfirm(target, `[值守唤醒] ${text}`);
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), target, routed: ok ? "delivered" : "pending" });
+        if (!ok) appendDutyFeedPending({ ts: Date.now(), kind, text: truncate(text, 200) });
+      } else {
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), routed: "pending" });
+        appendDutyFeedPending({ ts: Date.now(), kind, text: truncate(text, 200) });
+      }
+    } catch { /* 唤醒链尽力而为——绝不阻断事件主路径 */ }
+  }
+
+  /** pending 补投（任命 ✓ 落位 / relay 重启回活时）：合并单条推（逐条推=todo 轰炸） */
+  flushDutyFeedPending(): void {
+    try {
+      // R1 P1-2：leader 模式不补投（emit 侧已不积压，历史遗留 pending 留队等模式
+      // 切回 no-leader——不推 Leader 自我）
+      if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") return;
+      const target = this.dutyTargetId();
+      if (!target) return;
+      const items = takeDutyFeedPending();
+      if (!items.length) return;
+      // R1 P2-3：slice(-10) 撤——cap 20 的队列补投只带 10 条=静默丢。全量计数披露+
+      // 尾窗展示：标题如实「N 条（最近 M 条）」，正文取最新 12 条完整拼行（truncate
+      // 400 兜底只裁最旧——最新事件优先可见，丢弃由计数披露=非静默）
+      const show = items.length > 12 ? items.slice(-12) : items;
+      const lines = show.map((it) => `${new Date(it.ts).toLocaleTimeString("sv-SE")} ${it.text}`).join("；");
+      // R1 P1-1（A 审 主战场实锤）：投递真值——notifyConfirm false（目标不在册=断档/
+      // 重启收编窗，构造器 :1005 flush 恰在 adopt 前注册表必空）时**全量保序重入队**
+      // （原 take 清队后静默丢=本特性主战场路径丢数据）；审计如实记 pending。
+      const ok = this.notifyConfirm(target, `[值守唤醒·补投 ${items.length} 条${items.length > show.length ? `（显示最近 ${show.length} 条）` : ""}] ${truncate(lines, 400)}`);
+      if (!ok) {
+        restoreDutyFeedPending(items);
+        appendDutyFeedLog({ ts: Date.now(), kind: "flush", text: `补投未达（目标 ${target.slice(0, 8)} 不在册——断档/收编窗），${items.length} 条重入队`, target, routed: "pending" });
+        return;
+      }
+      appendDutyFeedLog({ ts: Date.now(), kind: "flush", text: `补投 ${items.length} 条空窗期积压事件`, target, routed: "delivered" });
+    } catch { /* 尽力而为 */ }
+  }
+
+  private dutyLostTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPmLostAlertAt = 0;
+  /** P2 断档可观测（用户=最终兜底人）：值守 PM 帧龄超阈（CCR_DUTY_LOST_MIN 缺省 20min）
+   *  → 推用户通知面（通知账 attention 组=手机通知中心可见）+ feed 审计 routed=user；
+   *  1h 节流防持续失联轰炸。60s 拍=事件驱动主链之外的可观测兜底（巡检只兜底军律）；
+   *  顺拍 flushDutyFeedPending（重启/席位回活窗补投）。 */
+  private startDutyLostWatch(): void {
+    if (this.dutyLostTimer) return;
+    this.dutyLostTimer = setInterval(() => {
+      try {
+        // R1 P1-2（A 审）：leader 模式（生产缺省）不拍失联——dutyTargetId 在该模式
+        // 返回 leaderId，帧龄判定对 Leader 会话失真=每小时误报轰炸用户手机的根源。
+        // 观测拍只在 no-leader（值守位语义存在的唯一模式）运行。
+        if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") return;
+        const target = this.dutyTargetId();
+        if (!target) { this.flushDutyFeedPending(); return; }
+        const v = Number(process.env.CCR_DUTY_LOST_MIN);
+        const lostMin = Number.isFinite(v) && v >= 1 ? v : 20;
+        const at = lastFrameAtFromEvents(this.cfg.dataDir, target);
+        const now = Date.now();
+        if (at !== null && now - at <= lostMin * 60_000) { this.flushDutyFeedPending(); return; }
+        this.flushDutyFeedPending();
+        if (now - this.lastPmLostAlertAt < 3600_000) return;
+        this.lastPmLostAlertAt = now;
+        const mins = at === null ? "∞" : Math.round((now - at) / 60_000);
+        appendDutyFeedLog({ ts: now, kind: "pm-lost", text: `值守 PM 会话 ${target.slice(0, 8)} 帧龄 ${mins}min（阈 ${lostMin}min）——推用户兜底`, routed: "user" });
+        try {
+          this.upsertNotification("system", "duty-pm-lost", target, {
+            title: "值守 PM 疑似失联",
+            body: `值守 PM 会话 ${target.slice(0, 8)} 已 ${mins} 分钟无帧（阈值 ${lostMin} 分钟）——断档窗口内的派单/回执可能无人跟进，请检查 PM 会话或改派值守。`,
+            severity: "waiting", group: "attention", actionable: true,
+            sessionId: target, domain: "org", returnPath: "/",
+          });
+        } catch { /* 通知尽力而为 */ }
+      } catch { /* 拍面尽力而为 */ }
+    }, 60_000);
+    this.dutyLostTimer.unref?.();
   }
 
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
@@ -7158,7 +7275,12 @@ ${lines.join("\n")}
           const self = this.locateSelfSession(str("cwd"), Number(str("pid")) || 0);
           if (!self) return { ok: false, error: "未定位到你的会话——请在项目目录内运行 org pm claim" };
           const pid = self.state.cli_pid;
-          if (!pid) return { ok: false, error: "会话无 CLI pid（外部会话需在终端活跃时 claim）" };
+          // [W-DUTYWIRE]（1105 断档第三现治本）：外部 SDK 会话（无 CLI pid）claim 资格
+          // 从「有 pid」改「活跃度凭证」——events.ndjson 最近帧在活跃窗内即可（与 CLI
+          // 会话同权；窗=CCR_DUTY_ACTIVITY_MIN 缺省 15min，三口同窗单点）
+          if (!pid && !sessionActiveByEvents(this.cfg.dataDir, self.state.session_id)) {
+            return { ok: false, error: `会话无 CLI pid 且近 ${dutyActivityWindowMin()} 分钟无帧（活跃度凭证不足）——外部会话活跃后重试（CCR_DUTY_ACTIVITY_MIN 可调窗）` };
+          }
           // 幂等：已是确认值守位本人 → 直接收执（重复 claim 无害）
           const cur = this.pmDutyStatus();
           if (cur.alive && cur.session_id === self.state.session_id) {
@@ -7193,7 +7315,7 @@ ${lines.join("\n")}
             return { ok: true, data: { needsConfirm: true, confirm: ownPending, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
           }
           // 提案：写 duty.json pm_appoint 镜像 + 出 pm-appoint 确认卡（不写 override）
-          setDutyAppoint({ session_id: self.state.session_id, cli_pid: pid, cwd: self.state.cwd || "", origin: "claim", proposed_at: Date.now() });
+          setDutyAppoint({ session_id: self.state.session_id, cli_pid: pid || 0, cwd: self.state.cwd || "", origin: "claim", proposed_at: Date.now() }); // [W-DUTYWIRE]：外部会话 pid=0（活跃度凭证形态）
           const confirm = addConfirm({
             kind: "pm-appoint",
             title: `值守 PM 认领：${self.state.title ? truncate(self.state.title, 24) : self.state.session_id.slice(0, 8)}`,
@@ -8260,6 +8382,7 @@ ${lines.join("\n")}
           if (!sid) return fail("任命生效", { error: "卡载荷缺 sid（陈旧卡）" });
           let alive = pid > 0;
           if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+          else { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：外部席位（pid=0）活跃度凭证决议时复核（与 claim 同窗——防「提案后停摆又 ✓」落死席）
           if (!alive) {
             // R1-A-P1②：死席**不入否决档**（系统推断≠用户否决——CLI 重启换 pid 正是
             // 「pid 死」常态，入档=同席 resume 复活后被永久逐出自动提名）。防刷闸
@@ -8284,7 +8407,7 @@ ${lines.join("\n")}
             clearPmOverride(); // 现任死/stale：清档腾位（与 dutyTargetId 读路径同语义）
           }
           const cand = this.sessions.get(sid);
-          if (!cand || !cand.state.cli_pid || cand.state.cli_pid !== pid) {
+          if (pid > 0 && (!cand || !cand.state.cli_pid || cand.state.cli_pid !== pid)) { // [W-DUTYWIRE]：pid=0 外部形态跳过 pid 一致性复核（无 pid 可比，活跃度已判）
             // 在册但 pid 已换代（提名到决议间 CLI 重启）＝卡载 pid 已失效——按死席同款
             // 作废（不入否决档）；不在册（挤出/冷窗）则放行 pid 探活结果（外部会话常态）
             if (cand) {
@@ -8303,6 +8426,7 @@ ${lines.join("\n")}
           if (!r.ok) return fail("任命生效", r);
           clearDutyAppoint(sid);
           this.emitChainAudit("pm-appoint-approved", `session=${sid.slice(0, 8)} pid=${pid} origin=${typeof c.payload.origin === "string" ? c.payload.origin : "auto"}——值守喂活恢复`);
+          this.flushDutyFeedPending(); // [W-DUTYWIRE]：席位落位即补投空窗期积压事件（claim 后首拍可见）
           break;
         }
         case "dispatch-closeout": {
