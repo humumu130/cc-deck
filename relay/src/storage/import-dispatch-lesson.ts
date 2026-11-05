@@ -7,10 +7,11 @@
 //   1. 两源各持 B2 checkpoint 五元组：ndjson 行级语义（offset=前 offset 行已处理，续跑从
 //      offset+1 起）；boardsDir 目录级语义（mtime=板文件最大 mtime、lineCount=板文件数，
 //      命中=域快进，失效=域重灌——JSON 树无逐行续跑面）。
-//   2. 失效 vs 中断（D1 调和的 D2 版）：
-//      · cp 有效+offset<lineCount = 纯中断续跑——不清域，从 offset+1 增量续行；重投链状态
+//   2. 失效 vs 中断（D1 调和的 D2 版；dispatchappend 起 ndjson 源走 appendOnly 增量）：
+//      · cp 有效+offset<lineCount = 中断/追加续跑——不清域，从 offset+1 增量续行（追加只导
+//        新增行——纯 append 源 mtime 变不杀 cp，见段 1 头注）；重投链状态
 //        （当前段号/是否终态）从 dispatch 表恢复（dispatch 域仅由本源灌入，全表回溯即全量状态）。
-//      · cp 失效 = 从 0 重放——dispatch 段首批事务清 lesson+dispatch 两域（倒序：lesson 的
+//      · cp 失效（行数缩减/schemaVersion 变） = 从 0 重放——dispatch 段首批事务清 lesson+dispatch 两域（倒序：lesson 的
 //        source_dispatch_id FK 引用 dispatch）+本源旧 loss。联动规则：dispatch 失效 ⇒ lesson
 //        必重灌（source_dispatch_id 悬空面随 dispatch 集变化，防陈旧归因）；boards 失效 ⇒ 仅
 //        lesson 重灌。文件缺失（lines=null）=源不可观测，不动作不清域（D1 events 同口径）。
@@ -96,6 +97,15 @@ interface ObservedNdjson {
 function observeNdjson(file: string): ObservedNdjson {
   if (!existsSync(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
   const obs = statThenRead(file); // stat 先于 read 定稿序（权威注释见 import-util.ts）
+  // dispatchbomb（1105 sqlitefix 验收审猎获·存量层时炸弹）：大源（>2MB）双未变短路
+  // 时 statThenRead 返回 unchanged+空 text+基线 lineCount——原版无此分支直接 split("")
+  // → lines=[] 且 lineCount=**0**（丢基线）→ checkpoint 失配 → replay 清 dispatch/
+  // lesson 全域+灌 0 行+写 0/0（生产 1.1MB 逼近 2MB 越线即触发）。修=对照 session-task
+  // 版（import-session-task.ts:133）unchanged 处理：lineCount 取基线、lines=[]——
+  // checkpoint 比较走 lineCount 不变=快进，域内数据原样保留。
+  if (obs.unchanged === true) {
+    return { mtimeMs: obs.mtimeMs, lineCount: obs.lineCount ?? 0, lines: [] };
+  }
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
@@ -391,8 +401,14 @@ export function importDispatchLesson(
   const obsBoards = observeBoardsDir(sources.boardsDir);
 
   const current = { schemaVersion };
+  // dispatchappend（t-a5e9f79e·P0 实锤 1105 振荡瘫痪）：appendOnly 增量续读（events 源
+  // F2 先例同款——checkpoint.ts appendOnly 分支）。原严格匹配「mtime 变即 null→replay 清两域
+  // 全量重放」在生产形态 550-600ms/次 × duty 心跳/keepalive/派单 append 高频（1 次/秒级）
+  // =事件循环近连续阻塞、HTTP 200/000 振荡（07:3x test.98 实锤）。dispatch-log 写面纯追加
+  // （org.ts writeDispatchToDb flag:"a"）——行数纯增长=前缀不变→旧 offset 仍有效，追加只导
+  // 新增行（毫秒级）；行数缩减（compact 重写/截断）=前缀已变→null→全量重放兜底（语义保留）。
   const cpLog = obsLog.lines !== null
-    ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount })
+    ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }, { appendOnly: true })
     : null;
   const cpBoards = readCheckpoint(port, sources.boardsDir, { ...current, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count });
 
@@ -416,7 +432,7 @@ export function importDispatchLesson(
 
   // ---- 段 1：dispatch-log 行级重放/续跑（重投链状态机） ----
   if (obsLog.lines !== null) {
-    const replay = cpLog === null; // 失效/首次→0 重放（首批事务清两域）；有效→offset+1 续跑
+    const replay = cpLog === null; // 行数缩减/首见→0 重放（首批事务清两域）；appendOnly 追加/中断→offset+1 增量续跑
     const fromLine = replay ? 0 : cpLog!.offset;
     // 归因锚预载（段 1 与续跑路径共用；dispatch 重放场景 group/session 行不受本域清理影响）
     const groupByAnchor = new Map<string, string>(
