@@ -54,7 +54,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: desktop-tauri/package-lock.json
+          # W-RELAYFRESHCI：relay lock 入缓存键（重建步在 relay 目录 npm ci）
+          cache-dependency-path: |
+            desktop-tauri/package-lock.json
+            relay/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -66,15 +69,32 @@ jobs:
         working-directory: desktop-tauri
         run: npm ci --no-audit --no-fund
 
+      - name: Rebuild embedded relay bundle（W-RELAYFRESHCI 出包强制重建）
+        # test.98/99 发布事故治本（2026-11-05）：出包 job 此前无 bundle 重建步，
+        # 内嵌 resources/relay.mjs 停在 97 期连续两版未更新（444dbce7 后的
+        # appendOnly 振荡根治/watchdogperm/429 与版本哨 relay 面全缺）——
+        # 「tag 出包≠源码状态」靠人记必再犯。本步让包内嵌物恒为 checkout 源码
+        # 的当场构建：relay npm ci（esbuild 经 tsx 传递 devDep 进入 node_modules）
+        # → build-plugin.mjs（bundle + VERSION 回写各落点 + native 闭包汇集 +
+        # resources/relay.mjs 拷贝）。与下方 freshness gate 配对：重建缺失/
+        # 静默失效/忘 bump 任一形态必红，零静默通过。
+        # ⚠ 顺序约束（#158）：本步 gatherClosure 会重汇集 resources/node_modules
+        #   （.node 为当前 runner 平台二进制），下方 prebuild-install 覆盖步在
+        #   本步之后（build-plugin → native 件覆盖），反序则覆盖被闭包重汇集冲掉。
+        working-directory: relay
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build-plugin.mjs
+
       - name: Replace better-sqlite3 binary with win32-x64 prebuilt
-        # #158（2026-10-08）：resources/node_modules 闭包由 dev 机（macOS arm64）经
-        # relay/scripts/build-plugin.mjs 汇集，better_sqlite3.node 是 darwin-arm64
-        # Mach-O——0.7.0-test.3 Windows 包实锤：内嵌 relay 启动即 dlopen
-        # ERR_DLOPEN_FAILED，8787 永不监听。此步在 Windows runner 上按闭包内
-        # package.json 的版本重拉 win32-x64 prebuilt 覆盖（better-sqlite3 官方发
-        # prebuilt，prebuild-install 按 runner 的 node ABI 自动选包）；mac job 不需
-        # 此步——dev 机汇集的 arm64 恰为 mac 目标形态（两平台来源注记见 mac job）。
-        # relay 侧已加纵深防御（驱动可失败加载+读面降级 json 档），此步是根修。
+        # #158（2026-10-08）：better_sqlite3.node 平台形态闸。W-RELAYFRESHCI 后
+        # 闭包由上方重建步在**本 runner** 上当场汇集（relay npm ci 拉的就是
+        # win32-x64 prebuilt），此步由「dev 机 Mach-O 覆盖」转为幂等纵深防御
+        # （历史上 0.7.0-test.3 闭包携 darwin-arm64 Mach-O 进包，dlopen 即炸，
+        # 8787 永不监听）——闭包再汇集/依赖面变动时仍保证 PE 形态，且必须
+        # 排在重建步之后（build-plugin → native 件覆盖，反序被闭包重汇集冲掉）。
+        # relay 侧另有纵深防御（驱动可失败加载+读面降级 json 档）。
         working-directory: desktop-tauri/src-tauri/resources/node_modules/better-sqlite3
         shell: bash
         run: |
@@ -98,6 +118,22 @@ jobs:
             }
             console.log(`better_sqlite3.node = win32 PE（${(b.length / 1024 / 1024).toFixed(1)} MB）`);
           '
+
+      - name: Embedded relay freshness gate（W-RELAYFRESHCI 新鲜度硬闸）
+        # 版本戳四面（plugin.json version / 双壳 CONSOLE_VERSION / bundle 内
+        # CCR_RELAY_VERSION 烙印）必须 == 仓库根 VERSION，且 cc-plugins 与
+        # desktop resources 双副本 SHA 一致；tag 出包另断言 tag==VERSION
+        # （打 tag 未 bump VERSION = 「tag 出包≠源码状态」反向形态）。
+        # 重建步改陈/删除/静默失效 → 本步红（闸不是摆设：本地夹具已验）。
+        # ⚠ 必须在下方 Sync version/Stamp dev 烙印步**之前**跑——烙印把
+        # CONSOLE_VERSION 改写为通道标识（无 tag 构建带 -dev.N 后缀），闸后
+        # 跑必被后缀误伤；烙印语义是通道显示，与本闸「产物==事实源」正交。
+        working-directory: relay
+        shell: bash
+        run: |
+          ARGS=""
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then ARGS="--expect-tag ${GITHUB_REF_NAME#v}"; fi  # W-RELAYFRESHCI-R1 P2：REF_TYPE 判 tag（v 开头分支 dispatch 不误传）
+          node scripts/check-embedded-freshness.mjs $ARGS
 
       - name: Regenerate icons from desktop/build/icon.png
         # 图标生成物已提交（src-tauri/icons/），此处幂等重生成，源图更新后 CI 自动跟上
@@ -212,14 +248,16 @@ jobs:
       - name: Deploy reminder（console-guardrails ③ 出包≠部署——1030 黄底事故防再犯）
         shell: bash
         run: |
-          echo "::warning::⚠️ 本包不含部署，需手动部署面同步（scripts/deploy-web.sh）——运行端 console/relay 不会随本包自动更新"
+          echo "::warning::⚠️ 本包不含部署，需手动部署面同步（scripts/deploy-web.sh）——运行端 console/relay 不会随本包自动更新；内嵌 relay 已由 CI 当场重建（W-RELAYFRESHCI，包内=出包时源码状态）"
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## ⚠️ 部署链提醒（console-guardrails ③）
           本 CI 只出包不含部署步。出包后必须：`scripts/deploy-web.sh` 四面同步 + 运行端关于页双版本核验（壳 vX · 界面 vY 一致）。核对表见 artifact 内 DEPLOY-CHECKLIST.md。
+          ℹ️ 包内嵌 relay 已由 CI 当场重建并过新鲜度硬闸（W-RELAYFRESHCI）——包内 relay 版本 == 仓库 VERSION；部署面（cc-plugins/Nova/relay-service/CF）仍需手动同步。
           EOF
           cat > DEPLOY-CHECKLIST.md <<'CHK'
           部署清单核对表（console-guardrails ③）
           ⚠️ 本包不含部署步——tag 直出 CI 只出包，运行端界面/relay 不会自动同步！
+          ℹ️ 内嵌 relay 已由 CI 当场重建+新鲜度硬闸（W-RELAYFRESHCI）：包内 bundle == 出包时源码，无需人工核对包内 relay 新鲜度。
           - [ ] scripts/deploy-web.sh 四面同步（cc-plugins/Nova Resources/relay-service/CF）
           - [ ] -test 通道：latest-test.json 已更新（手机端关于页完整通道版本可见）
           - [ ] 运行端验证：关于页「壳 vX · 界面 vY」一致（错配横幅不出现=护栏①通过）
@@ -271,7 +309,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: desktop-tauri/package-lock.json
+          # W-RELAYFRESHCI：relay lock 入缓存键（重建步在 relay 目录 npm ci）
+          cache-dependency-path: |
+            desktop-tauri/package-lock.json
+            relay/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -284,6 +325,28 @@ jobs:
       - name: Install tauri-cli
         working-directory: desktop-tauri
         run: npm ci --no-audit --no-fund
+
+      - name: Rebuild embedded relay bundle（W-RELAYFRESHCI 出包强制重建）
+        # 同 Windows job（test.98/99 陈账事故治本）：包内嵌 relay 恒为 checkout
+        # 源码的当场构建。macos-14 = arm64：relay npm ci 拉的 better-sqlite3
+        # prebuilt 恰为 dmg 目标形态（aarch64-apple-darwin），无需 Windows 侧的
+        # prebuild-install 覆盖步（#158 平台来源注记：闭包二进制=构建机平台）。
+        working-directory: relay
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build-plugin.mjs
+
+      - name: Embedded relay freshness gate（W-RELAYFRESHCI 新鲜度硬闸）
+        # 同 Windows job：版本戳四面 == 仓库 VERSION + 双副本 SHA + tag==VERSION
+        #（tag 时）。必须在下方 Sync version/Stamp dev 烙印步之前跑（-dev.N
+        # 通道后缀会误伤 CONSOLE_VERSION 校验）。
+        working-directory: relay
+        shell: bash
+        run: |
+          ARGS=""
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then ARGS="--expect-tag ${GITHUB_REF_NAME#v}"; fi  # W-RELAYFRESHCI-R1 P2：REF_TYPE 判 tag（v 开头分支 dispatch 不误传）
+          node scripts/check-embedded-freshness.mjs $ARGS
 
       - name: Regenerate icons
         working-directory: desktop-tauri
@@ -375,14 +438,16 @@ jobs:
       - name: Deploy reminder（console-guardrails ③ 出包≠部署——1030 黄底事故防再犯）
         shell: bash
         run: |
-          echo "::warning::⚠️ 本包不含部署，需手动部署面同步（scripts/deploy-web.sh）——运行端 console/relay 不会随本包自动更新"
+          echo "::warning::⚠️ 本包不含部署，需手动部署面同步（scripts/deploy-web.sh）——运行端 console/relay 不会随本包自动更新；内嵌 relay 已由 CI 当场重建（W-RELAYFRESHCI，包内=出包时源码状态）"
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## ⚠️ 部署链提醒（console-guardrails ③）
           本 CI 只出包不含部署步。出包后必须：`scripts/deploy-web.sh` 四面同步 + 运行端关于页双版本核验（壳 vX · 界面 vY 一致）。核对表见 artifact 内 DEPLOY-CHECKLIST.md。
+          ℹ️ 包内嵌 relay 已由 CI 当场重建并过新鲜度硬闸（W-RELAYFRESHCI）——包内 relay 版本 == 仓库 VERSION；部署面（cc-plugins/Nova/relay-service/CF）仍需手动同步。
           EOF
           cat > DEPLOY-CHECKLIST.md <<'CHK'
           部署清单核对表（console-guardrails ③）
           ⚠️ 本包不含部署步——tag 直出 CI 只出包，运行端界面/relay 不会自动同步！
+          ℹ️ 内嵌 relay 已由 CI 当场重建+新鲜度硬闸（W-RELAYFRESHCI）：包内 bundle == 出包时源码，无需人工核对包内 relay 新鲜度。
           - [ ] scripts/deploy-web.sh 四面同步（cc-plugins/Nova Resources/relay-service/CF）
           - [ ] -test 通道：latest-test.json 已更新（手机端关于页完整通道版本可见）
           - [ ] 运行端验证：关于页「壳 vX · 界面 vY」一致（错配横幅不出现=护栏①通过）
