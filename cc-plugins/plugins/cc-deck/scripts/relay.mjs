@@ -47,9 +47,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
+// node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -412,11 +412,11 @@ var require_nacl_fast = __commonJS({
         this.pad = new Uint16Array(8);
         this.leftover = 0;
         this.fin = 0;
-        var t02, t12, t2, t3, t4, t52, t6, t72;
-        t02 = key[0] & 255 | (key[1] & 255) << 8;
-        this.r[0] = t02 & 8191;
+        var t03, t12, t2, t3, t4, t52, t6, t72;
+        t03 = key[0] & 255 | (key[1] & 255) << 8;
+        this.r[0] = t03 & 8191;
         t12 = key[2] & 255 | (key[3] & 255) << 8;
-        this.r[1] = (t02 >>> 13 | t12 << 3) & 8191;
+        this.r[1] = (t03 >>> 13 | t12 << 3) & 8191;
         t2 = key[4] & 255 | (key[5] & 255) << 8;
         this.r[2] = (t12 >>> 10 | t2 << 6) & 7939;
         t3 = key[6] & 255 | (key[7] & 255) << 8;
@@ -442,15 +442,15 @@ var require_nacl_fast = __commonJS({
       };
       poly1305.prototype.blocks = function(m, mpos, bytes) {
         var hibit = this.fin ? 0 : 1 << 11;
-        var t02, t12, t2, t3, t4, t52, t6, t72, c;
+        var t03, t12, t2, t3, t4, t52, t6, t72, c;
         var d02, d12, d2, d32, d4, d52, d6, d72, d8, d9;
         var h02 = this.h[0], h12 = this.h[1], h22 = this.h[2], h3 = this.h[3], h4 = this.h[4], h52 = this.h[5], h6 = this.h[6], h72 = this.h[7], h8 = this.h[8], h9 = this.h[9];
         var r02 = this.r[0], r12 = this.r[1], r2 = this.r[2], r32 = this.r[3], r4 = this.r[4], r52 = this.r[5], r6 = this.r[6], r72 = this.r[7], r8 = this.r[8], r9 = this.r[9];
         while (bytes >= 16) {
-          t02 = m[mpos + 0] & 255 | (m[mpos + 1] & 255) << 8;
-          h02 += t02 & 8191;
+          t03 = m[mpos + 0] & 255 | (m[mpos + 1] & 255) << 8;
+          h02 += t03 & 8191;
           t12 = m[mpos + 2] & 255 | (m[mpos + 3] & 255) << 8;
-          h12 += (t02 >>> 13 | t12 << 3) & 8191;
+          h12 += (t03 >>> 13 | t12 << 3) & 8191;
           t2 = m[mpos + 4] & 255 | (m[mpos + 5] & 255) << 8;
           h22 += (t12 >>> 10 | t2 << 6) & 8191;
           t3 = m[mpos + 6] & 255 | (m[mpos + 7] & 255) << 8;
@@ -837,9 +837,9 @@ var require_nacl_fast = __commonJS({
         for (var i = 0; i < 16; i++) o[i] = a[i] - b[i];
       }
       function M(o, a, b) {
-        var v, c, t02 = 0, t12 = 0, t2 = 0, t3 = 0, t4 = 0, t52 = 0, t6 = 0, t72 = 0, t8 = 0, t9 = 0, t10 = 0, t11 = 0, t122 = 0, t13 = 0, t14 = 0, t15 = 0, t16 = 0, t17 = 0, t18 = 0, t19 = 0, t20 = 0, t21 = 0, t22 = 0, t23 = 0, t24 = 0, t25 = 0, t26 = 0, t27 = 0, t28 = 0, t29 = 0, t30 = 0, b02 = b[0], b12 = b[1], b2 = b[2], b32 = b[3], b4 = b[4], b52 = b[5], b6 = b[6], b72 = b[7], b82 = b[8], b9 = b[9], b10 = b[10], b11 = b[11], b122 = b[12], b13 = b[13], b14 = b[14], b15 = b[15];
+        var v, c, t03 = 0, t12 = 0, t2 = 0, t3 = 0, t4 = 0, t52 = 0, t6 = 0, t72 = 0, t8 = 0, t9 = 0, t10 = 0, t11 = 0, t122 = 0, t13 = 0, t14 = 0, t15 = 0, t16 = 0, t17 = 0, t18 = 0, t19 = 0, t20 = 0, t21 = 0, t22 = 0, t23 = 0, t24 = 0, t25 = 0, t26 = 0, t27 = 0, t28 = 0, t29 = 0, t30 = 0, b02 = b[0], b12 = b[1], b2 = b[2], b32 = b[3], b4 = b[4], b52 = b[5], b6 = b[6], b72 = b[7], b82 = b[8], b9 = b[9], b10 = b[10], b11 = b[11], b122 = b[12], b13 = b[13], b14 = b[14], b15 = b[15];
         v = a[0];
-        t02 += v * b02;
+        t03 += v * b02;
         t12 += v * b12;
         t2 += v * b2;
         t3 += v * b32;
@@ -1110,7 +1110,7 @@ var require_nacl_fast = __commonJS({
         t28 += v * b13;
         t29 += v * b14;
         t30 += v * b15;
-        t02 += 38 * t16;
+        t03 += 38 * t16;
         t12 += 38 * t17;
         t2 += 38 * t18;
         t3 += 38 * t19;
@@ -1126,9 +1126,9 @@ var require_nacl_fast = __commonJS({
         t13 += 38 * t29;
         t14 += 38 * t30;
         c = 1;
-        v = t02 + c + 65535;
+        v = t03 + c + 65535;
         c = Math.floor(v / 65536);
-        t02 = v - c * 65536;
+        t03 = v - c * 65536;
         v = t12 + c + 65535;
         c = Math.floor(v / 65536);
         t12 = v - c * 65536;
@@ -1174,11 +1174,11 @@ var require_nacl_fast = __commonJS({
         v = t15 + c + 65535;
         c = Math.floor(v / 65536);
         t15 = v - c * 65536;
-        t02 += c - 1 + 37 * (c - 1);
+        t03 += c - 1 + 37 * (c - 1);
         c = 1;
-        v = t02 + c + 65535;
+        v = t03 + c + 65535;
         c = Math.floor(v / 65536);
-        t02 = v - c * 65536;
+        t03 = v - c * 65536;
         v = t12 + c + 65535;
         c = Math.floor(v / 65536);
         t12 = v - c * 65536;
@@ -1224,8 +1224,8 @@ var require_nacl_fast = __commonJS({
         v = t15 + c + 65535;
         c = Math.floor(v / 65536);
         t15 = v - c * 65536;
-        t02 += c - 1 + 37 * (c - 1);
-        o[0] = t02;
+        t03 += c - 1 + 37 * (c - 1);
+        o[0] = t03;
         o[1] = t12;
         o[2] = t2;
         o[3] = t3;
@@ -1959,29 +1959,29 @@ var require_nacl_fast = __commonJS({
         return smlen;
       }
       function unpackneg(r, p) {
-        var t = gf2(), chk = gf2(), num3 = gf2(), den = gf2(), den2 = gf2(), den4 = gf2(), den6 = gf2();
+        var t = gf2(), chk = gf2(), num4 = gf2(), den = gf2(), den2 = gf2(), den4 = gf2(), den6 = gf2();
         set25519(r[2], gf1);
         unpack25519(r[1], p);
-        S(num3, r[1]);
-        M(den, num3, D3);
-        Z2(num3, num3, r[2]);
+        S(num4, r[1]);
+        M(den, num4, D3);
+        Z2(num4, num4, r[2]);
         A2(den, r[2], den);
         S(den2, den);
         S(den4, den2);
         M(den6, den4, den2);
-        M(t, den6, num3);
+        M(t, den6, num4);
         M(t, t, den);
         pow2523(t, t);
-        M(t, t, num3);
+        M(t, t, num4);
         M(t, t, den);
         M(t, t, den);
         M(r[0], t, den);
         S(chk, r[0]);
         M(chk, chk, den);
-        if (neq25519(chk, num3)) M(r[0], r[0], I2);
+        if (neq25519(chk, num4)) M(r[0], r[0], I2);
         S(chk, r[0]);
         M(chk, chk, den);
-        if (neq25519(chk, num3)) return -1;
+        if (neq25519(chk, num4)) return -1;
         if (par25519(r[0]) === p[31] >> 7) Z2(r[0], gf0, r[0]);
         M(r[3], r[0], r[1]);
         return 0;
@@ -2439,7 +2439,7 @@ function writeCheckpoint(port, key) {
     [key.path, key.mtimeMs, key.mtimeNs ?? null, key.lineCount, key.offset, key.schemaVersion, now]
   );
 }
-function readCheckpoint(port, path6, current) {
+function readCheckpoint(port, path6, current, opts) {
   const row = port.query("SELECT path, mtime_ms, mtime_ns, line_count, line_offset, schema_version, updated_at FROM import_checkpoint WHERE path = ?", [path6])[0];
   if (!row) return null;
   const checkpoint = {
@@ -2451,6 +2451,11 @@ function readCheckpoint(port, path6, current) {
     schemaVersion: row.schema_version,
     updatedAt: row.updated_at
   };
+  if (opts?.appendOnly) {
+    if (checkpoint.schemaVersion !== current.schemaVersion) return null;
+    if (current.lineCount < checkpoint.lineCount) return null;
+    return checkpoint;
+  }
   if (checkpoint.mtimeMs !== current.mtimeMs || checkpoint.lineCount !== current.lineCount || checkpoint.schemaVersion !== current.schemaVersion) {
     return null;
   }
@@ -2619,7 +2624,7 @@ function importOrg(port, orgDir2, opts) {
   const headcountRefs = [];
   const confirms = [];
   const orgSrc = sources[0];
-  let leader2 = null;
+  let leader = null;
   if (orgSrc.text !== null) {
     try {
       const a = JSON.parse(orgSrc.text);
@@ -2627,7 +2632,7 @@ function importOrg(port, orgDir2, opts) {
         losses.push({ source: orgSrc, lineNo: 1, reason: "bad-field", excerpt: orgSrc.text.slice(0, 200) });
       } else {
         const identity = `${orgDir2}@leader@`;
-        leader2 = {
+        leader = {
           id: `mem-${sha12(identity)}`,
           stableIdentity: identity,
           displayName: "Leader",
@@ -2767,7 +2772,7 @@ function importOrg(port, orgDir2, opts) {
           losses.push({ source: confirmsSrc, lineNo, reason: "missing-attribution", excerpt: JSON.stringify({ id: c.id }).slice(0, 200) });
         }
         let decidedBy = typeof c.decided_by === "string" && c.decided_by ? c.decided_by : null;
-        if (decidedBy === "leader" && leader2 !== null) decidedBy = leader2.id;
+        if (decidedBy === "leader" && leader !== null) decidedBy = leader.id;
         const cid = c.id;
         const kind = c.kind;
         const status = c.status;
@@ -2813,7 +2818,7 @@ function importOrg(port, orgDir2, opts) {
         [g2.id, p?.id ?? null, g2.name, g2.anchorDir, g2.status, g2.tier, g2.singleCard, g2.headcountJson, g2.roleDefaultsJson, g2.holdSuggestedAt, g2.archiveNote, g2.createdAt, g2.updatedAt]
       );
     }
-    const allMembers = leader2 !== null ? [leader2, ...memberByIdentity.values()] : [...memberByIdentity.values()];
+    const allMembers = leader !== null ? [leader, ...memberByIdentity.values()] : [...memberByIdentity.values()];
     for (const m of allMembers) {
       const validGroups = m.groupIds.filter((gid) => validGroupIds.has(gid));
       port.exec(
@@ -2901,7 +2906,7 @@ function deriveLevel(actionable, kind, resolvedAt) {
   if (!actionable || kind === "system") return "info";
   return resolvedAt !== null ? "done" : "waiting";
 }
-function importNotifications(port, dataDir3, opts) {
+async function importNotifications(port, dataDir3, opts) {
   const schemaVersion = opts?.schemaVersion ?? NOTIFICATION_IMPORT_SCHEMA_VERSION;
   const sources = [
     observe2(join9(dataDir3, "notifications.json"), "notifications.json"),
@@ -3044,29 +3049,50 @@ function importNotifications(port, dataDir3, opts) {
       losses.push({ source: ledgerSrc, lineNo: 1, reason: "bad-json", excerpt: ledgerSrc.text.slice(0, 200) });
     }
   }
+  const yieldFn = opts?.yieldFn;
+  const all = [...byKey.values()];
+  const BATCH = 2e3;
   port.begin();
   try {
     port.exec("DELETE FROM notification_client_state");
     port.exec("DELETE FROM notification");
     port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [projSrc.file, ledgerSrc.file]);
-    for (const n of byKey.values()) {
-      port.exec(
-        "INSERT INTO notification (id, project_id, group_id, session_id, level, category, payload_json, handled_at, resolved_at, condition_key, created_at) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [n.id, n.sessionId, n.level, n.category, JSON.stringify(n.payload), n.handledAt, n.resolvedAt, n.conditionKey, n.createdAt]
-      );
-      for (const cs2 of n.clientStates) {
+    port.commit();
+  } catch (err) {
+    port.rollback();
+    throw new Error(`import-notification: \u901A\u77E5\u57DF\u6E05\u6BB5\u5931\u8D25\u5DF2\u56DE\u6EDA\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+  }
+  for (let bi2 = 0; bi2 < all.length; bi2 += BATCH) {
+    port.begin();
+    try {
+      for (let i = bi2; i < Math.min(bi2 + BATCH, all.length); i++) {
+        const n = all[i];
         port.exec(
-          "INSERT INTO notification_client_state (notification_id, client_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)",
-          [n.id, cs2.clientId, cs2.readAt, cs2.dismissedAt]
+          "INSERT INTO notification (id, project_id, group_id, session_id, level, category, payload_json, handled_at, resolved_at, condition_key, created_at) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [n.id, n.sessionId, n.level, n.category, JSON.stringify(n.payload), n.handledAt, n.resolvedAt, n.conditionKey, n.createdAt]
         );
+        for (const cs2 of n.clientStates) {
+          port.exec(
+            "INSERT INTO notification_client_state (notification_id, client_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)",
+            [n.id, cs2.clientId, cs2.readAt, cs2.dismissedAt]
+          );
+        }
       }
+      port.commit();
+    } catch (err) {
+      port.rollback();
+      throw new Error(`import-notification: \u901A\u77E5\u57DF\u6279 ${bi2 / BATCH + 1} \u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08checkpoint \u672A\u5199\u2192\u4E0B\u8F6E\u5168\u91CF\u91CD\u704C\u81EA\u6108\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
     }
+    await yieldFn?.();
+  }
+  port.begin();
+  try {
     for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
     for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
     port.commit();
   } catch (err) {
     port.rollback();
-    throw new Error(`import-notification: \u901A\u77E5\u57DF\u5BFC\u5165\u5931\u8D25\u5DF2\u56DE\u6EDA\uFF08\u4FDD\u7559\u65E7\u5FEB\u7167\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`import-notification: \u901A\u77E5\u57DF\u6536\u5C3E\uFF08loss/checkpoint\uFF09\u5931\u8D25\u5DF2\u56DE\u6EDA\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
   }
   return { skipped: false, counts: countAll2(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };
 }
@@ -3307,14 +3333,15 @@ function parseTaskFile(ref, lossSource, reviewCwds, sessionCwd, groupByAnchor, g
     ts: ref.mtimeMs
   };
 }
-function importSessionTask(port, sources, opts) {
+async function importSessionTask(port, sources, opts) {
+  const yieldFn = opts?.yieldFn;
   const schemaVersion = opts?.schemaVersion ?? SESSION_TASK_IMPORT_SCHEMA_VERSION;
   const batchSize = opts?.batchSize ?? DEFAULT_BATCH_SIZE;
   const obsEvents = observeNdjson(sources.eventsFile);
   const obsTasks = observeTasksDir(sources.tasksDir);
   const obsAccept = observeAcceptanceDir(sources.acceptanceDir);
   const current = { schemaVersion };
-  const cpEvents = obsEvents.lines !== null ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount }) : null;
+  const cpEvents = obsEvents.lines !== null ? readCheckpoint(port, sources.eventsFile, { ...current, mtimeMs: obsEvents.mtimeMs, lineCount: obsEvents.lineCount }, { appendOnly: true }) : null;
   const cpTasks = readCheckpoint(port, sources.tasksDir, { ...current, mtimeMs: obsTasks.mtimeMs, lineCount: obsTasks.count });
   const accCpKey = `${sources.acceptanceDir}${ACC_DIR_CP_SUFFIX}`;
   const cpAccept = readCheckpoint(port, accCpKey, { ...current, mtimeMs: obsAccept.mtimeMs, lineCount: obsAccept.count });
@@ -3382,9 +3409,13 @@ function importSessionTask(port, sources, opts) {
         }
       }
       batch.push({ ev: ev2, lineNo });
-      if (batch.length >= batchSize) flushBatch();
+      if (batch.length >= batchSize) {
+        flushBatch();
+        await yieldFn?.();
+      }
     }
     flushBatch();
+    await yieldFn?.();
     if (obsEvents.lineCount === 0 && fromLine === 0) {
       port.begin();
       try {
@@ -3412,20 +3443,22 @@ function importSessionTask(port, sources, opts) {
     const groupProject = new Map(
       port.query(`SELECT id, project_id FROM "group"`).map((r) => [r.id, r.project_id ?? ""])
     );
+    const rows = [];
+    for (let fi = 0; fi < obsTasks.files.length; fi++) {
+      const ref = obsTasks.files[fi];
+      const row = parseTaskFile(ref, sources.tasksDir, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses);
+      if (row !== null) {
+        if (!TASK_STATUS.has(row.status)) {
+          throw new Error(`\u6620\u5C04\u4EA7\u7269\u72B6\u6001\u8D8A\u8BCD\u8868\uFF08${row.taskRef} \u2192 ${row.status}\uFF09`);
+        }
+        rows.push(row);
+      }
+      if ((fi + 1) % 200 === 0) await yieldFn?.();
+    }
     port.begin();
     try {
       port.exec("DELETE FROM task WHERE origin = 'user'");
       port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [sources.tasksDir, sources.acceptanceDir]);
-      const rows = [];
-      for (const ref of obsTasks.files) {
-        const row = parseTaskFile(ref, sources.tasksDir, reviewCwds, sessionCwd, groupByAnchor, groupProject, losses);
-        if (row !== null) {
-          if (!TASK_STATUS.has(row.status)) {
-            throw new Error(`\u6620\u5C04\u4EA7\u7269\u72B6\u6001\u8D8A\u8BCD\u8868\uFF08${row.taskRef} \u2192 ${row.status}\uFF09`);
-          }
-          rows.push(row);
-        }
-      }
       for (const r of rows) {
         port.exec(
           `INSERT INTO task (id, project_id, group_id, session_id, parent_task_id, origin, external_sid, external_task_file_id,
@@ -3978,6 +4011,9 @@ import { join as join12 } from "node:path";
 function observeNdjson2(file) {
   if (!existsSync11(file)) return { mtimeMs: 0, lineCount: 0, lines: null };
   const obs = statThenRead(file);
+  if (obs.unchanged === true) {
+    return { mtimeMs: obs.mtimeMs, lineCount: obs.lineCount ?? 0, lines: [] };
+  }
   const lines = obs.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return { mtimeMs: obs.mtimeMs, lineCount: lines.length, lines };
@@ -4125,7 +4161,7 @@ function importDispatchLesson(port, sources, opts) {
   const obsLog = observeNdjson2(sources.dispatchLogFile);
   const obsBoards = observeBoardsDir(sources.boardsDir);
   const current = { schemaVersion };
-  const cpLog = obsLog.lines !== null ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }) : null;
+  const cpLog = obsLog.lines !== null ? readCheckpoint(port, sources.dispatchLogFile, { ...current, mtimeMs: obsLog.mtimeMs, lineCount: obsLog.lineCount }, { appendOnly: true }) : null;
   const cpBoards = readCheckpoint(port, sources.boardsDir, { ...current, mtimeMs: obsBoards.mtimeMs, lineCount: obsBoards.count });
   if (cpLog !== null && cpLog.offset >= obsLog.lineCount && cpBoards !== null) {
     const n2 = (sql, ...params) => port.query(sql, params)[0]?.n ?? -1;
@@ -4912,6 +4948,7 @@ var read_mode_exports = {};
 __export(read_mode_exports, {
   READ_MODE_ENV: () => READ_MODE_ENV,
   SHADOW_DIFF_FILE: () => SHADOW_DIFF_FILE,
+  advanceOrgSourceCheckpoint: () => advanceOrgSourceCheckpoint,
   boardTaskEntriesFromDb: () => boardTaskEntriesFromDb,
   compareDomain: () => compareDomain,
   currentReadMode: () => currentReadMode,
@@ -4919,12 +4956,15 @@ __export(read_mode_exports, {
   dispatchEntriesFromDb: () => dispatchEntriesFromDb,
   ensureStore: () => ensureStore,
   ensureStoreQuiet: () => ensureStoreQuiet,
+  flushShadowImportForTest: () => flushShadowImportForTest,
   importAllForShadow: () => importAllForShadow,
+  isShadowImportPending: () => isShadowImportPending,
   isSqliteDegradationNotifiedForTest: () => isSqliteDegradationNotifiedForTest,
   lessonsFromDb: () => lessonsFromDb,
   orgConfirmsFromDb: () => orgConfirmsFromDb,
   probeSqliteDriverAtBoot: () => probeSqliteDriverAtBoot,
   projectGroupsFromDb: () => projectGroupsFromDb,
+  readDispatchFromDbCached: () => readDispatchFromDbCached,
   readShadowDiff: () => readShadowDiff,
   resetReadModeForTest: () => resetReadModeForTest,
   resetSqliteDegradationFlagForTest: () => resetSqliteDegradationFlagForTest,
@@ -4934,9 +4974,9 @@ __export(read_mode_exports, {
   viaReadMode: () => viaReadMode,
   writeShadowDiff: () => writeShadowDiff
 });
-import { existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync11, readdirSync as readdirSync5, writeFileSync as writeFileSync6 } from "node:fs";
+import { existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync11, readdirSync as readdirSync5, statSync as statSync7, writeFileSync as writeFileSync6 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
-import { basename as basename2, join as join14 } from "node:path";
+import { basename as basename2, dirname as dirname3, join as join14 } from "node:path";
 function resolveReadMode(raw) {
   if (raw === void 0 || raw === null || raw.trim() === "") return "sqlite";
   const v = raw.trim();
@@ -4984,15 +5024,108 @@ function resetSqliteDegradationFlagForTest() {
 function ensureStore(dirs) {
   const cached2 = portCache.get(dirs.dataDir);
   if (cached2) {
-    importAllForShadow(cached2, dirs);
+    const sig = shadowSourcesSig(dirs);
+    if (shadowSigCache.get(dirs.dataDir) === sig && !shadowDirty.has(dirs.dataDir)) return cached2;
+    scheduleShadowImport(cached2, dirs, sig);
     return cached2;
   }
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
-  importAllForShadow(port, dirs);
   portCache.set(dirs.dataDir, port);
+  scheduleShadowImport(port, dirs, shadowSourcesSig(dirs));
   return port;
+}
+function scheduleShadowImport(port, dirs, sig) {
+  if (shadowInflight.has(dirs.dataDir)) {
+    shadowDirty.add(dirs.dataDir);
+    return;
+  }
+  shadowInflight.add(dirs.dataDir);
+  shadowDirty.add(dirs.dataDir);
+  setImmediate(() => {
+    void (async () => {
+      try {
+        const t03 = Date.now();
+        const failures = await importAllForShadow(port, dirs, { yieldFn: () => new Promise((r) => setImmediate(r)) });
+        shadowSigCache.set(dirs.dataDir, sig);
+        for (const k3 of [...dispatchReadCache.keys()]) if (k3.startsWith(dirs.dataDir + "\0")) dispatchReadCache.delete(k3);
+        if (failures.length) reportImportFailureOnce(dirs.dataDir, failures);
+        const ms = Date.now() - t03;
+        if (ms > 50) console.warn(`[read-mode] \u5F71\u5B50\u5BFC\u5165\u5FEB\u8FDB ${ms}ms\uFF08\u540E\u53F0\u5F02\u6B65\u2014\u2014\u6E90\u53D8\u66F4\u89E6\u53D1\uFF0C\u8D85 50ms \u89C2\u6D4B\u95F8\uFF09`);
+      } catch (err) {
+        console.warn("[read-mode] \u540E\u53F0\u5F71\u5B50\u5BFC\u5165\u5931\u8D25\uFF08\u8BFB\u9762\u505C\u5728\u4E0A\u4E00\u5FEB\u7167\uFF0C\u4E0B\u6B21\u8BFB\u91CD\u8BD5\uFF09\uFF1A", err instanceof Error ? err.message : String(err));
+      } finally {
+        shadowInflight.delete(dirs.dataDir);
+        shadowDirty.delete(dirs.dataDir);
+        dispatchReadCache.clear();
+      }
+    })();
+  });
+}
+function reportImportFailureOnce(dataDir3, failures) {
+  const now = Date.now();
+  const last = importFailNotedAt.get(dataDir3) ?? 0;
+  if (now - last < 6e4) return false;
+  if (importFailNotedAt.size > 50) importFailNotedAt.clear();
+  importFailNotedAt.set(dataDir3, now);
+  console.warn(`[read-mode] \u5F71\u5B50\u5BFC\u5165 ${failures.length} \u57DF\u5931\u8D25\uFF08${failures.map((x) => x.domain).join("/")}\uFF1B\u4E0B\u8F6E\u6E90\u53D8\u66F4\u81EA\u6108\u91CD\u8BD5\uFF09: ${failures[0]?.error ?? ""}`);
+  return true;
+}
+function isShadowImportPending(dataDir3) {
+  return shadowDirty.has(dataDir3);
+}
+async function flushShadowImportForTest(dataDir3) {
+  for (let i = 0; i < 500; i++) {
+    if (dataDir3 ? !shadowDirty.has(dataDir3) && !shadowInflight.has(dataDir3) : shadowDirty.size === 0 && shadowInflight.size === 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+function statSigOf(p) {
+  try {
+    const st2 = statSync7(p);
+    return `${st2.mtimeMs}:${st2.size}`;
+  } catch {
+    return "-";
+  }
+}
+function shadowSourcesSig(dirs) {
+  const parts = [];
+  const file = (p) => parts.push(statSigOf(p));
+  for (const f of ["org.json", "projects.json", "confirms.json", "dispatch-log.ndjson", "boards-journal.ndjson"]) file(join14(dirs.orgDir, f));
+  file(join14(dirs.dataDir, "events.ndjson"));
+  file(join14(dirs.dataDir, "deliverables.json"));
+  file(join14(dirs.dataDir, "notifications.json"));
+  file(join14(dirs.dataDir, "decision-notifications.json"));
+  const dirFiles = (d2, ext) => {
+    try {
+      for (const e of readdirSync5(d2)) if (e.endsWith(ext)) file(join14(d2, e));
+    } catch {
+    }
+  };
+  dirFiles(join14(dirs.orgDir, "boards"), ".json");
+  dirFiles(join14(dirs.dataDir, "acceptances"), ".json");
+  if (dirs.tasksDir) {
+    try {
+      for (const e of readdirSync5(dirs.tasksDir)) {
+        const sidDir = join14(dirs.tasksDir, e);
+        try {
+          const st2 = statSync7(sidDir);
+          if (!st2.isDirectory()) {
+            parts.push(statSigOf(sidDir));
+            continue;
+          }
+          let n = 0;
+          for (const t of readdirSync5(sidDir)) if (t.endsWith(".json")) n++;
+          parts.push(`${e}@${st2.mtimeMs}#${n}`);
+        } catch {
+          parts.push(`${e}@-`);
+        }
+      }
+    } catch {
+    }
+  }
+  return parts.join("|");
 }
 function ensureStoreQuiet(dirs) {
   const cached2 = portCache.get(dirs.dataDir);
@@ -5002,6 +5135,26 @@ function ensureStoreQuiet(dirs) {
   runMigrations(port, migrations);
   portCache.set(dirs.dataDir, port);
   return port;
+}
+function advanceOrgSourceCheckpoint(file) {
+  try {
+    if (!existsSync13(file)) return;
+    const dirs = resolveDirs({ orgDir: dirname3(file) });
+    const port = ensureStoreQuiet(dirs);
+    const obs = statThenRead(file);
+    const lines = obs.text.split("\n");
+    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    writeCheckpoint(port, {
+      path: file,
+      mtimeMs: obs.mtimeMs,
+      mtimeNs: obs.mtimeNs,
+      lineCount: lines.length,
+      offset: lines.length,
+      schemaVersion: ORG_IMPORT_SCHEMA_VERSION
+    });
+  } catch (err) {
+    console.warn(`[read-mode] org \u6E90 checkpoint \u63A8\u8FDB\u5931\u8D25\uFF08${basename2(file)}\uFF0C\u4E0B\u8F6E\u5BFC\u5165\u6309\u91CD\u626B\u5E42\u7B49\u5904\u7406\uFF09: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 function orgRescanPending(port, orgDirPath) {
   const sources = ["org.json", "projects.json", "confirms.json"].map((f) => join14(orgDirPath, f));
@@ -5021,10 +5174,12 @@ function orgRescanPending(port, orgDirPath) {
   }
   return false;
 }
-function importAllForShadow(port, dirs) {
+async function importAllForShadow(port, dirs, opts) {
   const failures = [];
+  const __t0 = Date.now();
   const orgSources = ["org.json", "projects.json", "confirms.json"].map((f) => join14(dirs.orgDir, f));
   if (orgRescanPending(port, dirs.orgDir)) {
+    console.warn(`[read-mode] org \u6E90 checkpoint \u5931\u914D\u2192\u8054\u52A8\u5341\u8868\u5168\u6E05+\u5168\u57DF\u91CD\u704C\uFF08\u89E6\u53D1\u8005\uFF1A\u5916\u90E8\u5199\u8005\u6216\u5199\u9762\u63A8\u8FDB\u524D\u7A97\u2014\u2014bootfast3 \u89C2\u6D4B\uFF09`);
     port.begin();
     try {
       port.exec("PRAGMA defer_foreign_keys = ON");
@@ -5070,7 +5225,9 @@ function importAllForShadow(port, dirs) {
       })
     },
     { domain: "acceptance", run: () => importAcceptance(port, join14(dirs.dataDir, "acceptances")) },
-    { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
+    // bootfast3：notification 域透传 yieldFn——25k 行重放分批让出（沙盒实锤 60s 拍再重放
+    // 6s 块=HTTP 000 第二簇根）
+    { domain: "notification", run: () => importNotifications(port, dirs.dataDir, opts ? { yieldFn: opts.yieldFn } : void 0) },
     // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
     // 扫描源路径 G2 再接——备案见头注降级条目）。
     {
@@ -5083,13 +5240,16 @@ function importAllForShadow(port, dirs) {
   ];
   for (const { domain, run: run2 } of steps) {
     try {
-      run2();
+      await run2();
+      await opts?.yieldFn?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       failures.push({ domain, error: msg });
       console.warn(`[read-mode] \u5BFC\u5165\u5668 ${domain} \u5931\u8D25\uFF08\u4E0D\u963B\u65AD\u4ED6\u57DF\uFF09: ${msg}`);
     }
   }
+  const __ms = Date.now() - __t0;
+  if (__ms > 50) console.warn(`[read-mode] importAllForShadow \u5B8C\u6210 ${__ms}ms\uFF08\u5931\u8D25\u57DF ${failures.length}\u2014\u2014bootfast3 \u89C2\u6D4B\uFF09`);
   return failures;
 }
 function projectGroupsFromDb(port) {
@@ -5160,6 +5320,18 @@ function boardTaskEntriesFromDb(port, gid) {
     const entryId = r.task_ref.slice(`board/${gid}/`.length);
     return [{ id: entryId, text: r.title, status: r.status, ts: r.ts, updated_at: r.ts }];
   });
+}
+function readDispatchFromDbCached(port, dirs) {
+  const key = dirs.dataDir + "\0" + dirs.orgDir;
+  const sig = [statSigOf(join14(dirs.orgDir, "dispatch-log.ndjson")), statSigOf(join14(dirs.orgDir, "org.json")), statSigOf(join14(dirs.orgDir, "projects.json")), statSigOf(join14(dirs.orgDir, "confirms.json"))].join("|");
+  const hit = dispatchReadCache.get(key);
+  const now = Date.now();
+  if (hit && hit.sig === sig) return hit.rows.slice();
+  const rows = dispatchEntriesFromDb(port, 1e6);
+  if (dispatchReadCache.size > 20) dispatchReadCache.clear();
+  if (isShadowImportPending(dirs.dataDir) || shadowInflight.has(dirs.dataDir)) return rows.slice();
+  dispatchReadCache.set(key, { sig, at: now, rows });
+  return rows.slice();
 }
 function dispatchEntriesFromDb(port, max = 500) {
   const rows = port.query("SELECT id, tier, target_member_id, source_session_id, actor, status, receipt, created_at, updated_at, receipt_missing, failure_reason, retry_of, priority, generation, task_snapshot_json, run_ref, pr_url, pr_state FROM dispatch ORDER BY created_at, updated_at, id");
@@ -5418,6 +5590,7 @@ function viaReadMode(domain, io2) {
     warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain}\uFF0Csqlite \u5EFA\u5E93/\u8FC1\u79FB\u5931\u8D25`);
     return io2.json();
   }
+  if (isShadowImportPending(dirs.dataDir)) return io2.json();
   if (mode === "sqlite") return io2.sqlite(port);
   const jsonVal = io2.json();
   const now = Date.now();
@@ -5488,7 +5661,7 @@ function resetReadModeForTest() {
   degradationNotified = false;
   resetSqliteDriverForTest();
 }
-var READ_MODE_ENV, READ_MODES, SHADOW_DIFF_FILE, SHADOW_DIFF_COOLDOWN_MS, MAX_DIFF_ROWS_PER_DOMAIN, degradationNotified, portCache, DOWNSTREAM_TABLES, shadowCooldown;
+var READ_MODE_ENV, READ_MODES, SHADOW_DIFF_FILE, SHADOW_DIFF_COOLDOWN_MS, MAX_DIFF_ROWS_PER_DOMAIN, degradationNotified, portCache, shadowDirty, shadowInflight, importFailNotedAt, shadowSigCache, DOWNSTREAM_TABLES, dispatchReadCache, shadowCooldown;
 var init_read_mode = __esm({
   "src/storage/read-mode.ts"() {
     "use strict";
@@ -5511,6 +5684,10 @@ var init_read_mode = __esm({
     MAX_DIFF_ROWS_PER_DOMAIN = 200;
     degradationNotified = false;
     portCache = /* @__PURE__ */ new Map();
+    shadowDirty = /* @__PURE__ */ new Set();
+    shadowInflight = /* @__PURE__ */ new Set();
+    importFailNotedAt = /* @__PURE__ */ new Map();
+    shadowSigCache = /* @__PURE__ */ new Map();
     DOWNSTREAM_TABLES = [
       "notification_client_state",
       "notification",
@@ -5523,6 +5700,7 @@ var init_read_mode = __esm({
       "task",
       "session"
     ];
+    dispatchReadCache = /* @__PURE__ */ new Map();
     shadowCooldown = /* @__PURE__ */ new Map();
   }
 });
@@ -5720,9 +5898,9 @@ var init_session_write = __esm({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
+// node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
+  "node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -5743,9 +5921,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
+// node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -5818,9 +5996,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
+// node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
+  "node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -5868,9 +6046,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
+// node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -6061,26 +6239,26 @@ var require_permessage_deflate = __commonJS({
             value = value[0];
             if (key === "client_max_window_bits") {
               if (value !== true) {
-                const num3 = +value;
-                if (!Number.isInteger(num3) || num3 < 8 || num3 > 15) {
+                const num4 = +value;
+                if (!Number.isInteger(num4) || num4 < 8 || num4 > 15) {
                   throw new TypeError(
                     `Invalid value for parameter "${key}": ${value}`
                   );
                 }
-                value = num3;
+                value = num4;
               } else if (!this._isServer) {
                 throw new TypeError(
                   `Invalid value for parameter "${key}": ${value}`
                 );
               }
             } else if (key === "server_max_window_bits") {
-              const num3 = +value;
-              if (!Number.isInteger(num3) || num3 < 8 || num3 > 15) {
+              const num4 = +value;
+              if (!Number.isInteger(num4) || num4 < 8 || num4 > 15) {
                 throw new TypeError(
                   `Invalid value for parameter "${key}": ${value}`
                 );
               }
-              value = num3;
+              value = num4;
             } else if (key === "client_no_context_takeover" || key === "server_no_context_takeover") {
               if (value !== true) {
                 throw new TypeError(
@@ -6251,9 +6429,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
+// node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
+  "node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -6452,9 +6630,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
+// node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
+  "node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -6794,8 +6972,8 @@ var require_receiver = __commonJS({
           return;
         }
         const buf = this.consume(8);
-        const num3 = buf.readUInt32BE(0);
-        if (num3 > Math.pow(2, 53 - 32) - 1) {
+        const num4 = buf.readUInt32BE(0);
+        if (num4 > Math.pow(2, 53 - 32) - 1) {
           const error = this.createError(
             RangeError,
             "Unsupported WebSocket frame: payload length > 2^53 - 1",
@@ -6806,7 +6984,7 @@ var require_receiver = __commonJS({
           cb2(error);
           return;
         }
-        this._payloadLength = num3 * Math.pow(2, 32) + buf.readUInt32BE(4);
+        this._payloadLength = num4 * Math.pow(2, 32) + buf.readUInt32BE(4);
         this.haveLength(cb2);
       }
       /**
@@ -7075,9 +7253,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
+// node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
+  "node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -7568,9 +7746,9 @@ var require_sender = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
+// node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
+  "node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -7797,9 +7975,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
+// node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
+  "node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -7950,9 +8128,9 @@ var require_extension = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
+// node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
+  "node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -8846,9 +9024,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
+// node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
+  "node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -8944,9 +9122,9 @@ var require_stream = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
+// node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -8989,9 +9167,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
+// node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -9390,9 +9568,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -9402,9 +9580,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -9424,9 +9602,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -9462,21 +9640,21 @@ var require_QRMath = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
-    function QRPolynomial(num3, shift) {
-      if (num3.length === void 0) {
-        throw new Error(num3.length + "/" + shift);
+    function QRPolynomial(num4, shift) {
+      if (num4.length === void 0) {
+        throw new Error(num4.length + "/" + shift);
       }
       var offset = 0;
-      while (offset < num3.length && num3[offset] === 0) {
+      while (offset < num4.length && num4[offset] === 0) {
         offset++;
       }
-      this.num = new Array(num3.length - offset + shift);
-      for (var i = 0; i < num3.length - offset; i++) {
-        this.num[i] = num3[i + offset];
+      this.num = new Array(num4.length - offset + shift);
+      for (var i = 0; i < num4.length - offset; i++) {
+        this.num[i] = num4[i + offset];
       }
     }
     QRPolynomial.prototype = {
@@ -9487,36 +9665,36 @@ var require_QRPolynomial = __commonJS({
         return this.num.length;
       },
       multiply: function(e) {
-        var num3 = new Array(this.getLength() + e.getLength() - 1);
+        var num4 = new Array(this.getLength() + e.getLength() - 1);
         for (var i = 0; i < this.getLength(); i++) {
           for (var j2 = 0; j2 < e.getLength(); j2++) {
-            num3[i + j2] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j2)));
+            num4[i + j2] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j2)));
           }
         }
-        return new QRPolynomial(num3, 0);
+        return new QRPolynomial(num4, 0);
       },
       mod: function(e) {
         if (this.getLength() - e.getLength() < 0) {
           return this;
         }
         var ratio = QRMath.glog(this.get(0)) - QRMath.glog(e.get(0));
-        var num3 = new Array(this.getLength());
+        var num4 = new Array(this.getLength());
         for (var i = 0; i < this.getLength(); i++) {
-          num3[i] = this.get(i);
+          num4[i] = this.get(i);
         }
         for (var x = 0; x < e.getLength(); x++) {
-          num3[x] ^= QRMath.gexp(QRMath.glog(e.get(x)) + ratio);
+          num4[x] ^= QRMath.gexp(QRMath.glog(e.get(x)) + ratio);
         }
-        return new QRPolynomial(num3, 0).mod(e);
+        return new QRPolynomial(num4, 0).mod(e);
       }
     };
     module.exports = QRPolynomial;
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -9530,9 +9708,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -9754,9 +9932,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -9766,9 +9944,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -10015,9 +10193,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -10027,9 +10205,9 @@ var require_QRBitBuffer = __commonJS({
         var bufIndex = Math.floor(index / 8);
         return (this.buffer[bufIndex] >>> 7 - index % 8 & 1) == 1;
       },
-      put: function(num3, length) {
+      put: function(num4, length) {
         for (var i = 0; i < length; i++) {
-          this.putBit((num3 >>> length - i - 1 & 1) == 1);
+          this.putBit((num4 >>> length - i - 1 & 1) == 1);
         }
       },
       getLengthInBits: function() {
@@ -10050,9 +10228,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
+// node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -10370,9 +10548,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
+// node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -10460,9 +10638,9 @@ var require_main = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -10478,9 +10656,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
+// node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -10521,9 +10699,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
+// node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -10576,9 +10754,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
+// node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10711,9 +10889,9 @@ var require_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
+// node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10858,9 +11036,9 @@ var require_registry = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
+// node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
+  "node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -11054,9 +11232,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
+// node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
+  "node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -11135,9 +11313,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
+// node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
+  "node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -11216,9 +11394,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
+// node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
+  "node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -11253,9 +11431,9 @@ var require_classes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
+// node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
+  "node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -11347,9 +11525,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
+// node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -11540,9 +11718,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
+// node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
+  "node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -12968,9 +13146,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
+// node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
+  "node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -13017,9 +13195,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
+// node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
+  "node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -13190,9 +13368,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
+// node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -13246,9 +13424,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
+// node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13357,9 +13535,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -13383,9 +13561,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -13394,9 +13572,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -13416,9 +13594,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
+// node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13615,9 +13793,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
+// node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -13670,9 +13848,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
+// node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -13735,6 +13913,28 @@ var require_dist = __commonJS({
     module.exports = Bonjour2;
   }
 });
+
+// src/boot-time.ts
+var t0 = Date.now();
+var marks = [];
+var enabled = process.env.CCR_BOOT_TIME !== "0";
+function bootMark(label) {
+  if (!enabled) return;
+  marks.push({ at: Date.now(), label });
+}
+function bootDone() {
+  const total = Date.now() - t0;
+  if (!enabled) return total;
+  const parts = [];
+  let prev = t0;
+  for (const m of marks) {
+    if (m.at > prev) parts.push(`${m.label}=${m.at - prev}ms`);
+    prev = m.at;
+  }
+  parts.push(`tail=${Date.now() - prev}ms`);
+  console.log(`[boot-time] \u603B ${total}ms\uFF5C${parts.join(" ")}`);
+  return total;
+}
 
 // src/index.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
@@ -13799,10 +13999,10 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir27, hostname as hostname2, tmpdir as tmpdir5 } from "node:os";
-import { join as join63, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync36, openSync as openSync7, readFileSync as readFileSync54, rmSync as rmSync11, existsSync as existsSync43, readdirSync as readdirSync24, statSync as statSync21 } from "node:fs";
+import { join as join64, sep as sep9 } from "node:path";
+import { writeFileSync as writeFileSync36, openSync as openSync8, readFileSync as readFileSync55, rmSync as rmSync12, existsSync as existsSync44, readdirSync as readdirSync24, statSync as statSync23 } from "node:fs";
 import { execSync as execSync2 } from "node:child_process";
-import { spawn as spawn8, execFileSync as execFileSync6 } from "node:child_process";
+import { spawn as spawn8, execFileSync as execFileSync7 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/agent-activator.ts
@@ -14873,6 +15073,12 @@ function kindLabel(kind) {
     // W-ROLE-BUILDER：AI Builder 对话建岗确认卡通知标签
     case "patrol-suggest":
       return "\u5DE1\u67E5\u9608\u503C\u5EFA\u8BAE";
+    // W-WATCHAGENT：巡查员阈值调整确认卡通知标签
+    case "pm-appoint":
+      return "\u503C\u5B88 PM \u4EFB\u547D";
+    // [W-PMSEAT] 值守任命确认卡通知标签（1104 串台根治）
+    case "dispatch-closeout":
+      return "\u6536\u53E3\u5F85\u529E\uFF08PR \u672A\u5173\uFF09";
   }
 }
 function compact(text, max = 160) {
@@ -15069,8 +15275,8 @@ var DecisionNotificationWatcher = class {
   }
   targetSession(preferred, sessions) {
     if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
-    const leader2 = this.options.leaderSessionId();
-    if (leader2 && sessions.some((session) => session.session_id === leader2)) return leader2;
+    const leader = this.options.leaderSessionId();
+    if (leader && sessions.some((session) => session.session_id === leader)) return leader;
     return sessions[0]?.session_id ?? null;
   }
 };
@@ -15193,7 +15399,7 @@ function buildSnapshotLogs(sessions, budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES, p
 }
 
 // src/session-manager.ts
-import { appendFileSync as appendFileSync6, existsSync as existsSync34, mkdirSync as mkdirSync23, readFileSync as readFileSync42, readdirSync as readdirSync16, realpathSync as realpathSync3, rmSync as rmSync8, statSync as statSync13, writeFileSync as writeFileSync27 } from "node:fs";
+import { appendFileSync as appendFileSync7, closeSync as closeSync4, existsSync as existsSync35, mkdirSync as mkdirSync24, openSync as openSync4, readFileSync as readFileSync43, readdirSync as readdirSync16, readSync as readSync3, realpathSync as realpathSync3, rmSync as rmSync9, statSync as statSync15, writeFileSync as writeFileSync27 } from "node:fs";
 
 // src/fs-safe.ts
 import { appendFileSync, closeSync, existsSync as existsSync5, openSync, readSync, renameSync as renameSync3, statSync as statSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync5 } from "node:fs";
@@ -15346,11 +15552,11 @@ var syncPending = /* @__PURE__ */ new Set();
 // src/session-manager.ts
 init_session_write();
 import { homedir as homedir18 } from "node:os";
-import { dirname as dirname14, isAbsolute as isAbsolute6, join as join51, resolve as resolve9, sep as sep6 } from "node:path";
+import { dirname as dirname15, isAbsolute as isAbsolute6, join as join52, resolve as resolve9, sep as sep6 } from "node:path";
 
 // src/artifacts.ts
 import { closeSync as closeSync2, constants, fstatSync, lstatSync, openSync as openSync2, readdirSync as readdirSync6, readFileSync as readFileSync12, realpathSync } from "node:fs";
-import { dirname as dirname3, extname, join as join16, normalize as normalize2, relative, resolve as resolve2, sep } from "node:path";
+import { dirname as dirname4, extname, join as join16, normalize as normalize2, relative, resolve as resolve2, sep } from "node:path";
 import { homedir as homedir6 } from "node:os";
 var MIME = {
   ".html": "text/html; charset=utf-8",
@@ -15431,7 +15637,7 @@ function validateDeliverablePath(rawPath) {
     if (!st2.isFile()) return { ok: false, path: path6, error: `\u4EA4\u4ED8\u7269\u5FC5\u987B\u662F\u666E\u901A\u6587\u4EF6: ${trimmed}` };
     let unverified = false;
     try {
-      unverified = lstatSync(path6).isSymbolicLink() || realpathSync(dirname3(path6)) !== dirname3(path6);
+      unverified = lstatSync(path6).isSymbolicLink() || realpathSync(dirname4(path6)) !== dirname4(path6);
     } catch {
       unverified = true;
     }
@@ -15499,7 +15705,7 @@ function serveArtifact(name, res) {
 // src/org.ts
 import { readFileSync as readFileSync14, writeFileSync as writeFileSync8, existsSync as existsSync15, mkdirSync as mkdirSync8, rmSync, chmodSync } from "node:fs";
 import { homedir as homedir7 } from "node:os";
-import { dirname as dirname4, join as join18 } from "node:path";
+import { dirname as dirname5, join as join18 } from "node:path";
 
 // src/dispatch-run-archive.ts
 import { gzipSync } from "node:zlib";
@@ -15852,6 +16058,12 @@ function scheduleTransientRetry(fire, delayMs = TRANSIENT_RETRY_DELAY_MS) {
   const t = setTimeout(fire, delayMs);
   t.unref?.();
 }
+function backoffDelayMs(streak, base = Number(process.env.CCR_RATE_LIMIT_BASE_MS) > 0 ? Number(process.env.CCR_RATE_LIMIT_BASE_MS) : TRANSIENT_RETRY_DELAY_MS, cap = 10 * 6e4, now = Date.now()) {
+  const n = Math.max(1, Math.floor(streak));
+  const raw = Math.min(cap, base * 2 ** (n - 1));
+  const jitter = 0.8 + now % 41 / 100;
+  return Math.round(raw * jitter);
+}
 
 // src/org.ts
 var COMMAND_CAPABILITY_MATRIX = {
@@ -15979,8 +16191,9 @@ var ORG_CLAUDE_MD_X0_SECTION = `${ORG_CLAUDE_MD_X0_MARKER}\uFF082026-10-29 \u8D7
 - \u4EFB\u4F55\u672C\u673A\u4F1A\u8BDD\u53EF\u81EA\u8350\u5165\u7F16\uFF1A\u5728\u9879\u76EE\u76EE\u5F55\u91CC\u8FD0\u884C \`org join <\u7EC4id> [\u89D2\u8272]\`\uFF08\u9ED8\u8BA4 worker\uFF09\u2014\u2014
   \u7533\u8BF7\u8FDB\u5F85\u786E\u8BA4\u961F\u5217\uFF0C\u7528\u6237\u5728\u9762\u677F\u653E\u884C\u540E\u6B63\u5F0F\u5165\u7F16\uFF08\u9632\u4EFB\u610F\u6DF7\u5165\uFF0C\u4F60\u4E0D\u4EE3\u653E\u884C\uFF09\u3002
 - \u975E deck \u4F1A\u8BDD\u5E72\u4E86\u6D3B\u8981\u7559\u75D5\uFF1A\`org log-append "<\u505A\u4E86\u4EC0\u4E48>"\` \u624B\u52A8\u8865\u5F55\u53F0\u8D26\uFF08\u4E00\u884C\u4E00\u6761\uFF09\u3002
-- \u503C\u5B88 PM \u4F4D\u63A5\u7BA1\uFF08no-leader \u6A21\u5F0F\u53CC\u673A\u573A\u666F\uFF09\uFF1A\`org pm claim\`\u2014\u2014\u672C\u673A\u4F1A\u8BDD\u6210\u4E3A\u503C\u5B88 PM\uFF0C
-  \u539F PM \u4F1A\u8BDD\u6B7B\u4EA1\u81EA\u52A8\u79FB\u4EA4\u3002
+- \u503C\u5B88 PM \u4F4D\uFF08no-leader \u6A21\u5F0F\u53CC\u673A\u573A\u666F\uFF09\uFF1A\`org pm claim\` \u63D0\u8BA4\u2014\u2014**\u51FA\u4EFB\u547D\u5361\u5F85\u7528\u6237\u62CD\u677F**
+  \uFF08\u672A\u51B3\u671F\u95F4\u96F6\u503C\u5B88\u5582\u6D3B\uFF0C\u9632\u5148\u65A9\u540E\u594F\uFF1B\u2713 \u624D\u843D\u4F4D\uFF09\uFF1B\`org pm release\` \u663E\u5F0F\u8BA9\u51FA\uFF08R1 \u89E3\u9501
+  \u53E3\uFF1A\u5224\u6D3B\u6B67\u4E49/\u79FB\u4EA4\u573A\u666F\uFF0C\u514D\u5361\u76F4\u6548+\u5BA1\u8BA1\u7559\u75D5\uFF09\u3002
 `;
 var ORG_CLAUDE_MD_RECALL_MARKER = "## \u94FE\u5F0F\u53EC\u56DE\uFF08recall\uFF09";
 var ORG_CLAUDE_MD_RECALL_SECTION = `${ORG_CLAUDE_MD_RECALL_MARKER}\uFF082026-11-04 \u8D77\uFF0Cchainrecall MVP\uFF09
@@ -15996,44 +16209,89 @@ var ORG_CLAUDE_MD_RECALL_SECTION = `${ORG_CLAUDE_MD_RECALL_MARKER}\uFF082026-11-
 function pmOverridePath(dir) {
   return join18(dir ?? orgDir(), "duty.json");
 }
-var pmOverrideCache = { data: null, loaded: false };
-function readPmOverride(dir) {
-  if (!dir) {
-    if (pmOverrideCache.loaded) return pmOverrideCache.data;
-    pmOverrideCache = { data: readPmOverrideUncached(), loaded: true };
-    return pmOverrideCache.data;
+var dutyFileCache = /* @__PURE__ */ new Map();
+function dutyCacheKey(dir) {
+  return dir ?? orgDir();
+}
+function readDutyFileUncached(dir) {
+  try {
+    const raw = JSON.parse(readFileSync14(pmOverridePath(dir), "utf-8"));
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
   }
+}
+function readDutyFile(dir) {
+  const key = dutyCacheKey(dir);
+  let v = dutyFileCache.get(key);
+  if (v === void 0) {
+    v = readDutyFileUncached(dir);
+    if (dutyFileCache.size >= 64) dutyFileCache.clear();
+    dutyFileCache.set(key, v);
+  }
+  return v;
+}
+function writeDutyFile(next, dir) {
+  try {
+    const d2 = dir ?? orgDir();
+    mkdirSync8(d2, { recursive: true });
+    const ok2 = atomicWriteJson(pmOverridePath(d2), JSON.stringify(next, null, 2) + "\n");
+    if (ok2) dutyFileCache.set(d2, next);
+    return ok2;
+  } catch {
+    return false;
+  }
+}
+function readPmOverride(dir) {
   return readPmOverrideUncached(dir);
 }
 function readPmOverrideUncached(dir) {
-  try {
-    const raw = JSON.parse(readFileSync14(pmOverridePath(dir), "utf-8"));
-    const v = raw.pm_override;
-    if (!v || typeof v !== "object") return null;
-    const o = v;
-    if (typeof o.session_id !== "string" || !o.session_id) return null;
-    return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), claimed_at: Number(o.claimed_at) || Date.now() };
-  } catch {
-    return null;
-  }
+  const v = readDutyFile(dir).pm_override;
+  if (!v || typeof v !== "object") return null;
+  const o = v;
+  if (typeof o.session_id !== "string" || !o.session_id) return null;
+  return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), claimed_at: Number(o.claimed_at) || Date.now() };
 }
 function setPmOverride(v, dir) {
   try {
     const d2 = dir ?? orgDir();
     mkdirSync8(d2, { recursive: true });
-    atomicWriteJson(pmOverridePath(d2), JSON.stringify({ pm_override: v }, null, 2) + "\n");
-    if (!dir) pmOverrideCache = { data: v, loaded: true };
+    const okw = writeDutyFile({ ...readDutyFile(d2), pm_override: v }, d2);
+    if (!okw) return { ok: false, error: "duty.json \u5199\u5165\u5931\u8D25" };
     return { ok: true };
   } catch (e) {
     return { ok: false, error: `duty.json \u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 function clearPmOverride(dir) {
-  try {
-    rmSync(pmOverridePath(dir), { force: true });
-  } catch {
-  }
-  if (!dir) pmOverrideCache = { data: null, loaded: true };
+  writeDutyFile({ ...readDutyFile(dir), pm_override: null }, dir);
+}
+function readDutyAppoint(dir) {
+  const v = readDutyFile(dir).pm_appoint;
+  if (!v || typeof v !== "object") return null;
+  const o = v;
+  if (typeof o.session_id !== "string" || !o.session_id) return null;
+  if (o.origin !== "auto" && o.origin !== "claim") return null;
+  return { session_id: o.session_id, cli_pid: Number(o.cli_pid) || 0, cwd: String(o.cwd || ""), origin: o.origin, proposed_at: Number(o.proposed_at) || Date.now() };
+}
+function setDutyAppoint(v, dir) {
+  return writeDutyFile({ ...readDutyFile(dir), pm_appoint: v }, dir);
+}
+function clearDutyAppoint(sid, dir) {
+  const cur = readDutyFile(dir);
+  if (sid && cur.pm_appoint && cur.pm_appoint.session_id !== sid) return;
+  writeDutyFile({ ...cur, pm_appoint: null }, dir);
+}
+function readAppointRejected(dir) {
+  const v = readDutyFile(dir).appoint_rejected;
+  return Array.isArray(v) ? v.filter((r) => r && typeof r.session_id === "string" && !!r.session_id) : [];
+}
+function recordAppointRejected(sessionId, cliPid = 0, dir) {
+  if (!sessionId) return;
+  const cur = readDutyFile(dir);
+  const rest = readAppointRejected(dir).filter((r) => r.session_id !== sessionId);
+  const next = [{ session_id: sessionId, cli_pid: Number(cliPid) || 0, ts: Date.now() }, ...rest].slice(0, 50);
+  writeDutyFile({ ...cur, appoint_rejected: next }, dir);
 }
 function ensureOrgClaudeMd(dir) {
   const p = orgFilePath("CLAUDE.md", dir);
@@ -16078,7 +16336,9 @@ function writeOrgAnchor(a, dir) {
   try {
     const d2 = dir ?? orgDir();
     mkdirSync8(d2, { recursive: true });
-    return atomicWriteJson(orgFilePath("org.json", d2), JSON.stringify(a, null, 2) + "\n");
+    const ok2 = atomicWriteJson(orgFilePath("org.json", d2), JSON.stringify(a, null, 2) + "\n");
+    if (ok2) advanceOrgSourceCheckpoint(orgFilePath("org.json", d2));
+    return ok2;
   } catch (e) {
     console.warn(`[org] \u951A\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
     return false;
@@ -16094,8 +16354,16 @@ var anchorLockExempt = null;
 function registerAnchorLockExempt(fn) {
   anchorLockExempt = fn;
 }
+var dispatchTerminalHook = null;
+function registerDispatchTerminalHook(fn) {
+  dispatchTerminalHook = fn;
+}
 function dispatchLogPath(dir) {
   return orgFilePath("dispatch-log.ndjson", dir);
+}
+var dispatchClosedHook = null;
+function setDispatchClosedHook(hook) {
+  dispatchClosedHook = hook;
 }
 function appendDispatch(e, dir) {
   if (e.status === "failed" && !e.failure_reason) e.failure_reason = classifyDispatchFailure(e.receipt ?? "");
@@ -16122,6 +16390,18 @@ function appendDispatch(e, dir) {
     mkdirSync8(d2, { recursive: true });
     writeFileSync8(dispatchLogPath(d2), JSON.stringify(e) + "\n", { flag: "a" });
     writeDispatchToDb();
+    if ((e.status === "done" || e.status === "failed") && dispatchTerminalHook) {
+      try {
+        dispatchTerminalHook(e);
+      } catch {
+      }
+    }
+    if (e.status === "done" || e.status === "failed") {
+      try {
+        dispatchClosedHook?.(e);
+      } catch {
+      }
+    }
     return true;
   } catch (e2) {
     console.warn(`[org] \u53F0\u8D26\u5199\u5165\u5931\u8D25: ${e2 instanceof Error ? e2.message : String(e2)}`);
@@ -16131,7 +16411,11 @@ function appendDispatch(e, dir) {
 function readDispatchLog(dir, max = 500) {
   return viaReadMode("dispatch", {
     json: () => readDispatchLogFile(dir, max),
-    sqlite: (port) => dispatchEntriesFromDb(port, max),
+    sqlite: (port) => {
+      const d2 = resolveDirs({ orgDir: dir });
+      const rows = readDispatchFromDbCached(port, d2);
+      return rows.length > max ? rows.slice(-max) : rows;
+    },
     dirs: { orgDir: dir }
   });
 }
@@ -16188,7 +16472,8 @@ var ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rule supersede <id> <text> [audience] [scope]  \u66FF\u4EE3\uFF08\u65B0\u6761\u5165\u5E93+\u65E7\u6761\u505C\u6CE8\u6307\u65B0\uFF09
 #   org rule promote <exp_id> [text] [audience] [scope]  \u7ECF\u9A8C\u5347\u683C\u4E3A\u89C4\u5219\uFF08\u590D\u5236\u975E\u642C\u79FB\uFF0Cpromoted_from \u6EAF\u6E90\uFF09
 #   org join <gid> [role]                          \u81EA\u8350\u5165\u7F16\uFF08X0 \u4EF62\uFF1B\u672C\u673A\u4F1A\u8BDD\u2192\u5F85\u786E\u8BA4\u5361\uFF0C\u7528\u6237\u653E\u884C\u540E\u5165\u7F16\uFF09
-#   org pm claim                                   \u503C\u5B88 PM \u4F4D\u63A5\u7BA1\uFF08X0 \u4EF66\uFF1B\u539F PM \u6B7B\u4EA1\u81EA\u52A8\u79FB\u4EA4\uFF09
+#   org pm claim                                   \u503C\u5B88 PM \u4F4D\u63D0\u8BA4\uFF08X0 \u4EF66\uFF1B\u51FA\u4EFB\u547D\u5361\u5F85\u7528\u6237\u62CD\u677F\uFF0C\u672A\u51B3\u96F6\u5582\u6D3B\uFF09
+#   org pm release                                 \u503C\u5B88 PM \u4F4D\u8BA9\u51FA\uFF08R1\uFF1B\u6E05 override \u76F4\u6548\u2014\u2014\u89E3\u9501/\u79FB\u4EA4\u7528\uFF09
 #   org log-append "<\u6587\u672C>"                        \u53F0\u8D26\u8865\u5F55\uFF08X0 \u4EF65\uFF1B\u975E deck \u4F1A\u8BDD\u5DE5\u4F5C\u4E00\u884C\u5165\u8D26\uFF09
 #   org agent-teams [check|on]                     AGENT_TEAMS \u5B9E\u9A8C\u7279\u6027\u534F\u52A9\uFF08X0 \u4EF64\uFF1Bon=\u4E00\u952E\u5199\u5165\u7528\u6237 settings env\uFF09
 # \u76F8\u5BF9\u8DEF\u5F84 anchor \u4EE5\u5F53\u524D\u76EE\u5F55\u8865\u5168\uFF08deliver \u540C\u53E3\u5F84\uFF09\u3002\u7531 relay \u7269\u5316\u4E0E\u5347\u7EA7\uFF08ensureOrgCli\uFF09\u3002
@@ -16220,9 +16505,17 @@ case "$action" in
     body="$(python3 -c 'import json,sys,os;print(json.dumps({"action":"join","gid":sys.argv[1],"role":sys.argv[2],"cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))' "$1" "$role")"
     ;;
   pm)
-    # X0 \u4EF66\uFF08PRD \xA74.6 \u524D\u534A\uFF09\uFF1A\u503C\u5B88 PM \u4F4D\u63A5\u7BA1\uFF08\u53CC\u673A no-leader \u573A\u666F\uFF09
-    [ "\${1:-}" = "claim" ] || { echo "\u7528\u6CD5: org pm claim   \u672C\u673A\u4F1A\u8BDD\u63A5\u7BA1\u503C\u5B88 PM \u4F4D\uFF08\u539F PM \u6B7B\u4EA1\u81EA\u52A8\u79FB\u4EA4\uFF09" >&2; exit 1; }
-    body="$(python3 -c 'import json,os;print(json.dumps({"action":"pm-claim","cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))')"
+    # X0 \u4EF66\uFF08PRD \xA74.6 \u524D\u534A\uFF09+R1\uFF1Aclaim=\u51FA\u5361\u5F85\u62CD\u677F\uFF08\u672A\u51B3\u96F6\u5582\u6D3B\uFF09\uFF1Brelease=\u663E\u5F0F\u8BA9\u4F4D
+    #\uFF08R1-B-F2 \u89E3\u9501\u51FA\u53E3\uFF1A\u5224\u6D3B\u6B67\u4E49\u7A97/\u8BEF\u9501\u5E2D\u7684\u552F\u4E00\u4EA7\u54C1\u9762\u51FA\u53E3\uFF0C\u514D\u5361\u76F4\u6548+\u5BA1\u8BA1\u7559\u75D5\uFF09
+    case "\${1:-}" in
+      claim)
+        body="$(python3 -c 'import json,os;print(json.dumps({"action":"pm-claim","cwd":os.getcwd(),"pid":os.getppid()},ensure_ascii=False))')"
+        ;;
+      release)
+        body="$(python3 -c 'import json;print(json.dumps({"action":"pm-release"},ensure_ascii=False))')"
+        ;;
+      *) echo "\u7528\u6CD5: org pm claim   \u63D0\u8BA4\u503C\u5B88 PM \u4F4D\uFF08\u51FA\u4EFB\u547D\u5361\u5F85\u7528\u6237\u62CD\u677F\uFF0C\u672A\u51B3\u96F6\u5582\u6D3B\uFF09" >&2; echo "      org pm release  \u8BA9\u51FA\u503C\u5B88\u4F4D\uFF08\u6E05 override \u76F4\u6548\uFF1B\u89E3\u9501/\u79FB\u4EA4\u7528\uFF09" >&2; exit 1 ;;
+    esac
     ;;
   chain)
     # #92 W-NOTIFY2 D\uFF1A\u6D3E\u53D1\u2192\u6536\u5E27\u2192\u56DE\u6267\u2192\u6536\u5272 \u65F6\u95F4\u7EBF\u4E00\u5904\u53EF\u67E5\uFF08\u53EA\u8BFB\uFF1Borg chain [id\u524D\u7F00] [\u6761\u6570=20]\uFF09
@@ -16601,7 +16894,7 @@ function ensureOrgCli() {
     } catch {
     }
     if (cur === ORG_CLI_TEMPLATE) return target;
-    mkdirSync8(dirname4(target), { recursive: true });
+    mkdirSync8(dirname5(target), { recursive: true });
     writeFileSync8(target, ORG_CLI_TEMPLATE, "utf-8");
     chmodSync(target, 493);
     return target;
@@ -16633,7 +16926,7 @@ function ensureUserClaudeBroadcast() {
       writeFileSync8(marker, String(Date.now()), "utf-8");
       return false;
     }
-    mkdirSync8(dirname4(p), { recursive: true });
+    mkdirSync8(dirname5(p), { recursive: true });
     writeFileSync8(p, (cur ? cur.trimEnd() + "\n\n" : "") + USER_CLAUDE_BROADCAST_SECTION + "\n", "utf-8");
     writeFileSync8(marker, String(Date.now()), "utf-8");
     return true;
@@ -16769,7 +17062,7 @@ function undeliveredCallbacks(maxAgeMs = 24 * 36e5, dir) {
 
 // src/harvest.ts
 import { execFileSync } from "node:child_process";
-import { existsSync as existsSync16, readdirSync as readdirSync7, readFileSync as readFileSync16, statSync as statSync7 } from "node:fs";
+import { existsSync as existsSync16, readdirSync as readdirSync7, readFileSync as readFileSync16, statSync as statSync8 } from "node:fs";
 import { homedir as homedir8 } from "node:os";
 import { join as join20 } from "node:path";
 function dataDir() {
@@ -16851,7 +17144,7 @@ function harvestCheck(input, opts = {}) {
   } else {
     let bytes = 0;
     try {
-      bytes = statSync7(receipt).size;
+      bytes = statSync8(receipt).size;
     } catch {
     }
     try {
@@ -17023,8 +17316,8 @@ function drillDue(mainRepo, dataDir3) {
   }
 }
 function runDrill(dataDir3) {
-  const t02 = Date.now();
-  const runId = `drill-${t02.toString(36)}`;
+  const t03 = Date.now();
+  const runId = `drill-${t03.toString(36)}`;
   const hops = [];
   const hop = (name, fn) => {
     const s = Date.now();
@@ -17039,7 +17332,7 @@ function runDrill(dataDir3) {
       throw e;
     }
   };
-  const drillId = `dp-drill-${t02.toString(36)}`;
+  const drillId = `dp-drill-${t03.toString(36)}`;
   const tmp = mkdtempSync(join21(tmpdir(), "cc-deck-drill-"));
   let failed;
   try {
@@ -17088,7 +17381,7 @@ function runDrill(dataDir3) {
       return "harvest \u5168\u95F8\u7EFF";
     });
     hop("release-gate", () => {
-      const ver = `0.0.0-drill.${t02}`;
+      const ver = `0.0.0-drill.${t03}`;
       const manifest = JSON.stringify({ version: ver });
       const ok2 = gateManifestPairing(ver, manifest);
       if (!ok2.ok) throw new Error(ok2.detail);
@@ -17121,7 +17414,7 @@ function runDrill(dataDir3) {
     writeFileSync9(join21(dataDir3, "drill-last.json"), JSON.stringify({ ts: Date.now(), run_id: runId, ok: !failed }));
   } catch {
   }
-  const duration = Date.now() - t02;
+  const duration = Date.now() - t03;
   appendJournal(join21(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: "summary", ok: !failed, ms: duration, ...failed ? { detail: `\u65AD\u70B9\uFF1A${failed}` } : {} });
   return { ok: !failed, run_id: runId, hops, ...failed ? { failed_hop: failed } : {}, duration_ms: duration };
 }
@@ -17130,7 +17423,7 @@ function mkdirGit(dir) {
 }
 
 // src/projects.ts
-import { appendFileSync as appendFileSync2, copyFileSync, existsSync as existsSync19, mkdirSync as mkdirSync11, readFileSync as readFileSync19, renameSync as renameSync4, rmSync as rmSync3, statSync as statSync8, writeFileSync as writeFileSync11 } from "node:fs";
+import { appendFileSync as appendFileSync2, copyFileSync, existsSync as existsSync19, mkdirSync as mkdirSync11, readFileSync as readFileSync19, renameSync as renameSync4, rmSync as rmSync3, statSync as statSync9, writeFileSync as writeFileSync11 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { join as join23, posix, win32 } from "node:path";
 
@@ -17305,7 +17598,9 @@ function writeProjectsFile(f, dir) {
     trust_light: f.trust_light === true,
     snapshot: f
   });
-  return atomicWriteJson(projectsFilePath(d2), JSON.stringify(f, null, 2) + "\n");
+  const ok2 = atomicWriteJson(projectsFilePath(d2), JSON.stringify(f, null, 2) + "\n");
+  if (ok2) advanceOrgSourceCheckpoint(projectsFilePath(d2));
+  return ok2;
 }
 function listGroups(dir) {
   return readProjectsFile(dir).groups;
@@ -17719,7 +18014,7 @@ function appendBoardJournal(gid, rec, d2) {
   try {
     const p = join23(d2, "boards-journal.ndjson");
     try {
-      if (statSync8(p).size > BOARD_JOURNAL_MAX_BYTES) {
+      if (statSync9(p).size > BOARD_JOURNAL_MAX_BYTES) {
         try {
           rmSync3(`${p}.1`, { force: true });
         } catch {
@@ -18054,7 +18349,9 @@ function writeConfirms(list, dir) {
     mkdirSync11(d2, { recursive: true });
     const pending = list.filter((c) => c.status === "pending");
     const decided = list.filter((c) => c.status !== "pending").slice(-200);
-    return atomicWriteJson(confirmsFilePath(d2), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n");
+    const ok2 = atomicWriteJson(confirmsFilePath(d2), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n");
+    if (ok2) advanceOrgSourceCheckpoint(confirmsFilePath(d2));
+    return ok2;
   } catch (e) {
     console.warn(`[projects] \u786E\u8BA4\u5355\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
     return false;
@@ -18221,9 +18518,9 @@ function listRetiredEvents(dir) {
 import { appendFileSync as appendFileSync3, readFileSync as readFileSync20 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
 import { join as join24 } from "node:path";
-var CFG_KEY = { patrol: "autoPatrol", converge: "autoConverge", revive: "autoRevive" };
+var CFG_KEY = { patrol: "autoPatrol", converge: "autoConverge", revive: "autoRevive", boardrecon: "autoBoardrecon" };
 var LEGACY_BOOL = { patrol: "patrol" };
-var DEFAULT_TIER = { patrol: "auto", converge: "auto", revive: "auto" };
+var DEFAULT_TIER = { patrol: "auto", converge: "auto", revive: "auto", boardrecon: "observe" };
 function isTier(v) {
   return v === "off" || v === "observe" || v === "auto";
 }
@@ -18437,18 +18734,25 @@ function normalizeLegacyPermissionMode(value) {
   return { mode: "default", kind: "unknown_reset" };
 }
 var ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
-var ROLES = ["team_pm", "worker", "review_pm"];
+var ROLES = ["team_pm", "worker", "review_pm", "watchdog"];
 var CAPS = ["confirmed", "unverified", "unsupported"];
 var CONSERV = { ask: 0, plan: 1, "edit-auto": 2, "full-auto": 3 };
 var CEILING = {
   team_pm: { \u54A8\u8BE2: "edit-auto", \u968F\u624B\u529E: "full-auto", \u8F7B\u7ACB\u9879: "full-auto", \u6B63\u7ECF\u7ACB\u9879: "full-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
   worker: { \u54A8\u8BE2: "edit-auto", \u968F\u624B\u529E: "full-auto", \u8F7B\u7ACB\u9879: "full-auto", \u6B63\u7ECF\u7ACB\u9879: "full-auto", \u6682\u7F13: "ask", \u770B\u95E8\u72D7: "ask" },
-  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
+  // W-WATCHDOGPERM（t-a86739fd，1105 用户实锤「观察员没看到」=dispatch role=watchdog 被
+  // 词表拒）：巡查员=只读巡查主体——**全 tier 恒 plan 上限**（plan=只读档：禁写产品码/禁改
+  // 配置，与巡查员岗位 rows 纪律同构；对照 worker 全线收窄到最保守档）。任何写档请求
+  //（edit-auto/full-auto/bypass）恒 above_role_tier_ceiling 拒=越权面根。
+  watchdog: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "plan", \u8F7B\u7ACB\u9879: "plan", \u6B63\u7ECF\u7ACB\u9879: "plan", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
 };
 var TIER_DEFAULT = {
   team_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
   worker: { \u54A8\u8BE2: "ask", \u968F\u624B\u529E: "edit-auto", \u8F7B\u7ACB\u9879: "edit-auto", \u6B63\u7ECF\u7ACB\u9879: "edit-auto", \u6682\u7F13: "ask", \u770B\u95E8\u72D7: "ask" },
-  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "plan", \u8F7B\u7ACB\u9879: "plan", \u6B63\u7ECF\u7ACB\u9879: "plan", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+  review_pm: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "plan", \u8F7B\u7ACB\u9879: "plan", \u6B63\u7ECF\u7ACB\u9879: "plan", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" },
+  watchdog: { \u54A8\u8BE2: "plan", \u968F\u624B\u529E: "plan", \u8F7B\u7ACB\u9879: "plan", \u6B63\u7ECF\u7ACB\u9879: "plan", \u6682\u7F13: "plan", \u770B\u95E8\u72D7: "plan" }
+  // W-WATCHDOGPERM：上岗恒 plan（只读巡查档）
 };
 function denied(requested, engine, cap, source, reason) {
   return { requested_mode: requested, normalized_mode: null, effective_mode: "forbidden", native_mode: null, capability_state: cap, engine, reason, policy_source: source };
@@ -18486,7 +18790,7 @@ function evaluatePermission(input) {
   let materialized = "";
   if (requested === null) {
     if (source === "mixed_team_default") {
-      if (input.role === "review_pm") {
+      if (input.role === "review_pm" || input.role === "watchdog") {
         requested = "plan";
         normalized = "plan";
         materialized = "mixed_team_default_review_pm_excluded";
@@ -19483,7 +19787,7 @@ import { accessSync as accessSync3, constants as constants5 } from "node:fs";
 import { spawnSync as spawnSync2 } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -35642,10 +35946,10 @@ var IS = class {
 `));
   }
 };
-var t0 = { major: 4, minor: 0, patch: 0 };
+var t02 = { major: 4, minor: 0, patch: 0 };
 var We = P("$ZodType", (e, t) => {
   var n;
-  e ?? (e = {}), e._zod.def = t, e._zod.bag = e._zod.bag || {}, e._zod.version = t0;
+  e ?? (e = {}), e._zod.def = t, e._zod.bag = e._zod.bag || {}, e._zod.version = t02;
   let r = [...e._zod.def.checks ?? []];
   if (e._zod.traits.has("$ZodCheck")) r.unshift(e);
   for (let o of r) for (let s of o._zod.onattach) s(e);
@@ -48949,7 +49253,7 @@ import { delimiter as pathDelimiter, join as join37 } from "node:path";
 // src/cli-path.ts
 import { accessSync as accessSync2, constants as constants4, existsSync as existsSync24, readFileSync as readFileSync28 } from "node:fs";
 import { createRequire as createRequire2 } from "node:module";
-import { delimiter as delimiter2, dirname as dirname8, join as join35 } from "node:path";
+import { delimiter as delimiter2, dirname as dirname9, join as join35 } from "node:path";
 import { homedir as homedir13 } from "node:os";
 var cached;
 function usable(p) {
@@ -48995,14 +49299,14 @@ function fromPath(name) {
   return null;
 }
 function cmdToFallbackJs(p) {
-  const direct = join35(dirname8(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+  const direct = join35(dirname9(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
   if (existsSync24(direct)) return direct;
   try {
     const txt = readFileSync28(p, "utf8");
     const m = txt.match(/(?:%~dp0\\?"|")(%~dp0\\)?([^"\r\n]+\.js)"/i);
     if (m) {
       const rel = m[2].replace(/\\+/g, "\\");
-      const cand = rel.match(/^[a-zA-Z]:[\\/]/) ? rel : join35(dirname8(p), rel);
+      const cand = rel.match(/^[a-zA-Z]:[\\/]/) ? rel : join35(dirname9(p), rel);
       if (existsSync24(cand)) return cand;
     }
   } catch {
@@ -52350,7 +52654,7 @@ function createSessionCommands(mgr2) {
 var MAX_SESSIONS = 20;
 function adoptReplayed(mgr2, replayed2) {
   const entries = [...replayed2.entries()].sort((a, b) => b[1].state.updated_at - a[1].state.updated_at);
-  let adopted2 = 0;
+  let adopted = 0;
   for (const [id2, rs2] of entries) {
     if (mgr2.sessions.size >= MAX_SESSIONS) break;
     if (rs2.state.external) rs2.state.historical = false;
@@ -52361,9 +52665,9 @@ function adoptReplayed(mgr2, replayed2) {
     }
     mgr2.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
     mgr2.applyDeclaredDeliverables(id2);
-    adopted2++;
+    adopted++;
   }
-  return adopted2;
+  return adopted;
 }
 
 // src/lifecycle/transition.ts
@@ -52418,7 +52722,7 @@ function transitionLegal(cur, next, by) {
 }
 
 // src/task-store.ts
-import { readdirSync as readdirSync11, readFileSync as readFileSync31, statSync as statSync10 } from "node:fs";
+import { readdirSync as readdirSync11, readFileSync as readFileSync31, statSync as statSync11 } from "node:fs";
 import { homedir as homedir15 } from "node:os";
 import path3 from "node:path";
 function readTaskStoreTodos(cliSessionId, base) {
@@ -52441,7 +52745,7 @@ function readTaskStoreTodos(cliSessionId, base) {
       const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
       const parsed = Number(t.id);
       const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync10(fp2).mtimeMs, ...activeForm });
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync11(fp2).mtimeMs, ...activeForm });
     } catch {
     }
   }
@@ -52696,6 +53000,7 @@ function todoStaleDays() {
 }
 function reviveEligible(mgr2, s) {
   if (s.state.external) return "external";
+  if (s.rateLimitBackoffUntil && Date.now() < s.rateLimitBackoffUntil) return "rate-limit-backoff";
   if (s.agent) return "agent-alive";
   if (s.state.org_parked) return "org-parked";
   if (s.state.project_gid) {
@@ -52770,8 +53075,144 @@ function pmKeepaliveEligible(p) {
   if (!p.isDutyTarget) return false;
   if (p.resumePending) return false;
   if (p.resumeCooldownUntil && p.resumeCooldownUntil > p.now) return false;
+  if (p.rateLimitBackoffUntil && p.rateLimitBackoffUntil > p.now) return false;
   if (p.idleStreak >= PM_KEEPALIVE_MAX_IDLE_STREAK) return false;
   return true;
+}
+
+// src/link-quality.ts
+import { appendFileSync as appendFileSync5, existsSync as existsSync25, mkdirSync as mkdirSync18, readFileSync as readFileSync32, renameSync as renameSync8, rmSync as rmSync5, statSync as statSync12 } from "node:fs";
+import { join as join39 } from "node:path";
+var LINK_SRC_OK = /* @__PURE__ */ new Set(["web-lan", "web-cloud", "rn"]);
+var LINK_KIND_OK = /* @__PURE__ */ new Set(["drop", "reconnect", "connect", "retry-fail"]);
+var LINK_SEEN = /* @__PURE__ */ new Map();
+var LINK_SEEN_MAX = 2e3;
+var LINK_SEEN_WINDOW_MS = 30 * 6e4;
+function num(v, min) {
+  return typeof v === "number" && Number.isFinite(v) && v >= min ? v : void 0;
+}
+function ingestLinkEvents(dataDir3, events, now = Date.now()) {
+  const out = { accepted: 0, deduped: 0, rejected: 0 };
+  if (!Array.isArray(events)) return out;
+  for (const e of events.slice(0, 200)) {
+    if (!e || typeof e !== "object") {
+      out.rejected++;
+      continue;
+    }
+    const r = e;
+    const src = r.src, kind = r.kind;
+    if (typeof r.ts !== "number" || !LINK_SRC_OK.has(src) || !LINK_KIND_OK.has(kind)) {
+      out.rejected++;
+      continue;
+    }
+    if (r.ts > now + 6e4 || r.ts < now - 7 * 864e5) {
+      out.rejected++;
+      continue;
+    }
+    const fp2 = `${src}|${kind}|${r.ts}`;
+    if (LINK_SEEN.has(fp2)) {
+      out.deduped++;
+      continue;
+    }
+    LINK_SEEN.set(fp2, r.ts);
+    appendLinkEvent(dataDir3, {
+      ts: r.ts,
+      src,
+      kind,
+      ...typeof r.reason === "string" && r.reason ? { reason: r.reason.slice(0, 100) } : {},
+      ...num(r.code, 0) !== void 0 ? { code: r.code } : {},
+      ...num(r.downtimeMs, 0) !== void 0 ? { downtimeMs: r.downtimeMs } : {},
+      ...num(r.attempts, 1) !== void 0 ? { attempts: r.attempts } : {},
+      ...num(r.connectedMs, 0) !== void 0 ? { connectedMs: r.connectedMs } : {},
+      ...r.channel === "lan" || r.channel === "cloud" ? { channel: r.channel } : {}
+    });
+    out.accepted++;
+  }
+  if (LINK_SEEN.size > LINK_SEEN_MAX) {
+    const cutoff = now - LINK_SEEN_WINDOW_MS;
+    for (const [k3, ts2] of [...LINK_SEEN.entries()]) {
+      if (ts2 < cutoff) LINK_SEEN.delete(k3);
+    }
+    if (LINK_SEEN.size > LINK_SEEN_MAX) {
+      const keep = [...LINK_SEEN.entries()].sort((a, b) => b[1] - a[1]).slice(0, LINK_SEEN_MAX);
+      LINK_SEEN.clear();
+      for (const [k3, ts2] of keep) LINK_SEEN.set(k3, ts2);
+    }
+  }
+  return out;
+}
+var LINK_LOG_MAX_BYTES = 5 * 1024 * 1024;
+function linkLogPath(dataDir3) {
+  return join39(dataDir3, "link-quality.ndjson");
+}
+function appendLinkEvent(dataDir3, row) {
+  const p = linkLogPath(dataDir3);
+  try {
+    mkdirSync18(dataDir3, { recursive: true });
+    try {
+      if (existsSync25(p) && statSync12(p).size > LINK_LOG_MAX_BYTES) {
+        try {
+          rmSync5(`${p}.1`, { force: true });
+        } catch {
+        }
+        renameSync8(p, `${p}.1`);
+      }
+    } catch {
+    }
+    appendFileSync5(p, JSON.stringify(row) + "\n", "utf-8");
+  } catch (e) {
+    console.error(`[link-quality] \u8BB0\u8D26\u5931\u8D25\uFF08\u4E0D\u963B\u65AD\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function readLinkEvents(dataDir3, maxRows = 2e4) {
+  const out = [];
+  for (const p of [`${linkLogPath(dataDir3)}.1`, linkLogPath(dataDir3)]) {
+    let raw = "";
+    try {
+      raw = readFileSync32(p, "utf-8");
+    } catch {
+      continue;
+    }
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const r = JSON.parse(line);
+        if (r && typeof r.ts === "number" && typeof r.src === "string" && typeof r.kind === "string") out.push(r);
+      } catch {
+      }
+    }
+  }
+  return out.length > maxRows ? out.slice(out.length - maxRows) : out;
+}
+function percentile(sorted, q2) {
+  if (sorted.length === 0) return void 0;
+  if (sorted.length === 1) return sorted[0];
+  const idx = (sorted.length - 1) * q2;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return Math.round(sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo));
+}
+function linkSummary(dataDir3, windowMs = 864e5, now = Date.now()) {
+  const rows = readLinkEvents(dataDir3).filter((r) => now - r.ts <= windowMs);
+  const drops = rows.filter((r) => r.kind === "drop");
+  const recs = rows.filter((r) => r.kind === "reconnect" && typeof r.downtimeMs === "number");
+  const dt2 = recs.map((r) => r.downtimeMs).sort((a, b) => a - b);
+  const attRows = recs.filter((r) => typeof r.attempts === "number" && r.src !== "bridge");
+  const dropsBySrc = {};
+  for (const d2 of drops) dropsBySrc[d2.src] = (dropsBySrc[d2.src] ?? 0) + 1;
+  const sum = dt2.reduce((a, b) => a + b, 0);
+  return {
+    windowMs,
+    drops: drops.length,
+    dropsBySrc,
+    reconnects: recs.length,
+    ...dt2.length ? { reconnectP50Ms: percentile(dt2, 0.5) } : {},
+    ...dt2.length ? { reconnectP95Ms: percentile(dt2, 0.95) } : {},
+    ...dt2.length ? { reconnectAvgMs: Math.round(sum / dt2.length) } : {},
+    ...attRows.length ? { avgAttempts: Math.round(attRows.reduce((a, r) => a + r.attempts, 0) / attRows.length * 10) / 10 } : {},
+    ...drops.length ? { lastDropAt: drops[drops.length - 1].ts } : {},
+    ...rows.length ? { lastEventAt: rows[rows.length - 1].ts } : {}
+  };
 }
 
 // src/lifecycle/context-link.ts
@@ -52969,7 +53410,7 @@ function createCloudCommands(mgr2) {
 }
 
 // src/commands/board-commands.ts
-import { statSync as statSync11, readFileSync as readFileSync32 } from "node:fs";
+import { statSync as statSync13, readFileSync as readFileSync33 } from "node:fs";
 import { resolve as resolve8 } from "node:path";
 function createBoardCommands(mgr2) {
   return {
@@ -53026,7 +53467,7 @@ function createBoardCommands(mgr2) {
       }
       let st2;
       try {
-        st2 = statSync11(hit.path);
+        st2 = statSync13(hit.path);
       } catch {
         return { command_id: cmd.command_id, ok: false, error: imgHit ? "\u56FE\u7247\u5DF2\u8FC7\u671F\uFF08\u4E34\u65F6\u9644\u4EF6\u5B9A\u671F\u6E05\u626B\uFF09" : "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
       }
@@ -53036,7 +53477,7 @@ function createBoardCommands(mgr2) {
       }
       const ref = cmd.command_id;
       try {
-        const buf = readFileSync32(hit.path);
+        const buf = readFileSync33(hit.path);
         const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
         for (let seq = 0; seq < total; seq++) {
           mgr2.bus.emitTransient(
@@ -53089,19 +53530,19 @@ function createBoardCommands(mgr2) {
     },
     COMMAND_PIN_SESSION(cmd, by) {
       const s = mgr2.require(cmd.payload.session_id);
-      const pinned2 = cmd.payload.pinned === true;
-      s.state.pinned = pinned2 || void 0;
-      if (!pinned2) s.state.saved = void 0;
+      const pinned = cmd.payload.pinned === true;
+      s.state.pinned = pinned || void 0;
+      if (!pinned) s.state.saved = void 0;
       s.state.updated_at = Date.now();
       writePinnedSessions(
         mgr2.cfg.dataDir,
-        [...readPinnedSessions(mgr2.cfg.dataDir).filter((x) => x !== cmd.payload.session_id), ...pinned2 ? [cmd.payload.session_id] : []]
+        [...readPinnedSessions(mgr2.cfg.dataDir).filter((x) => x !== cmd.payload.session_id), ...pinned ? [cmd.payload.session_id] : []]
       );
       mgr2.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
         stats: { ...s.state.stats },
-        pinned: pinned2,
+        pinned,
         saved: !!s.state.saved,
         updated_at: s.state.updated_at
         // #271：帧完整性（pin 是 UI 态≠活动）
@@ -53138,7 +53579,7 @@ import { randomUUID as randomUUID9 } from "node:crypto";
 // src/device-trust.ts
 init_read_mode();
 init_sqlite();
-import { join as join40 } from "node:path";
+import { join as join41 } from "node:path";
 var trustSkipNotified = false;
 function warnTrustSkipped(reason) {
   if (trustSkipNotified) return;
@@ -53152,7 +53593,7 @@ function trustStore(dataDir3) {
     return null;
   }
   try {
-    return ensureStore({ dataDir: dataDir3, orgDir: orgDir(), tasksDir: join40(dataDir3, "tasks") });
+    return ensureStore({ dataDir: dataDir3, orgDir: orgDir(), tasksDir: join41(dataDir3, "tasks") });
   } catch (e) {
     warnTrustSkipped(e instanceof Error ? e.message : String(e));
     return null;
@@ -53242,8 +53683,8 @@ function revokeDevice(port, dev, note) {
 }
 
 // src/xmsg.ts
-import { existsSync as existsSync26, readFileSync as readFileSync33, renameSync as renameSync8, writeFileSync as writeFileSync19 } from "node:fs";
-import { join as join41 } from "node:path";
+import { existsSync as existsSync27, readFileSync as readFileSync34, renameSync as renameSync9, writeFileSync as writeFileSync19 } from "node:fs";
+import { join as join42 } from "node:path";
 var XMSG_BODY_MAX = 32 * 1024;
 var XMSG_TTL_DEFAULT_MS = 5 * 6e4;
 var XMSG_TTL_MAX_MS = 15 * 6e4;
@@ -53297,8 +53738,8 @@ ${inner.body}`;
 }
 function readJson(path6, fallback) {
   try {
-    if (!existsSync26(path6)) return fallback;
-    return JSON.parse(readFileSync33(path6, "utf-8"));
+    if (!existsSync27(path6)) return fallback;
+    return JSON.parse(readFileSync34(path6, "utf-8"));
   } catch {
     return fallback;
   }
@@ -53306,7 +53747,7 @@ function readJson(path6, fallback) {
 function writeJsonAtomic(path6, data) {
   const tmp = `${path6}.tmp`;
   writeFileSync19(tmp, JSON.stringify(data), "utf-8");
-  renameSync8(tmp, path6);
+  renameSync9(tmp, path6);
 }
 function isTerminalState(s) {
   return s === "injected" || s === "rejected" || s === "failed";
@@ -53482,10 +53923,10 @@ var XmsgRateGate = class {
 };
 function openXmsgStores(dataDir3, now = Date.now) {
   return {
-    outbox: new XmsgOutbox(join41(dataDir3, "xmsg-outbox.json"), now),
-    seen: new XmsgSeen(join41(dataDir3, "xmsg-seen.json"), now),
-    held: new XmsgHeld(join41(dataDir3, "xmsg-held.json"), now),
-    peers: new XmsgPeers(join41(dataDir3, "xmsg-peers.json"), now)
+    outbox: new XmsgOutbox(join42(dataDir3, "xmsg-outbox.json"), now),
+    seen: new XmsgSeen(join42(dataDir3, "xmsg-seen.json"), now),
+    held: new XmsgHeld(join42(dataDir3, "xmsg-held.json"), now),
+    peers: new XmsgPeers(join42(dataDir3, "xmsg-peers.json"), now)
   };
 }
 
@@ -53883,9 +54324,9 @@ function createXmsgCommands(mgr2) {
 }
 
 // src/title-codex.ts
-import { readFileSync as readFileSync34 } from "node:fs";
+import { readFileSync as readFileSync35 } from "node:fs";
 import { homedir as homedir16 } from "node:os";
-import { join as join42 } from "node:path";
+import { join as join43 } from "node:path";
 function parseCodexSessionIndexLine(line) {
   try {
     const raw = JSON.parse(line);
@@ -53899,10 +54340,10 @@ function parseCodexSessionIndexLine(line) {
 function readCodexThreadName(threadId, codexHome2) {
   if (!threadId) return null;
   try {
-    const home = codexHome2 ?? process.env.CODEX_HOME ?? join42(homedir16(), ".codex");
+    const home = codexHome2 ?? process.env.CODEX_HOME ?? join43(homedir16(), ".codex");
     let text;
     try {
-      text = readFileSync34(join42(home, "session_index.jsonl"), "utf-8");
+      text = readFileSync35(join43(home, "session_index.jsonl"), "utf-8");
     } catch {
       return null;
     }
@@ -53973,8 +54414,8 @@ async function generateTitle(task, model, onSid, cwd, configHome) {
 }
 
 // src/cron.ts
-import { readFileSync as readFileSync35 } from "node:fs";
-import { join as join43 } from "node:path";
+import { readFileSync as readFileSync36 } from "node:fs";
+import { join as join44 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
 var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
 function tsNum(v) {
@@ -54013,7 +54454,7 @@ function normalizeTask(raw, fallbackId) {
 function readCronTasks(cwd) {
   let text;
   try {
-    text = readFileSync35(join43(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+    text = readFileSync36(join44(cwd, ".claude", "scheduled_tasks.json"), "utf8");
   } catch (e) {
     return e.code === "ENOENT" ? void 0 : "bad";
   }
@@ -54044,8 +54485,8 @@ function cronTasksKey(tasks) {
 }
 
 // src/dispatch-lock.ts
-import { existsSync as existsSync27, linkSync, mkdtempSync as mkdtempSync2, readFileSync as readFileSync36, readdirSync as readdirSync13, renameSync as renameSync9, rmSync as rmSync5, writeFileSync as writeFileSync20 } from "node:fs";
-import { join as join44 } from "node:path";
+import { existsSync as existsSync28, linkSync, mkdtempSync as mkdtempSync2, readFileSync as readFileSync37, readdirSync as readdirSync13, renameSync as renameSync10, rmSync as rmSync6, writeFileSync as writeFileSync20 } from "node:fs";
+import { join as join45 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 var WORKTREE_LOCK_FILE = ".cc-deck-lock";
 function buildLockBody(lock) {
@@ -54063,9 +54504,9 @@ function takeOverStale(worktree, full) {
   const body = JSON.stringify(full, null, 2) + "\n";
   let tmp = "";
   try {
-    tmp = join44(mkdtempSync2(join44(tmpdir2(), "wtlock-")), WORKTREE_LOCK_FILE);
+    tmp = join45(mkdtempSync2(join45(tmpdir2(), "wtlock-")), WORKTREE_LOCK_FILE);
     writeFileSync20(tmp, body, "utf-8");
-    renameSync9(tmp, p);
+    renameSync10(tmp, p);
     const back = readWorktreeLock(worktree);
     if (back && back.dispatch_id === full.dispatch_id && back.session_id === full.session_id && back.created_at === full.created_at) {
       return { ok: true, lock: full };
@@ -54076,7 +54517,7 @@ function takeOverStale(worktree, full) {
   } finally {
     if (tmp) {
       try {
-        rmSync5(tmp, { force: true, recursive: true });
+        rmSync6(tmp, { force: true, recursive: true });
       } catch {
       }
     }
@@ -54087,8 +54528,8 @@ function acquireWorktreeLock(worktree, lock) {
   const p = lockPath(worktree);
   let tmpDir = "";
   try {
-    tmpDir = mkdtempSync2(join44(tmpdir2(), "wtlock-"));
-    const tmp = join44(tmpDir, WORKTREE_LOCK_FILE);
+    tmpDir = mkdtempSync2(join45(tmpdir2(), "wtlock-"));
+    const tmp = join45(tmpDir, WORKTREE_LOCK_FILE);
     writeFileSync20(tmp, JSON.stringify(full, null, 2) + "\n", "utf-8");
     try {
       linkSync(tmp, p);
@@ -54104,7 +54545,7 @@ function acquireWorktreeLock(worktree, lock) {
   } finally {
     if (tmpDir) {
       try {
-        rmSync5(tmpDir, { force: true, recursive: true });
+        rmSync6(tmpDir, { force: true, recursive: true });
       } catch {
       }
     }
@@ -54127,11 +54568,11 @@ function worktreeLockWindowMs() {
   return Number.isFinite(v) && v > 0 ? v : 2 * 36e5;
 }
 function lockPath(worktree) {
-  return join44(worktree, WORKTREE_LOCK_FILE);
+  return join45(worktree, WORKTREE_LOCK_FILE);
 }
 function readWorktreeLock(worktree, now = Date.now()) {
   try {
-    const raw = JSON.parse(readFileSync36(lockPath(worktree), "utf-8"));
+    const raw = JSON.parse(readFileSync37(lockPath(worktree), "utf-8"));
     if (typeof raw !== "object" || raw === null) return null;
     if (typeof raw.expires_at !== "number" || typeof raw.created_at !== "number") return null;
     if (raw.expires_at <= now) return null;
@@ -54161,34 +54602,50 @@ function writeWorktreeLock(worktree, lock) {
 }
 function clearWorktreeLock(worktree, dispatchId) {
   const p = lockPath(worktree);
-  if (!existsSync27(p)) return true;
+  if (!existsSync28(p)) return true;
   if (dispatchId) {
     const lock = readWorktreeLock(worktree);
     if (lock && lock.dispatch_id !== dispatchId) return false;
   }
   try {
-    rmSync5(p, { force: true });
+    rmSync6(p, { force: true });
     return true;
   } catch {
     return false;
   }
 }
-function scanClearWorktreeLocks(dispatchId, root) {
+function scanClearWorktreeLocks(dispatchId, root, guard, guardedOut) {
   if (!dispatchId) return [];
   const wtRoot = root ?? process.env.CCR_WT_ROOT ?? "/private/tmp";
   const cleared = [];
   try {
     for (const name of readdirSync13(wtRoot)) {
       if (!name.includes("cc-deck-w")) continue;
-      const dir = join44(wtRoot, name);
-      const p = join44(dir, WORKTREE_LOCK_FILE);
-      if (!existsSync27(p)) continue;
+      const dir = join45(wtRoot, name);
+      const p = join45(dir, WORKTREE_LOCK_FILE);
+      if (!existsSync28(p)) continue;
+      if (guard?.(dir)) {
+        guardedOut?.push(dir);
+        continue;
+      }
       if (clearWorktreeLock(dir, dispatchId)) cleared.push(dir);
       else console.log(`[dispatch-lock] \u6536\u53E3\u6E05\u9501\u8DF3\u8FC7\uFF08\u975E\u672C\u5355\u9501\u6216\u65E0 id \u54E8\u5175\u9501\uFF0C\u53EA\u6309\u8FC7\u671F\u5931\u6548\uFF09: ${dir}`);
     }
   } catch {
   }
   return cleared;
+}
+
+// src/worktree-gc.ts
+import { execFileSync as execFileSync3 } from "node:child_process";
+var WT_ACTIVE_MTIME_MS = 24 * 36e5;
+function worktreeDirty(dir) {
+  try {
+    const out = execFileSync3("git", ["-C", dir, "status", "--porcelain"], { encoding: "utf-8", timeout: 1e4 });
+    return out.split("\n").some((line) => line.trim() && !/\.cc-deck-lock$/.test(line.trim()));
+  } catch {
+    return false;
+  }
 }
 
 // src/board-mirror.ts
@@ -54269,9 +54726,9 @@ function escalateClaimed(now, dir) {
 }
 
 // src/experience.ts
-import { existsSync as existsSync28, mkdirSync as mkdirSync18, readFileSync as readFileSync37, readdirSync as readdirSync14, renameSync as renameSync10, writeFileSync as writeFileSync21, appendFileSync as appendFileSync5, statSync as statSync12 } from "node:fs";
+import { existsSync as existsSync29, mkdirSync as mkdirSync19, readFileSync as readFileSync38, readdirSync as readdirSync14, renameSync as renameSync11, writeFileSync as writeFileSync21, appendFileSync as appendFileSync6, statSync as statSync14 } from "node:fs";
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { dirname as dirname9, join as join45 } from "node:path";
+import { dirname as dirname10, join as join46 } from "node:path";
 var EXPERIENCE_KINDS = ["pitfall", "practice", "preference", "fact", "term"];
 function envNum2(name, fallback, min = 1) {
   const raw = process.env[name];
@@ -54317,27 +54774,27 @@ var EXP_GC_STALE_DAYS = 7;
 var EXP_NORM_KEY_CHARS = 64;
 var DAY = 864e5;
 function experiencePath(dir) {
-  return join45(dir ?? orgDir(), "experience.json");
+  return join46(dir ?? orgDir(), "experience.json");
 }
 function archivePath(dir) {
-  return join45(dir ?? orgDir(), "experience-archive.json");
+  return join46(dir ?? orgDir(), "experience-archive.json");
 }
 function expGcLogPath(dir) {
-  return join45(dir ?? orgDir(), "exp-gc-log.ndjson");
+  return join46(dir ?? orgDir(), "exp-gc-log.ndjson");
 }
 function expGcBackupPath(dir) {
-  return join45(dir ?? orgDir(), "exp-gc-backup.json");
+  return join46(dir ?? orgDir(), "exp-gc-backup.json");
 }
 function atomicWrite(path6, content) {
   const tmp = `${path6}.tmp-${Date.now()}`;
   writeFileSync21(tmp, content, "utf-8");
-  renameSync10(tmp, path6);
+  renameSync11(tmp, path6);
 }
 function findCorruptMarker(dir) {
   try {
     const d2 = dir ?? orgDir();
     const hit = readdirSync14(d2).find((f) => f.startsWith("experience.json.corrupt-"));
-    return hit ? join45(d2, hit) : null;
+    return hit ? join46(d2, hit) : null;
   } catch {
     return null;
   }
@@ -54349,9 +54806,9 @@ function loadExperience(dir) {
     return { store: { entries: [] }, corrupted: true };
   }
   const p = experiencePath(dir);
-  if (!existsSync28(p)) return { store: { entries: [] }, corrupted: false };
+  if (!existsSync29(p)) return { store: { entries: [] }, corrupted: false };
   try {
-    const raw = JSON.parse(readFileSync37(p, "utf-8"));
+    const raw = JSON.parse(readFileSync38(p, "utf-8"));
     if (Array.isArray(raw?.entries)) return { store: { entries: raw.entries }, corrupted: false };
     return corruptAndRefuse(p, dir, "\u7ED3\u6784\u975E\u6CD5\uFF08entries \u975E\u6570\u7EC4\uFF09");
   } catch (e) {
@@ -54361,7 +54818,7 @@ function loadExperience(dir) {
 function corruptAndRefuse(p, dir, why) {
   const renamed = `${p}.corrupt-${Date.now()}`;
   try {
-    renameSync10(p, renamed);
+    renameSync11(p, renamed);
   } catch (e) {
     console.warn(`[experience] \u574F\u6587\u4EF6\u7559\u8BC1\u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u62D2\u7EDD\u5199\u64CD\u4F5C\u4ECD\u751F\u6548`);
   }
@@ -54374,7 +54831,7 @@ function saveExperience(s, dir) {
 function saveExperienceInner(s, dir) {
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync18(d2, { recursive: true });
+    mkdirSync19(d2, { recursive: true });
     atomicWrite(experiencePath(d2), JSON.stringify(s, null, 2) + "\n");
     return true;
   } catch (e) {
@@ -54411,12 +54868,12 @@ function maybeArchiveRetired(entries, dir) {
   if (retired.length <= expArchiveAt()) return null;
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync18(d2, { recursive: true });
+    mkdirSync19(d2, { recursive: true });
     let prev = [];
     const p = archivePath(d2);
-    if (existsSync28(p)) {
+    if (existsSync29(p)) {
       try {
-        const raw = JSON.parse(readFileSync37(p, "utf-8"));
+        const raw = JSON.parse(readFileSync38(p, "utf-8"));
         if (Array.isArray(raw?.archived)) prev = raw.archived;
       } catch {
       }
@@ -54433,15 +54890,15 @@ function maybeArchiveRetired(entries, dir) {
 function appendGcLog(row, dir) {
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync18(d2, { recursive: true });
-    appendFileSync5(expGcLogPath(d2), JSON.stringify(row) + "\n", "utf-8");
+    mkdirSync19(d2, { recursive: true });
+    appendFileSync6(expGcLogPath(d2), JSON.stringify(row) + "\n", "utf-8");
   } catch (e) {
     console.warn(`[experience] GC \u65E5\u5FD7\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 function lastGcLogTs(dir) {
   try {
-    const raw = readFileSync37(expGcLogPath(dir), "utf-8");
+    const raw = readFileSync38(expGcLogPath(dir), "utf-8");
     let ts2 = 0;
     for (const line of raw.split("\n")) {
       const t = line.trim();
@@ -54461,12 +54918,12 @@ function writeGcBackup(ts2, affected, dir) {
   if (affected.length === 0) return;
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync18(d2, { recursive: true });
+    mkdirSync19(d2, { recursive: true });
     let rounds = [];
     const p = expGcBackupPath(d2);
-    if (existsSync28(p)) {
+    if (existsSync29(p)) {
       try {
-        const raw = JSON.parse(readFileSync37(p, "utf-8"));
+        const raw = JSON.parse(readFileSync38(p, "utf-8"));
         if (Array.isArray(raw?.rounds)) rounds = raw.rounds;
       } catch {
       }
@@ -54834,7 +55291,7 @@ function startExperienceGc(dir) {
         const p = experiencePath(dir);
         let sizeBytes = 0;
         try {
-          sizeBytes = statSync12(p).size;
+          sizeBytes = statSync14(p).size;
         } catch {
         }
         const activeCount = listExperience({ status: "active" }, dir).length;
@@ -54904,7 +55361,7 @@ function migrateLessonsToExperience(dir) {
 }
 function loadBoardForMigration(gid, dir) {
   try {
-    const raw = JSON.parse(readFileSync37(join45(dir ?? orgDir(), "boards", `${gid}.json`), "utf-8"));
+    const raw = JSON.parse(readFileSync38(join46(dir ?? orgDir(), "boards", `${gid}.json`), "utf-8"));
     if (!Array.isArray(raw.lessons)) return [];
     return raw.lessons.filter((l) => typeof l === "object" && l !== null && typeof l.id === "string" && typeof l.text === "string" && l.text.trim() !== "" && Array.isArray(l.tags)).map((l) => ({
       id: l.id,
@@ -54927,10 +55384,10 @@ function exportExperience(targetPath, dir) {
   if (p) {
     if (!p.startsWith("/")) return { ok: false, error: "path \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84\uFF08\u81EA\u9009\u5BFC\u51FA\u843D\u70B9\uFF09" };
   } else {
-    p = join45(d2, "exports", `experience-${Date.now()}.json`);
+    p = join46(d2, "exports", `experience-${Date.now()}.json`);
   }
   try {
-    mkdirSync18(dirname9(p), { recursive: true });
+    mkdirSync19(dirname10(p), { recursive: true });
     const doc = {
       format: EXP_EXPORT_FORMAT,
       version: EXP_EXPORT_VERSION,
@@ -54955,7 +55412,7 @@ function importExperience(path6, dir) {
   if (!p.startsWith("/")) return { ok: false, error: "path \u5FC5\u586B\u4E14\u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
   let raw;
   try {
-    raw = readFileSync37(p);
+    raw = readFileSync38(p);
   } catch (e) {
     return { ok: false, error: `\u5BFC\u51FA\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -55035,8 +55492,8 @@ function importExperience(path6, dir) {
 }
 
 // src/role-templates.ts
-import { copyFileSync as copyFileSync2, existsSync as existsSync29, mkdirSync as mkdirSync19, readFileSync as readFileSync38, renameSync as renameSync11, writeFileSync as writeFileSync22 } from "node:fs";
-import { dirname as dirname10, join as join46 } from "node:path";
+import { copyFileSync as copyFileSync2, existsSync as existsSync30, mkdirSync as mkdirSync20, readFileSync as readFileSync39, renameSync as renameSync12, writeFileSync as writeFileSync22 } from "node:fs";
+import { dirname as dirname11, join as join47 } from "node:path";
 
 // presets/role-templates.json
 var role_templates_default = {
@@ -55118,7 +55575,7 @@ function envRoleDir(dir) {
   return dir ?? orgDir();
 }
 function roleTemplatesPath(dir) {
-  return join46(envRoleDir(dir), "role-templates.json");
+  return join47(envRoleDir(dir), "role-templates.json");
 }
 function validTemplate(t) {
   if (!t || typeof t !== "object" || Array.isArray(t)) return false;
@@ -55137,9 +55594,9 @@ function builtinTemplates() {
 }
 function loadUserTemplates(dir) {
   const p = roleTemplatesPath(dir);
-  if (!existsSync29(p)) return [];
+  if (!existsSync30(p)) return [];
   try {
-    const lib = JSON.parse(readFileSync38(p, "utf-8"));
+    const lib = JSON.parse(readFileSync39(p, "utf-8"));
     if (!Array.isArray(lib?.templates)) {
       console.warn(`[role-templates] \u7528\u6237\u5C97\u4F4D\u5E93\u7ED3\u6784\u975E\u6CD5\uFF08templates \u975E\u6570\u7EC4\uFF09\uFF0C\u672C\u6B21\u5FFD\u7565\u7528\u6237\u5E93\uFF08\u5185\u7F6E\u5E93\u515C\u5E95\uFF09: ${p}`);
       return [];
@@ -55204,10 +55661,10 @@ function upsertRoleTemplate(draft, dir) {
   try {
     const p = roleTemplatesPath(dir);
     let lib = { schema_version: 1, templates: [] };
-    if (existsSync29(p)) {
+    if (existsSync30(p)) {
       copyFileSync2(p, `${p}.bak-builder`);
       try {
-        const raw = JSON.parse(readFileSync38(p, "utf-8"));
+        const raw = JSON.parse(readFileSync39(p, "utf-8"));
         if (Array.isArray(raw?.templates)) lib = { schema_version: raw.schema_version ?? 1, ...raw.version ? { version: raw.version } : {}, templates: raw.templates.filter(validTemplate) };
       } catch {
       }
@@ -55225,12 +55682,12 @@ function upsertRoleTemplate(draft, dir) {
     };
     lib.templates = lib.templates.map((x) => x.slug === t.slug ? t : x);
     if (!lib.templates.some((x) => x.slug === t.slug)) lib.templates.push(t);
-    mkdirSync19(dirname10(p), { recursive: true });
+    mkdirSync20(dirname11(p), { recursive: true });
     const tmp = `${p}.tmp-${Date.now()}`;
     writeFileSync22(tmp, JSON.stringify(lib, null, 2) + "\n", "utf-8");
-    renameSync11(tmp, p);
+    renameSync12(tmp, p);
     injectionMemo2.clear();
-    return { ok: true, template: t, backup: existsSync29(`${p}.bak-builder`) ? `${p}.bak-builder` : null };
+    return { ok: true, template: t, backup: existsSync30(`${p}.bak-builder`) ? `${p}.bak-builder` : null };
   } catch (e) {
     return { ok: false, error: `\u5C97\u4F4D\u5E93\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -55249,19 +55706,19 @@ function instantiateBuiltin(t, dir) {
     const p = roleTemplatesPath(dir);
     const libVersion = role_templates_default.version;
     let lib = { schema_version: 1, templates: [] };
-    if (existsSync29(p)) {
+    if (existsSync30(p)) {
       try {
-        const raw = JSON.parse(readFileSync38(p, "utf-8"));
+        const raw = JSON.parse(readFileSync39(p, "utf-8"));
         if (Array.isArray(raw?.templates)) lib = { schema_version: raw.schema_version ?? 1, ...raw.version ? { version: raw.version } : {}, templates: raw.templates.filter(validTemplate) };
       } catch {
       }
     }
     if (lib.templates.some((x) => x.slug === t.slug)) return;
     lib.templates.push({ ...t, source: "builtin", ...libVersion ? { base_version: libVersion } : {} });
-    mkdirSync19(dirname10(p), { recursive: true });
+    mkdirSync20(dirname11(p), { recursive: true });
     const tmp = `${p}.tmp-${Date.now()}`;
     writeFileSync22(tmp, JSON.stringify(lib, null, 2) + "\n", "utf-8");
-    renameSync11(tmp, p);
+    renameSync12(tmp, p);
   } catch (e) {
     console.warn(`[role-templates] \u5185\u7F6E\u6A21\u677F\u5B9E\u4F8B\u5316\u843D\u76D8\u5931\u8D25\uFF08\u5FFD\u7565\uFF0C\u6CE8\u5165\u7167\u5E38\uFF09: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -55313,8 +55770,8 @@ function buildRoleInjection(input) {
 }
 
 // src/watch-feed.ts
-import { mkdirSync as mkdirSync20, readFileSync as readFileSync39, renameSync as renameSync12, writeFileSync as writeFileSync23 } from "node:fs";
-import { dirname as dirname11, join as join47 } from "node:path";
+import { mkdirSync as mkdirSync21, readFileSync as readFileSync40, renameSync as renameSync13, writeFileSync as writeFileSync23 } from "node:fs";
+import { dirname as dirname12, join as join48 } from "node:path";
 import { createHash as createHash4 } from "node:crypto";
 var WATCHDOG_ROLE = "watchdog";
 var REPORT_LINE_KEEP = /^\[(?<ts>[^\]]+)\] (ALERT|ALERT-NO-TARGET|RECOVERED|BREAKER-RETRY|CONVERGE)\b/;
@@ -55330,7 +55787,7 @@ function lineTs(line) {
 function patrolReportIncrement(cursor, ctx) {
   let text = "";
   try {
-    text = readFileSync39(ctx.reportPath, "utf-8");
+    text = readFileSync40(ctx.reportPath, "utf-8");
   } catch {
     return null;
   }
@@ -55371,11 +55828,11 @@ var PATROL_TUNABLE_KEYS = [
   { key: "CCR_PATROL_DOING_STALE_MIN", desc: "doing \u5361\u6EDE\u7559\u63D0\u9192\u9608\u503C\uFF08\u5206\u949F\uFF0C\u7F3A\u7701 60\uFF09", runtimeImmediate: true, min: 1, max: 43200 }
 ];
 function patrolConfigPath(dataDir3) {
-  return join47(dataDir3, "patrol-config.json");
+  return join48(dataDir3, "patrol-config.json");
 }
 function readPatrolConfig(dataDir3) {
   try {
-    const raw = JSON.parse(readFileSync39(patrolConfigPath(dataDir3), "utf-8"));
+    const raw = JSON.parse(readFileSync40(patrolConfigPath(dataDir3), "utf-8"));
     if (raw && typeof raw === "object" && raw.overrides && typeof raw.overrides === "object") {
       const overrides = {};
       const vocab = new Set(PATROL_TUNABLE_KEYS.map((k3) => k3.key));
@@ -55398,10 +55855,10 @@ function applyPatrolOverride(key, value, dataDir3) {
     cfg2.overrides[key] = value;
     cfg2.updated_at = Date.now();
     const p = patrolConfigPath(dataDir3);
-    mkdirSync20(dirname11(p), { recursive: true });
+    mkdirSync21(dirname12(p), { recursive: true });
     const tmp = `${p}.tmp-${Date.now()}`;
     writeFileSync23(tmp, JSON.stringify(cfg2, null, 2) + "\n", "utf-8");
-    renameSync12(tmp, p);
+    renameSync13(tmp, p);
     process.env[key] = String(value);
     return { ok: true, immediate: entry.runtimeImmediate };
   } catch (e) {
@@ -55435,14 +55892,32 @@ var WatchFeedModule = class {
     const raw = process.env.CCR_WATCH_FEED_MS;
     const n = Number(raw);
     const interval = raw && Number.isFinite(n) && n > 0 ? n : this.opts.intervalMs ?? DEFAULT_INTERVAL_MS2;
+    setTimeout(() => {
+      if (!this.timer) return;
+      void this.tickGuarded();
+    }, 4e4).unref?.();
     this.timer = setInterval(() => {
-      try {
-        this.tick();
-      } catch (e) {
-        console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
-      }
+      void this.tickGuarded();
     }, interval);
     this.timer.unref?.();
+  }
+  ticking = false;
+  async tickGuarded() {
+    if (this.ticking) {
+      console.log("[watch-feed] \u4E0A\u8F6E tick \u672A\u6536\u5C3E\uFF0C\u672C\u8F6E\u8DF3\u8FC7\uFF08sqlitefix \u91CD\u5165\u95E8\uFF09");
+      return;
+    }
+    this.ticking = true;
+    const t03 = Date.now();
+    try {
+      await this.tick();
+    } catch (e) {
+      console.log(`[watch-feed] tick error: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      this.ticking = false;
+    }
+    const ms = Date.now() - t03;
+    if (ms > 50) console.warn(`[watch-feed] tick ${ms}ms\uFF08\u8D85 50ms \u9884\u7B97\u89C2\u6D4B\u95F8\u2014\u2014sqlitefix \u6253\u70B9\uFF09`);
   }
   stop() {
     if (this.timer) clearInterval(this.timer);
@@ -55468,13 +55943,13 @@ var WatchFeedModule = class {
     return out;
   }
   statePath() {
-    return join47(this.opts.dataDir, "watch-feed-state.json");
+    return join48(this.opts.dataDir, "watch-feed-state.json");
   }
   loadState() {
     if (this.state) return this.state;
     let st2 = { schema_version: 1, cursors: {}, signatures: {}, tsAnchors: {}, updated_at: 0 };
     try {
-      const raw = JSON.parse(readFileSync39(this.statePath(), "utf-8"));
+      const raw = JSON.parse(readFileSync40(this.statePath(), "utf-8"));
       if (raw && typeof raw === "object" && raw.cursors && typeof raw.cursors === "object") {
         const cursors = {};
         for (const [k3, v] of Object.entries(raw.cursors)) {
@@ -55498,10 +55973,10 @@ var WatchFeedModule = class {
   saveState(next) {
     try {
       const p = this.statePath();
-      mkdirSync20(dirname11(p), { recursive: true });
+      mkdirSync21(dirname12(p), { recursive: true });
       const tmp = `${p}.tmp-${Date.now()}`;
       writeFileSync23(tmp, JSON.stringify(next, null, 2) + "\n", "utf-8");
-      renameSync12(tmp, p);
+      renameSync13(tmp, p);
       this.state = next;
     } catch {
     }
@@ -55602,9 +56077,9 @@ var WatchFeedModule = class {
 };
 
 // src/team-rules.ts
-import { existsSync as existsSync31, mkdirSync as mkdirSync21, readFileSync as readFileSync40, readdirSync as readdirSync15, renameSync as renameSync13, writeFileSync as writeFileSync24 } from "node:fs";
+import { existsSync as existsSync32, mkdirSync as mkdirSync22, readFileSync as readFileSync41, readdirSync as readdirSync15, renameSync as renameSync14, writeFileSync as writeFileSync24 } from "node:fs";
 import { randomUUID as randomUUID11 } from "node:crypto";
-import { join as join48, dirname as dirname12 } from "node:path";
+import { join as join49, dirname as dirname13 } from "node:path";
 function envNum4(name, fallback, min = 1) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -55628,18 +56103,18 @@ function rulesInjectBudget() {
 }
 var RULE_NORM_KEY_CHARS = 64;
 function rulesPath(dir) {
-  return join48(dir ?? orgDir(), "rules.json");
+  return join49(dir ?? orgDir(), "rules.json");
 }
 function atomicWrite2(path6, content) {
   const tmp = `${path6}.tmp-${Date.now()}`;
   writeFileSync24(tmp, content, "utf-8");
-  renameSync13(tmp, path6);
+  renameSync14(tmp, path6);
 }
 function findCorruptMarker2(dir) {
   try {
     const d2 = dir ?? orgDir();
     const hit = readdirSync15(d2).find((f) => f.startsWith("rules.json.corrupt-"));
-    return hit ? join48(d2, hit) : null;
+    return hit ? join49(d2, hit) : null;
   } catch {
     return null;
   }
@@ -55651,9 +56126,9 @@ function loadRules(dir) {
     return { store: { version: 1, rules: [] }, corrupted: true };
   }
   const p = rulesPath(dir);
-  if (!existsSync31(p)) return { store: { version: 1, rules: [] }, corrupted: false };
+  if (!existsSync32(p)) return { store: { version: 1, rules: [] }, corrupted: false };
   try {
-    const raw = JSON.parse(readFileSync40(p, "utf-8"));
+    const raw = JSON.parse(readFileSync41(p, "utf-8"));
     if (Array.isArray(raw?.rules)) return { store: { version: 1, rules: raw.rules }, corrupted: false };
     return corruptAndRefuse2(p, dir, "\u7ED3\u6784\u975E\u6CD5\uFF08rules \u975E\u6570\u7EC4\uFF09");
   } catch (e) {
@@ -55663,7 +56138,7 @@ function loadRules(dir) {
 function corruptAndRefuse2(p, dir, why) {
   const renamed = `${p}.corrupt-${Date.now()}`;
   try {
-    renameSync13(p, renamed);
+    renameSync14(p, renamed);
   } catch (e) {
     console.warn(`[team-rules] \u574F\u6587\u4EF6\u7559\u8BC1\u5931\u8D25\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u62D2\u7EDD\u5199\u64CD\u4F5C\u4ECD\u751F\u6548`);
   }
@@ -55676,7 +56151,7 @@ function saveRules(s, dir) {
 function saveRulesInner(s, dir) {
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync21(d2, { recursive: true });
+    mkdirSync22(d2, { recursive: true });
     atomicWrite2(rulesPath(d2), JSON.stringify(s, null, 2) + "\n");
     writeRulesMirror(dir);
     return true;
@@ -55686,11 +56161,11 @@ function saveRulesInner(s, dir) {
   }
 }
 function rulesMirrorPath(dir) {
-  return join48(dirname12(dirname12(rulesPath(dir))), "RULES.md");
+  return join49(dirname13(dirname13(rulesPath(dir))), "RULES.md");
 }
 function writeRulesMirror(dir) {
   try {
-    if (!existsSync31(dirname12(rulesPath(dir)))) return false;
+    if (!existsSync32(dirname13(rulesPath(dir)))) return false;
     const loaded = loadRules(dir);
     if (loaded.corrupted) return false;
     const active = loaded.store.rules.filter((e) => e.status === "active");
@@ -55959,14 +56434,14 @@ function ensureBuiltinRulesSeed(dir) {
 }
 
 // src/restart-ledger.ts
-import { existsSync as existsSync32, mkdirSync as mkdirSync22, readFileSync as readFileSync41, renameSync as renameSync14, rmSync as rmSync6, unlinkSync as unlinkSync4, writeFileSync as writeFileSync25 } from "node:fs";
-import { join as join49 } from "node:path";
+import { existsSync as existsSync33, mkdirSync as mkdirSync23, readFileSync as readFileSync42, renameSync as renameSync15, rmSync as rmSync7, unlinkSync as unlinkSync4, writeFileSync as writeFileSync25 } from "node:fs";
+import { join as join50 } from "node:path";
 function restartLedgerTtlMs() {
   const v = Number(process.env.CCR_RESTART_LEDGER_TTL_MS);
   return Number.isFinite(v) && v >= 0 ? v : 10 * 6e4;
 }
 function ledgerPath(dataDir3) {
-  return join49(dataDir3, "restart-ledger.json");
+  return join50(dataDir3, "restart-ledger.json");
 }
 var retryState = null;
 function saveRestartLedger(dataDir3, entries) {
@@ -55974,9 +56449,9 @@ function saveRestartLedger(dataDir3, entries) {
   const target = ledgerPath(dataDir3);
   const tmp = target + ".tmp";
   try {
-    mkdirSync22(dataDir3, { recursive: true });
+    mkdirSync23(dataDir3, { recursive: true });
     writeFileSync25(tmp, JSON.stringify(file));
-    renameSync14(tmp, target);
+    renameSync15(tmp, target);
     if (retryState) {
       if (retryState.timer) clearTimeout(retryState.timer);
       retryState = null;
@@ -56004,13 +56479,13 @@ function loadRestartLedger(dataDir3, now = Date.now()) {
   const target = ledgerPath(dataDir3);
   const tmp = target + ".tmp";
   try {
-    if (existsSync32(tmp)) unlinkSync4(tmp);
+    if (existsSync33(tmp)) unlinkSync4(tmp);
   } catch {
   }
-  if (!existsSync32(target)) return { entries: [], droppedRenewable: 0, orphans: [] };
+  if (!existsSync33(target)) return { entries: [], droppedRenewable: 0, orphans: [] };
   let droppedRenewable = 0;
   try {
-    const raw = JSON.parse(readFileSync41(target, "utf-8"));
+    const raw = JSON.parse(readFileSync42(target, "utf-8"));
     const entries = Array.isArray(raw.entries) ? raw.entries.filter((x) => x && typeof x.session_id === "string" && Array.isArray(x.unacked)) : [];
     const ttl = restartLedgerTtlMs();
     for (const e of entries) {
@@ -56030,10 +56505,10 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*\//,
 // src/agent-codex.ts
 import { spawn as spawn5 } from "node:child_process";
 import { randomUUID as randomUUID12 } from "node:crypto";
-import { existsSync as existsSync33, mkdtempSync as mkdtempSync3, rmSync as rmSync7, writeFileSync as writeFileSync26 } from "node:fs";
+import { existsSync as existsSync34, mkdtempSync as mkdtempSync3, rmSync as rmSync8, writeFileSync as writeFileSync26 } from "node:fs";
 import { tmpdir as tmpdir3 } from "node:os";
-import { delimiter as delimiter3, dirname as dirname13, join as join50 } from "node:path";
-var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+import { delimiter as delimiter3, dirname as dirname14, join as join51 } from "node:path";
+var num2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
 var CODEX_ACTIVITY_CAPABILITIES = {
   native_status: true,
   operation_summary: true,
@@ -56094,10 +56569,10 @@ var CodexEventMapper = class {
       case "turn.completed": {
         const u = ev2.usage ?? {};
         cb2.onUsage({
-          input_tokens: num(u.input_tokens),
-          output_tokens: num(u.output_tokens),
-          cache_read_input_tokens: num(u.cached_input_tokens),
-          cache_creation_input_tokens: num(u.cache_write_input_tokens)
+          input_tokens: num2(u.input_tokens),
+          output_tokens: num2(u.output_tokens),
+          cache_read_input_tokens: num2(u.cached_input_tokens),
+          cache_creation_input_tokens: num2(u.cache_write_input_tokens)
         });
         cb2.onTurnEnd(true, "success", this.turnStartMs ? Math.max(0, now - this.turnStartMs) : 0);
         this.turnTerminal = true;
@@ -56127,7 +56602,7 @@ function resolveCodexCliPath() {
     cachedBin = null;
     return null;
   }
-  if (fromEnv && existsSync33(fromEnv)) {
+  if (fromEnv && existsSync34(fromEnv)) {
     cachedBin = fromEnv;
     return cachedBin;
   }
@@ -56135,8 +56610,8 @@ function resolveCodexCliPath() {
   const dirs = (childEnv().PATH ?? "").split(delimiter3).filter(Boolean);
   for (const d2 of dirs) {
     for (const n of names) {
-      const p = join50(d2, n);
-      if (existsSync33(p)) {
+      const p = join51(d2, n);
+      if (existsSync34(p)) {
         cachedBin = p;
         return p;
       }
@@ -56147,12 +56622,12 @@ function resolveCodexCliPath() {
 }
 function materializeImages(images) {
   if (!images || images.length === 0) return [];
-  const dir = mkdtempSync3(join50(tmpdir3(), "ccr-codex-img-"));
+  const dir = mkdtempSync3(join51(tmpdir3(), "ccr-codex-img-"));
   const out = [];
   images.forEach((b64, i) => {
     if (typeof b64 !== "string" || b64.length === 0) return;
     try {
-      const p = join50(dir, `${i}.img`);
+      const p = join51(dir, `${i}.img`);
       writeFileSync26(p, Buffer.from(b64, "base64"));
       out.push(p);
     } catch {
@@ -56250,7 +56725,7 @@ var CodexAgentSession = class {
     if (this.ended) return;
     this.stopping = true;
     this.ended = true;
-    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname13(p))));
+    const queuedDirs = new Set(this.queued.flatMap((q2) => (q2.images ?? []).map((p) => dirname14(p))));
     this.queued = [];
     this.cleanupTurnImages(queuedDirs);
     const child = this.proc;
@@ -56266,7 +56741,7 @@ var CodexAgentSession = class {
     if (this.threadId) args.push("resume", this.threadId);
     for (const p of images) args.push("--image", p);
     args.push("-");
-    this.turnImageDirs = new Set(images.map((p) => dirname13(p)));
+    this.turnImageDirs = new Set(images.map((p) => dirname14(p)));
     this.mapper.turnTerminal = false;
     this.mapper.turnStartMs = Date.now();
     let child;
@@ -56349,7 +56824,7 @@ var CodexAgentSession = class {
     for (const d2 of extraDirs ?? []) dirs.add(d2);
     for (const d2 of dirs) {
       try {
-        rmSync7(d2, { recursive: true, force: true });
+        rmSync8(d2, { recursive: true, force: true });
       } catch {
       }
     }
@@ -56381,6 +56856,10 @@ var ZCODE_ACTIVITY_CAPABILITIES = {
 };
 
 // src/session-manager.ts
+function workerConcurrencyCap() {
+  const v = Number(process.env.CCR_WORKER_CONCURRENCY_CAP);
+  return Number.isFinite(v) && v >= 2 ? Math.floor(v) : 6;
+}
 var EXTERNAL_PERM_MODES = /* @__PURE__ */ new Set(["default", "acceptEdits", "plan", "bypassPermissions", "auto", "manual"]);
 function sanitizeImportPushEntry(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -56413,21 +56892,21 @@ function sanitizeImportPushEntry(raw) {
 }
 function expandHome(p) {
   if (p === "~") return homedir18();
-  if (p.startsWith("~/")) return join51(homedir18(), p.slice(2));
+  if (p.startsWith("~/")) return join52(homedir18(), p.slice(2));
   return p;
 }
 function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const isUsableDir = (p) => {
     if (!p) return false;
     try {
-      return statSync13(p).isDirectory();
+      return statSync15(p).isDirectory();
     } catch {
       return false;
     }
   };
   const tryMkdir = (abs) => {
     try {
-      mkdirSync23(abs, { recursive: true });
+      mkdirSync24(abs, { recursive: true });
       return isUsableDir(abs);
     } catch {
       return false;
@@ -56471,7 +56950,7 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir3) {
   try {
-    const raw = JSON.parse(readFileSync42(join51(dataDir3, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync43(join52(dataDir3, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -56482,13 +56961,13 @@ function appendChildSession(dataDir3, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync27(join51(dataDir3, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync27(join52(dataDir3, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir3) {
   try {
-    const raw = JSON.parse(readFileSync42(join51(dataDir3, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync43(join52(dataDir3, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -56499,14 +56978,14 @@ function appendDeletedExt(dataDir3, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync27(join51(dataDir3, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync27(join52(dataDir3, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 var DELIVERABLES_CAP = 300;
 function readDeliverables(dataDir3) {
   try {
-    const raw = JSON.parse(readFileSync42(join51(dataDir3, "deliverables.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync43(join52(dataDir3, "deliverables.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter(
       (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
     ) : [];
@@ -56522,18 +57001,18 @@ function appendDeliverable(dataDir3, e) {
   withStorageTx({ dataDir: dataDir3 }, () => {
     const list = readDeliverables(dataDir3).filter((x) => !sameLedgerEntry(x, e.sid, e.path));
     list.push(e);
-    ok2 = atomicWriteJson(join51(dataDir3, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
+    ok2 = atomicWriteJson(join52(dataDir3, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
     if (!ok2) console.warn(`[deliverable] \u4EA4\u4ED8\u6E05\u5355\u5199\u5165\u5931\u8D25\uFF08\u6587\u4EF6/\u5E93\u5747\u65E0\u6B64\u8BB0\u5F55\uFF0C\u8C03\u7528\u65B9\u5E94\u77E5\u6089\uFF09\uFF1Asid=${e.sid} path=${e.path}`);
   });
   return ok2;
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir3) {
-  return join51(dataDir3, "pinned-sessions.json");
+  return join52(dataDir3, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir3) {
   try {
-    const raw = JSON.parse(readFileSync42(pinnedSessionsPath(dataDir3), "utf-8"));
+    const raw = JSON.parse(readFileSync43(pinnedSessionsPath(dataDir3), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -56624,20 +57103,20 @@ function resumeBreakerCapMs() {
 }
 function transcriptPathFor(cwd, sdkId, configHome) {
   const slug = realpathSync3(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-  const base = configHome ?? join51(homedir18(), ".claude");
-  return join51(base, "projects", slug, `${sdkId}.jsonl`);
+  const base = configHome ?? join52(homedir18(), ".claude");
+  return join52(base, "projects", slug, `${sdkId}.jsonl`);
 }
 function transcriptHasAssistant(cwd, sdkId, configHome) {
   try {
     const p = transcriptPathFor(cwd, sdkId, configHome);
-    return readFileSync42(p, "utf-8").includes('"type":"assistant"');
+    return readFileSync43(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
   }
 }
 function transcriptBytesFor(cwd, sdkId, configHome) {
   try {
-    return statSync13(transcriptPathFor(cwd, sdkId, configHome)).size;
+    return statSync15(transcriptPathFor(cwd, sdkId, configHome)).size;
   } catch {
     return void 0;
   }
@@ -56671,21 +57150,39 @@ var SNAPSHOT_LOGS_LAN = {
 var SessionManager = class {
   constructor(bus2, cfg2) {
     this.bus = bus2;
+    bootMark("ctor-enter");
     this.cfg = cfg2;
     registerAnchorLockExempt((a) => findGroupByAnchor(a) !== null);
+    registerDispatchTerminalHook((e) => this.closeoutJointCheck(e));
     this.allowRules = new AllowRuleStore(cfg2.dataDir);
     this.allowRules.onChange = () => this.bus.emitTransient("ALLOW_RULES_UPDATED", { rules: this.allowRules.list() });
     this.childSdkIds = new Set(readChildSessions(cfg2.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg2.dataDir));
     this.titleOverrides = readTitleOverrides(cfg2.dataDir);
     this.loadNotifications();
-    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
-    this.reconcileOrphanConfirms();
+    bootMark("ctor-notifications");
+    this.pendingUserActionsJson = "[]";
     try {
       writeRulesMirror();
     } catch {
     }
     setConfirmCreatedHook((c2) => this.recordOrgConfirmNotification(c2));
+    setDispatchClosedHook((e) => {
+      if (e.drill === true) return;
+      if (!e.receipt || !e.receipt.trim()) {
+        const txt = `dispatch ${e.id.slice(0, 8)}\uFF08${(e.title ?? "").slice(0, 30) || "\u65E0\u9898"}\uFF09${e.status === "done" ? "done" : "failed"} \u5173\u5355\u4F46\u96F6\u56DE\u6267\u2014\u2014\u4EA4\u4ED8\u7269\u5931\u8E2A\uFF08W-TREEGC \u5173\u5355\u9632\u7EBF\uFF09\uFF1A\u6838\u5BF9 worktree \u9694\u79BB\u533A/git \u5206\u652F/PR \u540E\u4EBA\u5DE5\u6536\u53E3`;
+        this.upsertNotification("system", `zero-receipt-${e.id}`, this.leaderId ?? "leaderless", {
+          title: "\u5173\u5355\u96F6\u56DE\u6267",
+          body: txt,
+          severity: "waiting",
+          group: "attention",
+          actionable: true,
+          domain: "session",
+          returnPath: "/"
+        });
+        this.notifyLeaderSystem(txt);
+      }
+    });
     setExperienceGcSummaryHook((s) => this.onExperienceGcRound(s));
     setAuthWatchReadyHook((engine) => this.recoverEngineAfterAuth(engine));
     this.bus.subscribe((env) => {
@@ -56905,12 +57402,12 @@ provider=${opts.provider ?? "default"}` : void 0,
   // settings.json → cfg 重推导 → 广播 SETTINGS_UPDATED；此后新会话立即用新家，
   // 存量会话按各自 employee_home 记录走（不受翻转影响）。env 显式设置（部署
   // 覆盖面）时设置项锁定：拒改并给可读指引
-  applyEmployeeHome(enabled) {
+  applyEmployeeHome(enabled2) {
     const cur = resolveEmployeeHome(this.cfg.dataDir);
     if (cur.source === "env") {
       return { ok: false, error: `\u96C7\u5458\u72EC\u7ACB\u5BB6\u5DF2\u7531\u73AF\u5883\u53D8\u91CF CCR_EMPLOYEE_CONFIG_DIR \u663E\u5F0F\u8BBE\u5B9A\uFF08${cur.value ?? "\u503C\u975E\u6CD5\uFF0C\u6309\u5173\u95ED\u5904\u7406"}\uFF09\uFF0C\u8BBE\u7F6E\u9879\u88AB\u90E8\u7F72\u9501\u5B9A\u2014\u2014\u8BF7\u8C03\u6574\u73AF\u5883\u53D8\u91CF\u540E\u91CD\u542F relay` };
     }
-    if (!writeSettingsFile(this.cfg.dataDir, { employeeHome: enabled })) {
+    if (!writeSettingsFile(this.cfg.dataDir, { employeeHome: enabled2 })) {
       return { ok: false, error: "settings.json \u5199\u76D8\u5931\u8D25\uFF08\u76D8\u6EE1/\u6743\u9650\uFF1F\uFF09" };
     }
     const next = resolveEmployeeHome(this.cfg.dataDir);
@@ -56948,7 +57445,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 与 M4 DISPATCH_DONE / ORG_CONFIRM_UPDATED 等既有瞬时通道并存：那些管在线弹，
   // 这边持久落账管离线兜底与列表沉淀（任务书对账：不双发靠 stableKey 一单一行）。
   notificationsPath() {
-    return join51(this.cfg.dataDir, "notifications.json");
+    return join52(this.cfg.dataDir, "notifications.json");
   }
   // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
   // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
@@ -56958,7 +57455,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
   loadNotifications() {
     try {
-      const raw = JSON.parse(readFileSync42(this.notificationsPath(), "utf-8"));
+      const raw = JSON.parse(readFileSync43(this.notificationsPath(), "utf-8"));
       const list = Array.isArray(raw.notifications) ? raw.notifications : [];
       for (const item of list) {
         if (item && typeof item.key === "string" && item.key) this.notifications.set(item.key, item);
@@ -56978,7 +57475,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.trimNotifications();
     withStorageTx({ dataDir: this.cfg.dataDir }, () => {
       try {
-        mkdirSync23(this.cfg.dataDir, { recursive: true });
+        mkdirSync24(this.cfg.dataDir, { recursive: true });
         if (!atomicWriteJson(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n")) {
           console.warn("[notify] \u901A\u77E5\u8D26\u539F\u5B50\u5199\u5931\u8D25\uFF08fs-safe \u5DF2\u544A\u8B66\uFF0C\u6B64\u5904\u8865\u8BED\u4E49\u9762\uFF09");
         }
@@ -57051,7 +57548,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 运维脚本批同步（kv-put 系）后续挂载，回执备案）
   chainAuditMirror(action, detail) {
     try {
-      appendFileSync6(join51(this.cfg.dataDir, "chain-audit.jsonl"), JSON.stringify({ action, detail, ts: Date.now() }) + "\n");
+      appendFileSync7(join52(this.cfg.dataDir, "chain-audit.jsonl"), JSON.stringify({ action, detail, ts: Date.now() }) + "\n");
     } catch {
     }
   }
@@ -57141,7 +57638,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   runLedgerRecon(trigger) {
     const now = Date.now();
     try {
-      writeFileSync27(join51(this.cfg.dataDir, "recon-heartbeat.json"), JSON.stringify({ at: now, trigger }));
+      writeFileSync27(join52(this.cfg.dataDir, "recon-heartbeat.json"), JSON.stringify({ at: now, trigger }));
     } catch {
     }
     const nn = (t) => {
@@ -57155,12 +57652,12 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     const task = /* @__PURE__ */ new Set();
     try {
-      const tasksRoot = join51(homedir18(), ".claude", "tasks");
+      const tasksRoot = join52(homedir18(), ".claude", "tasks");
       for (const d2 of readdirSync16(tasksRoot).slice(-80)) {
         try {
-          for (const f of readdirSync16(join51(tasksRoot, d2))) {
+          for (const f of readdirSync16(join52(tasksRoot, d2))) {
             try {
-              const j2 = JSON.parse(readFileSync42(join51(tasksRoot, d2, f), "utf-8"));
+              const j2 = JSON.parse(readFileSync43(join52(tasksRoot, d2, f), "utf-8"));
               if (j2.status === "pending" || j2.status === "in_progress") {
                 const k3 = nn(j2.subject);
                 if (k3) task.add(k3);
@@ -57271,14 +57768,14 @@ provider=${opts.provider ?? "default"}` : void 0,
   }
   /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
   drainTurnSpool() {
-    const dir = join51(homedir18(), ".cc-deck", "data", "turn-spool");
+    const dir = join52(homedir18(), ".cc-deck", "data", "turn-spool");
     let drained = 0;
     try {
       for (const f of readdirSync16(dir)) {
         if (!f.endsWith(".jsonl")) continue;
-        const full = join51(dir, f);
+        const full = join52(dir, f);
         try {
-          for (const line of readFileSync42(full, "utf-8").split("\n")) {
+          for (const line of readFileSync43(full, "utf-8").split("\n")) {
             if (!line.trim()) continue;
             try {
               const j2 = JSON.parse(line);
@@ -57292,7 +57789,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         } catch {
         }
         try {
-          rmSync8(full, { recursive: true, force: true });
+          rmSync9(full, { recursive: true, force: true });
         } catch {
         }
       }
@@ -57504,6 +58001,26 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
   //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
   //，跨域误指无法在数据层比对——不硬造，以「非空才对账」收窄误收口窗口
+  /** bootfast2：pending 聚合基线首算（index 后台段首调——ctor 占位迁出） */
+  refreshPendingUserActionsBaseline() {
+    this.pendingUserActionsJson = JSON.stringify(this.pendingUserActionsList());
+  }
+  /** bootfast2（1104 移交§三）：boot 数据就绪 flag——SNAPSHOT boot.phase 消费
+   *（index 后台段 data-ready 处置 true；端上「已连接，数据加载中」判定源）。 */
+  bootDataReady = false;
+  markBootDataReady() {
+    this.bootDataReady = true;
+    try {
+      this.bus.emitTransient("BOOT_PHASE", { phase: "ready", loaded: this.snapshot().length, ts: Date.now() });
+    } catch {
+    }
+  }
+  /** bootfast2（刀②公开化）：boot 后台段首跑（index.ts 后台段 adopt 前调）——
+   * 构造器瘦身迁出，语义锚 #018-R1FIX1 P2-5 不变。 */
+  reconcileOrphanConfirmsOnBoot() {
+    bootMark("orphan-confirms");
+    this.reconcileOrphanConfirms();
+  }
   reconcileOrphanConfirms() {
     const known = this.readConfirmsForReconcile();
     if (!known) return;
@@ -57530,11 +58047,11 @@ provider=${opts.provider ?? "default"}` : void 0,
   // P2-6 把「读失败」伪装成「空清单」再放行批量收口的通道，闸门处必须区分「读不
   // 出来」与「真的没有」（只读消费 confirms.json 文件本身，projects.ts 结构不动）
   readConfirmsForReconcile() {
-    const path6 = join51(orgDir(), "confirms.json");
-    if (!existsSync34(path6)) return null;
+    const path6 = join52(orgDir(), "confirms.json");
+    if (!existsSync35(path6)) return null;
     let raw;
     try {
-      raw = readFileSync42(path6, "utf-8");
+      raw = readFileSync43(path6, "utf-8");
     } catch {
       return null;
     }
@@ -57561,9 +58078,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join51(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join52(this.cfg.dataDir, ".tmp-titlegen");
     try {
-      mkdirSync23(titleCwd, { recursive: true });
+      mkdirSync24(titleCwd, { recursive: true });
     } catch {
     }
     void generateTitle(task, this.cfg.model, (sid) => {
@@ -57632,8 +58149,8 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.applyDerivedTitle(sessionId, prompt);
       }
     };
-    const t02 = setTimeout(() => attempt(0), probeDelays[0]);
-    t02.unref();
+    const t03 = setTimeout(() => attempt(0), probeDelays[0]);
+    t03.unref();
   }
   snapshotLogs() {
     const out = {};
@@ -57766,6 +58283,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (opts?.model && !existing.state.model) existing.state.model = opts.model;
       if (opts?.provider && !existing.state.engine_provider) existing.state.engine_provider = opts.provider;
       this.applyDeclaredDeliverables(id2);
+      this.maybeProposePmAppointment();
       return existing.state;
     }
     const state = {
@@ -57796,6 +58314,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (readPinnedSessions(this.cfg.dataDir).includes(id2)) state.pinned = true;
     this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0, pmKeepaliveStreak: 0, pmKeepaliveTimer: null });
     this.applyDeclaredDeliverables(id2);
+    this.maybeProposePmAppointment();
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
       initial_prompt: prompt,
@@ -57961,6 +58480,9 @@ provider=${opts.provider ?? "default"}` : void 0,
   prCommentFetcher = fetchPrCommentsViaGh;
   startPrCommentWatch(intervalMs = 5 * 6e4) {
     if (this.prCommentTimer) return;
+    setTimeout(() => {
+      if (this.prCommentTimer) void this.runPrCommentCycleOnce();
+    }, 2e4).unref?.();
     this.prCommentTimer = setInterval(() => {
       void this.runPrCommentCycleOnce();
     }, intervalMs);
@@ -58135,7 +58657,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     let size;
     let exists = true;
     try {
-      size = statSync13(p).size;
+      size = statSync15(p).size;
     } catch {
       exists = false;
     }
@@ -58210,7 +58732,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       unverified = snapshot.unverified === true;
     } else {
       try {
-        size = statSync13(p).size;
+        size = statSync15(p).size;
       } catch {
         exists = false;
       }
@@ -58341,7 +58863,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       let size;
       let exists = true;
       try {
-        size = statSync13(a.path).size;
+        size = statSync15(a.path).size;
       } catch {
         exists = false;
       }
@@ -58397,7 +58919,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       for (const name of readdirSync16(dir)) {
         if (!/^(w-|review-w-).+\.md$/.test(name)) continue;
         try {
-          cur.set(name, statSync13(join51(dir, name)).mtimeMs);
+          cur.set(name, statSync15(join52(dir, name)).mtimeMs);
         } catch {
         }
       }
@@ -58428,7 +58950,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       let size;
       let exists = true;
       try {
-        size = statSync13(e.path).size;
+        size = statSync15(e.path).size;
       } catch {
         exists = false;
       }
@@ -58551,6 +59073,11 @@ provider=${opts.provider ?? "default"}` : void 0,
       clearTimeout(s.pmKeepaliveTimer);
       s.pmKeepaliveTimer = null;
     }
+    if (s.rateLimitTimer) {
+      clearTimeout(s.rateLimitTimer);
+      s.rateLimitTimer = null;
+      this.persistRateLimitBackoff(id2, void 0, void 0);
+    }
     this.closeOpenDispatches(id2, "failed", "\u4F1A\u8BDD\u5220\u9664\uFF0C\u56DE\u5408\u4E2D\u65AD", true, false, void 0, "backlog");
     this.sessions.delete(id2);
     this.lastStoreTodos.delete(id2);
@@ -58639,16 +59166,16 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.logs.splice(i, 1);
     this.bus.emit(id2, "SESSION_LOG_PATCH", { remove_id: entryId });
   }
-  setRemoteMode(id2, enabled) {
+  setRemoteMode(id2, enabled2) {
     const s = this.sessions.get(id2);
     if (!s || !s.state.external) return;
-    s.state.remote_mode = enabled;
+    s.state.remote_mode = enabled2;
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      remote_mode: enabled,
+      remote_mode: enabled2,
       updated_at: s.state.updated_at
       // #271：帧完整性
     });
@@ -58665,6 +59192,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       // boot 补水时刻固化成活跃时刻 + 双端客户端 fallback 伪造接收时刻，双洗）
       updated_at: s.state.updated_at
     });
+    this.maybeProposePmAppointment();
   }
   clearExternalCliPid(id2) {
     const s = this.sessions.get(id2);
@@ -58774,6 +59302,13 @@ provider=${opts.provider ?? "default"}` : void 0,
         case "COMMAND_ARTIFACT_FETCH": {
           return this.boardCmds.COMMAND_ARTIFACT_FETCH(cmd, by);
         }
+        case "COMMAND_TELEMETRY_LINK": {
+          const tp2 = cmd.payload;
+          if (tp2.get === "summary") {
+            return { command_id: cmd.command_id, ok: true, data: linkSummary(this.cfg.dataDir) };
+          }
+          return { command_id: cmd.command_id, ok: true, data: ingestLinkEvents(this.cfg.dataDir, tp2.events) };
+        }
         case "COMMAND_ORG_ACTION": {
           return this.boardCmds.COMMAND_ORG_ACTION(cmd, by);
         }
@@ -58823,7 +59358,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir18()) {
       this.cfg.defaultCwd = cwd;
       try {
-        writeFileSync27(join51(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+        writeFileSync27(join52(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
       } catch {
       }
     }
@@ -59278,6 +59813,15 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (ok2) {
           this.transition(managed.state.session_id, "DONE", "turn-end");
           managed.state.done_reason = reason;
+          if (managed.rateLimitStreak || managed.rateLimitBackoffUntil) {
+            managed.rateLimitStreak = void 0;
+            managed.rateLimitBackoffUntil = void 0;
+            this.persistRateLimitBackoff(managed.state.session_id, void 0, void 0);
+            if (managed.rateLimitTimer) {
+              clearTimeout(managed.rateLimitTimer);
+              managed.rateLimitTimer = null;
+            }
+          }
           if (managed.state.auth_hint) managed.state.auth_hint = void 0;
           this.bus.emit(managed.state.session_id, "SESSION_DONE", {
             terminal_reason: reason,
@@ -59287,6 +59831,30 @@ provider=${opts.provider ?? "default"}` : void 0,
         } else {
           this.transition(managed.state.session_id, "ERROR", "turn-end");
           managed.state.last_error = reason;
+          if (classifyDispatchFailure(reason) === "model_overload") {
+            const streak = managed.rateLimitStreak = (managed.rateLimitStreak ?? 0) + 1;
+            const delay = backoffDelayMs(streak);
+            const until = Date.now() + delay;
+            managed.rateLimitBackoffUntil = until;
+            this.persistRateLimitBackoff(managed.state.session_id, until, streak);
+            const hhmmss = new Date(until).toLocaleTimeString("zh-CN", { hour12: false });
+            managed.state.action_summary = `\u9650\u6D41\u9000\u907F\u4E2D\uFF08\u7B2C ${streak} \u6B21\uFF0C\u4E0B\u6B21\u5C1D\u8BD5 ${hhmmss}\uFF09`;
+            const entry = { kind: "system", text: `API \u9650\u6D41\uFF08429/\u901F\u7387\u9650\u5236\uFF09\u2014\u2014\u9000\u907F ${Math.round(delay / 1e3)}s\uFF08\u4E0B\u6B21\u5C1D\u8BD5 ${hhmmss}\uFF09\uFF0C\u5230\u70B9\u81EA\u52A8\u6062\u590D\uFF0C\u65E0\u9700\u624B\u52A8\u5904\u7406`, ts: Date.now() };
+            managed.logs.push(entry);
+            if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500);
+            this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+            this.emitUpdated(managed, true);
+            this.emitChainAudit("rate-limit-backoff", `${managed.state.session_id.slice(0, 12)} \u9650\u6D41\u9000\u907F streak=${streak} ${Math.round(delay / 1e3)}s\uFF08until ${hhmmss}\uFF09`);
+            if (managed.rateLimitTimer) clearTimeout(managed.rateLimitTimer);
+            managed.rateLimitTimer = setTimeout(() => {
+              managed.rateLimitBackoffUntil = void 0;
+              managed.rateLimitTimer = null;
+              if (managed.state.action_summary.startsWith("\u9650\u6D41\u9000\u907F\u4E2D")) managed.state.action_summary = "\u9650\u6D41\u9000\u907F\u7ED3\u675F\uFF0C\u7B49\u5F85\u7EED\u8DD1";
+              this.emitUpdated(managed, true);
+              if (dutyEnabled()) this.feedPM("rate_limit_clear");
+            }, delay);
+            managed.rateLimitTimer.unref?.();
+          }
           const authHint = authFailureHint(reason, managed.state.engine);
           if (authHint) {
             managed.state.auth_hint = authHint;
@@ -59344,7 +59912,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       resumePending: s.resumePending,
       resumeCooldownUntil: s.resumeCooldownUntil,
       now: Date.now(),
-      idleStreak: s.pmKeepaliveStreak
+      idleStreak: s.pmKeepaliveStreak,
+      rateLimitBackoffUntil: this.backoffUntilOf(s.state.session_id)
+      // R1（A-P1-2）：合并读（内存∨持久侧账）
     });
     if (!check()) return;
     s.pmKeepaliveTimer = setTimeout(() => {
@@ -59728,8 +60298,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     const keep = [];
     let saved = 0;
     for (const s of this.sessions.values()) {
-      const pinned2 = file.includes(s.state.session_id);
-      if (pinned2) {
+      const pinned = file.includes(s.state.session_id);
+      if (pinned) {
         keep.push(s.state.session_id);
         const was = s.state.pinned;
         s.state.pinned = true;
@@ -59809,7 +60379,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (this.titleOverrides[anchor.leader_session_id]) {
         delete this.titleOverrides[anchor.leader_session_id];
         try {
-          writeFileSync27(join51(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+          writeFileSync27(join52(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
         } catch {
         }
       }
@@ -59979,7 +60549,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   setTitleOverride(id2, title) {
     this.titleOverrides[id2] = title;
     try {
-      writeFileSync27(join51(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+      writeFileSync27(join52(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
     } catch {
     }
     const s = this.sessions.get(id2);
@@ -60249,6 +60819,12 @@ provider=${opts.provider ?? "default"}` : void 0,
       } catch {
       }
     }
+    queueMicrotask(() => {
+      try {
+        this.drainDispatchQueue("");
+      } catch {
+      }
+    });
   }
   // ===== W-LEADFIX resume 熔断与自动恢复闸门 =====
   // 生产实证（2026-10-09 深夜，org Leader 0f6906c5）：Leader CLI 死后值守喂活/派单
@@ -60328,12 +60904,73 @@ provider=${opts.provider ?? "default"}` : void 0,
   // 账与台账不对称、离线端重启后看不到「哪些单被打断」（PM R1 终审 P1-2）。补记
   // 豁免的只有熟手路由评价（recordRoutingResult 不经此，维持原口径：relay 重启不是
   // worker 的账）
+  /** R1-B-F3：events 尾账捞会话最新 cli_pid（pid 帧被压缩/挤出后回放态缺 pid 的
+   * 兜底源）——2MB 尾窗反向扫（leader-dispatch scan_alive 同款手法），快筛 sid+
+   * cli_pid 双词再 parse；只在守卫判活缺 pid 时调用（boot 一次性，非常态热路径）。 */
+  cliPidFromEventsTail(sid) {
+    try {
+      const p = join52(this.cfg.dataDir, "events.ndjson");
+      const size = statSync15(p).size;
+      const fd2 = openSync4(p, "r");
+      try {
+        const len = Math.min(size, 2097152);
+        const buf = Buffer.alloc(len);
+        readSync3(fd2, buf, 0, len, size - len);
+        for (const line of buf.toString("utf-8").split("\n").reverse()) {
+          const t = line.trim();
+          if (!t.includes(sid) || !t.includes("cli_pid")) continue;
+          try {
+            const d2 = JSON.parse(t);
+            if (d2.session_id === sid && typeof d2.payload?.cli_pid === "number" && d2.payload.cli_pid > 0) return d2.payload.cli_pid;
+          } catch {
+          }
+        }
+      } finally {
+        closeSync4(fd2);
+      }
+    } catch {
+    }
+    return void 0;
+  }
   closeHungDispatchRows() {
-    const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
+    const hung = [];
+    {
+      const byId = /* @__PURE__ */ new Map();
+      try {
+        for (const line of readFileSync43(dispatchLogPath(), "utf-8").split("\n")) {
+          const t = line.trim();
+          if (!t) continue;
+          try {
+            const r = JSON.parse(t);
+            if (typeof r.id === "string" && r.id && typeof r.status === "string") byId.set(r.id, r);
+          } catch {
+          }
+        }
+      } catch {
+      }
+      for (const e of byId.values()) if (e.status === "running" || e.status === "dispatched") hung.push(e);
+    }
     if (!hung.length) return;
     const bySt = listGroupsByStatus();
     const scanGids = [...bySt.active, ...bySt.parked].map((g2) => g2.id);
     for (const e of hung) {
+      if (e.session_id) {
+        const s = this.sessions.get(e.session_id);
+        const wpid = s?.state.external ? s.state.cli_pid && s.state.cli_pid > 0 ? s.state.cli_pid : this.cliPidFromEventsTail(e.session_id) : void 0;
+        if (wpid && wpid > 0) {
+          let alive2 = false;
+          try {
+            process.kill(wpid, 0);
+            alive2 = true;
+          } catch {
+            alive2 = false;
+          }
+          if (alive2) {
+            this.emitChainAudit("restart-skip-live-worker", `dispatch=${e.id.slice(0, 8)} session=${e.session_id.slice(0, 8)} pid=${wpid}${s?.state.cli_pid === wpid ? "" : "(events \u5C3E\u8D26\u515C\u5E95\u6E90)"} \u6D3B\u2014\u2014\u8DF3\u8FC7\u91CD\u542F\u6E05\u626B\uFF08\u56DE\u5408\u5728\u9014\uFF0C\u5F85\u771F\u5B9E\u7EC8\u6001\u6536\u53E3\uFF09`);
+            continue;
+          }
+        }
+      }
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD" });
       if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
@@ -60527,8 +61164,31 @@ ${lines.join("\n")}
   }
   notifyDispatchClosed(e, status, receipt, workerSessionId, interrupted = false) {
     try {
-      const cleared = scanClearWorktreeLocks(e.id);
+      const guarded = [];
+      const cleared = scanClearWorktreeLocks(e.id, void 0, (d2) => {
+        if (worktreeDirty(d2)) {
+          guarded.push(d2);
+          return true;
+        }
+        return false;
+      });
       if (cleared.length) this.emitChainAudit("dispatch-close", `worktree \u9501\u968F\u6536\u53E3\u91CA\u653E: ${cleared.map((d2) => d2.split("/").pop()).join(",")}`);
+      if (guarded.length) {
+        for (const d2 of guarded) this.emitChainAudit("wt-guard", `\u810F\u6811\u4E0D\u6E05\u9501\uFF08\u672A\u63D0\u4EA4\u6539\u52A8\u5728\u6811\uFF0C\u9501\u7559\u5B88 2h \u9632\u88F8\u5954\uFF09\uFF1A${d2}\u2014\u2014\u6536\u53E3\u5355 ${e.id.slice(0, 8)}\uFF08${truncate2(receipt, 40)}\uFF09`);
+        const wtTxt = `[\u4EA4\u4ED8\u7269\u5931\u8E2A] \u5355 ${e.id.slice(0, 8)} ${status}\uFF08${truncate2(receipt, 40)}\uFF09\u4F46 worktree ${guarded.map((d2) => d2.split("/").pop()).join(",")} \u6709\u672A\u63D0\u4EA4\u6539\u52A8\u2014\u2014\u9501\u5DF2\u7559\u5B88\uFF082h \u9501\u7A97\u5185\uFF09\uFF0C\u5C3D\u5FEB\u4ECE ${guarded.join(", ")} \u62A2\u6551\uFF08W-TREEGC\uFF09`;
+        for (const d2 of guarded) {
+          this.upsertNotification("system", `wt-guard-${e.id}-${d2.split("/").pop() || "wt"}`, this.leaderId ?? "leaderless", {
+            title: "\u810F\u6811\u7A3F\u4EF6\u60AC\u7A7A",
+            body: wtTxt,
+            severity: "waiting",
+            group: "attention",
+            actionable: true,
+            domain: "session",
+            returnPath: "/"
+          });
+        }
+        this.notifyLeaderSystem(wtTxt);
+      }
     } catch {
     }
     this.emitChainAudit("dispatch-close", `id=${e.id.slice(0, 8)} status=${status} worker=${workerSessionId.slice(0, 12)} receipt=${truncate2(receipt, 60)}`);
@@ -60594,7 +61254,7 @@ ${lines.join("\n")}
   // 直接写 notification ledger」），非 EventBus。
   appendDutyRound(r) {
     try {
-      appendFileSync6(join51(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
+      appendFileSync7(join52(this.cfg.dataDir, "duty-rounds.ndjson"), `${JSON.stringify({
         kind: "PM_DUTY_ROUND",
         v: 1,
         feed_id: r.feed_id,
@@ -60736,20 +61396,47 @@ ${lines.join("\n")}
   dutyTargetId() {
     const ov2 = readPmOverride();
     if (ov2 && ov2.cli_pid > 0 && readCollabMode(this.cfg.dataDir) === "no-leader") {
-      try {
-        process.kill(ov2.cli_pid, 0);
-        return ov2.session_id;
-      } catch {
-      }
+      const l = this.pmOverrideLiveness(ov2);
+      if (l === "alive") return ov2.session_id;
+      if (l === "stale") this.emitChainAudit("pm-override-stale-pid", `session=${ov2.session_id.slice(0, 8)} override pid=${ov2.cli_pid} \u4F46\u5728\u518C pid \u5DF2\u6362\u4EE3\u2014\u2014pid \u56DE\u6536\u5360\u4F4D\u89C6\u6B7B\uFF0C\u503C\u5B88\u4F4D\u6E05\u6863\uFF08claim/\u63D0\u540D\u6062\u590D\u53EF\u8FBE\uFF09`);
       clearPmOverride();
     }
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
+    return null;
+  }
+  /** R1-B-F2 复合判活："alive"=pid 活且绑定一致（或会话不在册的外部冷窗）/
+   * "stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）/"dead"=pid 死。
+   * stale 与 dead 同清档（读路径顺手清档语义维持），区别只在审计措辞与定性。 */
+  pmOverrideLiveness(ov2) {
+    try {
+      process.kill(ov2.cli_pid, 0);
+    } catch {
+      return "dead";
+    }
+    const s = this.sessions.get(ov2.session_id);
+    if (s?.state.cli_pid && s.state.cli_pid > 0 && s.state.cli_pid !== ov2.cli_pid) return "stale";
+    return "alive";
+  }
+  /** [W-PMSEAT] 值守候选现算（原 dutyTargetId 回落扫描搬此，提案专用）：最近活跃+
+   * pid 活（external 优先）且**不在 appoint_rejected 否决档**（用户 ✗ 过的会话不再
+   * 自动提名——防「否决→下一边沿再提名」的轰炸环；显式 org pm claim 仍可提案，
+   * 用户改主意有手动通道）。消费面（喂活/pm 视图/pm_standby）一律走 dutyTargetId
+   * （只认确认位），本口只喂 maybeProposePmAppointment。 */
+  dutyCandidateId() {
+    if (readCollabMode(this.cfg.dataDir) !== "no-leader") return null;
+    const ov2 = readPmOverride();
+    if (ov2 && ov2.cli_pid > 0) {
+      if (this.pmOverrideLiveness(ov2) === "alive") return null;
+      clearPmOverride();
+    }
+    const rejected = new Set(readAppointRejected().map((r) => r.session_id));
     let best = null;
     let bestAt = -1;
     let bestIsExternal = false;
     for (const s of this.sessions.values()) {
       if (s.state.historical) continue;
       if (this.leaderId && s.state.session_id === this.leaderId) continue;
+      if (rejected.has(s.state.session_id)) continue;
       const pid = s.state.cli_pid;
       if (!pid) continue;
       try {
@@ -60766,6 +61453,135 @@ ${lines.join("\n")}
       }
     }
     return best;
+  }
+  /** [W-PMSEAT] 值守任命提案边（1104 根治件①）：候选在席而无在确认任命 → 出
+   * pm-appoint 确认卡进用户待拍板（org-confirms 通道→awaituser 聚合清单自动含）。
+   * 幂等三闸：①该席已有待决 pm-appoint 卡不重提；②他人卡在决不抢提（一次一张，
+   * 用户决完再轮到当前候选）；③候选进否决档不提（dutyCandidateId 已滤）。自愈：
+   * 待决卡所属会话已死 → auto 否决消卡（by=auto:pm-dead）再提名当前候选。提案镜像
+   * duty.json pm_appoint（pm 视图 pending_appoint 面数据源）。全部尽力而为——异常
+   * 绝不阻断调用主路径。挂点：ensureExternal 两分支/setExternalCliPid（pid 落位=候选
+   * 判活前提齐）/feedPM 空目标分支（turn_end/worker_done/confirm-decided 事件边兜底）。 */
+  maybeProposePmAppointment() {
+    try {
+      if (readCollabMode(this.cfg.dataDir) !== "no-leader") return;
+      if (!dutyEnabled()) return;
+      if (readPluginConfig().duty === false) return;
+      const candidate = this.dutyCandidateId();
+      for (const c of listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending")) {
+        const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+        const pid = Number(c.payload.cli_pid) || 0;
+        let alive2 = !!sid && pid > 0;
+        if (alive2) {
+          try {
+            process.kill(pid, 0);
+          } catch {
+            alive2 = false;
+          }
+        }
+        if (!alive2) {
+          decideConfirm(c.id, false, "auto:pm-dead");
+          clearDutyAppoint(sid);
+          this.emitChainAudit("pm-appoint-auto-dead", `session=${sid.slice(0, 8)} pid=${pid} \u5F85\u51B3\u671F\u95F4\u9000\u51FA\u2014\u2014auto \u6D88\u5361\uFF08\u4E0D\u5165\u5426\u51B3\u6863\uFF0C\u590D\u6D3B\u53EF\u518D\u63D0\u540D\uFF09`);
+        }
+      }
+      const stillPending = listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending");
+      if (!candidate) return;
+      const mine = stillPending.find((x) => x.payload.sid === candidate);
+      if (mine) {
+        const ap2 = readDutyAppoint();
+        if (!ap2 || ap2.session_id !== candidate) {
+          const s2 = this.sessions.get(candidate);
+          setDutyAppoint({ session_id: candidate, cli_pid: s2?.state.cli_pid ?? 0, cwd: s2?.state.cwd ?? "", origin: mine.payload.origin === "claim" ? "claim" : "auto", proposed_at: mine.created_at });
+        }
+        return;
+      }
+      if (stillPending.length > 0) return;
+      const s = this.sessions.get(candidate);
+      if (!s) return;
+      setDutyAppoint({ session_id: candidate, cli_pid: s.state.cli_pid ?? 0, cwd: s.state.cwd ?? "", origin: "auto", proposed_at: Date.now() });
+      addConfirm({
+        kind: "pm-appoint",
+        title: `\u503C\u5B88 PM \u4EFB\u547D\uFF1A${s.state.title ? truncate2(s.state.title, 24) : candidate.slice(0, 8)}`,
+        reason: `no-leader \u6A21\u5F0F\u503C\u5B88\u4F4D\u5F53\u524D\u4E3A\u7A7A\uFF0C\u5019\u9009\u4F1A\u8BDD ${candidate.slice(0, 8)}\uFF08${s.state.external ? "external" : "managed"}\xB7${truncate2(s.state.cwd || "", 48)}\uFF09\u7B49\u5F85\u4EFB\u547D\u2014\u2014\u6279\u51C6\u540E\u5F00\u59CB\u503C\u5B88\u5582\u6D3B\uFF1B\u5426\u51B3\u5219\u4E0D\u8BA4\u9886\uFF08\u8BE5\u4F1A\u8BDD\u4E0D\u518D\u81EA\u52A8\u63D0\u540D\uFF09`,
+        payload: { sid: candidate, cli_pid: s.state.cli_pid ?? 0, cwd: s.state.cwd ?? "", origin: "auto" }
+      });
+      this.emitOrgState();
+      this.emitChainAudit("pm-appoint-propose", `session=${candidate.slice(0, 8)} pid=${s.state.cli_pid ?? 0} origin=auto cwd=${truncate2(s.state.cwd || "", 60)}`);
+    } catch {
+    }
+  }
+  /** [W-PMSEAT] 收割收尾联检（1104 根治件③，dispatch 终态钩子注入）：该 dispatch_id
+   * 关联的开着 PR（台账段行 pr_url/pr_state 快照，板卡 prchip 面兜底）与 review-ledger
+   * 段行——PR 未 merged 即挂 dispatch-closeout 确认卡进 PM 待办（复用待拍板聚合），
+   * 不允许静默漏。✓=通知值守 PM 执行收口（relay 不代关 PR），✗=知情放弃；pr-report
+   * merged 上报自动消单（本函数只建卡，消单在 pr-report 面）。同 id 待决收口卡不重提。
+   * 段行语义（readDispatchLogFile 同 id 收敛末行，历史须读 ndjson 原始账）：终态行的
+   * **前一段行**=in_review ⇒ 本收口=review-ledger end（leader-harvest --merge 已
+   * squash-merge 后才写 end，缺席硬拒）——PR 已收口，跳过不误报；前态=running/
+   * dispatched（closeOpenDispatches 直收）而 PR 面开着 ⇒ 正是 1104 PR#9 孤儿形态。 */
+  closeoutJointCheck(e) {
+    try {
+      if (!e.id || e.drill === true) return;
+      let rows = [];
+      try {
+        for (const line of readFileSync43(dispatchLogPath(), "utf-8").split("\n")) {
+          const t = line.trim();
+          if (!t) continue;
+          try {
+            const r = JSON.parse(t);
+            if (r && r.id === e.id) rows.push(r);
+          } catch {
+          }
+        }
+      } catch {
+      }
+      const prev = rows.length >= 2 ? rows[rows.length - 2] : void 0;
+      if (prev?.status === "in_review") {
+        const pend2 = listPendingConfirms().find((c) => c.kind === "dispatch-closeout" && c.status === "pending" && c.payload?.dispatch_id === e.id);
+        if (pend2) {
+          const d2 = decideConfirm(pend2.id, false, "auto:review-end");
+          if (d2.ok) {
+            try {
+              this.applyConfirmEffects(d2.confirm);
+            } catch {
+            }
+          }
+        }
+        return;
+      }
+      let prUrl = "";
+      let prState = "";
+      for (const r of [...rows].reverse()) {
+        if (r.pr_url || r.pr_state) {
+          prUrl = r.pr_url ?? "";
+          prState = r.pr_state ?? "";
+          break;
+        }
+      }
+      if (!prUrl) {
+        for (const g2 of listGroups()) {
+          const ent = loadBoard(g2.id).entries.find((x) => x.dispatch_id === e.id);
+          if (ent?.pr_url) {
+            prUrl = ent.pr_url;
+            prState = ent.pr_state ?? "";
+            break;
+          }
+        }
+      }
+      if (!prUrl || prState === "merged") return;
+      const reviewSeg = rows.some((r) => r.status === "in_review");
+      if (listPendingConfirms().some((c) => c.kind === "dispatch-closeout" && c.payload?.dispatch_id === e.id)) return;
+      addConfirm({
+        kind: "dispatch-closeout",
+        title: `\u6536\u53E3\u5F85\u529E\uFF1APR \u672A\u5173 \xB7 ${e.title ? truncate2(e.title, 32) : e.id.slice(0, 8)}`,
+        reason: `\u6D3E\u5355\u5DF2${e.status === "done" ? "\u4EA4\u4ED8\u6536\u53E3" : "\u5931\u8D25\u6536\u53E3"}\u4F46\u5173\u8054 PR \u4ECD\u5F00\u7740\uFF08${prState || "ci_unknown"}${reviewSeg ? "\uFF0C\u5BA1\u67E5\u6BB5\u884C\u672A\u6536\u53E3" : ""}\uFF09\u2014\u2014PM \u6536\u53E3\uFF08leader-harvest --merge \u6216 gh pr close\uFF09\u540E\u81EA\u52A8\u6D88\u5355\uFF1B\u2713=\u4EA4 PM \u5904\u7406\uFF0C\u2717=\u77E5\u60C5\u653E\u5F03`,
+        payload: { dispatch_id: e.id, pr_url: prUrl, pr_state: prState || "ci_unknown", session_id: e.session_id ?? "", review_segment: reviewSeg }
+      });
+      this.emitOrgState();
+      this.emitChainAudit("closeout-pending", `dispatch=${e.id.slice(0, 8)} pr_state=${prState || "ci_unknown"}${reviewSeg ? " review_segment=open" : ""}`);
+    } catch {
+    }
   }
   // ---------- #279 野生会话纳管：SessionStart 广播文案 ----------
   // 给「用户项目目录直接开的 CLI 会话」的只读在场声明：它们此前对 cc-deck 零感知
@@ -60793,7 +61609,7 @@ ${lines.join("\n")}
     }
     const pmAlive = !!this.dutyTargetId();
     const rulesPath2 = rulesMirrorPath();
-    const orgMd = join51(orgDir(), "CLAUDE.md");
+    const orgMd = join52(orgDir(), "CLAUDE.md");
     return [
       `[cc-deck] \u672C\u673A\u6709 cc-deck \u56E2\u961F\u8C03\u5EA6\uFF08PM \u503C\u5B88\uFF1A${pmAlive ? "\u5728\u5C97 \u2713" : "\u5F53\u524D\u65E0\u5728\u5C97 PM"}\uFF09\u3002${groupsText}`,
       // 审查 B-P1-1 修正：值守链路=feedPM 喂活提醒（CCR_PM_DUTY env 门+产品门控制），
@@ -60814,13 +61630,20 @@ ${lines.join("\n")}
     const envOn = dutyEnabled();
     const productOn = readPluginConfig().duty !== false;
     const target = envOn ? this.dutyTargetId() : null;
+    let pendingAppoint;
+    if (envOn && productOn && !target) {
+      const card = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending");
+      const sid = typeof card?.payload.sid === "string" ? card.payload.sid : "";
+      if (card && sid) pendingAppoint = { session_id: sid, origin: card.payload.origin === "claim" ? "claim" : "auto", proposed_at: card.created_at };
+    }
     return {
       mode,
       session_id: target ?? "",
       alive: !!target,
       duty_enabled: envOn && productOn,
       product_switch: productOn,
-      ...!envOn ? { hint: "\u503C\u5B88\u73AF\u5883\u95E8\u5173\u95ED\uFF08CCR_PM_DUTY=0 \u6216 CCR_NO_LEADER=1\uFF09\u2014\u2014\u503C\u5B88\u94FE\u6574\u4F53\u505C\u6446\uFF0C\u975E\u65E0 PM \u76EE\u6807" } : !productOn ? { hint: "\u503C\u5B88\u4EA7\u54C1\u603B\u95F8\u5173\uFF08~/.cc-deck/config.json duty=false\uFF09\u2014\u2014\u5168\u7EC4\u505C\u6B62\u503C\u5B88 feed" } : target ? {} : { hint: "\u5F53\u524D\u65E0\u5728\u5C97 PM\uFF0C\u5206\u8BCA\u6682\u7F13\u6216\u8D70\u63A5\u7BA1\u6D41\u7A0B" }
+      ...pendingAppoint ? { pending_appoint: pendingAppoint } : {},
+      ...!envOn ? { hint: "\u503C\u5B88\u73AF\u5883\u95E8\u5173\u95ED\uFF08CCR_PM_DUTY=0 \u6216 CCR_NO_LEADER=1\uFF09\u2014\u2014\u503C\u5B88\u94FE\u6574\u4F53\u505C\u6446\uFF0C\u975E\u65E0 PM \u76EE\u6807" } : !productOn ? { hint: "\u503C\u5B88\u4EA7\u54C1\u603B\u95F8\u5173\uFF08~/.cc-deck/config.json duty=false\uFF09\u2014\u2014\u5168\u7EC4\u505C\u6B62\u503C\u5B88 feed" } : target ? {} : pendingAppoint ? { hint: `\u503C\u5B88\u4EFB\u547D\u5F85\u7528\u6237\u51B3\u8BAE\uFF1A\u5019\u9009\u4F1A\u8BDD ${pendingAppoint.session_id.slice(0, 8)}\uFF08${pendingAppoint.origin === "claim" ? "\u4E3B\u52A8\u8BA4\u9886" : "\u81EA\u52A8\u63D0\u540D"}\uFF09\u2014\u2014\u6279\u51C6\u540E\u5F00\u59CB\u503C\u5B88\u5582\u6D3B\uFF0C\u5426\u51B3\u4E0D\u8BA4\u9886` } : { hint: "\u503C\u5B88\u4F4D\u7A7A\uFF08no-leader \u65E0\u786E\u8BA4\u4EFB\u547D\uFF09\u2014\u2014\u5916\u90E8\u4F1A\u8BDD\u6D3B\u8DC3\u65F6\u81EA\u52A8\u63D0\u540D\u51FA\u4EFB\u547D\u5361\uFF0C\u6216 org pm claim \u4E3B\u52A8\u8BA4\u9886\uFF08\u672A\u51B3\u96F6\u5582\u6D3B\uFF09" }
     };
   }
   // 喂活单一入口（019 §3.3 feedPM）。判定用 leader-duty 纯函数 evaluateLeaderActionableWork
@@ -60862,11 +61685,12 @@ ${lines.join("\n")}
         });
       } catch {
       }
+      this.maybeProposePmAppointment();
       return;
     }
     const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
-    const leader2 = this.sessions.get(targetId);
-    if (leader2?.state.status === "WORKING") return;
+    const leader = this.sessions.get(targetId);
+    if (leader?.state.status === "WORKING") return;
     const from = Date.now();
     const feedId = randomUUID13();
     const generation = randomUUID13();
@@ -61059,10 +61883,10 @@ ${lines.join("\n")}
     try {
       const dir = acceptanceDir();
       return listAcceptances(50).filter((s) => !s.submitted).map((s) => {
-        const p = join51(dir, `${s.id}.json`);
+        const p = join52(dir, `${s.id}.json`);
         let mtime = 0;
         try {
-          mtime = statSync13(p).mtimeMs;
+          mtime = statSync15(p).mtimeMs;
         } catch {
         }
         return { sid: s.id, receipt_path: p, mtime, reviewed: false };
@@ -61469,6 +62293,10 @@ ${lines.join("\n")}
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    if (action === "pm-claim" || action === "pm-release") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
   // org 命令审计行（dispatch-log 台账通道，append-only；org.ts 口径：审计不进
@@ -61588,12 +62416,12 @@ ${lines.join("\n")}
         }
         case "auth-bypass": {
           const on2 = bool("on");
-          const file = join51(this.cfg.dataDir, "permission-auth.json");
+          const file = join52(this.cfg.dataDir, "permission-auth.json");
           if (on2) {
             writeFileSync27(file, JSON.stringify({ bypass_authorized: true, authorized_by: str2("by") || "org-cli", scope: "org-dispatch+create", updated_at: Date.now() }, null, 2) + "\n", "utf-8");
           } else {
             try {
-              rmSync8(file, { force: true });
+              rmSync9(file, { force: true });
             } catch {
             }
           }
@@ -61745,6 +62573,18 @@ ${lines.join("\n")}
           }
           this.emitBoard(hit.gid);
           this.emitChainAudit("pr-report", `\u5361 ${hit.entry.id}\u300C${truncate2(hit.entry.text, 40)}\u300DPR \u5FBD\u7AE0\uFF1A${prUrl ? `${prUrl} \xB7 ${prStateRaw || "ci_unknown"}` : "\u6E05\u9664"}`);
+          if (prStateRaw === "merged") {
+            const pend = listPendingConfirms().find((c) => c.kind === "dispatch-closeout" && c.status === "pending" && c.payload?.dispatch_id === dispatchId);
+            if (pend) {
+              const d2 = decideConfirm(pend.id, false, "auto:pr-merged");
+              if (d2.ok) {
+                try {
+                  this.applyConfirmEffects(d2.confirm);
+                } catch {
+                }
+              }
+            }
+          }
           return { ok: true, data: { entry: u.entry } };
         }
         case "suggest-hold": {
@@ -61835,6 +62675,16 @@ ${lines.join("\n")}
           this.emitOrgState();
           return { ok: true, data: { needsConfirm: true, confirm, sid: self2.state.session_id } };
         }
+        case "pm-release": {
+          if (readCollabMode(this.cfg.dataDir) !== "no-leader") {
+            return { ok: false, error: "\u5F53\u524D\u4E3A leader \u534F\u4F5C\u6A21\u5F0F\uFF0C\u503C\u5B88\u4F4D\u7531 Leader \u4F1A\u8BDD\u627F\u62C5\u2014\u2014\u65E0 release \u9762" };
+          }
+          const ov2 = readPmOverride();
+          if (!ov2) return { ok: true, data: { released: false, note: "\u503C\u5B88\u4F4D\u672C\u5C31\u7A7A\uFF08\u65E0 override\uFF09" } };
+          clearPmOverride();
+          this.emitChainAudit("pm-release", `session=${ov2.session_id.slice(0, 8)} pid=${ov2.cli_pid}\u2014\u2014\u503C\u5B88\u4F4D\u663E\u5F0F\u8BA9\u51FA\uFF08org pm release\uFF09\uFF0C\u5582\u6D3B\u5373\u523B\u56DE\u843D\u7A7A\u5E2D\uFF08\u4E0B\u8F6E\u63D0\u540D/claim \u53EF\u8FBE\uFF09`);
+          return { ok: true, data: { released: true, pm_session_id: ov2.session_id } };
+        }
         case "pm-claim": {
           if (readCollabMode(this.cfg.dataDir) !== "no-leader") {
             return { ok: false, error: "\u5F53\u524D\u4E3A leader \u534F\u4F5C\u6A21\u5F0F\uFF0C\u503C\u5B88\u4F4D\u7531 Leader \u4F1A\u8BDD\u627F\u62C5\u2014\u2014org pm claim \u5C5E no-leader\uFF08\u53CC\u673A\u503C\u5B88\uFF09\u573A\u666F" };
@@ -61843,11 +62693,50 @@ ${lines.join("\n")}
           if (!self2) return { ok: false, error: "\u672A\u5B9A\u4F4D\u5230\u4F60\u7684\u4F1A\u8BDD\u2014\u2014\u8BF7\u5728\u9879\u76EE\u76EE\u5F55\u5185\u8FD0\u884C org pm claim" };
           const pid = self2.state.cli_pid;
           if (!pid) return { ok: false, error: "\u4F1A\u8BDD\u65E0 CLI pid\uFF08\u5916\u90E8\u4F1A\u8BDD\u9700\u5728\u7EC8\u7AEF\u6D3B\u8DC3\u65F6 claim\uFF09" };
-          const r = setPmOverride({ session_id: self2.state.session_id, cli_pid: pid, cwd: self2.state.cwd || "", claimed_at: Date.now() });
-          if (!r.ok) return { ok: false, error: r.error ?? "claim \u5931\u8D25" };
+          const cur = this.pmDutyStatus();
+          if (cur.alive && cur.session_id === self2.state.session_id) {
+            return { ok: true, data: { pm_session_id: self2.state.session_id, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          }
+          if (cur.alive && cur.session_id) {
+            try {
+              this.pushExternalLog(cur.session_id, "system", `[\u503C\u5B88\u4F4D] \u4F1A\u8BDD ${self2.state.session_id.slice(0, 8)} \u5C1D\u8BD5 claim \u503C\u5B88\u4F4D\u88AB\u62D2\uFF08\u4F60\u5728\u4F4D\uFF0Cpid \u6D3B\uFF09\u2014\u2014\u5982\u9700\u79FB\u4EA4\u5148\u9000\u51FA\u7EC8\u7AEF\u8BA9 pid \u63A2\u6D3B\u5931\u6548\uFF0C\u6216\u7528\u6237\u9762\u677F\u6539\u9009`);
+            } catch {
+            }
+            try {
+              this.upsertNotification("system", "pm-claim-contested", void 0, {
+                title: "\u503C\u5B88\u4F4D\u8BA4\u9886\u88AB\u62D2\uFF1A\u4F60\u4ECD\u5728\u5C97",
+                body: truncate2(`\u4F1A\u8BDD ${self2.state.session_id.slice(0, 8)}\uFF08${truncate2(self2.state.cwd || "", 48)}\uFF09\u5C1D\u8BD5\u63A5\u7BA1\u503C\u5B88\u4F4D\u2014\u2014\u5DF2\u6309\u53CC PM \u4E92\u65A5\u62D2\u7EDD\uFF0C\u4F60\u4FDD\u6301\u503C\u5B88\u3002\u5982\u9700\u79FB\u4EA4\uFF1A\u8BA9\u4F4D\u4F1A\u8BDD\u9000\u51FA\u540E\u5BF9\u65B9\u518D claim\uFF0C\u6216\u7528\u6237\u9762\u677F\u51B3\u8BAE\u4EFB\u547D\u5361\u3002`, 200),
+                severity: "waiting",
+                group: "attention",
+                actionable: true,
+                sessionId: cur.session_id,
+                domain: "org",
+                returnPath: "/"
+              });
+            } catch {
+            }
+            this.emitChainAudit("pm-claim-rejected", `session=${self2.state.session_id.slice(0, 8)} \u649E\u6D3B\u503C\u5B88\u4F4D ${cur.session_id.slice(0, 8)}\u2014\u2014\u53CC PM \u4E92\u65A5\u62D2\u7EDD`);
+            return { ok: false, error: `\u503C\u5B88\u4F4D\u5DF2\u7531\u4F1A\u8BDD ${cur.session_id.slice(0, 8)} \u5360\u636E\uFF08\u8FDB\u7A0B\u6D3B\uFF09\u2014\u2014\u53CC PM \u4E92\u65A5\u62D2\u6536\u3002\u5982\u9700\u79FB\u4EA4\uFF1A\u73B0\u4EFB\u9000\u51FA\u7EC8\u7AEF\u540E\uFF08pid \u63A2\u6D3B\u5931\u6548\u81EA\u52A8\u817E\u4F4D\uFF09\u518D claim\uFF0C\u6216\u7B49\u7528\u6237\u51B3\u8BAE\u4EFB\u547D\u5361` };
+          }
+          const otherPending = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending" && c.payload?.sid !== self2.state.session_id);
+          if (otherPending) {
+            const otherSid = typeof otherPending.payload.sid === "string" ? otherPending.payload.sid : "";
+            return { ok: false, error: `\u5DF2\u6709\u503C\u5B88\u4EFB\u547D\u5F85\u7528\u6237\u51B3\u8BAE\uFF08\u5019\u9009\u4F1A\u8BDD ${otherSid.slice(0, 8)}\uFF09\u2014\u2014\u51B3\u5B8C\u518D claim\uFF0C\u9632\u53CC\u5361\u7ADE\u4E89` };
+          }
+          const ownPending = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending" && c.payload?.sid === self2.state.session_id);
+          if (ownPending) {
+            return { ok: true, data: { needsConfirm: true, confirm: ownPending, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          }
+          setDutyAppoint({ session_id: self2.state.session_id, cli_pid: pid, cwd: self2.state.cwd || "", origin: "claim", proposed_at: Date.now() });
+          const confirm = addConfirm({
+            kind: "pm-appoint",
+            title: `\u503C\u5B88 PM \u8BA4\u9886\uFF1A${self2.state.title ? truncate2(self2.state.title, 24) : self2.state.session_id.slice(0, 8)}`,
+            reason: `\u4F1A\u8BDD ${self2.state.session_id.slice(0, 8)}\uFF08${self2.state.external ? "external" : "managed"}\xB7${truncate2(self2.state.cwd || "", 48)}\uFF09\u4E3B\u52A8\u8BA4\u9886\u503C\u5B88\u4F4D\u2014\u2014\u6279\u51C6\u540E\u63A5\u7BA1\u503C\u5B88\u5582\u6D3B\uFF1B\u5426\u51B3\u5219\u4E0D\u8BA4\u9886\uFF08\u8BE5\u4F1A\u8BDD\u4E0D\u518D\u88AB\u81EA\u52A8\u63D0\u540D\uFF0C\u53EF\u518D claim \u63D0\u6848\uFF09`,
+            payload: { sid: self2.state.session_id, cli_pid: pid, cwd: self2.state.cwd || "", origin: "claim" }
+          });
           this.emitOrgState();
-          this.emitChainAudit("pm-claim", `session=${self2.state.session_id.slice(0, 8)} pid=${pid} cwd=${truncate2(self2.state.cwd || "", 60)}`);
-          return { ok: true, data: { pm_session_id: self2.state.session_id, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          this.emitChainAudit("pm-claim", `session=${self2.state.session_id.slice(0, 8)} pid=${pid} cwd=${truncate2(self2.state.cwd || "", 60)}\u2014\u2014\u63D0\u6848\u5F85\u7528\u6237\u51B3\u8BAE\uFF08\u672A\u51B3\u96F6\u5582\u6D3B\uFF09`);
+          return { ok: true, data: { needsConfirm: true, confirm, pm_session_id: "", collab_mode: readCollabMode(this.cfg.dataDir) } };
         }
         case "agent-teams": {
           const mode = str2("mode") === "on" ? "on" : "check";
@@ -61865,15 +62754,15 @@ ${lines.join("\n")}
           }
           try {
             const sandbox = !!process.env.CCR_ORG_DIR;
-            const p2 = sandbox ? join51(orgDir(), "agent-teams-settings.json") : join51(homedir18(), ".claude", "settings.json");
+            const p2 = sandbox ? join52(orgDir(), "agent-teams-settings.json") : join52(homedir18(), ".claude", "settings.json");
             let cur = {};
             try {
-              cur = JSON.parse(readFileSync42(p2, "utf-8"));
+              cur = JSON.parse(readFileSync43(p2, "utf-8"));
             } catch {
             }
             const env = { ...cur.env ?? {}, [VAR]: "1" };
             const next = { ...cur, env };
-            mkdirSync23(dirname14(p2), { recursive: true });
+            mkdirSync24(dirname15(p2), { recursive: true });
             writeFileSync27(p2, JSON.stringify(next, null, 2) + "\n", "utf-8");
             return { ok: true, data: { enabled: true, written: p2, hint: `\u5DF2\u5199\u5165 ${sandbox ? "\u6C99\u76D2\u955C\u50CF" : "~/.claude/settings.json"} env\u2014\u2014\u65B0\u5F00 CLI \u4F1A\u8BDD\u751F\u6548\uFF1B\u5F53\u524D\u5DF2\u5F00\u4F1A\u8BDD\u4E0D\u7EE7\u627F\uFF08Windows Terminal \u540C\u9650\uFF0C\u9700\u65B0\u4F1A\u8BDD\uFF09` } };
           } catch (e) {
@@ -61881,6 +62770,10 @@ ${lines.join("\n")}
           }
         }
         case "dispatch": {
+          if (readCollabMode(this.cfg.dataDir) === "no-leader") {
+            const duty = this.pmDutyStatus();
+            if (!duty.alive) this.emitChainAudit("dispatch-no-duty-pm", `dispatch=${String(str2("title") || "").slice(0, 40)}\u2014\u2014no-leader \u6A21\u5F0F\u6D3E\u5355\u65F6\u503C\u5B88\u4F4D\u7A7A\uFF08\u8C01\u5728\u6D3E/PM \u662F\u5426\u5931\u8054\uFF0C\u65F6\u5E8F\u5BF9\u8D26\u7528\uFF09`);
+          }
           if (p.engine !== void 0 && !isSessionEngine(p.engine)) return { ok: false, error: `\u672A\u77E5\u5F15\u64CE: ${String(p.engine)}` };
           return this.dispatchWorker({
             anchor: str2("anchor"),
@@ -62388,7 +63281,7 @@ ${lines.join("\n")}
           const tail2 = Number.isFinite(tailRaw) ? Math.max(1, Math.min(Math.trunc(tailRaw), 100)) : 20;
           const rows = [];
           try {
-            for (const line of readFileSync42(dispatchLogPath(), "utf-8").split("\n")) {
+            for (const line of readFileSync43(dispatchLogPath(), "utf-8").split("\n")) {
               const t = line.trim();
               if (!t) continue;
               try {
@@ -62408,7 +63301,7 @@ ${lines.join("\n")}
           const ids = [...byId.entries()].sort((a, b) => Math.max(...b[1].map((x) => x.ts ?? 0)) - Math.max(...a[1].map((x) => x.ts ?? 0))).slice(0, tail2);
           let auditLines = [];
           try {
-            auditLines = readFileSync42(join51(this.cfg.dataDir, "chain-audit.jsonl"), "utf-8").split("\n").filter((l) => l.trim()).map((l) => {
+            auditLines = readFileSync43(join52(this.cfg.dataDir, "chain-audit.jsonl"), "utf-8").split("\n").filter((l) => l.trim()).map((l) => {
               try {
                 return JSON.parse(l);
               } catch {
@@ -62742,10 +63635,89 @@ ${lines.join("\n")}
           }
           break;
         }
+        case "pm-appoint": {
+          const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+          const pid = Number(c.payload.cli_pid) || 0;
+          if (!sid) return fail("\u4EFB\u547D\u751F\u6548", { error: "\u5361\u8F7D\u8377\u7F3A sid\uFF08\u9648\u65E7\u5361\uFF09" });
+          let alive2 = pid > 0;
+          if (alive2) {
+            try {
+              process.kill(pid, 0);
+            } catch {
+              alive2 = false;
+            }
+          }
+          if (!alive2) {
+            clearDutyAppoint(sid);
+            this.emitChainAudit("pm-appoint-target-dead", `session=${sid.slice(0, 8)} pid=${pid} \u51B3\u8BAE\u65F6\u5DF2\u6B7B\u2014\u2014\u4EFB\u547D\u4F5C\u5E9F\u4E0D\u5165\u5426\u51B3\u6863\uFF08\u590D\u6D3B\u53EF\u518D\u63D0\u540D\uFF09`);
+            return fail("\u4EFB\u547D\u751F\u6548", { error: "\u5019\u9009\u4F1A\u8BDD\u8FDB\u7A0B\u5DF2\u9000\u51FA\u2014\u2014\u4EFB\u547D\u4F5C\u5E9F\uFF0C\u503C\u5B88\u4F4D\u4FDD\u6301\u7A7A\uFF08\u4E0B\u4E00\u5019\u9009\u81EA\u52A8\u63D0\u540D\uFF1B\u672C\u4F1A\u8BDD\u590D\u6D3B\u540E\u53EF\u518D\u88AB\u63D0\u540D\uFF09" });
+          }
+          const incumbent = readPmOverride();
+          if (incumbent && incumbent.session_id !== sid) {
+            const il2 = this.pmOverrideLiveness(incumbent);
+            if (il2 === "alive") {
+              this.emitChainAudit("pm-appoint-superseded-blocked", `\u5361\u5019\u9009 session=${sid.slice(0, 8)} \u51B3\u8BAE\u65F6\u5E2D\u4F4D\u5DF2\u6709\u6D3B\u503C\u5B88 PM session=${incumbent.session_id.slice(0, 8)}\u2014\u2014\u9648\u65E7\u5361\u4F5C\u5E9F\u4E0D\u8986\u5199\uFF08\u73B0\u4EFB\u65E0\u611F\u4FDD\u6301\uFF09`);
+              clearDutyAppoint(sid);
+              return fail("\u4EFB\u547D\u751F\u6548", { error: "\u5E2D\u4F4D\u5DF2\u6709\u503C\u5B88 PM \u5728\u4F4D\uFF08\u4F1A\u8BDD " + incumbent.session_id.slice(0, 8) + "\uFF09\u2014\u2014\u672C\u5361\u5DF2\u9648\u65E7\u4F5C\u5E9F\uFF1B\u5982\u9700\u79FB\u4EA4\u5148 org pm release \u6216\u7B49\u73B0\u4EFB\u9000\u51FA" });
+            }
+            clearPmOverride();
+          }
+          const cand = this.sessions.get(sid);
+          if (!cand || !cand.state.cli_pid || cand.state.cli_pid !== pid) {
+            if (cand) {
+              clearDutyAppoint(sid);
+              this.emitChainAudit("pm-appoint-target-pid-changed", `session=${sid.slice(0, 8)} \u5361\u8F7D pid=${pid} \u5728\u518C pid=${cand.state.cli_pid}\u2014\u2014\u51B3\u8BAE\u65F6\u5DF2\u6362\u4EE3\uFF0C\u4EFB\u547D\u4F5C\u5E9F\u4E0D\u5165\u5426\u51B3\u6863`);
+              return fail("\u4EFB\u547D\u751F\u6548", { error: "\u5019\u9009\u4F1A\u8BDD CLI \u5DF2\u91CD\u542F\uFF08pid \u6362\u4EE3\uFF09\u2014\u2014\u4EFB\u547D\u4F5C\u5E9F\uFF0C\u65B0 pid \u63D0\u540D\u53EF\u8FBE\uFF08\u4E0D\u5165\u5426\u51B3\u6863\uFF09" });
+            }
+          }
+          if (incumbent && incumbent.session_id !== sid) {
+            try {
+              this.pushExternalLog(incumbent.session_id, "system", `[\u503C\u5B88\u4F4D] \u4F60\u5DF2\u88AB\u4F1A\u8BDD ${sid.slice(0, 8)} \u63A5\u66FF\uFF08\u4EFB\u547D\u5361 \u2713\uFF0C\u4F60 pid \u5DF2\u5931\u6548\uFF09\u2014\u2014\u503C\u5B88\u5582\u6D3B\u81EA\u6B64\u6539\u9053\u65B0\u4EFB`);
+            } catch {
+            }
+          }
+          const r = setPmOverride({ session_id: sid, cli_pid: pid, cwd: String(c.payload.cwd ?? ""), claimed_at: Date.now() });
+          if (!r.ok) return fail("\u4EFB\u547D\u751F\u6548", r);
+          clearDutyAppoint(sid);
+          this.emitChainAudit("pm-appoint-approved", `session=${sid.slice(0, 8)} pid=${pid} origin=${typeof c.payload.origin === "string" ? c.payload.origin : "auto"}\u2014\u2014\u503C\u5B88\u5582\u6D3B\u6062\u590D`);
+          break;
+        }
+        case "dispatch-closeout": {
+          const prUrl = typeof c.payload.pr_url === "string" ? c.payload.pr_url : "";
+          const pmSid = this.dutyTargetId() ?? (typeof c.payload.session_id === "string" ? c.payload.session_id : "");
+          try {
+            this.upsertNotification("system", "closeout-ack", `${c.payload.dispatch_id ?? ""}`, {
+              title: "\u6536\u53E3\u5F85\u529E\u5DF2\u786E\u8BA4\uFF1A\u5173 PR",
+              body: truncate2(`\u6D3E\u5355 ${String(c.payload.dispatch_id ?? "").slice(0, 8)} \u7684 PR \u672A\u5173\uFF08${String(c.payload.pr_state ?? "")}\uFF09\u2014\u2014\u8BF7 PM \u6536\u53E3\uFF1Aleader-harvest --merge \u6216 gh pr close ${prUrl}\uFF1B\u5408\u5E76\u540E pr-report merged \u81EA\u52A8\u6D88\u5355\u3002`, 200),
+              severity: "waiting",
+              group: "action",
+              actionable: true,
+              ...pmSid ? { sessionId: pmSid } : {},
+              domain: "org",
+              returnPath: "/"
+            });
+          } catch {
+          }
+          break;
+        }
       }
     } else if (c.kind === "project-create" && gid) {
       const r = setGroupStatus(gid, "archived", "\u7ACB\u9879\u786E\u8BA4\u88AB\u5426\u51B3");
       if (!r.ok) return fail("\u5426\u51B3\u7559\u75D5\u8FC1\u79FB", r);
+    } else if (c.kind === "pm-appoint") {
+      const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
+      const by = c.decided_by ?? "user";
+      if (sid) {
+        if (by !== "auto:pm-dead") recordAppointRejected(sid, Number(c.payload.cli_pid) || 0);
+        clearDutyAppoint(sid);
+        this.emitChainAudit("pm-appoint-rejected", `session=${sid.slice(0, 8)} by=${by}\u2014\u2014\u4E0D\u8BA4\u9886${by === "auto:pm-dead" ? "\uFF08auto \u6D88\u5361\u4E0D\u5165\u5426\u51B3\u6863\uFF09" : "\uFF08\u5426\u51B3\u6863\uFF0C\u81EA\u52A8\u63D0\u540D\u8DF3\u8FC7\uFF09"}`);
+        try {
+          if (this.sessions.get(sid)) {
+            this.pushExternalLog(sid, "system", `[\u503C\u5B88\u4F4D] \u4EFB\u547D\u5361\u88AB${by === "auto:pm-dead" ? "\u7CFB\u7EDF auto \u6D88\u5361\uFF08\u8FDB\u7A0B\u9000\u51FA\uFF09" : "\u7528\u6237 \u2717"}\u2014\u2014\u4E0D\u8BA4\u9886\uFF1B\u5982\u9700\u503C\u5B88\u7528 org pm claim \u518D\u63D0\u6848\uFF08\u7528\u6237\u53EF\u6539\u4E3B\u610F\uFF09`);
+          }
+        } catch {
+        }
+      }
     } else if (c.kind === "device-trust") {
       const dev = typeof c.payload.dev === "string" ? c.payload.dev : "";
       if (!dev) return fail("\u8BBE\u5907\u9996\u8054\u5426\u51B3", { error: "payload.dev \u7F3A\u5931" });
@@ -63016,6 +63988,21 @@ ${lines.join("\n")}
   }
   dispatchWorker(input) {
     if (!input.prompt.trim()) return { ok: false, error: "prompt \u5FC5\u586B" };
+    if (this.dispatchQueueItems.length >= 200) {
+      return { ok: false, error: `\u5168\u5C40\u6392\u961F\u6EE1\u4ED3\uFF08200\uFF09\u2014\u2014\u8BF7\u7A0D\u540E\u518D\u6D3E\uFF08\u5F53\u524D\u961F\u5217 ${this.dispatchQueueItems.length}\uFF09` };
+    }
+    if (this.activeManagedCount() >= workerConcurrencyCap()) {
+      const cap = workerConcurrencyCap();
+      const dispatchId2 = randomUUID13();
+      const item = { dispatch_id: dispatchId2, enqueued_at: Date.now(), input: { ...input } };
+      this.dispatchQueueItems = [...this.dispatchQueueItems, item];
+      if (!saveDispatchQueue(this.dispatchQueueItems)) console.warn("[dispatch-queue] \u5168\u5C40\u5E3D\u6392\u961F\u843D\u76D8\u5931\u8D25\uFF08\u5185\u5B58\u961F\u5217\u6709\u6548\uFF0C\u91CD\u542F\u8BE5\u5355\u4E22\u5931\uFF09");
+      const titleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
+      appendDispatch({ ts: Date.now(), id: dispatchId2, tier: "\u6B63\u7ECF\u7ACB\u9879", target: "cap-queue", status: "queued", receipt: truncate2(`${titleSeg}\u5168\u5C40\u5E76\u53D1\u89E6\u9876\uFF08${this.activeManagedCount()}/${cap}\uFF09\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u4F4D\uFF08429 \u9650\u6D41\u6CBB\u7406\uFF09`, 200), session_id: "", project_anchor: input.anchor, ...input.actor ? { actor: input.actor } : {}, trigger_key: dispatchTriggerKey(input) });
+      this.emitChainAudit("worker-cap", `\u5168\u5C40\u5E76\u53D1\u95F8\uFF1A${this.activeManagedCount()}/${cap} \u89E6\u9876\uFF0C\u5355 ${dispatchId2.slice(0, 8)} \u6392\u961F\uFF08\u961F\u5217 ${this.dispatchQueueItems.length}\uFF09`);
+      console.log(`[dispatch] worker-cap queued id=${dispatchId2.slice(0, 8)} pos=${this.dispatchQueueItems.length}\uFF08${this.activeManagedCount()}/${cap}\uFF09`);
+      return { ok: true, dispatch_id: dispatchId2, session_id: "", queued: true };
+    }
     if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
     let tier = "\u968F\u624B\u529E";
     let anchor = input.anchor;
@@ -63048,7 +64035,7 @@ ${lines.join("\n")}
     };
     let anchorSt;
     try {
-      anchorSt = statSync13(anchor, { throwIfNoEntry: false });
+      anchorSt = statSync15(anchor, { throwIfNoEntry: false });
     } catch (e) {
       return { ok: false, error: `\u951A\u76EE\u5F55\u65E0\u6CD5\u8BBF\u95EE: ${anchor}\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u8BF7\u6838\u5BF9\u8DEF\u5F84\u6743\u9650` };
     }
@@ -63215,7 +64202,7 @@ ${lines.join("\n")}
     const dirScope = resolveDirScope(anchor);
     const envScope = resolveEnvScope(this.cfg.port);
     const policyOn = permissionPolicyEnabled();
-    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : role === "watchdog" ? "watchdog" : null;
     const auditRow = (p, sid) => ({
       ...p,
       environment: envScope,
@@ -63237,10 +64224,14 @@ ${lines.join("\n")}
         reason: "unknown_role_mapping",
         policy_source: null
       }, null));
-      return { ok: false, error: `forbidden: unknown_role_mapping\uFF08\u672A\u77E5\u5C97\u4F4D\u540D ${role}\u2014\u2014\u6743\u9650\u4E3B\u4F53\u6620\u5C04\u8BCD\u8868 worker/pm/team_pm/review/review_pm\uFF09` };
+      return { ok: false, error: `forbidden: unknown_role_mapping\uFF08\u672A\u77E5\u5C97\u4F4D\u540D ${role}\u2014\u2014\u6743\u9650\u4E3B\u4F53\u6620\u5C04\u8BCD\u8868 worker/pm/team_pm/review/review_pm/watchdog\uFF09` };
     }
     const perm = policyOn ? evaluatePermission({
-      requested_mode: "bypassPermissions",
+      // W-WATCHDOGPERM（t-a86739fd）：watchdog 请求 plan 而非 bypass——只读主体对 plan
+      // ceiling 请求 bypass 恒 above_role_tier_ceiling 拒（上岗即断链）；plan=只读巡查档
+      //（spawn 收 plan 实参，EFFECTIVE_TO_MANAGED["plan"]="plan"）。其余岗位 §5.3.1 物
+      // bypass 语义零变。
+      requested_mode: bizRole === "watchdog" ? "plan" : "bypassPermissions",
       engine: engineForPolicy,
       role: bizRole ?? "worker",
       // 到此 policyOn=true⇒bizRole 必非 null（上方已拒）；?? 兜底仅 off 分支类型需要
@@ -63440,7 +64431,7 @@ ${msg2}`);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields, generation: dispatchGeneration, trigger_key: triggerKey });
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
-    const receiptPath = receiptRel ? join51(homedir18(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : void 0;
+    const receiptPath = receiptRel ? join52(homedir18(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : void 0;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...receiptPath ? { receiptPath } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {} });
     if (input.gid) {
       let claimEntryId = input.entry_id;
@@ -63602,7 +64593,7 @@ ${msg2}`);
   buildSinceLastBlock(anchorDir, selfDispatchId) {
     try {
       const all = [];
-      for (const line of readFileSync42(dispatchLogPath(), "utf-8").split("\n")) {
+      for (const line of readFileSync43(dispatchLogPath(), "utf-8").split("\n")) {
         if (!line.trim()) continue;
         try {
           all.push(JSON.parse(line));
@@ -63721,6 +64712,7 @@ ${out}`;
       if (!s || !s.state.relay_session_id) continue;
       if (s.state.external) continue;
       if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
+      if (this.backoffUntilOf(s.state.session_id) > Date.now()) continue;
       if (this.routeLivenessSkip(e.session_id, s)) {
         this.emitChainAudit("dispatch-reroute", `zombie skip: ${e.session_id.slice(0, 12)} \u65E0\u8FDB\u5EA6\u5E27 ${Math.round((Date.now() - Math.max(s.lastProgressAt, s.state.updated_at ?? 0)) / 6e4)}min\uFF0C\u91CD\u8DEF\u7531\u4E0B\u4E00\u5019\u9009`);
         continue;
@@ -63826,6 +64818,65 @@ ${out}`;
   // **内存队列权威**：this.dispatchQueueItems 是唯一事实源，盘文件只做持久化
   //（boot reload 回灌）——enqueue 一律内存 push+写穿；若从盘 load-append（首版实现），
   // 排水期间盘落后内存，重放再排队会把整条旧队列复制回来（测试 H3 实锤四重账）。
+  /** W-RATELIMIT429：在编活 worker 计数（managed 且 agent 在**且 status∈{WORKING,
+   * WAITING}**=真占用并发槽——回合收口即 DONE/ERROR 不占（agent wrapper 残留/ended
+   * 置位时序均不可靠，status 是收口链权威态）。对齐 groupHasLiveWorker 的「活」语义
+   * 取全局）。全局并发闸判定用。 */
+  activeManagedCount() {
+    let n = 0;
+    for (const s of this.sessions.values()) {
+      if (s.state.action_summary === "wd-stall") continue;
+      if (!s.state.external && s.agent && (s.state.status === "WORKING" || s.state.status === "WAITING")) n++;
+    }
+    return n;
+  }
+  // ---------- R1（B1-b）：429 退避态持久化（rate-limit-backoff.json 侧账） ----------
+  // 纯内存态重启即失=风暴复活窗（B1）——boot 回灌进内存 map；revive/keepalive/选席
+  // 判据统一走 backoffUntilOf 合并读（内存 ∨ 持久侧账）。
+  rateLimitBackoffPersisted = /* @__PURE__ */ new Map();
+  rlBackoffPath() {
+    return join52(this.cfg.dataDir, "rate-limit-backoff.json");
+  }
+  persistRateLimitBackoff(sid, until, streak) {
+    try {
+      if (until === void 0) this.rateLimitBackoffPersisted.delete(sid);
+      else this.rateLimitBackoffPersisted.set(sid, { until, streak: streak ?? 1 });
+      const obj = {};
+      for (const [k3, v] of this.rateLimitBackoffPersisted) {
+        if (v.until > Date.now()) obj[k3] = v;
+      }
+      writeFileSync27(this.rlBackoffPath(), JSON.stringify(obj), "utf-8");
+    } catch {
+    }
+  }
+  loadRateLimitBackoff() {
+    try {
+      const raw = JSON.parse(readFileSync43(this.rlBackoffPath(), "utf-8"));
+      const now = Date.now();
+      for (const [sid, v] of Object.entries(raw)) {
+        if (v && typeof v.until === "number" && v.until > now) {
+          this.rateLimitBackoffPersisted.set(sid, v);
+          const managed = this.sessions.get(sid);
+          if (managed) {
+            managed.rateLimitBackoffUntil = v.until;
+            managed.rateLimitStreak = v.streak;
+          }
+        }
+      }
+    } catch {
+    }
+  }
+  /** 退避到期时刻合并读（内存 ∨ 持久侧账）——revive/keepalive/选席判据统一走此口。 */
+  backoffUntilOf(sid) {
+    const managed = this.sessions.get(sid);
+    const mem = managed?.rateLimitBackoffUntil ?? 0;
+    const persisted = this.rateLimitBackoffPersisted.get(sid)?.until ?? 0;
+    return Math.max(mem, persisted);
+  }
+  /** W-RATELIMIT429：排队长度（/api/state 轻端点只读面——private 队列的只读缝） */
+  dispatchQueueSize() {
+    return this.dispatchQueueItems.length;
+  }
   enqueueCapDispatch(input, g2, tier, anchor, actor, engineFields) {
     const dispatchId = input.queue_replay ?? randomUUID13();
     const enqueuedAt = Date.now();
@@ -63857,12 +64908,17 @@ ${out}`;
     this.drainReentrant = true;
     try {
       for (; ; ) {
-        const next = this.dispatchQueueItems.find((x) => x.input.gid === gid);
+        const next = this.dispatchQueueItems.find((x) => x.input.gid === gid) ?? this.dispatchQueueItems.find((x) => !x.input.gid);
         if (!next) break;
         this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== next.dispatch_id);
         try {
           const r = this.dispatchWorker({ ...next.input, queue_replay: next.dispatch_id });
           if (r.ok && r.queued) break;
+          if (!r.ok) {
+            const fin = next.input;
+            const qtier = (fin.gid ? findGroup(fin.gid)?.tier : void 0) ?? "\u968F\u624B\u529E";
+            appendDispatch({ ts: Date.now(), id: next.dispatch_id, tier: qtier, target: "cap-queue", status: "failed", receipt: truncate2(`\u6392\u961F\u91CD\u653E\u62D2\u6536: ${r.error}`, 200), session_id: "", ...fin.anchor ? { project_anchor: fin.anchor } : {}, actor: fin.actor ?? "leader" });
+          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           const input = next.input;
@@ -63953,11 +65009,11 @@ ${out}`;
   // 但未实现——闸从未落任何账）。boot 由 recoverPendingReceiptChecks 补跑（TTL 10min：
   // 过期单不再报——超过窗的旧单人工核，防重启风暴后陈账轰炸）
   pendingReceiptChecksPath() {
-    return join51(this.cfg.dataDir, "pending-receipt-checks.json");
+    return join52(this.cfg.dataDir, "pending-receipt-checks.json");
   }
   loadPendingReceiptChecks() {
     try {
-      return JSON.parse(readFileSync42(this.pendingReceiptChecksPath(), "utf-8"));
+      return JSON.parse(readFileSync43(this.pendingReceiptChecksPath(), "utf-8"));
     } catch {
       return [];
     }
@@ -63970,8 +65026,8 @@ ${out}`;
   }
   runReceiptCheck(entry) {
     try {
-      const artsDir = join51(homedir18(), ".cc-deck", "artifacts");
-      const hit = entry.receiptPath ? existsSync34(entry.receiptPath) : existsSync34(artsDir) && readdirSync16(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+      const artsDir = join52(homedir18(), ".cc-deck", "artifacts");
+      const hit = entry.receiptPath ? existsSync35(entry.receiptPath) : existsSync35(artsDir) && readdirSync16(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
       if (!hit) {
         this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
           title: "\u6536\u53E3\u65E0\u56DE\u6267",
@@ -64021,6 +65077,7 @@ ${out}`;
   // 重启回灌：队列文件 → 内存 + 立即试排一轮（各组有 idle 即接续；触顶全忙单留在
   // 队列等收口联动）。boot 在 adopt 之后调（index.ts）。
   reloadDispatchQueue() {
+    this.loadRateLimitBackoff();
     this.dispatchQueueItems = loadDispatchQueue();
     const n = this.dispatchQueueItems.length;
     if (n === 0) return 0;
@@ -64082,7 +65139,7 @@ ${out}`;
       if (priorRoundGids === null) {
         priorRoundGids = /* @__PURE__ */ new Set();
         try {
-          const raw = readFileSync42(join51(orgDir(), "headcount-trim-journal.ndjson"), "utf-8");
+          const raw = readFileSync43(join52(orgDir(), "headcount-trim-journal.ndjson"), "utf-8");
           for (const line of raw.split("\n")) {
             const t = line.trim();
             if (!t) continue;
@@ -64164,12 +65221,12 @@ ${out}`;
     if (!opts?.dryRun && totalTrimmed > 0) {
       try {
         const d2 = orgDir();
-        mkdirSync23(d2, { recursive: true });
-        writeFileSync27(join51(d2, "headcount-trim-report.json"), JSON.stringify({ ts: now, groups }, null, 2) + "\n", "utf-8");
+        mkdirSync24(d2, { recursive: true });
+        writeFileSync27(join52(d2, "headcount-trim-report.json"), JSON.stringify({ ts: now, groups }, null, 2) + "\n", "utf-8");
       } catch {
       }
       for (const x of groups) {
-        appendJournal(join51(orgDir(), "headcount-trim-journal.ndjson"), { ts: now, gid: x.gid, name: x.name, before: x.before, after: x.after, trimmed: x.trimmed, via: opts?.viaConfirm ? "confirm" : opts?.auto ? "auto" : opts?.onlyGid ? "capacity" : "manual", ...opts?.keepIdleMs ? { keep_idle_ms: opts.keepIdleMs } : {} });
+        appendJournal(join52(orgDir(), "headcount-trim-journal.ndjson"), { ts: now, gid: x.gid, name: x.name, before: x.before, after: x.after, trimmed: x.trimmed, via: opts?.viaConfirm ? "confirm" : opts?.auto ? "auto" : opts?.onlyGid ? "capacity" : "manual", ...opts?.keepIdleMs ? { keep_idle_ms: opts.keepIdleMs } : {} });
         console.log(`[headcount-trim] ${x.name}: ${x.before} \u2192 ${x.after} \u5E2D\uFF08\u88C1 ${x.trimmed.length}\uFF09`);
       }
       this.upsertNotification("system", `headcount-trim-${now}`, String(now), {
@@ -64283,6 +65340,11 @@ ${out}`;
         s.state.dispatch_tier = void 0;
       }
     }
+    if (s.rateLimitTimer) {
+      clearTimeout(s.rateLimitTimer);
+      s.rateLimitTimer = null;
+    }
+    this.persistRateLimitBackoff(s.state.session_id, void 0, void 0);
     this.transition(s.state.session_id, "DONE", "retire");
     s.state.done_reason = mode === "parked" ? "\u9879\u76EE\u7EC4\u6302\u8D77\uFF08\u6210\u5458\u9000\u4F11\u8FDB\u719F\u624B\u6C60\uFF09" : mode === "disbanded" ? "\u9879\u76EE\u7EC4\u7ED3\u9879\uFF08\u7F16\u5236\u89E3\u6563\uFF09" : "\u6210\u5458\u9000\u4F11\uFF08\u7F16\u5236\u9664\u540D\uFF0C\u8DEF\u7531\u8868\u6863\u6848\u4FDD\u7559\uFF09";
     s.state.action_summary = mode === "parked" ? "\u5DF2\u968F\u9879\u76EE\u7EC4\u6302\u8D77" : mode === "disbanded" ? "\u5DF2\u968F\u9879\u76EE\u7EC4\u7ED3\u9879\u89E3\u6563" : "\u5DF2\u9000\u4F11\uFF08\u7F16\u5236\u9664\u540D\uFF09";
@@ -64636,10 +65698,10 @@ ${out}`;
   // 事故即达 PM）。offset 内存记忆（重启重放容忍重复审计行，通知靠 stableKey 去重）。
   harvestViolationOffset = 0;
   harvestViolationScan() {
-    const p = join51(this.cfg.dataDir, "harvest-violations.ndjson");
+    const p = join52(this.cfg.dataDir, "harvest-violations.ndjson");
     let raw;
     try {
-      raw = readFileSync42(p, "utf-8");
+      raw = readFileSync43(p, "utf-8");
     } catch {
       return;
     }
@@ -64890,7 +65952,7 @@ ${out}`;
   async recoverFromStall(s, lane, stalled, cpuDelta) {
     s.wd.phase = "recovering";
     const sid = s.state.session_id;
-    const t02 = Date.now();
+    const t03 = Date.now();
     const agent = s.agent;
     if (s.resumeCooldownUntil && Date.now() < s.resumeCooldownUntil) {
       this.bus.emit(sid, "WATCHDOG", {
@@ -64996,7 +66058,7 @@ ${out}`;
       this.bus.emit(sid, "WATCHDOG", {
         action: "recover_ok",
         lane,
-        detail: `\u6062\u590D\u5DF2\u6D3E\u53D1\uFF08\u8017\u65F6 ${Date.now() - t02}ms\uFF09\uFF0C\u91CD\u653E\u672A\u56DE\u663E\u6D88\u606F ${pending.length} \u6761`
+        detail: `\u6062\u590D\u5DF2\u6D3E\u53D1\uFF08\u8017\u65F6 ${Date.now() - t03}ms\uFF09\uFF0C\u91CD\u653E\u672A\u56DE\u663E\u6D88\u606F ${pending.length} \u6761`
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -65135,13 +66197,13 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID15 } from "node:crypto";
-import { readFileSync as readFileSync50, writeFileSync as writeFileSync32, mkdirSync as mkdirSync28, existsSync as existsSync39, readdirSync as readdirSync22, statSync as statSync19 } from "node:fs";
-import { join as join59, dirname as dirname15, sep as sep8 } from "node:path";
+import { readFileSync as readFileSync51, writeFileSync as writeFileSync32, mkdirSync as mkdirSync29, existsSync as existsSync40, readdirSync as readdirSync22, statSync as statSync21 } from "node:fs";
+import { join as join60, dirname as dirname16, sep as sep8 } from "node:path";
 import { homedir as homedir23, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/recall.ts
-import { closeSync as closeSync4, openSync as openSync4, readFileSync as readFileSync43, readdirSync as readdirSync17, readSync as readSync3, statSync as statSync14 } from "node:fs";
-import { join as join52 } from "node:path";
+import { closeSync as closeSync5, openSync as openSync5, readFileSync as readFileSync44, readdirSync as readdirSync17, readSync as readSync4, statSync as statSync16 } from "node:fs";
+import { join as join53 } from "node:path";
 var RECALL_KINDS = ["session", "card", "dispatch", "receipt"];
 var RECALL_DISPATCH_MAX = 5e4;
 function clip2(s, n) {
@@ -65163,25 +66225,25 @@ function receiptFileNameOf(id2) {
 function readHead(path6, cap = 262144) {
   let fd2 = null;
   try {
-    const size = statSync14(path6).size;
-    fd2 = openSync4(path6, "r");
+    const size = statSync16(path6).size;
+    fd2 = openSync5(path6, "r");
     const buf = Buffer.alloc(Math.min(size, cap));
-    const n = readSync3(fd2, buf, 0, buf.length, 0);
+    const n = readSync4(fd2, buf, 0, buf.length, 0);
     return buf.subarray(0, n).toString("utf-8");
   } catch {
     return "";
   } finally {
-    if (fd2 !== null) closeSync4(fd2);
+    if (fd2 !== null) closeSync5(fd2);
   }
 }
 function buildCtx(sessions) {
   const dir = orgDir();
   const boards = [];
   try {
-    for (const f of readdirSync17(join52(dir, "boards"))) {
+    for (const f of readdirSync17(join53(dir, "boards"))) {
       if (!f.endsWith(".json")) continue;
       try {
-        const raw = JSON.parse(readFileSync43(join52(dir, "boards", f), "utf-8"));
+        const raw = JSON.parse(readFileSync44(join53(dir, "boards", f), "utf-8"));
         if (Array.isArray(raw.entries)) {
           boards.push({ gid: f.replace(/\.json$/, ""), entries: raw.entries });
         }
@@ -65198,7 +66260,7 @@ function buildCtx(sessions) {
   const dispatches = readDispatchLogFile(dir, RECALL_DISPATCH_MAX);
   try {
     const byId = new Map(dispatches.map((d2) => [d2.id, d2]));
-    const raw = readFileSync43(join52(dir, "dispatch-log.ndjson"), "utf-8");
+    const raw = readFileSync44(join53(dir, "dispatch-log.ndjson"), "utf-8");
     const seen = /* @__PURE__ */ new Set();
     for (const line of raw.split("\n")) {
       const t = line.trim();
@@ -65227,7 +66289,7 @@ function summaryOfDispatch(d2) {
   return clip2(`${d2.title || d2.id}\uFF08${d2.status}\uFF0C\u627F\u63A5 ${String(d2.session_id).slice(0, 8)}\uFF09`, 80);
 }
 function summaryOfReceipt(fileName) {
-  const head = readHead(join52(artifactsDir(), fileName));
+  const head = readHead(join53(artifactsDir(), fileName));
   if (!head) return clip2(fileName, 80);
   const lines = head.split("\n").map((l) => l.trim());
   const h = lines.find((l) => l.startsWith("# "))?.replace(/^#\s+/, "");
@@ -65306,7 +66368,7 @@ function resolveDispatch(id2, ctx) {
   if (slug) {
     const f = `w-${slug}.md`;
     try {
-      statSync14(join52(artifactsDir(), f));
+      statSync16(join53(artifactsDir(), f));
       related.push(refOfReceipt(f));
     } catch {
     }
@@ -65317,7 +66379,7 @@ function resolveReceipt(id2, ctx) {
   const f = receiptFileNameOf(id2);
   if (!f) return null;
   try {
-    statSync14(join52(artifactsDir(), f));
+    statSync16(join53(artifactsDir(), f));
   } catch {
     return null;
   }
@@ -65341,7 +66403,7 @@ function detectKind(id2, ctx) {
   const f = receiptFileNameOf(id2);
   if (f) {
     try {
-      statSync14(join52(artifactsDir(), f));
+      statSync16(join53(artifactsDir(), f));
       return "receipt";
     } catch {
     }
@@ -65374,11 +66436,11 @@ function recallResolve(id2, opts) {
 }
 
 // src/design-docs.ts
-import { readFileSync as readFileSync44, readdirSync as readdirSync18, statSync as statSync15 } from "node:fs";
-import { join as join53, resolve as resolve10, sep as sep7 } from "node:path";
+import { readFileSync as readFileSync45, readdirSync as readdirSync18, statSync as statSync17 } from "node:fs";
+import { join as join54, resolve as resolve10, sep as sep7 } from "node:path";
 var DESIGN_DIR_SEGMENTS = ["docs", "system-design"];
 function designDir(webRoot) {
-  return join53(webRoot, ...DESIGN_DIR_SEGMENTS);
+  return join54(webRoot, ...DESIGN_DIR_SEGMENTS);
 }
 var DESIGN_EXT_RE = /\.(html|json|png|svg)$/i;
 var listCache = /* @__PURE__ */ new Map();
@@ -65392,9 +66454,9 @@ function dirFingerprint(dir) {
       return;
     }
     for (const name of entries.sort()) {
-      const p = join53(d2, name);
+      const p = join54(d2, name);
       try {
-        const st2 = statSync15(p);
+        const st2 = statSync17(p);
         parts.push(`${name}:${st2.mtimeMs}:${st2.size}:${st2.isDirectory()}`);
         if (st2.isDirectory() && depth < 1) walk(p, depth + 1);
       } catch {
@@ -65406,7 +66468,7 @@ function dirFingerprint(dir) {
 }
 function readTitle(file, fallback) {
   try {
-    const head = readFileSync44(file, { encoding: "utf8", flag: "r" }).slice(0, 24576);
+    const head = readFileSync45(file, { encoding: "utf8", flag: "r" }).slice(0, 24576);
     const m = head.match(/<title>([^<]{1,120})<\/title>/i);
     const t = m?.[1]?.trim();
     return t || fallback;
@@ -65432,9 +66494,9 @@ function listDesignDocs(webRoot) {
   const groups = [{ dir: root, group: "\u5168\u5C40" }];
   try {
     for (const name of readdirSync18(root).sort()) {
-      const p = join53(root, name);
+      const p = join54(root, name);
       try {
-        if (statSync15(p).isDirectory()) groups.push({ dir: p, group: name });
+        if (statSync17(p).isDirectory()) groups.push({ dir: p, group: name });
       } catch {
       }
     }
@@ -65454,7 +66516,7 @@ function listDesignDocs(webRoot) {
       list.push({
         path: "/design/" + relSegs.map(encodeURIComponent).join("/"),
         group,
-        title: readTitle(join53(dir, f), f.replace(/\.html$/i, "")),
+        title: readTitle(join54(dir, f), f.replace(/\.html$/i, "")),
         tags: tokenize([...relSegs])
       });
     }
@@ -65478,17 +66540,17 @@ function resolveDesignFile(webRoot, relPath) {
 }
 
 // src/devices.ts
-import { readFileSync as readFileSync45, mkdirSync as mkdirSync24 } from "node:fs";
-import { join as join54 } from "node:path";
+import { readFileSync as readFileSync46, mkdirSync as mkdirSync25 } from "node:fs";
+import { join as join55 } from "node:path";
 import { createHash as createHash5 } from "node:crypto";
 var MAX_DEVICES = 12;
 var RETAIN_MS = 30 * 24 * 36e5;
 function devicesPath(dataDir3) {
-  return join54(dataDir3, "relay-devices.json");
+  return join55(dataDir3, "relay-devices.json");
 }
 function readDevices(dataDir3) {
   try {
-    const raw = JSON.parse(readFileSync45(devicesPath(dataDir3), "utf-8"));
+    const raw = JSON.parse(readFileSync46(devicesPath(dataDir3), "utf-8"));
     return Array.isArray(raw.devices) ? raw.devices.filter((d2) => d2 && typeof d2.id === "string") : [];
   } catch {
     return [];
@@ -65516,7 +66578,7 @@ function touchDevice(dataDir3, ua, devName) {
   }
   const kept2 = list.filter((d2) => now - d2.last_seen < RETAIN_MS).sort((a, b) => b.last_seen - a.last_seen).slice(0, MAX_DEVICES);
   try {
-    mkdirSync24(dataDir3, { recursive: true });
+    mkdirSync25(dataDir3, { recursive: true });
     atomicWriteJson(devicesPath(dataDir3), JSON.stringify({ devices: kept2 }, null, 2) + "\n");
   } catch {
   }
@@ -65528,16 +66590,16 @@ function listDevices(dataDir3, onlineIds) {
 
 // src/release.ts
 import { spawn as spawn6 } from "node:child_process";
-import { existsSync as existsSync36, mkdirSync as mkdirSync25, readFileSync as readFileSync46, writeFileSync as writeFileSync28, appendFileSync as appendFileSync7 } from "node:fs";
+import { existsSync as existsSync37, mkdirSync as mkdirSync26, readFileSync as readFileSync47, writeFileSync as writeFileSync28, appendFileSync as appendFileSync8 } from "node:fs";
 import { homedir as homedir19 } from "node:os";
-import { execFileSync as execFileSync3 } from "node:child_process";
-import { join as join55 } from "node:path";
+import { execFileSync as execFileSync4 } from "node:child_process";
+import { join as join56 } from "node:path";
 var RELEASE_CHANNELS = {
   "apk-test": "scripts/build-test-apk.sh",
   "desktop-test": "scripts/build-test-desktop.sh"
 };
 function mainRepoRoot() {
-  return process.env.CCR_MAIN_REPO || join55(homedir19(), "dev", "cc-deck");
+  return process.env.CCR_MAIN_REPO || join56(homedir19(), "dev", "cc-deck");
 }
 var ReleaseModule = class {
   jobs = /* @__PURE__ */ new Map();
@@ -65551,21 +66613,21 @@ var ReleaseModule = class {
     this.dataDir = dataDir3;
   }
   configPath() {
-    return join55(this.dataDir, "release-config.json");
+    return join56(this.dataDir, "release-config.json");
   }
   historyPath() {
-    return join55(this.dataDir, "release-history.json");
+    return join56(this.dataDir, "release-history.json");
   }
   /** 发版环境存在性（§3.2 部署边界）：主仓+脚本任一缺席=非本机源 */
   hasReleaseEnv() {
     const root = mainRepoRoot();
-    if (!existsSync36(join55(root, "VERSION"))) return false;
-    return Object.values(RELEASE_CHANNELS).some((s) => existsSync36(join55(root, s)));
+    if (!existsSync37(join56(root, "VERSION"))) return false;
+    return Object.values(RELEASE_CHANNELS).some((s) => existsSync37(join56(root, s)));
   }
   configGet() {
     let cfg2 = { channels: Object.keys(RELEASE_CHANNELS).map((id2) => ({ id: id2, enabled: false })) };
     try {
-      const raw = JSON.parse(readFileSync46(this.configPath(), "utf-8"));
+      const raw = JSON.parse(readFileSync47(this.configPath(), "utf-8"));
       const byId = new Map((raw.channels ?? []).map((c) => [c.id, c]));
       cfg2 = {
         ecs_host: raw.ecs_host,
@@ -65577,7 +66639,7 @@ var ReleaseModule = class {
     }
     let version = "";
     try {
-      version = readFileSync46(join55(mainRepoRoot(), "VERSION"), "utf-8").trim();
+      version = readFileSync47(join56(mainRepoRoot(), "VERSION"), "utf-8").trim();
     } catch {
     }
     return {
@@ -65608,7 +66670,7 @@ var ReleaseModule = class {
       }
     }
     try {
-      mkdirSync25(this.dataDir, { recursive: true });
+      mkdirSync26(this.dataDir, { recursive: true });
       writeFileSync28(this.configPath(), JSON.stringify(clean, null, 2) + "\n", "utf-8");
       return { ok: true };
     } catch (e) {
@@ -65620,9 +66682,9 @@ var ReleaseModule = class {
   precheck() {
     const root = mainRepoRoot();
     try {
-      const branch = execFileSync3("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf-8" }).trim();
+      const branch = execFileSync4("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf-8" }).trim();
       if (branch !== "dev") return { ok: false, error: `\u4E3B\u4ED3\u5F53\u524D\u5728 ${branch} \u5206\u652F\uFF08\u53D1\u7248\u8981\u6C42 dev \u5E72\u51C0\u4E3B\u5E72\uFF09` };
-      const dirty = execFileSync3("git", ["-C", root, "status", "--porcelain"], { encoding: "utf-8" });
+      const dirty = execFileSync4("git", ["-C", root, "status", "--porcelain"], { encoding: "utf-8" });
       if (dirty.trim()) return { ok: false, error: `\u4E3B\u4ED3\u6709\u672A\u63D0\u4EA4\u6539\u52A8 ${dirty.trim().split("\n").length} \u5904\uFF08\u5148\u6536\u53E3\u518D\u51FA\u5305\uFF09` };
       return { ok: true };
     } catch (e) {
@@ -65644,11 +66706,11 @@ var ReleaseModule = class {
     if (!pre.ok) return pre;
     const note = typeof payload.note === "string" ? payload.note : "";
     const runId = `rel-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const histDir = join55(this.dataDir, "release-history");
-    mkdirSync25(histDir, { recursive: true });
-    const logFile = join55(histDir, `${runId}.log`);
+    const histDir = join56(this.dataDir, "release-history");
+    mkdirSync26(histDir, { recursive: true });
+    const logFile = join56(histDir, `${runId}.log`);
     const record = { run_id: runId, channel, ...note ? { note } : {}, started_at: Date.now(), status: "running", log_file: logFile };
-    const child = spawn6("bash", [join55(mainRepoRoot(), script), note], {
+    const child = spawn6("bash", [join56(mainRepoRoot(), script), note], {
       cwd: mainRepoRoot(),
       env: { ...process.env }
     });
@@ -65659,7 +66721,7 @@ var ReleaseModule = class {
     this.saveHistory({ ...record });
     const segRe = /^\[\d+\/\d+\]|配对闸|清单|✓|ERR|FAIL|直链|http/i;
     const onLine = (line) => {
-      appendFileSync7(logFile, line + "\n", "utf-8");
+      appendFileSync8(logFile, line + "\n", "utf-8");
       if (segRe.test(line)) {
         this.progress.set(channel, line.slice(0, 200));
         this.bus.emitTransient("RELEASE_PROGRESS", { run_id: runId, channel, line: line.slice(0, 200) });
@@ -65673,7 +66735,7 @@ var ReleaseModule = class {
       for (const l of lines) onLine(l);
     });
     child.stderr?.on("data", (d2) => {
-      appendFileSync7(logFile, "[stderr] " + d2.toString("utf-8"), "utf-8");
+      appendFileSync8(logFile, "[stderr] " + d2.toString("utf-8"), "utf-8");
     });
     child.on("close", (code) => {
       if (buf.trim()) onLine(buf);
@@ -65723,7 +66785,7 @@ var ReleaseModule = class {
   }
   loadHistory() {
     try {
-      return JSON.parse(readFileSync46(this.historyPath(), "utf-8"));
+      return JSON.parse(readFileSync47(this.historyPath(), "utf-8"));
     } catch {
       return [];
     }
@@ -65743,7 +66805,7 @@ var ReleaseModule = class {
 };
 function extractUrls(logFile) {
   try {
-    const txt = readFileSync46(logFile, "utf-8");
+    const txt = readFileSync47(logFile, "utf-8");
     return [...new Set(txt.match(/https?:\/\/[^\s"']+/g) ?? [])].slice(0, 10);
   } catch {
     return [];
@@ -65753,7 +66815,7 @@ function extractUrls(logFile) {
 // src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
+// node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -65766,14 +66828,14 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID14 } from "node:crypto";
-import { closeSync as closeSync6, openSync as openSync6, readSync as readSync5, readFileSync as readFileSync49, readdirSync as readdirSync21, statSync as statSync18, writeFileSync as writeFileSync31, existsSync as existsSync38 } from "node:fs";
+import { closeSync as closeSync7, openSync as openSync7, readSync as readSync6, readFileSync as readFileSync50, readdirSync as readdirSync21, statSync as statSync20, writeFileSync as writeFileSync31, existsSync as existsSync39 } from "node:fs";
 import { homedir as homedir22 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
-import { spawn as spawn7, execFileSync as execFileSync4 } from "node:child_process";
-import { existsSync as existsSync37, mkdirSync as mkdirSync26, appendFileSync as appendFileSync8, readFileSync as readFileSync47, writeFileSync as writeFileSync29, rmSync as rmSync9 } from "node:fs";
-import path4, { join as join56 } from "node:path";
+import { spawn as spawn7, execFileSync as execFileSync5 } from "node:child_process";
+import { existsSync as existsSync38, mkdirSync as mkdirSync27, appendFileSync as appendFileSync9, readFileSync as readFileSync48, writeFileSync as writeFileSync29, rmSync as rmSync10 } from "node:fs";
+import path4, { join as join57 } from "node:path";
 import { homedir as homedir20, tmpdir as tmpdir4 } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path4.dirname(fileURLToPath2(import.meta.url));
@@ -65791,7 +66853,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync47(injectCs, "utf8").includes("--peek");
+    return readFileSync48(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -65803,17 +66865,17 @@ function ensureInjector() {
   if (ready) return true;
   const srcPeek = peekCapableSource();
   try {
-    mkdirSync26(binDir, { recursive: true });
-    if (existsSync37(exe2) && !existsSync37(exe2 + ".v2") && srcPeek) {
+    mkdirSync27(binDir, { recursive: true });
+    if (existsSync38(exe2) && !existsSync38(exe2 + ".v2") && srcPeek) {
       try {
-        rmSync9(exe2, { force: true });
+        rmSync10(exe2, { force: true });
       } catch {
       }
     }
     let compiled = false;
-    if (!existsSync37(exe2)) {
+    if (!existsSync38(exe2)) {
       const src = injectCs.replace(/\//g, "\\");
-      execFileSync4(CSC, ["-nologo", `-out:${exe2}`, src], { timeout: 3e4, windowsHide: true });
+      execFileSync5(CSC, ["-nologo", `-out:${exe2}`, src], { timeout: 3e4, windowsHide: true });
       compiled = true;
     }
     if (compiled && srcPeek) {
@@ -65825,7 +66887,7 @@ function ensureInjector() {
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
-  ready = existsSync37(exe2);
+  ready = existsSync38(exe2);
   if (ready && !peekSupported()) {
     console.warn("[injector] \u9632\u62A2\u53D1\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08inject.exe \u65E0 --peek \u80FD\u529B\uFF1A\u65E7\u7248\u4EA7\u7269\u4FDD\u7559\u6216\u7F16\u8BD1\u5931\u8D25\uFF09\u2014\u2014\u6EDE\u7559\u8865\u53D1\u56DE\u8F66\u5C06\u6309 #180 \u4FDD\u5B88\u8DF3\u8FC7");
   }
@@ -65835,7 +66897,7 @@ var VALID_TARGET = /^(claude|node)(\.exe)?$/i;
 function targetIsCliHost(pid) {
   if (process.env.CCR_INJECT_CMD) return true;
   try {
-    const out = execFileSync4(
+    const out = execFileSync5(
       "tasklist",
       ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
       { encoding: "utf8", timeout: 5e3, windowsHide: true }
@@ -65931,7 +66993,7 @@ var tmuxEqCache = null;
 function tmuxSupportsEqPrefix() {
   if (tmuxEqCache !== null) return tmuxEqCache;
   try {
-    const v = execFileSync4("tmux", ["-V"], { encoding: "utf8", timeout: 3e3 });
+    const v = execFileSync5("tmux", ["-V"], { encoding: "utf8", timeout: 3e3 });
     const m = /(\d+)\.(\d+)/.exec(v);
     tmuxEqCache = !!m && (+m[1] > 3 || +m[1] === 3 && +m[2] >= 1);
   } catch {
@@ -65944,7 +67006,7 @@ async function resolveTmuxTarget(pid) {
   if (process.env.CCR_OSASCRIPT_CMD || process.env.CCR_INJECT_CMD) return null;
   let tty = "";
   try {
-    tty = execFileSync4("ps", ["-o", "tty=", "-p", String(pid)], { encoding: "utf8", timeout: 3e3 }).trim();
+    tty = execFileSync5("ps", ["-o", "tty=", "-p", String(pid)], { encoding: "utf8", timeout: 3e3 }).trim();
   } catch {
     return null;
   }
@@ -65997,7 +67059,7 @@ function runAppleScript(script) {
       clearTimeout(timer);
       if (code === 0) return resolve11({ ok: true });
       try {
-        appendFileSync8(join56(homedir20(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync9(join57(homedir20(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
       resolve11({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
@@ -66007,7 +67069,7 @@ function runAppleScript(script) {
 function macTargetIsCliHost(pid) {
   if (process.env.CCR_OSASCRIPT_CMD) return true;
   try {
-    const out = execFileSync4("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5e3 });
+    const out = execFileSync5("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5e3 });
     const base = out.trim().split("/").pop() ?? "";
     return VALID_TARGET.test(base);
   } catch {
@@ -66019,7 +67081,7 @@ function cliHostAlive(pid) {
     return process.env.CCR_INJECT_CMD ? true : targetIsCliHost(pid);
   }
   try {
-    const out = execFileSync4("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5e3 });
+    const out = execFileSync5("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5e3 });
     return VALID_TARGET.test(out.trim().split("/").pop() ?? "");
   } catch {
     return false;
@@ -66042,7 +67104,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join56(tmpdir4(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    const tmp = join57(tmpdir4(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync29(tmp, body, "utf8");
     return new Promise((resolve11) => {
       const child = spawn7("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
@@ -66052,7 +67114,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       });
       child.on("error", (e) => {
         try {
-          rmSync9(tmp, { force: true });
+          rmSync10(tmp, { force: true });
         } catch {
         }
         resolve11({ ok: false, error: e.message });
@@ -66069,7 +67131,7 @@ async function injectTextMac(pid, rawText) {
   if (!text) return { ok: false, error: "\u7A7A\u6D88\u606F" };
   const target = await resolveTmuxTarget(pid);
   if (target) {
-    const t02 = Date.now();
+    const t03 = Date.now();
     let w2 = await tmuxSendKeys(target, "-l", "--", text);
     let wRetried = false;
     if (!w2.ok) {
@@ -66082,7 +67144,7 @@ async function injectTextMac(pid, rawText) {
     const e = await tmuxSendKeys(target, "Enter");
     if (!e.ok) return e;
     const tail2 = tmuxNorm(text.slice(-24));
-    console.log(`[injector] optimistic-write sid-target=${target} write=${tWrite - t02}ms${wRetried ? "(retry)" : ""} enter=${Date.now() - tWrite}ms sync-total=${Date.now() - t02}ms len=${text.length}`);
+    console.log(`[injector] optimistic-write sid-target=${target} write=${tWrite - t03}ms${wRetried ? "(retry)" : ""} enter=${Date.now() - tWrite}ms sync-total=${Date.now() - t03}ms len=${text.length}`);
     void (async () => {
       let round = 0;
       for (const delay of [600, 1500]) {
@@ -66091,12 +67153,12 @@ async function injectTextMac(pid, rawText) {
         try {
           const tV = Date.now();
           if (await tmuxVerifySubmitted(target, tail2)) {
-            console.log(`[injector] verify-ok round=${round} at=${Date.now() - t02}ms (verify ${Date.now() - tV}ms)`);
+            console.log(`[injector] verify-ok round=${round} at=${Date.now() - t03}ms (verify ${Date.now() - tV}ms)`);
             return;
           }
           const r = await tmuxSendKeys(target, "Enter");
           if (!r.ok) return;
-          console.log(`[injector] compensate-enter round=${round} at=${Date.now() - t02}ms (verify ${Date.now() - tV}ms)`);
+          console.log(`[injector] compensate-enter round=${round} at=${Date.now() - t03}ms (verify ${Date.now() - tV}ms)`);
         } catch {
         }
       }
@@ -66219,7 +67281,7 @@ function peekSupported() {
   if (process.env.CCR_INJECT_CMD) return true;
   if (isDarwin()) return true;
   if (process.platform !== "win32") return false;
-  return existsSync37(exe2) && existsSync37(exe2 + ".v2");
+  return existsSync38(exe2) && existsSync38(exe2 + ".v2");
 }
 function buildCaptureScript(pid) {
   return [
@@ -66280,18 +67342,18 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join56(tmpdir4(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join57(tmpdir4(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync47(tmp, "utf8");
+    const text = readFileSync48(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
     return null;
   } finally {
     try {
-      rmSync9(tmp, { force: true });
+      rmSync10(tmp, { force: true });
     } catch {
     }
   }
@@ -66299,12 +67361,12 @@ async function captureConsoleBottom(pid, rows = 20) {
 
 // src/type-guard.ts
 function guardConfig() {
-  const num3 = (v, def) => Number(v) > 0 ? Number(v) : def;
+  const num4 = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
     enabled: !/^(off|0|false)$/i.test(process.env.CCR_TYPE_GUARD ?? ""),
-    pollMs: num3(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
-    stableMs: num3(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
-    maxMs: num3(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
+    pollMs: num4(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
+    stableMs: num4(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
+    maxMs: num4(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
   };
 }
 var isBorderRow = (l) => {
@@ -66368,7 +67430,7 @@ var sleep4 = (ms) => new Promise((r) => setTimeout(r, ms));
 async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   const cfg2 = opts.cfg ?? guardConfig();
   const abort = opts.abort ?? (() => false);
-  const t02 = Date.now();
+  const t03 = Date.now();
   let lastKey = "";
   let stableSince = 0;
   let held = false;
@@ -66377,25 +67439,25 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
     const box = lines ? extractInputBox(lines) : null;
     if (!box) return { kind: "unknown" };
     if (!anyKnownPresent(box, knownTexts)) return { kind: "skip-absent" };
-    if (!foreignResidual(box, knownTexts)) return held ? { kind: "enter-after-wait", waitedMs: Date.now() - t02 } : { kind: "enter" };
+    if (!foreignResidual(box, knownTexts)) return held ? { kind: "enter-after-wait", waitedMs: Date.now() - t03 } : { kind: "enter" };
     held = true;
     const key = JSON.stringify(box);
     if (key !== lastKey) {
       lastKey = key;
       stableSince = Date.now();
     } else if (stableSince && Date.now() - stableSince >= cfg2.stableMs) {
-      return { kind: "enter-after-wait", waitedMs: Date.now() - t02 };
+      return { kind: "enter-after-wait", waitedMs: Date.now() - t03 };
     }
-    if (Date.now() - t02 >= cfg2.maxMs) return { kind: "timeout", waitedMs: Date.now() - t02 };
+    if (Date.now() - t03 >= cfg2.maxMs) return { kind: "timeout", waitedMs: Date.now() - t03 };
     if (abort()) return { kind: "aborted" };
     await sleep4(cfg2.pollMs);
   }
 }
 
 // src/session-title.ts
-import { readdirSync as readdirSync19, statSync as statSync16 } from "node:fs";
+import { readdirSync as readdirSync19, statSync as statSync18 } from "node:fs";
 import { homedir as homedir21 } from "node:os";
-import { join as join57 } from "node:path";
+import { join as join58 } from "node:path";
 function titleFromLine(line) {
   if (!line.includes('"ai-title"') && !line.includes('"custom-title"')) return void 0;
   let obj;
@@ -66430,10 +67492,10 @@ function encodedProjectDir(cwd) {
 }
 function resolveSessionTitleFile(opts) {
   if (!opts.cwd || !opts.sessionId) return null;
-  const dir = join57(opts.home ?? homedir21(), ".claude", "projects", encodedProjectDir(opts.cwd));
-  const direct = join57(dir, `${opts.sessionId}.jsonl`);
+  const dir = join58(opts.home ?? homedir21(), ".claude", "projects", encodedProjectDir(opts.cwd));
+  const direct = join58(dir, `${opts.sessionId}.jsonl`);
   try {
-    if (statSync16(direct).isFile()) return direct;
+    if (statSync18(direct).isFile()) return direct;
   } catch {
   }
   let entries;
@@ -66445,9 +67507,9 @@ function resolveSessionTitleFile(opts) {
   let best = null;
   for (const f of entries) {
     if (!f.endsWith(".jsonl")) continue;
-    const p = join57(dir, f);
+    const p = join58(dir, f);
     try {
-      const m = statSync16(p).mtimeMs;
+      const m = statSync18(p).mtimeMs;
       if (!best || m > best.m) best = { p, m };
     } catch {
     }
@@ -66456,9 +67518,9 @@ function resolveSessionTitleFile(opts) {
 }
 
 // src/engine-rollouts.ts
-import { execFileSync as execFileSync5 } from "node:child_process";
-import { closeSync as closeSync5, openSync as openSync5, readFileSync as readFileSync48, readdirSync as readdirSync20, readSync as readSync4, renameSync as renameSync15, statSync as statSync17, writeFileSync as writeFileSync30 } from "node:fs";
-import { basename as basename6, join as join58, relative as relative3 } from "node:path";
+import { execFileSync as execFileSync6 } from "node:child_process";
+import { closeSync as closeSync6, openSync as openSync6, readFileSync as readFileSync49, readdirSync as readdirSync20, readSync as readSync5, renameSync as renameSync16, statSync as statSync19, writeFileSync as writeFileSync30 } from "node:fs";
+import { basename as basename6, join as join59, relative as relative3 } from "node:path";
 var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
 var ENGINE_SCAN_SPECS = [
   { engine: "codex", label: "Codex", envRoot: "CCR_CODEX_SESSIONS_ROOT", homeDirName: ".codex", filePattern: /^rollout-.+\.jsonl$/i, commandPattern: commandPatternOf("codex") },
@@ -66468,7 +67530,7 @@ var ENGINE_SCAN_SPECS = [
   { engine: "zcode", label: "ZCode", envRoot: "CCR_ZCODE_SESSIONS_ROOT", homeDirName: ".zcode", filePattern: /\.jsonl$/i, commandPattern: commandPatternOf("zcode") }
 ];
 function engineRoot(spec, home) {
-  return process.env[spec.envRoot] || join58(home, spec.homeDirName, "sessions");
+  return process.env[spec.envRoot] || join59(home, spec.homeDirName, "sessions");
 }
 var clip3 = (text, cap) => {
   const compact2 = text.replace(/\s+/g, " ").trim();
@@ -66639,7 +67701,7 @@ function rolloutFiles(root, pattern) {
       return;
     }
     for (const entry of entries) {
-      const p = join58(dir, entry.name);
+      const p = join59(dir, entry.name);
       if (entry.isDirectory()) walk(p, depth + 1);
       else if (entry.isFile() && pattern.test(entry.name)) out.push(p);
     }
@@ -66670,12 +67732,12 @@ var RolloutScanner = class {
     this.loaded = true;
     if (!this.persistFile) return;
     try {
-      const dump = JSON.parse(readFileSync48(this.persistFile, "utf8"));
+      const dump = JSON.parse(readFileSync49(this.persistFile, "utf8"));
       if (dump.version !== 1 || !dump.files || typeof dump.files !== "object") return;
       for (const [rel, entry] of Object.entries(dump.files)) {
         if (!entry || typeof entry.offset !== "number" || !entry.profile) continue;
         if (!(entry.offset >= 0) || typeof entry.carry !== "string") continue;
-        const filePath = join58(this.root, rel);
+        const filePath = join59(this.root, rel);
         this.cursors.set(filePath, { offset: entry.offset, carry: entry.carry, profile: { ...entry.profile, filePath } });
       }
     } catch {
@@ -66699,7 +67761,7 @@ var RolloutScanner = class {
       }
       const tmp = `${this.persistFile}.tmp`;
       writeFileSync30(tmp, JSON.stringify({ version: 1, files }));
-      renameSync15(tmp, this.persistFile);
+      renameSync16(tmp, this.persistFile);
     } catch {
     }
   }
@@ -66712,7 +67774,7 @@ var RolloutScanner = class {
       let size = 0;
       let mtime = now;
       try {
-        const stat2 = statSync17(filePath);
+        const stat2 = statSync19(filePath);
         size = stat2.size;
         mtime = Math.round(stat2.mtimeMs);
       } catch {
@@ -66729,7 +67791,7 @@ var RolloutScanner = class {
       if (!unchanged && budget > 0) {
         let fd2;
         try {
-          fd2 = openSync5(filePath, "r");
+          fd2 = openSync6(filePath, "r");
           const remaining = size - cursor.offset;
           if (remaining > 0) {
             const buffer = Buffer.alloc(Math.min(remaining, 1024 * 1024));
@@ -66738,7 +67800,7 @@ var RolloutScanner = class {
             while (position < size) {
               if (budget <= 0) break;
               const want = Math.min(buffer.length, size - position, budget);
-              const read = readSync4(fd2, buffer, 0, want, position);
+              const read = readSync5(fd2, buffer, 0, want, position);
               if (read <= 0) break;
               position += read;
               budget -= read;
@@ -66760,7 +67822,7 @@ var RolloutScanner = class {
           continue;
         } finally {
           if (fd2 !== void 0) try {
-            closeSync5(fd2);
+            closeSync6(fd2);
           } catch {
           }
         }
@@ -66779,7 +67841,7 @@ var RolloutScanner = class {
 function processCwd(pid) {
   if (process.platform === "win32") return void 0;
   try {
-    const raw = execFileSync5("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf8", timeout: 3e3 });
+    const raw = execFileSync6("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf8", timeout: 3e3 });
     return raw.split(/\r?\n/).find((line) => line.startsWith("n"))?.slice(1) || void 0;
   } catch {
     return void 0;
@@ -66792,7 +67854,7 @@ function parseProcessStart(raw) {
 function captureCliProcesses() {
   if (process.platform === "win32") return null;
   try {
-    const raw = execFileSync5("ps", ["-axo", "pid=,ppid=,lstart=,command="], { encoding: "utf8", timeout: 5e3, maxBuffer: 4 * 1024 * 1024 });
+    const raw = execFileSync6("ps", ["-axo", "pid=,ppid=,lstart=,command="], { encoding: "utf8", timeout: 5e3, maxBuffer: 4 * 1024 * 1024 });
     const out = [];
     for (const line of raw.split(/\r?\n/)) {
       const match = /^\s*(\d+)\s+(\d+)\s+(.{24})\s+(.+)$/.exec(line);
@@ -66850,9 +67912,9 @@ function pBody(p) {
 function transcriptFirstTs(p) {
   let fd2;
   try {
-    fd2 = openSync6(p, "r");
+    fd2 = openSync7(p, "r");
     const buf = Buffer.alloc(4096);
-    const n = readSync5(fd2, buf, 0, 4096, 0);
+    const n = readSync6(fd2, buf, 0, 4096, 0);
     const line = buf.toString("utf-8", 0, n).split("\n")[0];
     const ts2 = line ? JSON.parse(line).timestamp : void 0;
     const t = ts2 ? Date.parse(ts2) : NaN;
@@ -66861,7 +67923,7 @@ function transcriptFirstTs(p) {
     return 0;
   } finally {
     if (fd2 !== void 0) try {
-      closeSync6(fd2);
+      closeSync7(fd2);
     } catch {
     }
   }
@@ -66872,7 +67934,7 @@ var sleep5 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir22(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync49(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync50(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -66881,7 +67943,7 @@ function cliSessionIdle(pid) {
 function cliSessionStatus(pid) {
   try {
     const f = path5.join(homedir22(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync49(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync50(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -66950,29 +68012,6 @@ var Bridge = class _Bridge {
         scanner: new RolloutScanner(spec, engineRoot(spec, homedir22()), path5.join(opts.dataDir, `engine-cursors-${spec.engine}.json`))
       });
     }
-    this.reconcilePidsFromSessions();
-    this.hydratePidsFromCache();
-    this.reconcilePidsFromProcesses();
-    this.healExternal();
-    this.loadQueueDisk();
-    this.reviveAliveExternals();
-    this.reclaimAliveAtBoot();
-    this.adoptOrphans();
-    this.scanExternalEngines();
-    this.healTimer = setInterval(() => {
-      this.reconcilePidsFromSessions();
-      this.hydratePidsFromCache();
-      this.reconcilePidsFromProcesses();
-      this.healExternal();
-      this.reviveAliveExternals();
-      this.adoptOrphans();
-      this.sweepIdleArchive();
-      this.sweepStaleQueued();
-    }, 6e4);
-    this.healTimer.unref?.();
-    const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5e3;
-    this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
-    this.engineScanTimer.unref?.();
   }
   bus;
   mgr;
@@ -67208,6 +68247,42 @@ var Bridge = class _Bridge {
   get resumeVerifyMs() {
     return Number(process.env.CCR_RESUME_VERIFY_MS) > 0 ? Number(process.env.CCR_RESUME_VERIFY_MS) : 45e3;
   }
+  /** bootfast2（刀④）：boot 扫描族单口（原构造器 :512-548 段整体迁此）——pid 三源
+   * 补定位+自愈/重接管+孤儿扫描+引擎扫描+60s heal/引擎两 timer 挂载。startServer 在
+   * listen 回调 setTimeout(0) 调用（listen 先起，扫描不挡 HTTP）。幂等保护：二次调用
+   * 仅重跑扫描（timer 挂载带 has 检查）——生产单次，测试可重复。 */
+  runBootScan() {
+    this.reconcilePidsFromSessions();
+    this.hydratePidsFromCache();
+    this.reconcilePidsFromProcesses();
+    bootMark("bridge-pids");
+    this.healExternal();
+    this.loadQueueDisk();
+    this.reviveAliveExternals();
+    this.reclaimAliveAtBoot();
+    bootMark("bridge-heal");
+    this.adoptOrphans();
+    bootMark("bridge-adopt-orphans");
+    this.scanExternalEngines();
+    bootMark("bridge-engine-scan");
+    if (this.healTimer) return;
+    this.healTimer = setInterval(() => {
+      this.reconcilePidsFromSessions();
+      this.hydratePidsFromCache();
+      this.reconcilePidsFromProcesses();
+      this.healExternal();
+      this.reviveAliveExternals();
+      this.adoptOrphans();
+      this.sweepIdleArchive();
+      this.sweepStaleQueued();
+    }, 6e4);
+    this.healTimer.unref?.();
+    const engineScanMs = Number(process.env.CCR_ENGINE_SCAN_MS) > 0 ? Number(process.env.CCR_ENGINE_SCAN_MS) : 5e3;
+    if (!this.engineScanTimer) {
+      this.engineScanTimer = setInterval(() => this.scanExternalEngines(), engineScanMs);
+      this.engineScanTimer.unref?.();
+    }
+  }
   close() {
     if (this.queuePollTimer) clearInterval(this.queuePollTimer);
     if (this.healTimer) clearInterval(this.healTimer);
@@ -67364,7 +68439,7 @@ var Bridge = class _Bridge {
         if (!dir.isDirectory()) continue;
         const p = path5.join(root, dir.name, `${sid}.jsonl`);
         try {
-          if (existsSync38(p)) return p;
+          if (existsSync39(p)) return p;
         } catch {
         }
       }
@@ -67442,7 +68517,7 @@ var Bridge = class _Bridge {
           let mtime;
           let fileSize = 0;
           try {
-            const st2 = statSync18(p);
+            const st2 = statSync20(p);
             mtime = st2.mtimeMs;
             fileSize = st2.size;
           } catch {
@@ -67472,7 +68547,7 @@ var Bridge = class _Bridge {
           this.orphanProbe.delete(p);
           let orphanAt = Date.now();
           try {
-            orphanAt = statSync18(p).mtimeMs;
+            orphanAt = statSync20(p).mtimeMs;
           } catch {
           }
           this.mgr.ensureExternal(id2, cwd, "", sid, transcriptFirstTs(p), { updatedAt: orphanAt });
@@ -67495,11 +68570,11 @@ var Bridge = class _Bridge {
   readCwdFromTail(p) {
     let fd2;
     try {
-      fd2 = openSync6(p, "r");
-      const size = statSync18(p).size;
+      fd2 = openSync7(p, "r");
+      const size = statSync20(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
-      readSync5(fd2, buf, 0, len, size - len);
+      readSync6(fd2, buf, 0, len, size - len);
       const lines = buf.toString("utf-8").split("\n").reverse();
       for (const line of lines) {
         const i = line.indexOf("{");
@@ -67514,7 +68589,7 @@ var Bridge = class _Bridge {
     } catch {
       return "";
     } finally {
-      if (fd2 !== void 0) closeSync6(fd2);
+      if (fd2 !== void 0) closeSync7(fd2);
     }
   }
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
@@ -67524,14 +68599,14 @@ var Bridge = class _Bridge {
   transcriptHeadHas(p, needle) {
     let fd2;
     try {
-      fd2 = openSync6(p, "r");
+      fd2 = openSync7(p, "r");
       const buf = Buffer.alloc(4096);
-      const n = readSync5(fd2, buf, 0, 4096, 0);
+      const n = readSync6(fd2, buf, 0, 4096, 0);
       return buf.subarray(0, n).includes(needle);
     } catch {
       return false;
     } finally {
-      if (fd2 !== void 0) closeSync6(fd2);
+      if (fd2 !== void 0) closeSync7(fd2);
     }
   }
   isTitleGenTranscript(p) {
@@ -67579,8 +68654,8 @@ var Bridge = class _Bridge {
   scanOrphanActivity(p) {
     let fd2;
     try {
-      fd2 = openSync6(p, "r");
-      const size = statSync18(p).size;
+      fd2 = openSync7(p, "r");
+      const size = statSync20(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -67595,7 +68670,7 @@ var Bridge = class _Bridge {
         return n;
       };
       for (let pos = 0; pos < size; ) {
-        const len = readSync5(fd2, buf, 0, chunk, pos);
+        const len = readSync6(fd2, buf, 0, chunk, pos);
         if (len <= 0) break;
         pos += len;
         const isLast = pos >= size;
@@ -67609,14 +68684,14 @@ var Bridge = class _Bridge {
     } catch {
       return { adopt: false, size: 0 };
     } finally {
-      if (fd2 !== void 0) closeSync6(fd2);
+      if (fd2 !== void 0) closeSync7(fd2);
     }
   }
   // Relay 重启后内存里的 cli_pid 丢了，而空闲终端不会有新 hook 事件来恢复；
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync49(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync50(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -67646,7 +68721,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync49(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync50(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -67698,7 +68773,7 @@ var Bridge = class _Bridge {
     const reg = st2?.cli_pid;
     if (reg && cliHostAlive(reg)) return reg;
     try {
-      const cache = JSON.parse(readFileSync49(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync50(this.pidCacheFile, "utf-8"));
       if (cache[sid] && cliHostAlive(cache[sid])) return cache[sid];
     } catch {
     }
@@ -67982,16 +69057,16 @@ var Bridge = class _Bridge {
   //（utf8 行扫 + 类型词预过滤）——中段标题由 pushAssistantTexts 增量链跟随，两窗兜底。
   scanTranscriptTitles(p) {
     try {
-      const size = statSync18(p).size;
+      const size = statSync20(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
-      const fd2 = openSync6(p, "r");
+      const fd2 = openSync7(p, "r");
       try {
-        readSync5(fd2, buf, 0, buf.length, 0);
-        if (size > buf.length) readSync5(fd2, buf, buf.length / 2, buf.length / 2, size - buf.length / 2);
+        readSync6(fd2, buf, 0, buf.length, 0);
+        if (size > buf.length) readSync6(fd2, buf, buf.length / 2, buf.length / 2, size - buf.length / 2);
       } catch {
       } finally {
         try {
-          closeSync6(fd2);
+          closeSync7(fd2);
         } catch {
         }
       }
@@ -68339,7 +69414,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync49(path5.join(homedir22(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync50(path5.join(homedir22(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -68889,7 +69964,7 @@ var Bridge = class _Bridge {
         return;
       }
       this.stuckGuarding.add(sessionId);
-      const t02 = Date.now();
+      const t03 = Date.now();
       void guardCompensateEnter([text], () => captureConsoleBottom(pid), {
         // 短预算：submit-enter 是快路径，守门只为「框内是否只有我们的文本」一次快照判定，
         // 不承担「等人工停手」职责（那是慢层看门狗的分工）——held 态 600ms 内必出判定
@@ -68907,7 +69982,7 @@ var Bridge = class _Bridge {
           const w2 = ledger();
           const tryNext = w2.tries + 1;
           this.stuckWatch.set(sessionId, { lastTry: Date.now(), tries: tryNext, skips: w2.skips, given_up: tryNext >= 3, msgKey: normKey(text) });
-          console.log(`[submit] enter fired sid=${sessionId.slice(0, 14)} why=${why} verdict=${v.kind} round=${round} ms=${Date.now() - sentAt} (guard ${Date.now() - t02}ms)`);
+          console.log(`[submit] enter fired sid=${sessionId.slice(0, 14)} why=${why} verdict=${v.kind} round=${round} ms=${Date.now() - sentAt} (guard ${Date.now() - t03}ms)`);
           void injectEnter(pid).then((r) => {
             if (!r.ok) this.onInjectFail(sessionId, r.error);
           });
@@ -69025,7 +70100,7 @@ var Bridge = class _Bridge {
   //（重放后为空），从同一账本重建「排队中」回显，重连端可见
   loadQueueDisk() {
     try {
-      const raw = JSON.parse(readFileSync49(this.queueFile, "utf-8"));
+      const raw = JSON.parse(readFileSync50(this.queueFile, "utf-8"));
       for (const [id2, list] of Object.entries(raw)) {
         if (!Array.isArray(list) || list.length === 0) continue;
         if (!this.mgr.getExternal(id2)) continue;
@@ -69058,7 +70133,7 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync49(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync50(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
       writeFileSync31(this.pidCacheFile, JSON.stringify(raw));
     } catch {
@@ -69122,7 +70197,7 @@ var Bridge = class _Bridge {
       for (const f of readdirSync21(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync49(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync50(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -69250,7 +70325,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const fstat = statSync18(transcriptPath);
+      const fstat = statSync20(transcriptPath);
       const size = fstat.size;
       const fileMtime = Math.round(fstat.mtimeMs);
       const prev = this.transcriptOffsets.get(id2);
@@ -69264,11 +70339,11 @@ var Bridge = class _Bridge {
       } else {
         start = prev;
       }
-      const fd2 = openSync6(transcriptPath, "r");
+      const fd2 = openSync7(transcriptPath, "r");
       const len = size - start;
       const buf = Buffer.alloc(len);
-      readSync5(fd2, buf, 0, len, start);
-      closeSync6(fd2);
+      readSync6(fd2, buf, 0, len, start);
+      closeSync7(fd2);
       const raw = buf.toString("utf-8");
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
@@ -69630,13 +70705,13 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync18(path6).size;
-      const fd2 = openSync6(path6, "r");
+      const size = statSync20(path6).size;
+      const fd2 = openSync7(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
       for (let pos = 0; pos < size; ) {
-        const n = readSync5(fd2, buf, 0, CHUNK2, pos);
+        const n = readSync6(fd2, buf, 0, CHUNK2, pos);
         if (n <= 0) break;
         const text = carry + buf.toString("utf-8", 0, n);
         const lines = text.split("\n");
@@ -69675,7 +70750,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync6(fd2);
+      closeSync7(fd2);
     } catch {
       return;
     }
@@ -69690,13 +70765,13 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync18(path6).size;
-      const fd2 = openSync6(path6, "r");
+      const size = statSync20(path6).size;
+      const fd2 = openSync7(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
       for (let pos = 0; pos < size; ) {
-        const n = readSync5(fd2, buf, 0, CHUNK2, pos);
+        const n = readSync6(fd2, buf, 0, CHUNK2, pos);
         if (n <= 0) break;
         const text = carry + buf.toString("utf-8", 0, n);
         const lines = text.split("\n");
@@ -69711,7 +70786,7 @@ var Bridge = class _Bridge {
         }
         pos += n;
       }
-      closeSync6(fd2);
+      closeSync7(fd2);
     } catch {
       return;
     }
@@ -70227,7 +71302,7 @@ var Bridge = class _Bridge {
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync49(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync50(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -70239,19 +71314,19 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync18(file);
+      st2 = statSync20(file);
     } catch {
       return null;
     }
     const start = Math.max(0, st2.size - 65536);
     let buf;
     try {
-      const fd2 = openSync6(file, "r");
+      const fd2 = openSync7(file, "r");
       try {
         buf = Buffer.alloc(st2.size - start);
-        readSync5(fd2, buf, 0, buf.length, start);
+        readSync6(fd2, buf, 0, buf.length, start);
       } finally {
-        closeSync6(fd2);
+        closeSync7(fd2);
       }
     } catch {
       return null;
@@ -70332,7 +71407,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync18(agentFile).size;
+          const sz2 = statSync20(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -70741,6 +71816,8 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   // X1 多机编排：密封 xmsg 发送命令面（ccops/org/会话卡按钮三口汇流；与 cloud-client
   // 白名单逐字一致纪律——#212 漏加=LAN 实机死路同款坑）
   "COMMAND_XMSG",
+  // [W-LINKQUALITY-R1] 遥测补报帧命令（与 cloud-client COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_TELEMETRY_LINK",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -70821,7 +71898,7 @@ function listCustomCommands(dir, source) {
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync50(p, "utf-8").slice(0, 400);
+      const head = readFileSync51(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -70833,11 +71910,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join59(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join60(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync22(join59(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join59(dir, e.name, g2)), source });
+        for (const g2 of readdirSync22(join60(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join60(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -70862,32 +71939,32 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     fileURLToPath3(new URL("../", import.meta.url)),
     fileURLToPath3(new URL("../../", import.meta.url))
   ];
-  const webRoot = webRootCandidates.find((p) => p && existsSync39(join59(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
+  const webRoot = webRootCandidates.find((p) => p && existsSync40(join60(p, "web-console", "index-005.html"))) ?? webRootCandidates[1];
   const readVer = (p, re) => {
     try {
-      const m = readFileSync50(p, "utf-8").match(re);
+      const m = readFileSync51(p, "utf-8").match(re);
       return m?.[1] ?? "";
     } catch {
       return "";
     }
   };
-  const ver005Path = join59(webRoot, "web-console", "index-005.html");
-  const verLegacyPath = join59(webRoot, "web-console", "index.html");
+  const ver005Path = join60(webRoot, "web-console", "index-005.html");
+  const verLegacyPath = join60(webRoot, "web-console", "index.html");
   const ver005 = readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.0-test.97";
+  const verRelay = "0.7.0-test.99";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
   if (verRelay && (ver005 && ver005 !== verRelay || verLegacy && verLegacy !== verRelay)) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1Arelay=${verRelay} \u4E0E console \u4E0D\u4E00\u81F4\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014relay.mjs \u4E0E web-console \u975E\u540C\u6279\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
-  const consoleHtml005 = join59(webRoot, "web-console", "index-005.html");
-  const naclJs = join59(webRoot, "web-console", "nacl.js");
-  const qrJs = join59(webRoot, "web-console", "qr.js");
-  const mobileDir = join59(webRoot, "mobile") + sep8;
+  const consoleHtml005 = join60(webRoot, "web-console", "index-005.html");
+  const naclJs = join60(webRoot, "web-console", "nacl.js");
+  const qrJs = join60(webRoot, "web-console", "qr.js");
+  const mobileDir = join60(webRoot, "mobile") + sep8;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -70914,7 +71991,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync19(file).isFile();
+      isFile = statSync21(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -70922,7 +71999,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync50(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync51(file));
     return true;
   };
   const serveDesign = (url, res) => {
@@ -70935,7 +72012,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     let isFile = false;
     try {
-      isFile = statSync19(file).isFile();
+      isFile = statSync21(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -70943,13 +72020,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream", "cache-control": "max-age=300" }).end(readFileSync50(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream", "cache-control": "max-age=300" }).end(readFileSync51(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
   const connUa = /* @__PURE__ */ new WeakMap();
   const onlineDeviceIds = /* @__PURE__ */ new Map();
   mgr2.liveFrontends = () => [...wss.clients].some((c) => c.readyState === import_websocket.default.OPEN && !c.pairing) || !!opts.cloudHasPhones?.();
+  let bridgeBootScanned = false;
   const bridge = new Bridge(bus2, mgr2, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg2.dataDir,
@@ -70965,25 +72043,29 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "POST" && url.pathname === "/bridge/hook") {
+      if (!bridgeBootScanned) {
+        res.writeHead(503, { "content-type": "application/json", "retry-after": "1" }).end(JSON.stringify({ ok: false, error: "relay booting" }));
+        return;
+      }
       void handleBridgeHook(req, res, bridge, cfg2);
       return;
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
     if (req.method === "GET" && serveDesign(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync39(consoleHtml005)) {
+      if (!existsSync40(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync50(consoleHtml005));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync51(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname === "/app2") {
-      if (!existsSync39(consoleHtml005)) {
+      if (!existsSync40(consoleHtml005)) {
         res.writeHead(503).end("web-console/index-005.html \u4E0D\u5B58\u5728\uFF08005 \u65B0\u58F3\u672A\u751F\u6210/\u672A\u968F\u5305\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync50(consoleHtml005));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync51(consoleHtml005));
       return;
     }
     if (req.method === "GET" && url.pathname.startsWith("/preview/")) {
@@ -70992,28 +72074,28 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end("not found");
         return;
       }
-      const previewPath = join59(webRoot, "web-console", "preview", name);
-      if (!existsSync39(previewPath)) {
+      const previewPath = join60(webRoot, "web-console", "preview", name);
+      if (!existsSync40(previewPath)) {
         res.writeHead(404).end("preview \u4E0D\u5B58\u5728: " + name);
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync50(previewPath));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(readFileSync51(previewPath));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
-      if (!existsSync39(naclJs)) {
+      if (!existsSync40(naclJs)) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync50(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync51(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
-      if (!existsSync39(qrJs)) {
+      if (!existsSync40(qrJs)) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync50(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync51(qrJs));
       return;
     }
     if (req.method === "GET" && (url.pathname.startsWith("/css/") || url.pathname.startsWith("/js/"))) {
@@ -71022,22 +72104,22 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end("not found");
         return;
       }
-      const assetPath = join59(webRoot, "web-console", rel);
-      if (!existsSync39(assetPath)) {
+      const assetPath = join60(webRoot, "web-console", rel);
+      if (!existsSync40(assetPath)) {
         res.writeHead(404).end("not found");
         return;
       }
       const ct2 = rel.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
-      res.writeHead(200, { "content-type": ct2, "cache-control": "no-store" }).end(readFileSync50(assetPath));
+      res.writeHead(200, { "content-type": ct2, "cache-control": "no-store" }).end(readFileSync51(assetPath));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join59(webRoot, "web-console", url.pathname.slice(1));
-      if (!existsSync39(file)) {
+      const file = join60(webRoot, "web-console", url.pathname.slice(1));
+      if (!existsSync40(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync50(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync51(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -71081,11 +72163,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join59(cfg2.dataDir, "relay-name");
+      const file = join60(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync50(file, "utf8").trim().slice(0, 40);
+          name = readFileSync51(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -71193,6 +72275,35 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr2, cfg2);
+      return;
+    }
+    if (url.pathname === "/api/telemetry/link") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      if (req.method === "POST") {
+        let lqBody = "";
+        req.on("data", (c) => {
+          lqBody += c;
+        });
+        req.on("end", () => {
+          try {
+            const body = JSON.parse(lqBody || "{}");
+            const r = ingestLinkEvents(cfg2.dataDir, body.events);
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(r));
+          } catch (e) {
+            res.writeHead(400).end("bad request: " + String(e instanceof Error ? e.message : e).slice(0, 80));
+          }
+        });
+        return;
+      }
+      if (req.method === "GET") {
+        const winMs = Math.min(Math.max(Number(url.searchParams.get("windowMs")) || 864e5, 36e5), 7 * 864e5);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(linkSummary(cfg2.dataDir, winMs)));
+        return;
+      }
+      res.writeHead(405).end("method not allowed");
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/release") {
@@ -71351,6 +72462,19 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       });
       return;
     }
+    if (req.method === "GET" && url.pathname === "/api/state") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
+        ok: true,
+        workers_running: mgr2.activeManagedCount(),
+        cap: workerConcurrencyCap(),
+        queued: mgr2.dispatchQueueSize()
+      }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/org") {
       if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
         res.writeHead(401).end("unauthorized");
@@ -71425,6 +72549,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             // 实验特性协助（check 只读，on 写 settings env 段——CLI 由用户亲手运行）
             "join",
             "pm-claim",
+            "pm-release",
             "log-append",
             "agent-teams",
             "dispatch-remote",
@@ -71527,8 +72652,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join59(homedir23(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join59(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join60(homedir23(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join60(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -71672,7 +72797,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // 打标时序竞态漏标=用户 1016/1021 两报根因）。旧客户端 session.relay_source
           // 客户端打标有 `|| srcTag`/`if (!s.relay_source)` 守卫=自带字段自动优先，
           // 向前兼容零改
-          sessions: withRelaySource(mgr2.snapshot(), opts.relayName?.()),
+          sessions: (() => {
+            const sessionsArr = withRelaySource(mgr2.snapshot(), opts.relayName?.());
+            globalThis.__bootSnapSessions = sessionsArr;
+            return sessionsArr;
+          })(),
           // conn-page-v2 件③：客户端台账随快照（设置页「客户端」模块渲染源；旧端
           // 无消费面零影响——端上以字段存在性判能力）
           relay_devices: listDevices(cfg2.dataDir, /* @__PURE__ */ new Set([...onlineDeviceIds.values()])),
@@ -71680,6 +72809,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
           schema_version: SNAPSHOT_SCHEMA_VERSION,
+          // bootfast2（移交§三）：boot 相位——listen 先起后数据渐进加载期端上可感
+          //（「已连接，数据加载中」替代「relay 未启动」空屏）；loaded=当前会话数
+          boot: { phase: mgr2.bootDataReady ? "ready" : "loading", loaded: globalThis.__bootSnapSessions?.length ?? 0 },
+          // P2-1：复用上 sessions 数组（snapshot() 全量 clone 成本×2 根除）
           homedir: homedir23(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
@@ -71848,7 +72981,19 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     console.error(`[relay] server error: ${err.message}`);
     process.exit(1);
   });
-  server.listen(cfg2.port, opts.onReady);
+  server.listen(cfg2.port, () => {
+    bootMark("listen");
+    bootDone();
+    opts.onReady?.();
+    setTimeout(() => {
+      try {
+        bridge.runBootScan();
+      } catch (e) {
+        console.warn(`[bridge] boot \u626B\u63CF\u65CF\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      bridgeBootScanned = true;
+    }, 0);
+  });
   return {
     port: cfg2.port,
     bridge,
@@ -71914,11 +73059,11 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync50(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync51(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
-      mkdirSync28(dirname15(pluginConfigPath()), { recursive: true });
+      mkdirSync29(dirname16(pluginConfigPath()), { recursive: true });
       writeFileSync32(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
     } catch {
       res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
@@ -72047,10 +73192,72 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/patrol.ts
-import { statfsSync, writeFileSync as writeFileSync33, readFileSync as readFileSync51, readdirSync as readdirSync23, existsSync as existsSync40, rmSync as rmSync10 } from "node:fs";
-import { join as join60 } from "node:path";
-import { statSync as statSync20 } from "node:fs";
+import { statfsSync, writeFileSync as writeFileSync33, readFileSync as readFileSync52, readdirSync as readdirSync23, existsSync as existsSync41, rmSync as rmSync11 } from "node:fs";
+import { join as join61 } from "node:path";
+import { statSync as statSync22 } from "node:fs";
 import { homedir as homedir24 } from "node:os";
+
+// src/board-recon.ts
+var STALE_MS_DEFAULT = 4 * 36e5;
+var ORPHAN_GRACE_MS = 45 * 6e4;
+var OWNER_ACTIVE_WINDOW_MS = 20 * 6e4;
+var ORPHAN_DEAD_REASONS = /(success|用户(终断|停止|结束)|completed|cancelled|canceled)/i;
+function reconcileBoardCards(input) {
+  const now = input.now ?? Date.now();
+  const staleMs = input.staleMs ?? (Number(process.env.CCR_BOARDRECON_STALE_MS) || STALE_MS_DEFAULT);
+  const live = /* @__PURE__ */ new Map();
+  for (const s of input.sessions) {
+    if (s.session_id && !s.done_reason) live.set(s.session_id, s);
+  }
+  const running = /* @__PURE__ */ new Set();
+  for (const r of input.dispatchLog) {
+    if (r.id && (r.status === "running" || r.status === "dispatched" || r.status === "queued")) running.add(r.id);
+  }
+  const prevFlagged = input.previouslyFlagged ?? /* @__PURE__ */ new Set();
+  const flagNow = input.flaggedNow ?? /* @__PURE__ */ new Set();
+  const actions = [];
+  let claimedCards = 0;
+  let workingSessions = 0;
+  for (const s of input.sessions) {
+    if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
+  }
+  for (const { gid, board } of input.boards) {
+    for (const e of board.entries) {
+      if (e.status !== "claimed") continue;
+      claimedCards++;
+      const updated = Number(e.updated_at || e.ts || 0);
+      const age = now - updated;
+      if (e.owner_session && !live.has(e.owner_session)) {
+        const ownerSes = input.sessions.find((x) => x.session_id === e.owner_session);
+        const deadCert = !!(ownerSes?.done_reason && ORPHAN_DEAD_REASONS.test(ownerSes.done_reason));
+        const ledgerRunning = !!(e.dispatch_id && running.has(e.dispatch_id));
+        const recentActive = !!ownerSes?.last_active_at && now - ownerSes.last_active_at < OWNER_ACTIVE_WINDOW_MS;
+        const inGrace = age < ORPHAN_GRACE_MS;
+        if (!deadCert || ledgerRunning || recentActive || inGrace) {
+          continue;
+        }
+        flagNow.add(e.id);
+        if (!prevFlagged.has(e.id)) {
+          continue;
+        }
+        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "orphan-session", detail: `owner ${String(e.owner_session).slice(0, 8)} \u5224\u6B7B\u7ECF\u65C1\u8BC1\u805A\u5408\uFF08\u767D\u540D\u5355${deadCert ? "\u547D\u4E2D" : "\u5916\u7EC8\u6001/\u4E0D\u5728\u518C"}+\u53F0\u8D26\u65E0 running${ledgerRunning ? "" : "\u2713"}+\u8FD1\u7A97\u65E0\u6D3B\u52A8${recentActive ? "" : "\u2713"}+\u9F84 ${Math.round(age / 6e4)}min \u8FC7\u5BBD\u9650${inGrace ? "" : "\u2713"}\uFF0C\u4E24\u62CD\u786E\u8BA4\uFF09`, toBacklog: true });
+        continue;
+      }
+      if (age > staleMs) {
+        const ownerLive = live.get(e.owner_session || "");
+        const active = !!ownerLive && (ownerLive.status === "WORKING" || ownerLive.status === "WAITING");
+        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "stale-no-progress", detail: `claimed \u6EDE\u7559 ${Math.round(age / 36e5)}h \u65E0\u8FDB\u5C55\uFF08\u9608\u503C ${Math.round(staleMs / 36e5)}h${active ? "\uFF1Bowner \u6D3B\u8DC3\u4E2D\u2014\u2014\u53EA\u63D0\u9192\u4E0D\u5F52\u4F4D" : ""}\uFF09`, toBacklog: !active, advisory: active });
+      }
+    }
+  }
+  let mismatch = null;
+  if (claimedCards - workingSessions > 1) {
+    mismatch = `\u8FDB\u884C\u4E2D\u5361 ${claimedCards} > \u5DE5\u4F5C\u4E2D\u4F1A\u8BDD ${workingSessions}\uFF08\u6B63\u5DEE ${claimedCards - workingSessions}\u2014\u2014\u5B64\u513F\u5019\u9009\u89C1\u5BF9\u8D26\u6E05\u5355\uFF09`;
+  }
+  return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
+}
+
+// src/patrol.ts
 var WORKER_STALE_MIN = 40;
 var BOARD_CLAIMED_STALE_H = 48;
 var DISK_FREE_MIN_GB = 5;
@@ -72058,7 +73265,7 @@ var RECEIPT_STALE_H_DEFAULT = 24;
 var TODO_STALE_H_DEFAULT = 48;
 var CBC_PREFETCH_MAX = 20;
 var DOING_STALE_MIN_DEFAULT = 60;
-var num2 = (v, d2) => {
+var num3 = (v, d2) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : d2;
 };
@@ -72070,6 +73277,11 @@ var PatrolModule = class {
   mgr;
   opts;
   lightTimer = null;
+  /** R1-P0 两拍确认跨拍状态：上拍孤儿候选集（entryId） */
+  reconFlagged = /* @__PURE__ */ new Set();
+  /** R1-P2-1 审计/告警签名去重（同判定不重发） */
+  reconLastSig = "";
+  reconLastMismatch = "";
   fullTimer = null;
   // 去重账本：key → 上次告警文本（onset-only）
   lastAlerts = /* @__PURE__ */ new Map();
@@ -72090,8 +73302,8 @@ var PatrolModule = class {
   }
   start() {
     if (this.lightTimer || this.fullTimer) return;
-    const lightMs = num2(process.env.CCR_PATROL_LIGHT_MS, this.opts.lightMs ?? 5 * 6e4);
-    const fullMs = num2(process.env.CCR_PATROL_FULL_MS, this.opts.fullMs ?? 30 * 6e4);
+    const lightMs = num3(process.env.CCR_PATROL_LIGHT_MS, this.opts.lightMs ?? 5 * 6e4);
+    const fullMs = num3(process.env.CCR_PATROL_FULL_MS, this.opts.fullMs ?? 30 * 6e4);
     this.lightTimer = setInterval(() => {
       if (!this.opts.enabled()) return;
       if (autoTierOf("patrol") === "off") return;
@@ -72135,7 +73347,7 @@ var PatrolModule = class {
     } catch {
     }
     try {
-      const probe = join60(this.opts.dataDir, ".patrol-probe");
+      const probe = join61(this.opts.dataDir, ".patrol-probe");
       writeFileSync33(probe, String(Date.now()));
       alerts.push({ key: "dataDir", text: "" });
     } catch {
@@ -72153,13 +73365,13 @@ var PatrolModule = class {
           return;
         }
         for (const n of entries) {
-          const full = join60(d2, n);
+          const full = join61(d2, n);
           if (n.startsWith("cbc-update-prefetch-")) hit.push(full);
           else if (depth < 3) scan(full, depth + 1);
         }
       };
-      if (existsSync40(tmpRoot)) {
-        for (const top of readdirSync23(tmpRoot)) scan(join60(tmpRoot, top), 1);
+      if (existsSync41(tmpRoot)) {
+        for (const top of readdirSync23(tmpRoot)) scan(join61(tmpRoot, top), 1);
       }
       if (hit.length > CBC_PREFETCH_MAX) {
         if (autoTierOf("patrol") === "observe") {
@@ -72169,7 +73381,7 @@ var PatrolModule = class {
           let freed = 0;
           for (const d2 of hit) {
             try {
-              rmSync10(d2, { recursive: true, force: true });
+              rmSync11(d2, { recursive: true, force: true });
               freed++;
             } catch {
             }
@@ -72179,9 +73391,9 @@ var PatrolModule = class {
       } else this.resolve("cbc-prefetch");
     } catch {
     }
-    const t02 = Date.now();
+    const t03 = Date.now();
     setTimeout(() => {
-      const drift = Date.now() - t02 - 500;
+      const drift = Date.now() - t03 - 500;
       if (drift > 5e3) this.push("loop", `\u4E8B\u4EF6\u5FAA\u73AF\u6F02\u79FB ${Math.round(drift / 100) / 10}s\uFF08\u5B58\u5728\u540C\u6B65\u963B\u585E/CPU \u70E7\u8680\uFF09`);
       else this.resolve("loop");
     }, 500).unref?.();
@@ -72305,6 +73517,50 @@ var PatrolModule = class {
         }
       }
     } else this.resolve(`worker-stale`);
+    try {
+      const mode = autoTierOf("boardrecon");
+      if (mode !== "off") {
+        const boards = [];
+        for (const g2 of listGroups()) {
+          if (g2.status !== "active") continue;
+          const b = loadBoardFile(g2.id);
+          if (b && !b.frozen) boards.push({ gid: g2.id, board: b });
+        }
+        const sessions = this.mgr.snapshot().map((x) => ({ session_id: x.session_id, done_reason: x.done_reason ?? null, status: x.status, cli_pid: x.cli_pid ?? null, last_active_at: x.updated_at ?? 0 }));
+        const dispatchLog = readDispatchLog(void 0, 2e4);
+        const flagNow = /* @__PURE__ */ new Set();
+        const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow });
+        this.reconFlagged = flagNow;
+        const sig = r.actions.map((a) => a.entryId + a.reason).sort().join("|") + (r.mismatch ?? "");
+        if (r.actions.length && sig !== this.reconLastSig) {
+          this.reconLastSig = sig;
+          const lines2 = r.actions.slice(0, 8).map((a) => `${a.entryId}\u300C${a.text}\u300D${a.reason}\uFF1A${a.detail}`);
+          this.mgr.emitChainAudit("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08${mode}\uFF09\uFF1A${r.actions.length} \u5F20\u5224\u5B9A\u2014\u2014${lines2.join("\uFF1B").slice(0, 400)}`);
+          if (mode === "auto") {
+            let moved = 0;
+            for (const a of r.actions) {
+              if (a.advisory) continue;
+              const b = boards.find((x) => x.gid === a.gid)?.board;
+              const e = b?.entries.find((x) => x.id === a.entryId);
+              if (e && e.status === "claimed") {
+                const up2 = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] ${a.reason} \u5F52\u4F4D\u53EF\u91CD\u6D3E\uFF1A${a.detail}` });
+                if (up2.ok) moved++;
+              }
+            }
+            this.push("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08auto\uFF09\uFF1A${moved} \u5F20\u5B64\u513F\u5361\u5F52\u4F4D\uFF08advisory ${r.actions.filter((a) => a.advisory).length} \u6761 owner \u6D3B\u8DC3\u4EC5\u63D0\u9192\uFF09`);
+          } else {
+            this.wouldDo("boardrecon", "\u5F52\u4F4D\u5B64\u513F\u5361", `${r.actions.filter((a) => !a.advisory).length} \u5F20\u5019\u9009\uFF08\u4E24\u62CD\u786E\u8BA4+\u65C1\u8BC1\u805A\u5408\u540E\uFF09\u2014\u2014\u5E72\u8DD1\u4E0D\u6267\u884C`);
+            this.push("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08observe\uFF09\uFF1A${r.actions.length} \u5F20\u5224\u5B9A\uFF08\u5B64\u513F\u5019\u9009/\u6EDE\u7559\u63D0\u9192\uFF09\u2014\u2014\u6E05\u5355\u5728\u5BA1\u8BA1\u6D41\uFF0CPM \u8FC7\u76EE\u540E config autoBoardrecon=auto \u751F\u6548`);
+          }
+        }
+        if (r.mismatch && r.mismatch !== this.reconLastMismatch) {
+          this.reconLastMismatch = r.mismatch;
+          this.push("board-recon", `\u8D26\u5B9E\u4E0D\u7B26\u544A\u8B66\uFF1A${r.mismatch}`);
+        }
+      }
+    } catch (e) {
+      console.warn(`[patrol] \u4E09\u65B9\u5BF9\u8D26\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    }
     const boardAlerts = [];
     try {
       for (const g2 of listGroups()) {
@@ -72324,17 +73580,17 @@ var PatrolModule = class {
     if (boardAlerts.length) this.push("board", boardAlerts.slice(0, 6).join("\uFF1B"));
     else this.resolve("board");
     try {
-      const staleH = num2(process.env.CCR_PATROL_RECEIPT_STALE_H, RECEIPT_STALE_H_DEFAULT);
+      const staleH = num3(process.env.CCR_PATROL_RECEIPT_STALE_H, RECEIPT_STALE_H_DEFAULT);
       const cutoff = now - staleH * 36e5;
-      const artDir = process.env.CCR_ARTIFACTS_DIR || join60(homedir24(), ".cc-deck", "artifacts");
+      const artDir = process.env.CCR_ARTIFACTS_DIR || join61(homedir24(), ".cc-deck", "artifacts");
       const candidates = [];
       const scanDir = (d2) => {
-        if (!existsSync40(d2)) return;
+        if (!existsSync41(d2)) return;
         for (const n of readdirSync23(d2)) {
           if (!/^receipt|^acceptance/i.test(n)) continue;
-          const full = join60(d2, n);
+          const full = join61(d2, n);
           try {
-            const st2 = statSync20(full);
+            const st2 = statSync22(full);
             if (st2.isFile() && st2.mtimeMs < cutoff) candidates.push({ name: n, ageH: Math.round((now - st2.mtimeMs) / 36e5) });
           } catch {
           }
@@ -72342,7 +73598,7 @@ var PatrolModule = class {
       };
       scanDir(artDir);
       try {
-        const dv2 = JSON.parse(readFileSync51(join60(this.opts.dataDir, "deliverables.json"), "utf-8"));
+        const dv2 = JSON.parse(readFileSync52(join61(this.opts.dataDir, "deliverables.json"), "utf-8"));
         for (const it2 of dv2.items ?? []) {
           if (!it2.path || !/^receipt|^acceptance/i.test(it2.path.split("/").pop() || "")) continue;
           const ts2 = Number(it2.ts) || 0;
@@ -72362,7 +73618,7 @@ var PatrolModule = class {
       console.log(`[patrol] receipt scan error: ${e instanceof Error ? e.message : e}`);
     }
     try {
-      const todoH = num2(process.env.CCR_PATROL_TODO_STALE_H, TODO_STALE_H_DEFAULT);
+      const todoH = num3(process.env.CCR_PATROL_TODO_STALE_H, TODO_STALE_H_DEFAULT);
       const todoCutoff = now - todoH * 36e5;
       const staleTodo = this.mgr.snapshot().filter((s) => Array.isArray(s.todos) && s.todos.some((t) => t.status === "pending" && Number(t.updated_at ?? 0) > 0 && Number(t.updated_at) < todoCutoff));
       if (staleTodo.length) {
@@ -72372,7 +73628,7 @@ var PatrolModule = class {
       console.log(`[patrol] todo scan error: ${e instanceof Error ? e.message : e}`);
     }
     try {
-      const mainRepo = process.env.CCR_MAIN_REPO || join60(homedir24(), "dev", "cc-deck");
+      const mainRepo = process.env.CCR_MAIN_REPO || join61(homedir24(), "dev", "cc-deck");
       if (drillDue(mainRepo, this.opts.dataDir)) {
         if (this.patrolObserve()) {
           this.wouldDo("drill", "\u8865\u8DD1\u94FE\u8DEF\u6F14\u7EC3", `\u4E3B\u4ED3 ${mainRepo} \u94FE\u8DEF\u6587\u4EF6\u53D8\u66F4\u89E6\u53D1\uFF08\u4E0D\u5199\u53F0\u8D26\u5047\u884C\uFF09`);
@@ -72396,8 +73652,8 @@ var PatrolModule = class {
       }
     }
     try {
-      const hb2 = join60(this.opts.dataDir, "recon-heartbeat.json");
-      const st2 = statSync20(hb2);
+      const hb2 = join61(this.opts.dataDir, "recon-heartbeat.json");
+      const st2 = statSync22(hb2);
       if (Date.now() - st2.mtimeMs > 70 * 6e4) this.push("recon-stalled", `\u4E09\u8D26\u5BF9\u8D26\u5FC3\u8DF3\u505C\u8DF3 ${Math.round((Date.now() - st2.mtimeMs) / 6e4)}min\uFF08PM turn-report \u4E0E patrol \u53CC\u89E6\u53D1\u5747\u672A\u8DD1\uFF09`);
       else this.resolve("recon-stalled");
     } catch {
@@ -72410,7 +73666,7 @@ var PatrolModule = class {
    * 执行者活跃=卡旧人在干，不算滞留）。onset-only 去重与既有 patrol 告警同口径。 */
   boardCardScan() {
     const now = Date.now();
-    const staleMin = num2(process.env.CCR_PATROL_DOING_STALE_MIN, DOING_STALE_MIN_DEFAULT);
+    const staleMin = num3(process.env.CCR_PATROL_DOING_STALE_MIN, DOING_STALE_MIN_DEFAULT);
     const staleMs = staleMin * 6e4;
     const sessionsById = new Map(this.mgr.snapshot().map((s) => [s.session_id, s]));
     const wakeHits = [];
@@ -72556,7 +73812,7 @@ var PatrolModule = class {
       const path6 = this.opts.reportPath;
       let prev = "";
       try {
-        prev = readFileSync51(path6, "utf-8");
+        prev = readFileSync52(path6, "utf-8");
       } catch {
       }
       const lines = [...prev.split("\n").filter(Boolean), `[${ts2}] ${line}`];
@@ -72567,32 +73823,32 @@ var PatrolModule = class {
 };
 
 // src/cloud-identity.ts
-import { existsSync as existsSync41, readFileSync as readFileSync52, writeFileSync as writeFileSync34 } from "node:fs";
-import { join as join61 } from "node:path";
+import { existsSync as existsSync42, readFileSync as readFileSync53, writeFileSync as writeFileSync34 } from "node:fs";
+import { join as join62 } from "node:path";
 import { createHash as createHash6, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir3) {
-  const kpPath = join61(dataDir3, "cloud-keypair.json");
+  const kpPath = join62(dataDir3, "cloud-keypair.json");
   let keypair;
-  if (existsSync41(kpPath)) {
-    keypair = JSON.parse(readFileSync52(kpPath, "utf-8"));
+  if (existsSync42(kpPath)) {
+    keypair = JSON.parse(readFileSync53(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
     writeFileSync34(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join61(dataDir3, "wan-secret");
+  const wanSecretPath = join62(dataDir3, "wan-secret");
   let wanSecret = "";
-  if (existsSync41(wanSecretPath)) wanSecret = readFileSync52(wanSecretPath, "utf-8").trim();
+  if (existsSync42(wanSecretPath)) wanSecret = readFileSync53(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
     writeFileSync34(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash6("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join61(dataDir3, "cloud-peers.json");
+  const peersPath = join62(dataDir3, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
-  if (existsSync41(peersPath)) {
+  if (existsSync42(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync52(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync53(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -72603,11 +73859,11 @@ function loadOrCreateIdentity(dataDir3) {
     writeFileSync34(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
   let lastPeerFlush = 0;
-  const tenantCredPath = join61(dataDir3, "cloud-tenant.json");
+  const tenantCredPath = join62(dataDir3, "cloud-tenant.json");
   const loadTenantCred = () => {
     try {
-      if (!existsSync41(tenantCredPath)) return null;
-      const c = JSON.parse(readFileSync52(tenantCredPath, "utf-8"));
+      if (!existsSync42(tenantCredPath)) return null;
+      const c = JSON.parse(readFileSync53(tenantCredPath, "utf-8"));
       if (typeof c.tenant !== "string" || typeof c.token !== "string" || typeof c.exp !== "number") return null;
       if (c.exp < Date.now()) return null;
       return { tenant: c.tenant, token: c.token, exp: c.exp };
@@ -72689,6 +73945,8 @@ var COMMAND_TYPES2 = /* @__PURE__ */ new Set([
   "COMMAND_EXT_STOP",
   // X1 多机编排：密封 xmsg 发送命令面（三口汇流；与 ws-server 白名单逐字一致纪律）
   "COMMAND_XMSG",
+  // [W-LINKQUALITY-R1] 遥测补报帧命令（与 ws-server COMMAND_TYPES 逐字一致纪律）
+  "COMMAND_TELEMETRY_LINK",
   "COMMAND_DELETE",
   "COMMAND_RENAME",
   "COMMAND_ANSWER",
@@ -72791,6 +74049,11 @@ var CloudClient = class {
   // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
   wanDropLoggedAt = 0;
   delayMs = 1e3;
+  // [W-LINKQUALITY] 段②记账态：connect 计时/断点/存活起点/断因标注（boot-guard 等非 close 路径）
+  lqConnectAt = 0;
+  lqDropAt = 0;
+  lqOpenAt = 0;
+  lqDropReason = "";
   stopped = false;
   timer = null;
   lastRecv = 0;
@@ -72866,19 +74129,34 @@ var CloudClient = class {
     } catch (err) {
       console.log(`[cloud] bridge connect throw: ${err instanceof Error ? err.message : err}, retry in ${this.delayMs}ms`);
       this.timer = setTimeout(() => this.connect(), this.delayMs);
-      this.delayMs = Math.min(this.delayMs * 2, 3e4);
+      this.delayMs = Math.min(this.delayMs * 2, 15e3);
+      try {
+        appendLinkEvent(this.cfg.dataDir, { ts: Date.now(), src: "bridge", kind: "retry-fail", reason: ("construct-throw: " + String(err instanceof Error ? err.message : err)).slice(0, 120) });
+      } catch {
+      }
       return;
     }
+    this.lqConnectAt = Date.now();
     this.ws = ws2;
     const bootGuard = setTimeout(() => {
       if (this.ws === ws2 && ws2.readyState === wrapper_default.CONNECTING) {
         console.log("[cloud] bridge connect timeout (15s CONNECTING), terminating for retry");
+        this.lqDropReason = "boot-guard-15s";
         ws2.terminate();
       }
     }, 15e3);
     ws2.on("open", () => {
       clearTimeout(bootGuard);
       this.delayMs = 1e3;
+      try {
+        const now = Date.now();
+        if (this.lqConnectAt > 0) appendLinkEvent(this.cfg.dataDir, { ts: now, src: "bridge", kind: "connect", downtimeMs: now - this.lqConnectAt });
+        if (this.lqDropAt > 0) appendLinkEvent(this.cfg.dataDir, { ts: now, src: "bridge", kind: "reconnect", downtimeMs: now - this.lqDropAt, ...this.lqDropReason ? { reason: this.lqDropReason } : {} });
+        this.lqDropAt = 0;
+        this.lqDropReason = "";
+        this.lqOpenAt = now;
+      } catch {
+      }
       this.lastRecv = Date.now();
       this.lastHbAt = 0;
       this.hbMiss = 0;
@@ -72937,7 +74215,14 @@ var CloudClient = class {
         }
         this.ws = null;
         this.timer = setTimeout(() => this.connect(), this.delayMs);
-        this.delayMs = Math.min(this.delayMs * 2, 3e4);
+        this.delayMs = Math.min(this.delayMs * 2, 15e3);
+        try {
+          const now = Date.now();
+          appendLinkEvent(this.cfg.dataDir, { ts: now, src: "bridge", kind: "drop", reason: this.lqDropReason || "ws-close", ...this.lqOpenAt > 0 ? { connectedMs: now - this.lqOpenAt } : {} });
+          if (this.lqDropAt === 0) this.lqDropAt = now;
+          this.lqOpenAt = 0;
+        } catch {
+        }
       }
     });
   }
@@ -73112,14 +74397,22 @@ var CloudClient = class {
     const payloadSize = (p) => Buffer.byteLength(JSON.stringify(p));
     {
       const probe = {
-        sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => {
+          const arr = withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.());
+          this.__lastSnapSessions = arr;
+          return arr;
+        })(),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2 = {
-          sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
+          sessions: (() => {
+            const arr = withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.());
+            this.__lastSnapSessions = arr;
+            return arr;
+          })(),
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
         };
@@ -73139,11 +74432,17 @@ var CloudClient = class {
       // 旧客户端忽略多余字段，向前兼容
       payload: {
         // W-SRC2 #134：per-session relay_source 根修（与 ws-server LAN 快照同源，#117 教训）
-        sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => {
+          const arr = withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.());
+          this.__lastSnapSessions = arr;
+          return arr;
+        })(),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
+        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: this.__lastSnapSessions?.length ?? 0 },
+        // bootfast2-r1 P2-3：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
@@ -73596,14 +74895,22 @@ var CloudClient = class {
     const payloadSize = (p) => Buffer.byteLength(JSON.stringify(p));
     {
       const probe = {
-        sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => {
+          const arr = withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.());
+          this.__lastSnapSessions = arr;
+          return arr;
+        })(),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
       };
       if (payloadSize(probe) > 700 * 1024) {
         snapLogs = this.mgr.buildSnapshotLogs(256 * 1024, 25);
         const probe2 = {
-          sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
+          sessions: (() => {
+            const arr = withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.());
+            this.__lastSnapSessions = arr;
+            return arr;
+          })(),
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}
         };
@@ -73621,11 +74928,17 @@ var CloudClient = class {
         // W-SRC2 #134（本批②③）：wan resume 快照与 phone 密封面同键——per-session
         // relay_source + relay_name/lan_hint（#117 两键此前只挂密封面，wan 直连端
         // 收不到=源标链在此面全断）；旧客户端忽略未知键，向前兼容
-        sessions: withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.()),
+        sessions: (() => {
+          const arr = withRelaySource2(this.mgr.snapshot(), this.extra?.relayName?.());
+          this.__lastSnapSessions = arr;
+          return arr;
+        })(),
         logs: snapLogs.logs,
         ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
         server_time: Date.now(),
         schema_version: SNAPSHOT_SCHEMA_VERSION,
+        boot: { phase: this.mgr.bootDataReady ? "ready" : "loading", loaded: this.__lastSnapSessions?.length ?? 0 },
+        // bootfast2-r1 P2-3：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         models: listModels(this.mgr.cfg.model),
         ...this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {},
         ...this.extra?.relayName?.() ? { relay_name: this.extra.relayName() } : {}
@@ -73720,23 +75033,23 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync42, readFileSync as readFileSync53, writeFileSync as writeFileSync35 } from "node:fs";
-import { join as join62 } from "node:path";
+import { existsSync as existsSync43, readFileSync as readFileSync54, writeFileSync as writeFileSync35 } from "node:fs";
+import { join as join63 } from "node:path";
 import { homedir as homedir26 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join62(homedir26(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join63(homedir26(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
-  if (!existsSync42(dir)) return "skip-no-dir";
-  const file = join62(dir, "settings.json");
+  if (!existsSync43(dir)) return "skip-no-dir";
+  const file = join63(dir, "settings.json");
   let obj;
-  if (!existsSync42(file)) {
+  if (!existsSync43(file)) {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync53(file, "utf-8"));
+      obj = JSON.parse(readFileSync54(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -73773,9 +75086,9 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 {
-  const lockPath2 = join63(cfg.dataDir, "relay.lock");
+  const lockPath2 = join64(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync54(lockPath2, "utf8").trim());
+    const prev = Number(readFileSync55(lockPath2, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       const alive2 = process.platform === "win32" ? (() => {
         try {
@@ -73812,7 +75125,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync54(lockPath2, "utf8").trim()) === process.pid) rmSync11(lockPath2);
+      if (Number(readFileSync55(lockPath2, "utf8").trim()) === process.pid) rmSync12(lockPath2);
     } catch {
     }
   };
@@ -73859,7 +75172,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync54(join63(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync55(join64(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -73910,28 +75223,28 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync7(join63(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync8(join64(cfg.dataDir, "relay.log"), "a");
   const child = spawn8(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join63(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join64(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
   try {
     if (process.platform === "win32") {
-      const out = execFileSync6("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+      const out = execFileSync7("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
         encoding: "utf-8",
         timeout: 5e3,
         windowsHide: true
       });
       return /node/i.test(out);
     }
-    if (existsSync43("/proc")) return readFileSync54(`/proc/${pid}/comm`, "utf-8").includes("node");
-    return "node" === execFileSync6("ps", ["-o", "comm=", "-p", String(pid)], {
+    if (existsSync44("/proc")) return readFileSync55(`/proc/${pid}/comm`, "utf-8").includes("node");
+    return "node" === execFileSync7("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
     }).trim().split(/[\\/]/).pop();
@@ -73940,9 +75253,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join63(cfg.dataDir, "relay.pid");
+  const pidFile = join64(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync54(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync55(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -73953,7 +75266,7 @@ if (cliArgs.has("--stop")) {
     console.log("\u672A\u53D1\u73B0\u8FD0\u884C\u4E2D\u7684 CC Deck Relay");
   }
   try {
-    rmSync11(pidFile);
+    rmSync12(pidFile);
   } catch {
   }
   process.exit(0);
@@ -73969,24 +75282,26 @@ if (cliArgs.has("--stop")) {
   ensureEmployeeHomeStopHook(cfg.dataDir);
 }
 probeSqliteDriverAtBoot();
-var persistPath = join63(cfg.dataDir, "events.ndjson");
+bootMark("probe-sqlite");
+var persistPath = join64(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
     for (const f of readdirSync24(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
-      const p = join63(dir, f);
+      const p = join64(dir, f);
       try {
-        if (Date.now() - statSync21(p).mtimeMs > 7 * 864e5) rmSync11(p, { force: true });
+        if (Date.now() - statSync23(p).mtimeMs > 7 * 864e5) rmSync12(p, { force: true });
       } catch {
       }
     }
   } catch {
   }
 }
-var tmpImageDir = join63(cfg.dataDir, "..", "tmp");
+var tmpImageDir = join64(cfg.dataDir, "..", "tmp");
 sweepTmpImages(tmpImageDir);
 setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var boot = await bootReplayFile(persistPath);
+bootMark("replay-events");
 var kept = boot.kept;
 if (boot.compacted) rewriteFile(persistPath, kept);
 var eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
@@ -74037,182 +75352,27 @@ if (process.env.CCR_BOOT_FROM === "auto" || process.env.CCR_BOOT_FROM === "db") 
   }
 }
 var bus = new EventBus({ preload: kept, persistPath });
+bootMark("bus-ctor");
 var mgr = new SessionManager(bus, cfg);
-attachAgentActivator(bus, mgr);
-var adopted = mgr.adopt(replayed);
-for (const s of mgr.snapshot()) {
-  bus.emit(s.session_id, "SESSION_UPDATED", {
-    status: s.status,
-    action_summary: s.action_summary,
-    stats: { ...s.stats },
-    ...s.usage ? { usage: s.usage } : {},
-    ...s.title_locked ? { title: s.title, title_locked: true } : {}
-  });
-}
-var pinned = mgr.applyPinned();
-var leader = mgr.ensureLeader();
-var decisionNotify = new DecisionNotificationWatcher({
-  dataDir: cfg.dataDir,
-  listConfirms,
-  snapshotSessions: () => mgr.snapshot(),
-  leaderSessionId: () => mgr.getLeaderSessionId(),
-  notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
-  // [W-AWAITUSER]（1104 用户令）：源③验收单入扫描 + 用户推送腿（USER_NOTE 全端弹
-  // 系统通知——同 /api/notify mode=confirm 通道，patrol.sh:4 先例；同 key 滞留超
-  // 阈值只推一次，限频锚 user_pushed_at 持久在 watcher 台账）
-  listAcceptances: () => listAcceptances(),
-  userPush: (text) => mgr.emitUserNote(text)
-});
-decisionNotify.start();
-mgr.startPendingUserActionsTick();
-var parkedRehydrated = mgr.rehydrateParkedMembers();
-mgr.startStaleScan();
-try {
-  const trim = mgr.trimHeadcounts({ auto: true });
-  if (trim.data.totalTrimmed > 0) {
-    console.log(`[headcount-trim] boot \u9996\u8F6E\uFF1A\u88C1\u51CF ${trim.data.totalTrimmed} \u5E2D\uFF08${trim.data.groups.map((g2) => `${g2.name} ${g2.before}\u2192${g2.after}`).join("\uFF1B")}\uFF09\uFF0C\u6E05\u5355\u89C1 org/headcount-trim-report.json`);
-  }
-} catch (e) {
-  console.warn(`[headcount-trim] boot \u9996\u8F6E\u5931\u8D25\uFF08\u4E0B\u8F6E\u5B9A\u65F6\u91CD\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
-}
-mgr.startHeadcountTrim();
-try {
-  mgr.loadRestartLedgerOnBoot();
-} catch (e) {
-  console.warn(`[restart-ledger] boot \u56DE\u704C\u5931\u8D25\uFF08\u8D26\u9762\u6309\u7A7A\uFF0C\u672A\u6295\u9012\u901A\u77E5\u9762\u4E22\u5931\u672C\u8F6E\uFF09: ${e instanceof Error ? e.message : String(e)}`);
-}
-try {
-  mgr.reloadDispatchQueue();
-} catch (e) {
-  console.warn(`[dispatch-queue] \u91CD\u542F\u56DE\u704C\u5931\u8D25\uFF08\u961F\u5217\u6309\u7A7A\u5904\u7406\uFF09: ${e instanceof Error ? e.message : String(e)}`);
-}
-try {
-  const n = mgr.recoverPendingReceiptChecks();
-  if (n > 0) console.log(`[receipt-gate] boot \u8865\u8DD1 ${n} \u4E2A\u5230\u671F\u56DE\u6267\u6838\u5BF9`);
-} catch (e) {
-  console.warn(`[receipt-gate] boot \u8865\u8DD1\u5931\u8D25\uFF08pending \u8D26\u4FDD\u7559\uFF0C\u4E0B\u8F6E\u91CD\u542F\u518D\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
-}
-try {
-  const mig = migrateLessonsToExperience();
-  if (mig.migrated > 0 || mig.errors.length > 0) {
-    console.log(`[experience] \u65E7 lessons \u8FC1\u79FB\uFF1A\u5165\u8FC1 ${mig.migrated}\uFF0C\u8DF3\u8FC7 ${mig.skipped_auto + mig.skipped_dup}${mig.errors.length ? `\uFF0C\u5F02\u5E38 ${mig.errors.length} \u6761\uFF08\u89C1 warn\uFF09` : ""}`);
-    for (const err of mig.errors) console.warn(`[experience] \u8FC1\u79FB\u5F02\u5E38: ${err}`);
-  }
-} catch (e) {
-  console.warn(`[experience] \u65E7 lessons \u8FC1\u79FB\u5931\u8D25\uFF08\u65E7\u57DF\u539F\u6837\u4FDD\u7559\uFF0C\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
-}
-if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
-setTimeout(() => {
-  try {
-    mgr.autoReviveManaged();
-  } catch {
-  }
-  try {
-    mgr.resumeLeaderAfterReboot();
-  } catch {
-  }
-  try {
-    mgr.resumeInterruptedByReboot();
-  } catch {
-  }
-  try {
-    mgr.scanNeedsAuthSessions();
-  } catch {
-  }
-  try {
-    const n = mgr.drainTurnSpool();
-    if (n > 0) console.log(`[chain2] turn-spool drain ${n} \u6761`);
-  } catch {
-  }
-}, 5e3).unref?.();
+bootMark("bus+mgr-ctor");
 var lanAuthNonces = null;
 var cloudIdentity = null;
 var cloudClients = [];
 var pairCodes = createPairingCodes();
 var relayNameOf = (dataDir3) => effectiveRelayName(dataDir3);
-if (cfg.cloudUrls.length) {
-  cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
-  mgr.setCloud(cloudIdentity);
-  mgr.setPairIssuer((o) => pairCodes.issue(o));
-  mgr.setLoginGranter((dev, pk2, name) => {
-    for (const c of cloudClients) c.grantLogin(dev, pk2, name);
-    return true;
-  });
-  mgr.setImportPusher((dev, pk2, payload) => {
-    for (const c of cloudClients) if (c.hasActiveDev(dev) && c.pushImportTo(dev, pk2, payload)) return true;
-    for (const c of cloudClients) if (!c.hasActiveDev(dev) && c.pushImportTo(dev, pk2, payload)) return true;
-    return false;
-  });
-  mgr.setPeerKicker((dev) => {
-    cloudIdentity?.removePeer(dev);
-    for (const c of cloudClients) c.kickPeer(dev);
-  });
-  if (cfg.cloudToken) {
-    for (const url of cfg.cloudUrls) {
-      const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url, {
-        lanHint: () => {
-          const ip2 = detectLanIp(networkInterfaces3());
-          return ip2 ? `${ip2}:${cfg.port}` : "";
-        },
-        relayName: () => relayNameOf(cfg.dataDir)
-      });
-      cloudClients.push(c);
-      c.start();
-    }
-  }
-  mgr.setXmsgTransport({
-    myDev: () => cloudIdentity.relayDev,
-    myTenant: () => {
-      try {
-        return cloudIdentity.loadTenantCred()?.tenant ?? null;
-      } catch {
-        return null;
-      }
-    },
-    send: (dev, inner, theirPubkey) => {
-      let any = false;
-      for (const c of cloudClients) any = c.xmsgSend(dev, inner, theirPubkey) || any;
-      return any;
-    },
-    ack: (dev, theirPubkey, inner) => {
-      let any = false;
-      for (const c of cloudClients) any = c.xmsgAck(dev, theirPubkey, inner) || any;
-      return any;
-    },
-    discover: async (dev) => {
-      for (const c of cloudClients) {
-        const pk2 = await c.xmsgDiscover(dev);
-        if (pk2) return pk2;
-      }
-      return null;
-    }
-  });
-}
-startAcceptanceCloudPoll(cfg, mgr, bus);
-if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
-  preloadPatrolOverrides(cfg.dataDir);
-  new PatrolModule(mgr, {
-    dataDir: cfg.dataDir,
-    reportPath: join63(cfg.dataDir, "patrol-report.md"),
-    enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
-  }).start();
-  if (process.env.CCR_PR_COMMENT !== "0") mgr.startPrCommentWatch();
-}
-if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
-  new WatchFeedModule(mgr, {
-    dataDir: cfg.dataDir,
-    reportPath: join63(cfg.dataDir, "patrol-report.md"),
-    enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
-  }).start();
-}
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
-  ...cloudClients.length ? { pairCodes } : {},
+  pairCodes,
+  // bootfast2：恒传（云桥后台段起——pairCodes.issue 引用语义恒可用）
   // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
   // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
-  ...cloudIdentity ? { cloudRelayDev: () => cloudIdentity.relayDev } : {},
-  ...cloudIdentity ? { cloudWanDev: () => cloudIdentity.wanDev } : {},
+  // bootfast2-r1 P1-4（A 审）：spread 守卫是急切求值——startServer 前移后 cloudIdentity
+  // 尚未构造（云桥块在后台段），`cloudIdentity ? {...} : {}` 求值恒空=两 opt 永不注册
+  //（relay_dev/wan_dev 停发，#95/#134 合并链断）。改恒展开+闭包内判空（ws-server 侧
+  // `?.() ?? ""` 空值守卫既有，空值即不下发——语义与旧序等价）。
+  cloudRelayDev: () => cloudIdentity?.relayDev ?? "",
+  cloudWanDev: () => cloudIdentity?.wanDev ?? "",
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
   // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
   relayName: () => relayNameOf(cfg.dataDir),
@@ -74245,15 +75405,15 @@ startServer(bus, mgr, cfg, {
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname2()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync36(join63(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync36(join64(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync36(join63(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join63(homedir27(), ".cc-deck", "data");
+    writeFileSync36(join64(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join64(homedir27(), ".cc-deck", "data");
     const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir5(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep9).startsWith(t + sep9));
-    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync43(hookHome)) {
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync44(hookHome)) {
       try {
-        writeFileSync36(join63(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync36(join64(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -74265,39 +75425,236 @@ startServer(bus, mgr, cfg, {
     }
   }
 });
-console.log("CC Deck Relay \u5DF2\u542F\u52A8");
-console.log(`  \u8FDB\u7A0B:   pid=${process.pid}\uFF08${process.env.CCR_PARENT_PID ? "\u5185\u5D4C\xB7\u58F3\u5B75\u5316" : "\u72EC\u7ACB\u524D\u53F0"}\uFF09`);
-console.log(`  \u6A21\u578B:   ${cfg.model}`);
-console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
-console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
-if (pinned.saved > 0) {
-  console.log(`  \u7F6E\u9876:   ${pinned.saved} \u4E2A\u4F1A\u8BDD\u5DF2\u4F11\u7720\u767B\u8BB0\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF0C\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
-}
-console.log(
-  leader.ok ? `  \u56E2\u961F:   Leader ${leader.created ? "\u9996\u6B21\u521B\u5EFA" : leader.rebuilt ? "\u5DF2\u4ECE\u951A\u91CD\u5EFA" : "\u5728\u7EBF"}\uFF08${orgDir()}\uFF09` : process.env.CCR_NO_LEADER === "1" ? "  \u56E2\u961F:   Leader \u5DF2\u7981\u7528\uFF08CCR_NO_LEADER\uFF0C\u6D4B\u8BD5/\u6C99\u76D2\u6001\uFF09" : `  \u56E2\u961F:   Leader \u672A\u5C31\u7EEA\uFF1A${leader.error}\uFF08\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5\uFF09`
-);
-if (parkedRehydrated > 0) {
-  console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
-}
-console.log(`  \u6865\u63A5:   ${join63(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
-console.log(
-  cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
-);
-if (process.env.CC_DECK_DAEMON === "1") {
-  console.log("  \u8FDE\u63A5:  \u8FD0\u884C /cc-deck \u663E\u793A\u4E8C\u7EF4\u7801\uFF08token \u4E0D\u5199\u5165\u65E5\u5FD7\uFF09");
-} else {
-  const maskToken = (t) => t.length > 10 ? `${t.slice(0, 6)}\u2026${t.slice(-4)}` : "\u2026";
-  if (cfg.tokenGenerated) {
-    console.log(`  token:  ${maskToken(cfg.token)}  (\u672A\u8BBE\u7F6E CCR_TOKEN\uFF0C\u672C\u6B21\u968F\u673A\u751F\u6210\uFF1B\u5B8C\u6574\u503C\u8D70 /cc-deck \u914D\u5BF9\uFF0C\u4E0D\u843D\u65E5\u5FD7)`);
+console.log("CC Deck Relay \u5DF2\u542F\u52A8\uFF08HTTP \u5148\u884C\u2014\u2014\u6570\u636E\u52A0\u8F7D\u4E2D\uFF09");
+console.log(`  \u8FDB\u7A0B:   pid=${process.pid}\uFF08${process.env.CCR_PARENT_PID ? "\u5185\u5D4C\xB7\u58F3\u5B75\u5316" : "\u72EC\u7ACB\u524D\u53F0"}\uFF09\uFF5C\u7AEF\u53E3: ${cfg.port}`);
+var yieldLoop = () => new Promise((r) => setImmediate(r));
+void (async () => {
+  await yieldLoop();
+  try {
+    mgr.reconcileOrphanConfirmsOnBoot();
+  } catch (e) {
+    console.warn(`[orphan-confirms] boot \u5BF9\u8D26\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
   }
-  for (const list of Object.values(networkInterfaces3())) {
-    for (const net of list ?? []) {
-      if (net.family === "IPv4" && !net.internal) {
-        console.log(`  \u63A7\u5236\u53F0: http://${net.address}:${cfg.port}/?token=${maskToken(cfg.token)}\uFF08\u622A\u65AD\u663E\u793A\uFF0C\u6D4F\u89C8\u5668\u6253\u5F00\u8BF7\u7528\u914D\u5BF9\u9875\u5B8C\u6574 token\uFF09`);
+  await yieldLoop();
+  try {
+    mgr.refreshPendingUserActionsBaseline();
+  } catch {
+  }
+  attachAgentActivator(bus, mgr);
+  const adopted = mgr.adopt(replayed);
+  for (const s of mgr.snapshot()) {
+    bus.emit(s.session_id, "SESSION_UPDATED", {
+      status: s.status,
+      action_summary: s.action_summary,
+      stats: { ...s.stats },
+      ...s.usage ? { usage: s.usage } : {},
+      ...s.title_locked ? { title: s.title, title_locked: true } : {}
+    });
+  }
+  const pinned = mgr.applyPinned();
+  bootMark("adopt+broadcast");
+  await yieldLoop();
+  const leader = mgr.ensureLeader();
+  bootMark("pinned+leader");
+  await yieldLoop();
+  const decisionNotify = new DecisionNotificationWatcher({
+    dataDir: cfg.dataDir,
+    listConfirms,
+    snapshotSessions: () => mgr.snapshot(),
+    leaderSessionId: () => mgr.getLeaderSessionId(),
+    notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
+    // [W-AWAITUSER]（1104 用户令）：源③验收单入扫描 + 用户推送腿（USER_NOTE 全端弹
+    // 系统通知——同 /api/notify mode=confirm 通道，patrol.sh:4 先例；同 key 滞留超
+    // 阈值只推一次，限频锚 user_pushed_at 持久在 watcher 台账）
+    listAcceptances: () => listAcceptances(),
+    userPush: (text) => mgr.emitUserNote(text)
+  });
+  decisionNotify.start();
+  mgr.startPendingUserActionsTick();
+  const parkedRehydrated = mgr.rehydrateParkedMembers();
+  mgr.startStaleScan();
+  try {
+    const trim = mgr.trimHeadcounts({ auto: true });
+    if (trim.data.totalTrimmed > 0) {
+      console.log(`[headcount-trim] boot \u9996\u8F6E\uFF1A\u88C1\u51CF ${trim.data.totalTrimmed} \u5E2D\uFF08${trim.data.groups.map((g2) => `${g2.name} ${g2.before}\u2192${g2.after}`).join("\uFF1B")}\uFF09\uFF0C\u6E05\u5355\u89C1 org/headcount-trim-report.json`);
+    }
+  } catch (e) {
+    console.warn(`[headcount-trim] boot \u9996\u8F6E\u5931\u8D25\uFF08\u4E0B\u8F6E\u5B9A\u65F6\u91CD\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  mgr.startHeadcountTrim();
+  bootMark("notify+parked+trim");
+  await yieldLoop();
+  try {
+    mgr.loadRestartLedgerOnBoot();
+  } catch (e) {
+    console.warn(`[restart-ledger] boot \u56DE\u704C\u5931\u8D25\uFF08\u8D26\u9762\u6309\u7A7A\uFF0C\u672A\u6295\u9012\u901A\u77E5\u9762\u4E22\u5931\u672C\u8F6E\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    mgr.reloadDispatchQueue();
+  } catch (e) {
+    console.warn(`[dispatch-queue] \u91CD\u542F\u56DE\u704C\u5931\u8D25\uFF08\u961F\u5217\u6309\u7A7A\u5904\u7406\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    const n = mgr.recoverPendingReceiptChecks();
+    if (n > 0) console.log(`[receipt-gate] boot \u8865\u8DD1 ${n} \u4E2A\u5230\u671F\u56DE\u6267\u6838\u5BF9`);
+  } catch (e) {
+    console.warn(`[receipt-gate] boot \u8865\u8DD1\u5931\u8D25\uFF08pending \u8D26\u4FDD\u7559\uFF0C\u4E0B\u8F6E\u91CD\u542F\u518D\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    const mig = migrateLessonsToExperience();
+    if (mig.migrated > 0 || mig.errors.length > 0) {
+      console.log(`[experience] \u65E7 lessons \u8FC1\u79FB\uFF1A\u5165\u8FC1 ${mig.migrated}\uFF0C\u8DF3\u8FC7 ${mig.skipped_auto + mig.skipped_dup}${mig.errors.length ? `\uFF0C\u5F02\u5E38 ${mig.errors.length} \u6761\uFF08\u89C1 warn\uFF09` : ""}`);
+      for (const err of mig.errors) console.warn(`[experience] \u8FC1\u79FB\u5F02\u5E38: ${err}`);
+    }
+  } catch (e) {
+    console.warn(`[experience] \u65E7 lessons \u8FC1\u79FB\u5931\u8D25\uFF08\u65E7\u57DF\u539F\u6837\u4FDD\u7559\uFF0C\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (process.env.CCR_EXP_GC_DISABLE !== "1") startExperienceGc();
+  setTimeout(() => {
+    try {
+      mgr.autoReviveManaged();
+    } catch {
+    }
+    try {
+      mgr.resumeLeaderAfterReboot();
+    } catch {
+    }
+    try {
+      mgr.resumeInterruptedByReboot();
+    } catch {
+    }
+    try {
+      mgr.scanNeedsAuthSessions();
+    } catch {
+    }
+    try {
+      const n = mgr.drainTurnSpool();
+      if (n > 0) console.log(`[chain2] turn-spool drain ${n} \u6761`);
+    } catch {
+    }
+  }, 5e3).unref?.();
+  if (cfg.cloudUrls.length) {
+    cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
+    mgr.setCloud(cloudIdentity);
+    mgr.setPairIssuer((o) => pairCodes.issue(o));
+    mgr.setLoginGranter((dev, pk2, name) => {
+      for (const c of cloudClients) c.grantLogin(dev, pk2, name);
+      return true;
+    });
+    mgr.setImportPusher((dev, pk2, payload) => {
+      for (const c of cloudClients) if (c.hasActiveDev(dev) && c.pushImportTo(dev, pk2, payload)) return true;
+      for (const c of cloudClients) if (!c.hasActiveDev(dev) && c.pushImportTo(dev, pk2, payload)) return true;
+      return false;
+    });
+    mgr.setPeerKicker((dev) => {
+      cloudIdentity?.removePeer(dev);
+      for (const c of cloudClients) c.kickPeer(dev);
+    });
+    if (cfg.cloudToken) {
+      for (const url of cfg.cloudUrls) {
+        const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url, {
+          lanHint: () => {
+            const ip2 = detectLanIp(networkInterfaces3());
+            return ip2 ? `${ip2}:${cfg.port}` : "";
+          },
+          relayName: () => relayNameOf(cfg.dataDir)
+        });
+        cloudClients.push(c);
+        c.start();
+      }
+    }
+    mgr.setXmsgTransport({
+      myDev: () => cloudIdentity.relayDev,
+      myTenant: () => {
+        try {
+          return cloudIdentity.loadTenantCred()?.tenant ?? null;
+        } catch {
+          return null;
+        }
+      },
+      send: (dev, inner, theirPubkey) => {
+        let any = false;
+        for (const c of cloudClients) any = c.xmsgSend(dev, inner, theirPubkey) || any;
+        return any;
+      },
+      ack: (dev, theirPubkey, inner) => {
+        let any = false;
+        for (const c of cloudClients) any = c.xmsgAck(dev, theirPubkey, inner) || any;
+        return any;
+      },
+      discover: async (dev) => {
+        for (const c of cloudClients) {
+          const pk2 = await c.xmsgDiscover(dev);
+          if (pk2) return pk2;
+        }
+        return null;
+      }
+    });
+  }
+  startAcceptanceCloudPoll(cfg, mgr, bus);
+  bootMark("cloud+backfill");
+  await yieldLoop();
+  if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+    preloadPatrolOverrides(cfg.dataDir);
+    new PatrolModule(mgr, {
+      dataDir: cfg.dataDir,
+      reportPath: join64(cfg.dataDir, "patrol-report.md"),
+      enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
+    }).start();
+    if (process.env.CCR_PR_COMMENT !== "0") mgr.startPrCommentWatch();
+  }
+  if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
+    new WatchFeedModule(mgr, {
+      dataDir: cfg.dataDir,
+      reportPath: join64(cfg.dataDir, "patrol-report.md"),
+      enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
+    }).start();
+  }
+  bootMark("patrol+watchfeed");
+  await yieldLoop();
+  console.log("CC Deck Relay \u5DF2\u542F\u52A8");
+  console.log(`  \u8FDB\u7A0B:   pid=${process.pid}\uFF08${process.env.CCR_PARENT_PID ? "\u5185\u5D4C\xB7\u58F3\u5B75\u5316" : "\u72EC\u7ACB\u524D\u53F0"}\uFF09`);
+  console.log(`  \u6A21\u578B:   ${cfg.model}`);
+  console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
+  console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
+  if (pinned.saved > 0) {
+    console.log(`  \u7F6E\u9876:   ${pinned.saved} \u4E2A\u4F1A\u8BDD\u5DF2\u4F11\u7720\u767B\u8BB0\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF0C\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
+  }
+  console.log(
+    leader.ok ? `  \u56E2\u961F:   Leader ${leader.created ? "\u9996\u6B21\u521B\u5EFA" : leader.rebuilt ? "\u5DF2\u4ECE\u951A\u91CD\u5EFA" : "\u5728\u7EBF"}\uFF08${orgDir()}\uFF09` : process.env.CCR_NO_LEADER === "1" ? "  \u56E2\u961F:   Leader \u5DF2\u7981\u7528\uFF08CCR_NO_LEADER\uFF0C\u6D4B\u8BD5/\u6C99\u76D2\u6001\uFF09" : `  \u56E2\u961F:   Leader \u672A\u5C31\u7EEA\uFF1A${leader.error}\uFF08\u4E0B\u6B21\u542F\u52A8\u91CD\u8BD5\uFF09`
+  );
+  if (parkedRehydrated > 0) {
+    console.log(`  \u56E2\u961F:   ${parkedRehydrated} \u4E2A\u6302\u8D77\u7EC4\u6210\u5458\u5DF2\u91CD\u5EFA\u9000\u4F11\u6807\u8BB0\uFF08\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
+  }
+  console.log(`  \u6865\u63A5:   ${join64(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+  console.log(
+    cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
+  );
+  if (process.env.CC_DECK_DAEMON === "1") {
+    console.log("  \u8FDE\u63A5:  \u8FD0\u884C /cc-deck \u663E\u793A\u4E8C\u7EF4\u7801\uFF08token \u4E0D\u5199\u5165\u65E5\u5FD7\uFF09");
+  } else {
+    const maskToken = (t) => t.length > 10 ? `${t.slice(0, 6)}\u2026${t.slice(-4)}` : "\u2026";
+    if (cfg.tokenGenerated) {
+      console.log(`  token:  ${maskToken(cfg.token)}  (\u672A\u8BBE\u7F6E CCR_TOKEN\uFF0C\u672C\u6B21\u968F\u673A\u751F\u6210\uFF1B\u5B8C\u6574\u503C\u8D70 /cc-deck \u914D\u5BF9\uFF0C\u4E0D\u843D\u65E5\u5FD7)`);
+    }
+    for (const list of Object.values(networkInterfaces3())) {
+      for (const net of list ?? []) {
+        if (net.family === "IPv4" && !net.internal) {
+          console.log(`  \u63A7\u5236\u53F0: http://${net.address}:${cfg.port}/?token=${maskToken(cfg.token)}\uFF08\u622A\u65AD\u663E\u793A\uFF0C\u6D4F\u89C8\u5668\u6253\u5F00\u8BF7\u7528\u914D\u5BF9\u9875\u5B8C\u6574 token\uFF09`);
+        }
       }
     }
   }
-}
+  mgr.markBootDataReady();
+  bootMark("data-ready");
+  bootDone();
+})().catch((e) => {
+  console.error(`[boot] \u540E\u53F0\u6BB5\u5F02\u5E38\uFF08\u515C\u5E95\u7F6E data-ready\uFF09: ${e instanceof Error ? e.stack || e.message : String(e)}`);
+  try {
+    mgr.markBootDataReady();
+  } catch {
+  }
+});
 /*! Bundled license information:
 
 @anthropic-ai/claude-agent-sdk/sdk.mjs:
