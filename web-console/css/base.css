@@ -388,7 +388,7 @@
     .queue { min-width: 235px; width: var(--queue-w, 235px); flex: 0 0 auto; } /* #201 件⑤：钳制下限与 JS（cc-deck-queue-w-shared 235–420）对齐——跨页单键已在 #201⑨，此处补 CSS 侧防挤压一致性 */
     .queue-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
     .queue-resizer:hover::after, .queue-resizer:active::after { background: var(--border-strong); }
-    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; } /* W-NOTIFYFIX 件二（1105 用户问「间距是不是太大」）：13→8px 收档对齐面板节奏（session-list-tools 10px 相邻档；标题→搜索框垂直紧邻面） */
     .queue-head h2 {flex: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-D);}
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
     /* W-UIFB ⑨：第二列列头「＋」美化（i=11）——去边框、加号增大增粗（悬停淡底兜可发现性）；
@@ -3082,6 +3082,7 @@
        amber 族，禁新色纪律），实底 dot 脉冲一行内唯一动效——「等你拍板」与
        kind badge 并列（kind 说来源，chip 说紧急度） */
     .awaitu-chip { color: #FBBF24; background: rgba(245, 158, 11, .18); border: 1px solid rgba(245, 158, 11, .38); gap: 5px; }
+    .stale-chip { color: var(--faint); background: transparent; border: 1px solid var(--line); } /* W-NOTIFYFIX：过时徽章（版本退役/重复/陈年三因）——弱化灰系（过时≠行动） */
     .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; animation: awaitu-pulse 2.2s ease-in-out infinite; }
     @keyframes awaitu-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
     html[data-theme="light"] .awaitu-chip { color: #B45309; }

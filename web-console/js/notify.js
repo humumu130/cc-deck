@@ -86,9 +86,57 @@
                   return set;
                 }
                 const isUserPending = (set, kind, entityId) => !!(set && kind && entityId && set.has(kind + ":" + entityId));
+                // ── W-NOTIFYFIX（1105 用户实锤）：过时（stale）判定单点 ──
+                // 用户口径三连：「843 项需行动」计数虚高（陈年通知全累计）+test.96/97 已作废
+                // 版本验收单还挂着+同张 test.97 单重复 4 条（出单工具重跑=同 title 异 id 四张）。
+                // 治理（全 web 面，不动 relay 生成逻辑）：
+                //   ①版本退役：验收单 title 版号（v0.7.0-test.97 形态）≠ 当前装机版
+                //    （window.__ccDeck005Version 壳烙印）→ 过时——出新版即退役旧版单；
+                //   ②同 title 聚合：同 title 多张（异 id 重跑产物）只认 created_at 最新一张，
+                //     其余过时（重复治理）；
+                //   ③通用陈年：任何行 ts 距今 >7 天且非 userPending（等你拍板）→ 过时
+                //    （10-19 的死 waiting/陈年 system 全归历史）。
+                // 过时行：active/unresolved 双清（不进「需你行动」/「注意」组+不计数）→
+                // 落「历史动态」折叠组可查，行内「过时」徽章自明。userPending 行永不过时
+                //（W-AWAITUSER 语义：等用户拍板的行不因龄退役）。
+                const STALE_MS = 7 * 86400000;
+                const versionOfText = (t) => { const m = String(t || "").match(/v?(\d+\.\d+\.\d+)(?:-test\.(\d+))?/); return m ? { major: m[1], test: m[2] ? Number(m[2]) : null } : null; };
+                const currentVer = versionOfText(window.__ccDeck005Version || "");
+                const verObsolete = (titleVer) => {
+                  if (!titleVer || !currentVer) return false; // 提不出/无烙印（旧壳）不判——fail-open 保守
+                  if (titleVer.major !== currentVer.major) return titleVer.major < currentVer.major; // 主三段字典序（0.7.0<0.7.1）
+                  if (currentVer.test === null) return titleVer.test !== null; // 当前正式版：一切 test 单过时
+                  if (titleVer.test === null) return false; // 当前 test 版：无 test 序号的标题不比（罕见形态）
+                  return titleVer.test < currentVer.test; // 同主段比 test 序号
+                };
+                // 验收单池预研（**buildRows 调用期惰性求值**——页面加载期 bridge.accepts 尚空
+                //（SNAPSHOT 未达），IIFE 顶层级会固化空集=全员误判 dup）：同 title 最新一张
+                // id=现行，其余异 id 重复。
+                const acceptanceCurrentIdsOf = () => {
+                  const map = new Map(); // title -> {id, ts}
+                  for (const a of (bridge.accepts || [])) {
+                    const t = String(a.title || "").replace(/（[^）]*）$/, "").trim(); // 去尾括号（日期戳不参与聚合键）
+                    const ts = normTs(a.created_at);
+                    const prev = map.get(t);
+                    if (!prev || ts > prev.ts) map.set(t, { id: a.id, ts });
+                  }
+                  return new Set([...map.values()].map((x) => x.id));
+                };
+                const staleWhyOf = (row, now, currentIds) => {
+                  if (row.userPending) return null;
+                  if (row.kind === "acceptance" && row.source && row.source.id) {
+                    const a = row.source;
+                    if (!currentIds.has(a.id)) return "dup"; // 同 title 旧张（重复）
+                    const tv = versionOfText(a.title);
+                    if (tv && verObsolete(tv)) return "version"; // 版本退役
+                  }
+                  if (row.ts && now - row.ts > STALE_MS) return "aged"; // 通用陈年
+                  return null;
+                };
                 function buildRows() {
                   const rows = [];
                   const pending = userPendingIndex();
+                  const acceptanceCurrentIds = acceptanceCurrentIdsOf(); // 惰性：本帧 accepts 池聚合
                   for (const n of bridge.notifications) {
                     if (flight.has(n.key) || dismissedNotifyKeys.has(n.key)) continue;
                     const session = sessionOf(n);
@@ -121,6 +169,13 @@
                   // userPending 键——不造第二排序器、不改三分组结构，observe3
                   //「需你行动组首位」锚不动；组内待拍板行置顶，其余按原序）
                   rows.sort((a, b) => Number(b.userPending === true) - Number(a.userPending === true) || Number(b.active) - Number(a.active) || b.ts - a.ts);
+                  // W-NOTIFYFIX：过时标注（排序后单遍）——active/unresolved 双清=不进
+                  //「需你行动」/「注意」组、不计头部计数，落「历史动态」折叠组可查。
+                  const nowMs = Date.now();
+                  for (const r of rows) {
+                    const why = staleWhyOf(r, nowMs, acceptanceCurrentIds);
+                    if (why) { r.staleWhy = why; r.active = false; r.unresolved = false; }
+                  }
                   return rows;
                 }
 
@@ -146,7 +201,7 @@
                 // act 行动钮（直达来源域；无跳转的 actionable 行给「知道了」轻动作）+ × 清除。
                 // 组别类：alert=需你行动（红）/warn=注意（琥珀）/read=动态（已读降噪）。
                 function rowMarkup(row) {
-                  const jump = jumpOf(row);
+                  const jump = jumpOf(row) || (row.kind === "acceptance" && row.source && row.source.id ? { acceptance: row.source.id, label: "打开验收单" } : null); /* W-NOTIFYFIX：过时验收单按钮保留——退役≠不可查（jumpOf 对非 active 恒 null 的旁路） */
                   const km = kindMetaOf(row.kind);
                   const cls = row.active ? "alert" : row.unresolved ? "warn" : "read";
                   const canAck = !row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported;
@@ -165,7 +220,7 @@
                   // clamp2+tooltip / L3 摘要+内联操作）+右侧 act/× 列；» 引导符退役
                   return '<div class="nrow ' + cls + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<span class="ic"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + km.icon + '"></use></svg></span>'
-                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
+                    + '<div class="t"><div class="l1"><span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + '</span>' + (row.staleWhy ? '<span class="nbadge stale-chip" title="' + (row.staleWhy === "version" ? "验收单对应版本已被新版取代——已退役归档，不计需行动" : row.staleWhy === "dup" ? "同名单的早期重复生成——已归档" : "超过 7 天未处理的陈年通知——已归档，不计需行动") + '">过时</span>' : "") + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
                     + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + (act ? '<span class="act-slot">' + act + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪 */
                     + x + "</div>";
                 }
@@ -470,7 +525,13 @@
                   if (target.closest("[data-notify-clear-soft]")) { clearSoftNotifications(); return; }
                   if (target.closest("[data-notify-clear]")) { clearAllNotifications(); return; }
                   const open = target.closest("[data-notify-open-acceptance]");
-                  if (open) { bridge.openAcceptance(open.dataset.notifyOpenAcceptance); setOpen(false); return; }
+                  if (open) {
+                    // W-NOTIFYFIX（用户死钮实锤）：点击链兜底——openAcceptance/openUrl 任一环
+                    // 同步抛错（如降级链依赖缺失形态）不得静默吞掉——toast 可见报错+console 留痕
+                    try { bridge.openAcceptance(open.dataset.notifyOpenAcceptance); }
+                    catch (e) { try { console.error("[notify] 打开验收单失败", e); } catch (_) {} if (bridge && typeof bridge.toast === "function") bridge.toast("打开验收单失败：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), "error"); }
+                    setOpen(false); return;
+                  }
                   const jump = target.closest("[data-notify-jump]");
                   if (jump) { focusSource(jump); return; }
                   const card = target.closest("[data-notify-card]");

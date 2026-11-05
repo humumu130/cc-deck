@@ -825,27 +825,43 @@ function connectLan(ctx) {
       // 桌面→ccDeck.openExternal（失败 catch 降级复制）；浏览器→window.open 探路，被拦（返回 null）
       // 再合成 a[target=_blank noopener noreferrer] 点击并复制链接兜底——弹窗拦截器吞掉时用户至少
       // 拿到「链接已复制」反馈。幂等挂 window，消费点（B4 验收单/地基更新与诊断/mobile 下载）点击期解析。
+      // W-NOTIFYFIX（1105 用户实锤「打开验收单」死钮）：降级链五段此前后任一段都可能静默——
+      // 裸 sharedToast 对 #toast 缺失形态 `if(!t) return` 零反馈、a.click 被吞无感知、壳侧非
+      // http(s) 校验静默 Ok（配套 main.rs 已改 Err）。本批纪律：**任何降级都必须可见反馈**
+      // ——统一走 bridge toast()（__ccDeck005B4 惰性查节点+错误级样式，release-domain 同款
+      // 消费面）+console.error 留痕（devtools/日志侧可查），#toast 缺失兜底 body 直挂。
       if (!window.__ccDeck005OpenUrl) {
-        const sharedToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(sharedToast._t); sharedToast._t = setTimeout(() => t.classList.remove("show"), 2600); };
+        const sharedToast = (msg, isError) => {
+          try { console.error("[openUrl]", msg); } catch (_) {}
+          const viaBridge = window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function";
+          if (viaBridge) { window.__ccDeck005B4.toast(msg, isError ? "error" : undefined); return; }
+          // bridge 未就绪兜底（本 helper 幂等挂载先于 B4 暴露的极端时序）：自挂 toast 节点
+          let t = document.getElementById("toast");
+          if (!t) { t = document.createElement("div"); t.id = "toast"; (document.body || document.documentElement).appendChild(t); }
+          t.textContent = (isError ? "⚠ " : "") + msg;
+          t.classList.add("show");
+          clearTimeout(sharedToast._t);
+          sharedToast._t = setTimeout(() => t.classList.remove("show"), 3200);
+        };
         const copyLink = async (url) => {
           try { await navigator.clipboard.writeText(url); sharedToast("链接已复制 · 可粘贴到浏览器打开"); return true; }
-          catch (_) { sharedToast("打开被拦截 · 链接：" + url); return false; }
+          catch (e) { sharedToast("打开被拦截 · 链接：" + url, true); return false; }
         };
         window.__ccDeck005OpenUrl = async function openExternalUrl(url) {
           const u = String(url || "");
-          if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接"); return false; }
+          if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接（非 http/https）：" + u.slice(0, 80), true); return false; }
           if (window.ccDeck && typeof window.ccDeck.openExternal === "function") {
             try { await window.ccDeck.openExternal(u); return true; }
-            catch (_) { return copyLink(u); }
+            catch (e) { sharedToast("系统浏览器打开失败，已转复制兜底：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); return copyLink(u); }
           }
           let opened = null;
-          try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (_) { opened = null; }
+          try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (e) { opened = null; }
           if (opened) { try { opened.opener = null; } catch (_) {} return true; }
           // window.open 被拦：合成 a 点击（沙箱禁 window.open 但放行锚点导航的场景）+ 复制兜底
           const a = document.createElement("a");
           a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
           document.body.appendChild(a);
-          try { a.click(); } catch (_) {}
+          try { a.click(); } catch (e) { sharedToast("锚点导航失败：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); }
           a.remove();
           return copyLink(u);
         };
