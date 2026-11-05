@@ -25,7 +25,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: expo-app/package-lock.json
+          # W-RELAYFRESHCI：relay lock 入缓存键（下方重建步在 relay 目录 npm ci）
+          cache-dependency-path: |
+            expo-app/package-lock.json
+            relay/package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -60,6 +63,23 @@ jobs:
           sed -i "s/versionName \"[^\"]*\"/versionName \"$V\"/" android/app/build.gradle
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" app.json
           echo "stamped: $V"
+
+      - name: Rebuild embedded relay bundle + freshness gate（W-RELAYFRESHCI）
+        # 同 desktop.yml（test.98/99 陈账事故治本，2026-11-05）：APK 本身不内嵌
+        # relay bundle（expo-app 无消费面），本步是纯闸位——① 同一 tag 触发的
+        # 所有出包 job 一致强制过闸：tag==VERSION 断言让「打了 tag 但 VERSION
+        # 没 bump」在 android 面也红（与 desktop 面互为冗余证词）；② 当场重建
+        # 保证本 job 工作区与 desktop job 同源（未来 APK 若嵌 relay，闸已在位）。
+        # relay npm ci 在 ubuntu 上拉的 better-sqlite3/esbuild 为 linux-x64，
+        # 仅进本 job 工作区闭包，APK 不消费，无平台影响。
+        # 闸须在本步内重建后立即跑（下方无烙印步再碰 web-console，无顺序冲突）。
+        working-directory: relay
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build-plugin.mjs
+          ARGS=""
+          if [[ "$GITHUB_REF_NAME" == v* ]]; then ARGS="--expect-tag ${GITHUB_REF_NAME#v}"; fi
+          node scripts/check-embedded-freshness.mjs $ARGS
 
       - name: Build release APK
         working-directory: expo-app/android
