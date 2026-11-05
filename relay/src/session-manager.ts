@@ -5824,6 +5824,7 @@ ${lines.join("\n")}
         const pid = Number(c.payload.cli_pid) || 0;
         let alive = !!sid && pid > 0;
         if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
+        else if (sid) { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：pid=0 卡（外部会话形态）活跃度判——原恒判死=外部 claim 卡被 auto 消卡用户永不可见
         if (!alive) {
           decideConfirm(c.id, false, "auto:pm-dead");
           // R1-A-P1②：auto:pm-dead **不入否决档**——「pid 死」常态=CLI 重启换 pid
