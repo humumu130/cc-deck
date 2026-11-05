@@ -187,6 +187,11 @@ echo "  # 2) 主仓 squash 一笔（dev 只收验证过的一笔，一 worker �
 echo "  cd ${main_repo:-<主仓>} && git merge --squash ${branch:-<分支>} && git commit   # 信息带 #NN，body 列逐条清单"
 echo "  # 3) 收尾："
 [ -n "$worktree" ] && echo "  git worktree remove ${worktree} && git branch -D ${branch:-<分支>}"
+echo "  # 4) W-BOARDRECON-R3 手工收割翻卡（gh 闸坏绕行 squash 时的断链点——第二现 18 张实锤）："
+echo "  #    手工 squash 完成后必须翻板卡，否则对账器 2h 后会按收割证据自动翻（auto 档）——"
+echo "  #    但别依赖自动兜底，主动翻："
+echo "  #    org board move <gid> <entry_id> done    # 或面板拖卡到 done"
+echo "  #    提示来源：boards-journal 会记 boardrecon-auto-done 审计行（自动翻时的证据摘要）"
 echo "  # 不自动化项（SSOT 内核，逐项人工）：diff 抽查｜自测证据核验｜真机分级（L2 看 UI，L3/L4 未真机不收）"
 
 if [ "$fails" -gt 0 ]; then

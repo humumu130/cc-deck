@@ -29,6 +29,9 @@ export interface ReconSession {
 export interface ReconDispatchRow {
   id?: string;
   status?: string;
+  /** W-BOARDRECON-R3：台账 title（收割证据①——done 行 receipt 非空配对） */
+  title?: string;
+  receipt?: string;
 }
 
 export interface ReconAction {
@@ -37,10 +40,32 @@ export interface ReconAction {
   gid: string;
   entryId: string;
   text: string;
-  /** orphan-session=owner 会话死/不在册；ledger-terminal=台账终态漏网；stale-no-progress=滞留超窗 */
-  reason: "orphan-session" | "ledger-terminal" | "stale-no-progress";
+  /** orphan-session=owner 会话死/不在册；ledger-terminal=台账终态漏网；stale-no-progress=滞留超窗；
+   * R3：harvested-unflipped=submitted 陈化+收割证据已存在（auto 翻 done）；duplicate-card=同文本双卡 */
+  reason: "orphan-session" | "ledger-terminal" | "stale-no-progress" | "harvested-unflipped" | "duplicate-card";
   detail: string;
   toBacklog: boolean;
+  /** R3：true=翻 done（已收割未翻——与 toBacklog 互斥面） */
+  toDone?: boolean;
+}
+
+/** R3 收割证据三源（调用侧构建，纯函数只判——保持零 IO 可测）：
+ * - doneLedger：台账 done 行按 slug 锚聚合 {count, hasReceipt}——证据①（status=done+receipt 非空）
+ * - devLogText：git log --oneline 全文（一次子进程取回缓存）——证据②（slug 命中 dev 提交）
+ * - receiptSlugs：artifacts/w-*.md 尾行合规（「结果：…｜改动文件：…」）的 slug 集——证据③ */
+export interface HarvestEvidence {
+  doneLedger: Map<string, { count: number; hasReceipt: boolean }>;
+  devLogText: string;
+  receiptSlugs: Set<string>;
+}
+
+/** R3 归一键：卡/台账/回执/git log 统一用 W-SLUG 锚（`w-xxx` 前缀，大小写不敏感）；
+ * 无 slug 前缀的卡（如「巡查员上岗：…」）回落前 10 字归一。标题措辞差（派单书 vs 台账
+ * 微调词）在 slug 锚下零影响——三源键同一套。 */
+export function harvestKeyOf(text: string): string {
+  const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
+  if (m) return `w-${m[1].toLowerCase()}`;
+  return String(text || "").replace(/\s+/g, "").slice(0, 10).toLowerCase();
 }
 
 export interface ReconResult {
@@ -81,6 +106,10 @@ export function reconcileBoardCards(input: {
   previouslyFlagged?: Set<string>;
   /** R1-P0 输出侧：本拍新标记的候选（调用侧存起来供下拍 previouslyFlagged） */
   flaggedNow?: Set<string>;
+  /** W-BOARDRECON-R3：收割证据三源（submitted 陈化判定用；缺席=判定族关闭向后兼容） */
+  harvest?: HarvestEvidence;
+  /** R3：submitted 陈化阈值（缺省 2h；CCR_BOARDRECON_HARVEST_STALE_MS 可调） */
+  harvestStaleMs?: number;
 }): ReconResult {
   const now = input.now ?? Date.now();
   const staleMs = input.staleMs ?? (Number(process.env.CCR_BOARDRECON_STALE_MS) || STALE_MS_DEFAULT);
@@ -106,7 +135,47 @@ export function reconcileBoardCards(input: {
     if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
   }
   for (const { gid, board } of input.boards) {
+    // W-BOARDRECON-R3 重复卡检测（前置段——同 gid 同归一键 submitted 双卡）：告警卡提示
+    // 合并不自动删（任务书口径③；本事故 sqlitefixr1 ×2 实锤）。注意在 harvested 判定前跑：
+    // 双卡同题属「标题多义」，harvested 段对多卡同键降 advisory 不自动翻——两段协同。
+    const submittedByKey = new Map<string, string[]>();
+    if (input.harvest) {
+      for (const e of board.entries) {
+        if (e.status !== "submitted") continue;
+        const key = harvestKeyOf(String(e.text || ""));
+        (submittedByKey.get(key) ?? submittedByKey.set(key, []).get(key)!).push(e.id);
+      }
+      for (const [key, ids] of submittedByKey) {
+        if (ids.length >= 2) {
+          actions.push({ gid, entryId: ids[0], text: key, reason: "duplicate-card", detail: `同文本 submitted 双卡 ×${ids.length}（${ids.join(",")}）——疑似重复派单建卡，确认后合并/删一张`, toBacklog: false, advisory: true });
+        }
+      }
+    }
     for (const e of board.entries) {
+      // W-BOARDRECON-R3 判定族「已收割未翻」（手工收割断链第二现治本——1105 用户实锤
+      // 审查中 23 里 18 张已收割未翻）：submitted 滞留超阈值 + 收割证据三选一 → 翻 done；
+      // 证据多义（同键多卡）降告警卡（单键确认）不自动翻——auto 只动证据链闭合的。
+      if (e.status === "submitted" && input.harvest) {
+        const harvestStaleMs = input.harvestStaleMs ?? (Number(process.env.CCR_BOARDRECON_HARVEST_STALE_MS) || 2 * 3600_000);
+        const updated = Number(e.updated_at || e.ts || 0);
+        if (now - updated > harvestStaleMs) {
+          const key = harvestKeyOf(String(e.text || ""));
+          const ev = input.harvest;
+          const ledgerHit = ev.doneLedger.get(key);
+          const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
+          const devHit = ev.devLogText.toLowerCase().includes(key);
+          const receiptOk = ev.receiptSlugs.has(key);
+          const hits = [ledgerOk && "台账 done+回执", devHit && "dev log 命中", receiptOk && "回执尾行合规"].filter(Boolean) as string[];
+          const dupCount = submittedByKey.get(key)?.length ?? 1;
+          if (hits.length >= 1 && dupCount === 1) {
+            actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted 陈化 ${Math.round((now - updated) / 3600_000)}h，收割证据：${hits.join(" + ")}——已收割未翻，翻 done（boardrecon auto）`, toBacklog: false, toDone: true });
+          } else if (hits.length >= 1 && dupCount >= 2) {
+            actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `证据在（${hits.join(" + ")}）但同键 ${dupCount} 卡并存——多义不自动翻，人工确认后单键翻卡`, toBacklog: false, advisory: true });
+          }
+          // 无证据=真在审，不动（本单验收 2：5 张真在审不误翻）
+        }
+        continue;
+      }
       if (e.status !== "claimed") continue;
       claimedCards++;
       const updated = Number(e.updated_at || e.ts || 0);
