@@ -12,6 +12,23 @@
                 const laneFoldKey = (gid, status) => "lanefold:" + (gid || "?") + ":" + status;
                 const laneFoldOpen = (gid, status) => { try { const v = localStorage.getItem(laneFoldKey(gid, status)); if (v === "1") return true; if (v === "0") return false; } catch {} return status === "planned"; };
                 const laneFoldSet = (gid, status, open) => { try { localStorage.setItem(laneFoldKey(gid, status), open ? "1" : "0"); } catch {} };
+                // lanehide（1105 用户拍板方案①「列隐藏+尾部停靠条」，Linear 同款——lanepatterns
+                // 调研回执推荐①节）：低频列（done/planned）整列退出列序+四核心列吃回全宽；
+                // 板尾常驻停靠条「⟨ 已隐藏：完成 N ▸」点击临时展开尾列（临时态=内存集
+                // laneTempUnhide，刷新还原隐藏），列头 ⋯ 菜单「隐藏此列/收起（保持隐藏）」。
+                // 记忆沿用 lanefold 的 (boardId,status) localStorage 键制（机制复用，键名
+                // lanehide: 语义区分）；**替代**这两列的 lanefold 纵向折叠（用户否竖条后
+                // 泳道形态定版：status 列不做折叠只做隐藏——Linear 同款）。旧 lanefold 键
+                // 不迁移不读取（用户重藏一次，回执披露）。归档胶囊（方案②）不做，列头菜单
+                // 结构即升级位（加项即得）。
+                const LANE_HIDEABLE = new Set(["done", "planned"]);
+                const laneHideKey = (gid, status) => "lanehide:" + (gid || "?") + ":" + status;
+                const laneTempUnhide = new Set();
+                const laneHiddenNow = (gid, status) => {
+                  if (laneTempUnhide.has((gid || "?") + ":" + status)) return false;
+                  try { return localStorage.getItem(laneHideKey(gid, status)) === "1"; } catch { return false; }
+                };
+                const laneHideSet = (gid, status, hide) => { try { localStorage.setItem(laneHideKey(gid, status), hide ? "1" : "0"); } catch {} };
                 const laneLastCounts = new Map();
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
@@ -457,7 +474,15 @@
                   const total = tasks.length;
                   // V8R 总览区（原型 .ov）：prog 8px 矩形分段（段色 --p-* 同名类映射）+ 方 chip
                   // 图例——去「任务板总览」重头行（计数并入图例，实时口径入 boardfoot）
-                  const boardOverview = '<div class="board-overview"><div class="board-progress" aria-label="任务状态分布">' + lanes.filter(([status]) => boardCounts.get(status) > 0).map(([status]) => '<i class="' + status + '" style="flex-grow:' + boardCounts.get(status) + '"></i>').join("") + '</div><div class="board-legend">' + lanes.map(([status, label]) => '<span style="--legend-color:var(--p-' + (status === "ready_to_install" ? "ready" : status) + ')"><i></i>' + label + ' <b>' + boardCounts.get(status) + '</b></span>').join("") + '</div></div>'; /* t25fix #7：0 宽段不渲染（空段+分隔线堆叠=「全灰/被遮挡」观感），段宽 flex-grow 按任务数比例（gap 布局下百分比宽会溢出） */
+                  // boardpolish（1105 用户实测）：「完成」段剥离出比例条——done 量级（1100+）
+                  // 碾压活跃态（个位数）致比例条全绿、活跃分布不可辨（用户原话「别的类型都看
+                  // 不出来比例」）。修=条内只分布五活跃态（backlog/planned/claimed/submitted/
+                  // ready，图例同步），完成计数移条尾独立「✓ N」徽章（绿=--p-done 同源，
+                  // title 带全量口径）；每段 title 带该类计数（hover 可辨）。t25fix #7 的
+                  // flex-grow 按任务数+0 宽段不渲染+min-width 2px 底可见语义全保持。
+                  const doneN = boardCounts.get("done") || 0;
+                  const segLanes = lanes.filter(([status]) => status !== "done");
+                  const boardOverview = '<div class="board-overview"><div class="board-progress-row"><div class="board-progress" aria-label="活跃任务分布（完成已移出）">' + segLanes.filter(([status]) => boardCounts.get(status) > 0).map(([status]) => '<i class="' + status + '" style="flex-grow:' + boardCounts.get(status) + '" title="' + (lanes.find(([s]) => s === status) || [status, status])[1] + ' ' + boardCounts.get(status) + '"></i>').join("") + '</div><span class="ov-done" title="完成 ' + doneN + '（量级碾压活跃态，已移出比例条）">✓ ' + doneN + "</span></div>" + '<div class="board-legend">' + segLanes.map(([status, label]) => '<span style="--legend-color:var(--p-' + (status === "ready_to_install" ? "ready" : status) + ')"><i></i>' + label + ' <b>' + boardCounts.get(status) + '</b></span>').join("") + '</div></div>'; /* t25fix #7：0 宽段不渲染（空段+分隔线堆叠=「全灰/被遮挡」观感），段宽 flex-grow 按任务数比例（gap 布局下百分比宽会溢出）；boardpolish：done 段+图例行剥离（✓ N 徽章承载） */
                   const laneBody = (status, items) => {
                     // V8R：泳道内平铺（原型 bcol 无分区头概念）——claimed 全列统一「运行中置顶
                     // + ts 升序」=排队序，排队号 #n 与运行态落卡面 cline；backlog 同平铺。
@@ -495,7 +520,11 @@
                     // 审查 B-P2-3：泳道计数=可见卡数（根+孤儿子卡）——原 items.length 含折叠子卡（显 8 见 2）
                     return { html: status === "claimed" ? claimedBody : flatRender(withSubs, false), visibleN: withSubs.length };
                   };
-                  const columns = lanes.map(([status, label]) => {
+                  const boardGid = project?.id || "";
+                  // lanehide：隐藏列退出列序（临时展开列照常渲染——laneHiddenNow 已内含临时态）；
+                  // 停靠条聚合「隐藏且未临时展开」的列（计数徽章带 unhide 直达）。
+                  const hiddenLanes = lanes.filter(([s]) => LANE_HIDEABLE.has(s) && laneHiddenNow(boardGid, s));
+                  const columns = lanes.filter(([s]) => !hiddenLanes.some(([hs]) => hs === s)).map(([status, label]) => {
                     const items = tasks.filter((task) => (legacyStatuses.get(task.status) || task.status) === status);
                     let laneRes = laneBody(status, items);
                     let body = laneRes.html;
@@ -515,29 +544,29 @@
                     // V8R：待收单列 = 原型 bcol.go（⚡ 行动列：琥珀描边+光环+渐变头+列头琥珀字）
                     const headLabel = status === "ready_to_install" ? "⚡ " + label : label;
                     const inner = body || (laneLoading ? '<div class="lane-skel" aria-hidden="true"><i></i><i></i><i></i></div>' : '<div class="lane-empty">' + (status === "planned" ? "暂无规划——缓做想法（攒批/待评估）记在这里，排产后进待认领" : "暂无任务") + "</div>");
-                    // lanefold：可折叠两条（规划中/完成）——头=抽屉把手（标题+计数徽章+chevron），
-                    // 卡片区入 .lane-drawer（grid 0fr↔1fr 平滑开合）；计数徽章变化轻弹一次。
-                    const foldable = LANE_FOLDABLE.has(status);
-                    const gid = project?.id || "";
+                    const gid = boardGid;
                     const ck = gid + ":" + status;
-                    // W-P2WEB ⑤（审 A P2-5/审 B 反例3）：pop=「新增卡提醒」——只在**真实增量**弹
-                    //（visibleN > last）。旧判据 !== 把减量也当新增弹：done 列 7 天陈卡滑出 recent
-                    // 窗口时 visibleN 降 1 → 徽章假 pop 一次（每卡 7 天一遇）；丢板/清空形态同理
-                    // 不再弹。首见（laneLastCounts 无记录）不弹——冷启动不制造假提醒。
-                    const popCls = foldable && laneLastCounts.has(ck) && visibleN > laneLastCounts.get(ck) ? " pop" : "";
+                    // lanehide：可隐藏列头带 ⋯ 菜单（隐藏此列/收起保持隐藏——归档胶囊方案②
+                    // 预留升级位=菜单加项即得）；lanefold 折叠把手对这两列退役（用户拍板
+                    // 隐藏形态，Linear 同款「status 列不折叠只隐藏」）。pop 徽章语义随列
+                    // 头保留（临时展开列也提醒增量）。
+                    const hideable = LANE_HIDEABLE.has(status);
+                    const tempShown = hideable && laneTempUnhide.has((gid || "?") + ":" + status);
+                    const popCls = hideable && laneLastCounts.has(ck) && visibleN > laneLastCounts.get(ck) ? " pop" : "";
                     laneLastCounts.set(ck, visibleN);
-                    // W-P2WEB ④（审 A P2-4）：折叠腔 id 化+把手 aria-controls 关联——SR 导航闭环
-                    //（纯增强；visibility:hidden 已保隐藏内容不入可达树）。
-                    const drawerId = "lane-drawer-" + gid + "-" + status;
-                    const lane = foldable
-                      ? (open => '<div class="lane lane-' + status + ' lane-fold ' + (open ? "lane-open" : "lane-closed") + '"><div class="lane-head lane-fold-head" data-lane-fold="' + status + '" data-lane-gid="' + escape(gid) + '" role="button" tabindex="0" aria-expanded="' + open + '" aria-controls="' + drawerId + '"><span class="lane-title">' + headLabel + '</span><span class="lane-badge' + popCls + '">' + visibleN + '</span><i class="lane-chev" aria-hidden="true"></i></div><div class="lane-drawer" id="' + drawerId + '"><div class="lane-drawer-in">' + inner + "</div></div></div>")(laneFoldOpen(gid, status))
-                      : '<div class="lane lane-' + status + '"><div class="lane-head"><span>' + headLabel + "</span><span>" + visibleN + "</span></div>" + inner + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数（折叠子卡不计数）；W3P-P2-4 loading 骨架；planlane：规划泳道空态带去向指引；lanefold 折叠两条（1104） */
-                    // W-LANEFIX（用户 1024 装机实测）：完成泳道还原正常列——#236 D 的
-                    // 「归档 · 完成 N 张（点击展开）」<details> 默认折叠特例退役（与另四条
-                    // 泳道不统一）；标签回归词表定版「完成」（:3 1014 定版，图例同源）+
-                    // 默认展开同款样式。数据零删除不变（板面照常全量展示已收割任务）
+                    const menuBtn = hideable
+                      ? '<button type="button" class="lane-menu-btn" data-lane-menu="' + status + '" data-lane-gid="' + escape(gid) + '" aria-haspopup="true" aria-label="列操作菜单">⋯</button><div class="lane-menu" data-lane-menu-panel="' + status + '" hidden>' + (tempShown
+                        ? '<button type="button" class="lane-menu-item" data-lane-collapse="' + status + '" data-lane-gid="' + escape(gid) + '">⟨ 收起（保持隐藏）</button>'
+                        : '<button type="button" class="lane-menu-item" data-lane-hide="' + status + '" data-lane-gid="' + escape(gid) + '">隐藏此列（板尾停靠条可找回）</button>') + "</div>"
+                      : "";
+                    const lane = '<div class="lane lane-' + status + (tempShown ? " lane-temp-shown" : "") + '"><div class="lane-head"><span>' + headLabel + '</span>' + (hideable ? '<span class="lane-badge' + popCls + '">' + visibleN + "</span>" : "<span>" + visibleN + "</span>") + menuBtn + "</div>" + inner + "</div>"; /* #G3 审查 B-P2-3：计数=可见卡数；W3P-P2-4 loading 骨架；planlane 空态指引；lanehide：列头 ⋯ 菜单+隐藏滤列（lanefold 折叠把手退役——1105 拍板方案①） */
                     return lane;
                   }).join("");
+                  // lanehide：板尾停靠条——「⟨ 已隐藏：完成 N ▸」聚合 chip 逐列一枚（点击临时
+                  // 展开尾列，刷新还原隐藏——临时态不写记忆）。空态（无隐藏列）零渲染。
+                  const dockHtml = hiddenLanes.length
+                    ? '<div class="lane-dock" data-lane-dock="' + escape(boardGid) + '">' + hiddenLanes.map(([s, label]) => '<button type="button" class="dock-chip" data-lane-unhide="' + s + '" data-lane-gid="' + escape(boardGid) + '" title="点击临时展开' + label + '列（不改变隐藏记忆，刷新还原）">⟨ 已隐藏：' + label + " " + (boardCounts.get(s) || 0) + " ▸</button>").join("") + "</div>"
+                    : "";
                   const unknown = tasks.filter((task) => !lanes.some((lane) => lane[0] === (legacyStatuses.get(task.status) || task.status)));
                   // V8R boardfoot（原型 .boardfoot）：口径脚注——自验点语义 + 操作指引
                   const boardFoot = '<div class="boardfoot">板面实时同步 · 断线自动补齐 · 卡面 ✓✗○ = AI 自验进度，最终验收以确认卡为准 · 新建任务走来源会话派单</div>';
@@ -547,7 +576,7 @@
                   const staleMs = Date.now() - freshAt;
                   const freshHtml = freshAt ? '<div class="board-fresh" data-board-fresh="' + escape(project?.id || "") + '">更新于 ' + fmtHM(freshAt) + (staleMs > 600_000 ? ' <span class="board-fresh-stale">· 数据可能过期</span>' : "") + "</div>" : "";
                   const offlineHtml = !state.online ? '<div class="board-offline">离线——显示的是 ' + (freshAt ? fmtHM(freshAt) + " 的快照" : "旧数据（无龄戳）") + "</div>" : "";
-                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + offlineHtml + boardOverview + freshHtml + '<div class="board">' + columns + "</div>" + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
+                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + offlineHtml + boardOverview + freshHtml + '<div class="board">' + columns + "</div>" + dockHtml + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
                 }
                 function activityMarkup(project, opts = {}) {
                   // W-ACTIVITY3（#116，1015 拍板）：视觉基准=v3 原型活动页（feedwrap/.fi 轻列表
@@ -1798,6 +1827,43 @@
                     if (event.key !== "Enter" && event.key !== " ") return;
                     const head = event.target && event.target.closest ? event.target.closest(".lane-fold-head") : null;
                     if (head) { event.preventDefault(); laneFoldToggle(head); }
+                  });
+                  // lanehide（1105 拍板方案①）：列头 ⋯ 菜单开合/隐藏/临时展开收起 + 板尾停靠条
+                  // unhide。隐藏=记忆+列退出列序（四核心列吃回全宽）；临时展开=内存集（刷新还原）；
+                  // 停靠条 chip 点击临时展开。列增删走 render() 全量重渲（结构变化无局部更新价值）。
+                  root.addEventListener("click", (event) => {
+                    const t = event.target;
+                    if (!t || !t.closest) return;
+                    const menuBtn = t.closest(".lane-menu-btn");
+                    if (menuBtn) {
+                      const panel = menuBtn.parentElement && menuBtn.parentElement.querySelector('.lane-menu[data-lane-menu-panel="' + menuBtn.dataset.laneMenu + '"]');
+                      if (panel) {
+                        const wasHidden = panel.hidden;
+                        root.querySelectorAll(".lane-menu:not([hidden])").forEach((m) => { m.hidden = true; });
+                        panel.hidden = !wasHidden;
+                      }
+                      return;
+                    }
+                    const hideItem = t.closest("[data-lane-hide]");
+                    if (hideItem) {
+                      laneHideSet(hideItem.dataset.laneGid || "", hideItem.dataset.laneHide, true);
+                      render();
+                      return;
+                    }
+                    const collapseItem = t.closest("[data-lane-collapse]");
+                    if (collapseItem) {
+                      laneTempUnhide.delete((collapseItem.dataset.laneGid || "?") + ":" + collapseItem.dataset.laneCollapse);
+                      render();
+                      return;
+                    }
+                    const unhideChip = t.closest("[data-lane-unhide]");
+                    if (unhideChip) {
+                      laneTempUnhide.add((unhideChip.dataset.laneGid || "?") + ":" + unhideChip.dataset.laneUnhide);
+                      render();
+                      return;
+                    }
+                    // 点外收起所有列菜单
+                    if (!t.closest(".lane-menu")) root.querySelectorAll(".lane-menu:not([hidden])").forEach((m) => { m.hidden = true; });
                   });
                   root.addEventListener("click", (event) => {
                     // [W-AWAITUSER]「等你拍板」入口行：直达对应面（数据行由 render 写入，
