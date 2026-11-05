@@ -89,7 +89,7 @@ function deriveLevel(actionable: boolean, kind: string, resolvedAt: number | nul
  * notification 双层导入：两源 JSON 快照同步进 notification + notification_client_state。
  * 幂等/失效重扫/事务语义同 importOrg（C1 模板）。
  */
-export function importNotifications(port: StoragePort, dataDir: string, opts?: { schemaVersion?: number }): NotificationImportResult {
+export async function importNotifications(port: StoragePort, dataDir: string, opts?: { schemaVersion?: number; yieldFn?: () => Promise<void> }): Promise<NotificationImportResult> {
   const schemaVersion = opts?.schemaVersion ?? NOTIFICATION_IMPORT_SCHEMA_VERSION;
   const sources = [
     observe(join(dataDir, "notifications.json"), "notifications.json"),
@@ -238,30 +238,56 @@ export function importNotifications(port: StoragePort, dataDir: string, opts?: {
     }
   }
 
-  // ---------- 落库（单事务：域清→重灌→loss→checkpoint） ----------
+  // ---------- 落库（bootfast3 分批子事务+批间让出） ----------
+  // 原单事务「域清→25k 行重灌→checkpoint」在通知源失配时（运行期通知写入=常态）是
+  // 1.4~6s 事件循环块（沙盒 60s 拍再重放实锤=HTTP 000 第二簇）。分批：批 2000 主行
+  // 子事务+批间 yieldFn 让出。失败语义从「回滚保留旧快照」变「批 1..k 已提交中间态
+  // +checkpoint 未写→下轮全量重灌自愈」（events 批事务同款幂等路线——DELETE+INSERT
+  // 重放，无 accumulate 残留）。不传 yieldFn 时批结构仍逐批同步（事务边界一致）。
+  const yieldFn = opts?.yieldFn;
+  const all = [...byKey.values()];
+  const BATCH = 2000;
   port.begin();
   try {
     port.exec("DELETE FROM notification_client_state");
     port.exec("DELETE FROM notification");
     port.exec("DELETE FROM import_loss WHERE source_path IN (?, ?)", [projSrc.file, ledgerSrc.file]);
-    for (const n of byKey.values()) {
-      port.exec(
-        "INSERT INTO notification (id, project_id, group_id, session_id, level, category, payload_json, handled_at, resolved_at, condition_key, created_at) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [n.id, n.sessionId, n.level, n.category, JSON.stringify(n.payload), n.handledAt, n.resolvedAt, n.conditionKey, n.createdAt],
-      );
-      for (const cs of n.clientStates) {
+    port.commit();
+  } catch (err) {
+    port.rollback();
+    throw new Error(`import-notification: 通知域清段失败已回滚——${err instanceof Error ? err.message : String(err)}`);
+  }
+  for (let bi = 0; bi < all.length; bi += BATCH) {
+    port.begin();
+    try {
+      for (let i = bi; i < Math.min(bi + BATCH, all.length); i++) {
+        const n = all[i];
         port.exec(
-          "INSERT INTO notification_client_state (notification_id, client_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)",
-          [n.id, cs.clientId, cs.readAt, cs.dismissedAt],
+          "INSERT INTO notification (id, project_id, group_id, session_id, level, category, payload_json, handled_at, resolved_at, condition_key, created_at) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [n.id, n.sessionId, n.level, n.category, JSON.stringify(n.payload), n.handledAt, n.resolvedAt, n.conditionKey, n.createdAt],
         );
+        for (const cs of n.clientStates) {
+          port.exec(
+            "INSERT INTO notification_client_state (notification_id, client_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)",
+            [n.id, cs.clientId, cs.readAt, cs.dismissedAt],
+          );
+        }
       }
+      port.commit();
+    } catch (err) {
+      port.rollback();
+      throw new Error(`import-notification: 通知域批 ${bi / BATCH + 1} 失败已回滚（checkpoint 未写→下轮全量重灌自愈）——${err instanceof Error ? err.message : String(err)}`);
     }
+    await yieldFn?.();
+  }
+  port.begin();
+  try {
     for (const l of losses) appendLoss(port, { sourcePath: l.source.file, lineNo: l.lineNo, reason: l.reason, excerpt: l.excerpt });
     for (const s of sources) writeCheckpoint(port, { path: s.file, mtimeMs: s.mtimeMs, lineCount: s.lineCount, offset: s.lineCount, schemaVersion });
     port.commit();
   } catch (err) {
     port.rollback();
-    throw new Error(`import-notification: 通知域导入失败已回滚（保留旧快照）——${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`import-notification: 通知域收尾（loss/checkpoint）失败已回滚——${err instanceof Error ? err.message : String(err)}`);
   }
 
   return { skipped: false, counts: countAll(port), loss: losses.length, rescanned: sources.filter((s) => s.text !== null).map((s) => s.file) };

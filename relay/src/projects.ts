@@ -19,7 +19,7 @@ import { applyOrgChange } from "./org-schema.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
 import { withOrgWriteTx } from "./storage/org-write-tx.js";
-import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb, boardTaskEntriesFromDb } from "./storage/read-mode.js";
+import { viaReadMode, projectGroupsFromDb, orgConfirmsFromDb, boardTaskEntriesFromDb, advanceOrgSourceCheckpoint } from "./storage/read-mode.js";
 import type { DutyPolicy } from "./leader-duty.js";
 import type { SessionEngine } from "./types.js";
 
@@ -378,7 +378,11 @@ function writeProjectsFile(f: ProjectsFile, dir?: string): boolean {
     snapshot: f,
   });
   // T0a 第一件：tmp+rename 原子写（消除崩溃半写窗口；同目录 rename = POSIX 原子）
-  return atomicWriteJson(projectsFilePath(d), JSON.stringify(f, null, 2) + "\n");
+  const ok = atomicWriteJson(projectsFilePath(d), JSON.stringify(f, null, 2) + "\n");
+  // bootfast3（t-e23febf2）：org 源写面推进 import_checkpoint（防 orgRescanPending 失配
+  // 联动全域重灌——实产源变更后重启 HTTP 阻塞根因，详见 read-mode advanceOrgSourceCheckpoint 头注）
+  if (ok) advanceOrgSourceCheckpoint(projectsFilePath(d));
+  return ok;
 }
 
 export function listGroups(dir?: string): ProjectGroup[] {
@@ -1573,7 +1577,11 @@ function writeConfirms(list: OrgConfirm[], dir?: string): boolean {
     // #292-cutover-P1（B-F3）：confirms.json 改原子写（tmp+rename）——裸 writeFileSync
     // 的半写窗口×导入器「坏 JSON=清域+落 checkpoint」= 待决确认单被静默清空且空态合法化
     // （projects.json 同族文件 T0a 已落 atomicWriteJson，本件补齐）
-    return atomicWriteJson(confirmsFilePath(d), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n");
+    const ok = atomicWriteJson(confirmsFilePath(d), JSON.stringify({ confirms: [...pending, ...decided] }, null, 2) + "\n");
+    // bootfast3（t-e23febf2）：org 源写面推进 import_checkpoint（同 writeProjectsFile——
+    // 确认卡是 org 三源里运行期写入频率最高的源，实产「每次重启撞阻塞窗」的主常触发者）
+    if (ok) advanceOrgSourceCheckpoint(confirmsFilePath(d));
+    return ok;
   } catch (e) {
     console.warn(`[projects] 确认单写入失败: ${e instanceof Error ? e.message : String(e)}`);
     return false;

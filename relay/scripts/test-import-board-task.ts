@@ -143,7 +143,7 @@ assert(cps0.length === 2 && cps1.length === 2 && cps0.every((c, i) => c.updated_
 
 // ---------- 5. 分区契约（CLI 域重灌不碾板分区 / 板域重灌不碾 CLI 域） ----------
 console.log("分区契约:");
-const st = importSessionTask(port, {
+const st = await importSessionTask(port, {
   eventsFile: join(dataDir, "events.ndjson"), // 不存在=源不可观测（D1 口径），但 cpEvents null 仍触发 task 域重灌
   tasksDir: join(dataDir, "tasks"),
   acceptanceDir: join(dataDir, "acceptances"),

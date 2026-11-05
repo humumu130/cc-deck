@@ -64,11 +64,11 @@
 // 可显式传 dirs 覆盖（测试注入路径）。
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { StoragePort } from "./port.js";
 import { createSqlitePort, loadSqliteDriver, resetSqliteDriverForTest } from "./sqlite.js";
 import { runMigrations } from "./migrator.js";
-import { readCheckpoint } from "./checkpoint.js";
+import { readCheckpoint, writeCheckpoint } from "./checkpoint.js";
 import { statThenRead } from "./import-util.js";
 import { importOrg, ORG_IMPORT_SCHEMA_VERSION } from "./import-org.js";
 import { importNotifications } from "./import-notification.js";
@@ -216,9 +216,14 @@ export function ensureStore(dirs: ReadModeDirs): StoragePort {
   const port = createSqlitePort({ dataDir: dirs.dataDir });
   port.open();
   runMigrations(port, migrations);
-  importAllForShadow(port, dirs);
-  shadowSigCache.set(dirs.dataDir, shadowSourcesSig(dirs));
   portCache.set(dirs.dataDir, port);
+  // bootfast3（t-e23febf2 刀 B）：首建导入改后台 chunked——原同步 importAllForShadow 在
+  // 「checkpoint 失配→org 联动十表全清→全量重灌」形态（30MB events+2375 文件）同步霸占
+  // 事件循环 1-2.5min（listen 后 HTTP 000——bootfast2 只保 listen 不保事件循环活性，每次
+  // 重启首读都走本冷路径=用户每次重启必撞）。改后台让出跑：窗内读面经 isShadowImportPending
+  // 走 json 权威兜底（sqlitefix 既有机制），导入完自动切 sqlite 权威；「返回 port 即已灌」
+  // 的旧同步语义退役——依赖该语义的同步断言测试统一补 flushShadowImportForTest 栅栏。
+  scheduleShadowImport(port, dirs, shadowSourcesSig(dirs));
   return port;
 }
 
@@ -232,9 +237,14 @@ function scheduleShadowImport(port: StoragePort, dirs: ReadModeDirs, sig: string
   shadowInflight.add(dirs.dataDir);
   shadowDirty.add(dirs.dataDir);
   setImmediate(() => {
+    void (async () => {
     try {
       const t0 = Date.now();
-      const failures = importAllForShadow(port, dirs);
+      // bootfast3（t-e23febf2 刀 B）：chunked 让出跑——「后台 setImmediate」≠异步：
+      // better-sqlite3 同步链照样霸占事件循环（实产 HTTP 000 主诉根——修前本回调内
+      // 同步 importAllForShadow 全量重灌 1-2.5min 无让出）。yieldFn 每批/每域让出一拍，
+      // 导入期 HTTP/WS 回调仍有处理窗（验收场景 2：强制全清重灌窗 /health 全程 200）。
+      const failures = await importAllForShadow(port, dirs, { yieldFn: () => new Promise<void>((r) => setImmediate(r)) });
       shadowSigCache.set(dirs.dataDir, sig);
       // sqlitefix R1-P0 双保险③：导入完成即失效 dispatch 域缓存——库已追平，下读重查落
       // 新行（防「导入完成前的查询结果」被守卫②拒缓存后仍残留旧命中——双保险闭环）。
@@ -254,6 +264,7 @@ function scheduleShadowImport(port: StoragePort, dirs: ReadModeDirs, sig: string
       // 的条目（防漏网）随导入完成一并作废，新签名下的下次读重查已追平的库。
       dispatchReadCache.clear();
     }
+    })();
   });
 }
 
@@ -347,6 +358,43 @@ export function ensureStoreQuiet(dirs: ReadModeDirs): StoragePort {
   return port;
 }
 
+/** bootfast3（t-e23febf2，实产反例：源变更后重启 HTTP 阻塞 1-2.5 分钟）：org 三源写面
+ * checkpoint 推进口。
+ *
+ * 根因链（沙盒复现实证：暖启动 2.3s vs touch org.json 后 65.4s——listen 前仅 559ms，
+ * 65s 全在 listen 后事件循环内）：org.json/projects.json/confirms.json 写面写文件但
+ * **不推进 import_checkpoint** → 下一轮（同进程读或重启后首个 ensureStore）orgRescanPending
+ * 严格匹配失配 → 联动十表全清+删全部非 org checkpoint → 七域全量重灌（生产 30MB events/
+ * 28k 行+task/dispatch/notification 域连坐）——better-sqlite3 同步调用霸占事件循环，
+ * HTTP 端口 LISTEN 但回调无机会（000），导入完自愈。修=写面写文件成功后同步推进该源
+ * checkpoint（观测口径与 import-org observe 逐字同款）→ 失配窗收窄到「文件写后到推进前
+ * 的崩溃窗」（POSIX 上 rename+checkpoint 为两步，窗内崩溃回退现状重扫语义——幂等无恶化）。
+ *
+ * 容错：推进失败只 warn 不抛——checkpoint 停旧=下轮导入按现状重扫（幂等），写面成功
+ * 语义不受影响。低频面（org 写=立项/结项/确认卡），ensureStoreQuiet 首建开销可接受。 */
+export function advanceOrgSourceCheckpoint(file: string): void {
+  try {
+    if (!existsSync(file)) return; // 写面刚写成功必在——防御位（clearOrgAnchor 删文件形不推进）
+    const dirs = resolveDirs({ orgDir: dirname(file) });
+    const port = ensureStoreQuiet(dirs);
+    // 观测口径逐字对齐 import-org observe/statThenRead（orgRescanPending 同款）——
+    // 五元组任一错位=白推（下轮仍失配重灌）。
+    const obs = statThenRead(file);
+    const lines = obs.text.split("\n");
+    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    writeCheckpoint(port, {
+      path: file,
+      mtimeMs: obs.mtimeMs,
+      mtimeNs: obs.mtimeNs,
+      lineCount: lines.length,
+      offset: lines.length,
+      schemaVersion: ORG_IMPORT_SCHEMA_VERSION,
+    });
+  } catch (err) {
+    console.warn(`[read-mode] org 源 checkpoint 推进失败（${basename(file)}，下轮导入按重扫幂等处理）: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /**
  * 七导入器薄聚合入口（影子/直读前的灌库面；派单授权的新聚合点）。
  * 顺序：org 先行（group/session 锚定归因被后续域依赖）→ session-task → dispatch-lesson
@@ -389,14 +437,28 @@ function orgRescanPending(port: StoragePort, orgDirPath: string): boolean {
   return false;
 }
 
-export function importAllForShadow(
+// bootfast3（t-e23febf2 刀 B）：async 化+opts.yieldFn——域间让出+session-task 域内
+// 批间让出透传。不传 yieldFn 时各域仍逐个同步执行（await 同步体仅 microtask 一拍，
+// 测试直调面行为等价）；生产两调用点（冷路径/scheduleShadowImport）传 setImmediate
+// 让出——「后台 setImmediate」不等于异步：better-sqlite3 同步链照样霸占事件循环
+// （实产源变更重启 HTTP 000 1-2.5min 主诉根），让出才给排队 IO 处理窗。
+export async function importAllForShadow(
   port: StoragePort,
   dirs: ReadModeDirs,
-): { domain: string; error: string }[] {
+  opts?: { yieldFn?: () => Promise<void> },
+): Promise<{ domain: string; error: string }[]> {
   const failures: { domain: string; error: string }[] = [];
+  // bootfast3 观测闸：导入总耗时（冷路径/后台路径统一——此前 read-mode 零打点=定位盲区，
+  // 实产「源变更后重启 HTTP 阻塞 1-2.5min」全窗无日志可查）。>50ms 出行（与
+  // scheduleShadowImport 观测闸同款阈值）。
+  const __t0 = Date.now();
   // org 重扫联动：先作废下游域（见上注），再让 org 与下游各自按 checkpoint 重灌
   const orgSources = ["org.json", "projects.json", "confirms.json"].map((f) => join(dirs.orgDir, f));
   if (orgRescanPending(port, dirs.orgDir)) {
+    // bootfast3（t-e23febf2）：联动触发可见性——此前全静默（十表全清+七域全量重灌在
+    // 生产每次「org 源写后重启」发生且无任何日志）。修后（写面推进 checkpoint）仅剩
+    // 外部写者/崩溃窗触发——该行出现即应追查写入来源。
+    console.warn(`[read-mode] org 源 checkpoint 失配→联动十表全清+全域重灌（触发者：外部写者或写面推进前窗——bootfast3 观测）`);
     port.begin();
     try {
       port.exec("PRAGMA defer_foreign_keys = ON"); // 自引用表（task/dispatch 段链）全清的拓扑难题一次解除；commit 时全表已空=检查自然通过
@@ -447,7 +509,9 @@ export function importAllForShadow(
       }),
     },
     { domain: "acceptance", run: () => importAcceptance(port, join(dirs.dataDir, "acceptances")) },
-    { domain: "notification", run: () => importNotifications(port, dirs.dataDir) },
+    // bootfast3：notification 域透传 yieldFn——25k 行重放分批让出（沙盒实锤 60s 拍再重放
+    // 6s 块=HTTP 000 第二簇根）
+    { domain: "notification", run: () => importNotifications(port, dirs.dataDir, opts ? { yieldFn: opts.yieldFn } : undefined) },
     // artifact 聚合源首期只接 deliverables.json 清单（生产 artifacts 目录无固定清单文件，
     // 扫描源路径 G2 再接——备案见头注降级条目）。
     {
@@ -460,13 +524,19 @@ export function importAllForShadow(
   ];
   for (const { domain, run } of steps) {
     try {
-      run();
+      // bootfast3 刀 B：await 使 session-task 域内批间 yieldFn 生效（大头：events 28k
+      // 行 57 批+tasks 2375 文件 parse 批）；域间再让一拍
+      await run();
+      await opts?.yieldFn?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       failures.push({ domain, error: msg });
       console.warn(`[read-mode] 导入器 ${domain} 失败（不阻断他域）: ${msg}`);
     }
   }
+  // bootfast3 观测闸收尾：>50ms 出行（全量重灌形态秒级~分钟级必中；快进近零静默）
+  const __ms = Date.now() - __t0;
+  if (__ms > 50) console.warn(`[read-mode] importAllForShadow 完成 ${__ms}ms（失败域 ${failures.length}——bootfast3 观测）`);
   return failures;
 }
 
