@@ -93,7 +93,7 @@
                   status: "offline",
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
-                  engineCatalog: null, models: [], projects: [],
+                  engineCatalog: null, models: [], projects: [], createSource: "local", // W-ENGINESOURCE：新建弹「创建到」所选源（local|cloud），引擎目录随之切换
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id（组织锚 Leader 会话 id，空串=无锚/旧 relay）——列表滤 Leader 卡用
                   leaderSessionIds: new Set(), // UI 反馈批 1029 件B：全源 Leader 锚 id 并集（源→id 记账见 S._leaderIdBySource）——单值 leaderSessionId 在聚合视角被双源快照互相覆写（后到者赢），远程源 Leader 卡漏滤=「公司电脑源 leader 会话卡删不掉」的根因；过滤改并集判
@@ -101,6 +101,7 @@
                   retiredIds: null, // [W-RETIRED]：SNAPSHOT.retired_session_ids（Set|null；null=旧 relay 零过滤兼容）——退休成员会话默认隐藏沉「已退休成员」归档组（编制退休≠会话删除，历史可查）
                   retiredEntries: null, // [W-SEAT-SEMANTICS]：SNAPSHOT.retired_entries 富化面（Map sid→{cause,since,detail}|null；null=旧 relay 回落泛词组名「已退休成员」，在场=组名改「离席成员」+成因三拆副标签）
                   userPinnedBottom: true, scrollKeep: new Map(), scrollLock: false, // 件十九/二十滚动状态机 v3：用户贴底态 + 每会话 {top,bottom} 记录 + 程序写轻锁
+                  newBelow: 0, _chipSid: "", _convGrowAt: 0, // W-SCROLLFIX：离底期新消息计数（跟随门没滚时才计——判据同源）+ chip 会话粒度 + 渲染窗外变高度补偿时间戳
                   tabChatMemo: null, // #124 tab 往返滚动保持：离开对话 tab 瞬间的 {sid, top, bottom} 真值（捕获阶段记，防 display:none clamp 污染）；切回对话 tab 恢复后即清
                   experiences: null, // W-EXPP2：SNAPSHOT.experience（null=旧 relay；会话「更多」tab 经验注入分节只读消费）
                   selected: "", staged: [], engineChoice: "", filter: "all",
@@ -2395,7 +2396,13 @@
                   const cur = s.model || "";
                   const models = capsuleModelsFor(s);
                   let html = '<div class="source-menu-head">切换模型 · 下一回合生效</div>';
-                  if (!models.length) html += '<div class="source-menu-head" style="text-transform:none;letter-spacing:0">未收到模型列表，可直接输入模型名</div>';
+                  if (!models.length) {
+                    // W-ENGINESOURCE-R1 P2-②：cloudHasSnapshot 消费——配对远程 relay 版本较旧
+                    //（有快照但无 engine_catalog 域）时明示，替代恒挂「未收到」的含混
+                    const cst = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    const oldRemote = !!(cst && cst.cloudHasSnapshot && !(cst.cloudEngineCatalog && cst.cloudEngineCatalog.length));
+                    html += '<div class="source-menu-head" style="text-transform:none;letter-spacing:0">' + (oldRemote ? "远程 relay 版本较旧，不支持引擎目录——可直接输入模型名" : "未收到模型列表，可直接输入模型名") + "</div>";
+                  }
                   for (const m of models) {
                     html += '<button type="button" class="source-option' + (m === cur ? " active" : "") + '" data-model-pick="' + esc(m) + '" role="menuitem"><strong>' + esc(m) + "</strong>" + (m === cur ? "<small>当前</small>" : "") + "</button>";
                   }
@@ -3094,6 +3101,9 @@
                   // 会让滚动容器塌缩→scrollTop 归零。v3 用 top-anchor（距顶）：对话前缀稳定（历史只尾增），
                   // 距顶恢复天然免疫 bottom-anchor 的 clamp 折损（回涨高度把位置拖进贴底窗的链式失效）。
                   const scrollAnchor = UI.body ? { top: UI.body.scrollTop } : null;
+                  // W-SCROLLFIX：chip 会话粒度——选中会话变化即清零（切换重置；单点收口，
+                  // 三条选中链 :1677/:4881/#B3-17 不逐个挂）
+                  if (S._chipSid !== S.selected) { S._chipSid = S.selected; S.newBelow = 0; syncChip(); }
                   openProcGrp = null;
                   const s = curSession();
                   // #282 四批 S4 深度 keyed：timeline 条目进稳定内层宿主 [data-conv-body]，单口按
@@ -3167,6 +3177,7 @@
                     syncWaitCard(true);
                     autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
                     S.forceScroll = false; // 审查 P2-1（review-282d-a）：一次性强滚标志复位与旧路径对齐
+                    S._convGrowAt = Date.now(); snapConvAnchor(); // W-SCROLLFIX：渲染窗时间戳+锚快照（ResizeObserver 补偿管道的渲染窗跳过依据）
                     return;
                   }
                   // ---- rk 缺席兜底：旧全量重灌逐字节保留（零删） ----
@@ -3216,6 +3227,7 @@
                   syncWaitCard(true);
                   autoScroll(S.forceScroll, scrollAnchor, S.forceScroll ? (S.scrollKeep.get(s.session_id) || null) : null); // 件二十：切回恢复该会话记录位
                   S.forceScroll = false;
+                  S._convGrowAt = Date.now(); snapConvAnchor(); // W-SCROLLFIX：渲染窗时间戳+锚快照
                 }
                 function autoScroll(force, anchor, saved) {
                   // 件十九+二十统一滚动状态机 v3（top-anchor）：
@@ -3232,6 +3244,54 @@
                   const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
                   if (force || S.userPinnedBottom === true || (anchor ? false : near)) { el.scrollTop = el.scrollHeight; return; }
                   if (anchor) restoreTop(anchor.top);
+                }
+                // W-SCROLLFIX：chip 单口同步（计数文本+has-unread 形态+aria）——计数点
+                //（applyDomLog 离底增量/onScroll 近底清零/点击回底/会话切换重置）都走这里。
+                // 定义在外层 IIFE 作用域（renderConversation/applyDomLog/onScroll 三面共用；
+                // 2202 前车之鉴：ready() 内定义的函数外部不可见=ReferenceError 首渲染即毁）。
+                function syncChip() {
+                  const b = document.querySelector(".back-to-bottom");
+                  if (!b) return;
+                  const n = S.newBelow;
+                  const t = b.querySelector(".unread-n");
+                  if (t) t.textContent = n > 0 ? n + " 条新消息" : "";
+                  b.classList.toggle("has-unread", n > 0);
+                  const label = n > 0 ? n + " 条新消息，跳到底部" : "跳到最新消息";
+                  b.setAttribute("aria-label", label);
+                  b.title = label;
+                }
+                // W-SCROLLFIX 变高度锚定（任务书边界：图片/代码块晚到撑高不得顶走离底视口）：
+                // ResizeObserver 盯对话 pane 内容高度，变化时按「视口顶部锚节点」的位移补偿
+                // scrollTop——尾部 append（锚不动=delta 0）不补、上方撑高（锚下移）同向跟移，
+                // 视觉内容恒定。渲染管线自身的尺寸变化（全量重建/增量 append）由 autoScroll 的
+                // top-anchor 同步恢复管，RO 回调内 120ms 渲染窗跳过防双重补偿；锚节点被删
+                //（重建）快照失效跳过待窗后重建。只补锚位移，不猜增长来源（方向安全）。
+                let convAnchorSnap = null; // {n, top}（n=锚节点引用，top=当时距视口顶）
+                function snapConvAnchor() {
+                  if (!UI || !UI.body || !UI.convPane) { convAnchorSnap = null; return; }
+                  if (S.userPinnedBottom !== false) { convAnchorSnap = null; return; } // 贴底态无需锚定（跟随门管）
+                  const vpTop = UI.body.getBoundingClientRect().top;
+                  // R1（A 审 P1-2）锚点下钻：生产 rk4 路径 convPane 首子即 [data-conv-body]
+                  // 宿主（全部消息在宿主内）——原锚=宿主节点，宿主 top 与 pane 顶对齐，
+                  // 上方撑高宿主 top 不动=delta 恒 0、补偿失效（探针实测 300px 顶走补偿 0）。
+                  // 下钻：沿「首个跨视口顶的子节点」深入到消息条目层（带 data-x 的条目或
+                  // 叶节点为止）——锚=视口顶真实压着的那条消息，上方任何撑高它必然下移。
+                  let n = null;
+                  for (const c of UI.convPane.children) {
+                    const r = c.getBoundingClientRect();
+                    if (r.bottom > vpTop + 1) { n = c; break; }
+                  }
+                  while (n && n.firstElementChild && !n.hasAttribute("data-x")) {
+                    let next = null;
+                    for (const c of n.children) {
+                      const r = c.getBoundingClientRect();
+                      if (r.bottom > vpTop + 1) { next = c; break; }
+                    }
+                    if (!next) break;
+                    n = next;
+                  }
+                  if (!n) { convAnchorSnap = null; return; }
+                  convAnchorSnap = { n, top: n.getBoundingClientRect().top };
                 }
                 // #166 等待行动卡（双态分离 + 三级按钮 + remember 范围选择 + elapsed 计时 + 焦点感提升）
                 let waitElapsedTimer = null;
@@ -3490,11 +3550,20 @@
                   }
                   syncWaitCard(false);
                   if (S.userPinnedBottom !== false) autoScroll(); // 件十九：跟底走用户贴底态（几何 near 被 SNAPSHOT 中间态污染=跳底真凶），离底绝不拉
-                  // 件十一：新消息落地而用户离底超一屏（正读历史）→ FAB 点亮未读点
-                  // （点击回底/滚近底由 btb 侧熄灭）；近底跟随场景不点
-                  if (UI.body && UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight > UI.body.clientHeight) {
-                    document.querySelector(".back-to-bottom")?.classList.add("has-unread");
+                  // W-SCROLLFIX（1105 用户实锤「上滑看历史被新消息顶走」双端治理）：
+                  // 跟随门（上一行）没滚 = 用户离底正读历史 → 计数 +1 并浮「N 条新消息 ↓」
+                  // chip（点击回底）。判据与跟随门同源（userPinnedBottom===false）——门不滚
+                  // 必计数、门滚必不计数，两态互斥无中间缝。接替件十一的「超一屏才点未读点」
+                  // （离底不足一屏同样有新消息该提示；近底跟随场景天然不计数）。
+                  // R1（A 审 P1-1）：仅 outcome==="append" 计数——原一元判定下同一条消息的
+                  // 5 个流式 delta（replace 路径）逐帧 +1 显示「5 条新消息」（几十 delta=
+                  // 几十，与 expo 口径不一致）；tool 帧原位更新（resort/replace）同理不计数。
+                  // 一条消息只算一条：append=新条目落地才 +1。
+                  if (S.userPinnedBottom === false && outcome === "append") {
+                    S.newBelow += 1;
+                    syncChip();
                   }
+                  S._convGrowAt = Date.now(); snapConvAnchor(); // W-SCROLLFIX：渲染窗时间戳+锚快照
                 }
 
                 // ---------- 渲染：任务 tab（todosTabHtml 四组制 + VERIFY_RE） ----------
@@ -4250,11 +4319,33 @@
                 }
 
                 // ---------- 「+」新建：#75 引擎选择菜单 ----------
-                function catalogEntries() {
+                // W-ENGINESOURCE（1105 用户实锤）：引擎目录**按「创建到」所选源取数**——选远程时
+                // 读云源快照的 engine_catalog（各 relay 探测自己宿主机），本机视角下不再沿用
+                // 本机探测结果串台（公司电脑连本机、创建到远程·mac，下拉曾全显本机「未安装」
+                // 而远程 Mac 实装 Codex/CodeBuddy）。S.createSource 由新建弹「创建到」select 维护。
+                function createSourceNow() { return S.createSource === "cloud" ? "cloud" : "local"; }
+                function catalogSourceUnknown() {
+                  // 云源被选但其目录不可得：在线未及快照（获取中）/旧 relay 无目录（不支持）/
+                  // 离线——占位「该源引擎状态获取中/不可用」，绝不用本机数据冒充
+                  if (createSourceNow() !== "cloud") return false;
+                  const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                  return !(st && st.cloudEngineCatalog && st.cloudEngineCatalog.length);
+                }
+                function catalogEntries(source) {
+                  // W-ENGINESOURCE-R1（A 审 P1 干净修）：source 显式参——缺省 "local" =
+                  // B22 模型切换链（capsuleModelsFor→createModelsFor）恒本机目录（本机会话
+                  // 对本地 relay，远程清单选中即发本地不存在的模型名=粘滞态泄漏修）；
+                  // 新建弹各调用点显式传 createSourceNow()（弹内随「创建到」选源）。
+                  if ((source ?? "local") === "cloud") {
+                    const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    const cat = st ? st.cloudEngineCatalog : null;
+                    if (cat && cat.length) return cat;
+                    return []; // 占位空集——胶囊/菜单走 catalogSourceUnknown 文案，不回落本机
+                  }
                   if (S.engineCatalog && S.engineCatalog.length) return S.engineCatalog;
                   return [{ id: "claude", label: "Claude", state: "ready", preflight: { state: "pass", reason: "" }, models: S.models }];
                 }
-                function defaultEngineId() { const ready = catalogEntries().find((e) => e.state === "ready"); return ready ? ready.id : "claude"; }
+                function defaultEngineId(source) { const ready = catalogEntries(source).find((e) => e.state === "ready"); return ready ? ready.id : "claude"; }
                 function engineStateText(e) {
                   if (e.state === "ready") return e.models && e.models.length ? e.models.length + " 个模型" : "已就绪 · 使用默认模型";
                   if (e.state === "needs_auth") return "未登录 · " + oneLine(e.auth_hint || "请先完成引擎登录"); // #102 批 A：装了没登录——黄点+指引
@@ -4266,8 +4357,21 @@
                   if (e.state === "unsupported" || /枚举占位/.test(raw)) return "即将支持 · 当前版本暂不可用";
                   if (/未配置 CLI 命令/.test(raw)) return "未配置 · 请在源端补全引擎命令";
                   if (/provider|密钥|base ?URL/i.test(raw)) return "配置未完成 · " + raw;
-                  return "未安装 · 需先安装 " + label + " CLI";
+                  // W-ENGINESOURCE 顺带①：unavailable 补安装指引（有核实命令的给一行命令，
+                  // 没有的给官网占位——不编造命令）；「该源」口径：目录按创建到源取数后，
+                  // 指引也要落在源端执行（远程源的 CLI 装在远程机器上）
+                  const srcNote = createSourceNow() === "cloud" ? "（在所选源机器上执行）" : "";
+                  const hint = (typeof INSTALL_HINT !== "undefined" && INSTALL_HINT[e.id]) || "";
+                  return "未安装 · 需先安装 " + label + " CLI" + (hint ? " · " + hint + srcNote : "");
                 }
+                // W-ENGINESOURCE 顺带①：安装指引表——只列核实过的官方命令（codex/codebuddy
+                // 命令经 PM 在远程 Mac 实证；trae/qwen 不确定的只给官网占位，绝不编造命令）
+                const INSTALL_HINT = {
+                  codex: "npm i -g @openai/codex",
+                  codebuddy: "npm i -g @tencent-ai/codebuddy-code",
+                  trae: "安装指引见官网 trae.cn",
+                  "qwen-code": "安装指引见官网 qwen.ai",
+                };
                 // UI 反馈批 1029 件C：不可用行的悬停原文（运维口径不上面板但可查）
                 function engineStateHint(e) {
                   if (e.state === "ready") return "";
@@ -4324,8 +4428,8 @@
                   try { localStorage.setItem(CWD_HISTORY_KEY, JSON.stringify([d, ...createCwdHistory().filter((x) => x !== d)].slice(0, 8))); } catch (_) {}
                 }
                 // B10 模型二层：引擎目录 models 优先，claude 回落 SNAPSHOT S.models（与 B22 胶囊同源）
-                function createModelsFor(eng) {
-                  const entry = catalogEntries().find((e) => e.id === eng);
+                function createModelsFor(eng, source) { // R1：source 缺省 local（B22 胶囊链恒本机）；新建弹模型 select 传 createSourceNow()
+                  const entry = catalogEntries(source).find((e) => e.id === eng);
                   const list = entry && Array.isArray(entry.models) && entry.models.length ? entry.models : (eng === "claude" && Array.isArray(S.models) ? S.models : []);
                   return list.filter((m) => typeof m === "string" && m).slice(0, 24);
                 }
@@ -4339,9 +4443,10 @@
                     if (st && st.cloudPaired && st.cloudStatus === "online") {
                       const lanName = String(S.relayName || location.host || "本机");
                       const cloudName = String(st.cloudRelayName || st.cloudWsUrl || "远程源");
+                      // W-ENGINESOURCE：select 渲染 S.createSource 态（切源重绘后不回跳默认）
                       html += '<div class="create-label">创建到</div><select class="create-field" data-create-field="source" aria-label="目标源">'
-                        + '<option value="local">本机 · ' + esc(lanName) + "</option>"
-                        + '<option value="cloud">远程 · ' + esc(cloudName) + "</option>"
+                        + '<option value="local"' + (createSourceNow() === "local" ? " selected" : "") + '>本机 · ' + esc(lanName) + "</option>"
+                        + '<option value="cloud"' + (createSourceNow() === "cloud" ? " selected" : "") + '>远程 · ' + esc(cloudName) + "</option>"
                         + "</select>";
                     }
                   }
@@ -4351,19 +4456,30 @@
                     // W-PORT-A R-7：auto 档（跟随源默认）——选中态收起胶囊显「自动」，与手机 75-E
                     // 「auto=不发 engine，relay 按 role/源默认」同口径；显式选引擎维持件九形态
                     const isAuto = chosen === "auto";
-                    const entry = isAuto ? null : (catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null);
+                    const entries = catalogEntries(createSourceNow());
+                    const srcUnknown = catalogSourceUnknown();
+                    const entry = isAuto || srcUnknown ? null : (entries.find((e) => e.id === chosen) || entries[0] || null);
                     const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["自动", "claude"];
-                    const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
+                    const readyCount = entries.filter((e) => e.state === "ready").length;
+                    // W-ENGINESOURCE：所选源目录不可得=占位文案（获取中/不可用），绝不显示
+                    // 本机数据冒充远程（本机「未安装 4」与远程实装 3 的串台正是用户实锤形态）
+                    if (srcUnknown) {
+                      const stx = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                      const online = stx && stx.cloudStatus === "online";
+                      html += '<div class="create-label">引擎</div>'
+                        + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot na"></span><span class="engine-badge">远程</span><span class="ep-meta">' + (online ? "远程源引擎状态获取中…" : "远程源不可用，引擎状态未知") + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                    } else {
                     // #102 批 A：胶囊状态点三色——绿 ready / 黄 needs_auth（未登录）/ 灰 其余不可用
                     const dotCls = !isAuto && entry ? (entry.state === "needs_auth" ? " warn" : entry.state !== "ready" ? " na" : "") : "";
                     html += '<div class="create-label">引擎</div>'
-                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + dotCls + '"></span><span class="engine-badge ' + (isAuto ? "auto" : meta[1]) + '">' + engineBadgeInner(isAuto ? "" : meta[1], isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                      + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + dotCls + '"></span><span class="engine-badge ' + (isAuto ? "auto" : meta[1]) + '">' + engineBadgeInner(isAuto ? "" : meta[1], isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc((isAuto ? (catalogSourceUnknown() ? "引擎状态获取中" : "跟随源默认 · " + readyCount + " 个引擎可用") : (entry ? engineStateText(entry) : "无引擎数据")) + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                    } // W-ENGINESOURCE：else（非占位态）块尾
                   }
-                  html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
+                  html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen, createSourceNow()).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
                       let lastModel = null;
                       try { lastModel = localStorage.getItem("cc-deck-005-last-model"); } catch (_) {}
-                      const models = createModelsFor(chosen);
+                      const models = createModelsFor(chosen, createSourceNow());
                       if (lastModel && !models.includes(lastModel)) lastModel = null;
                       return models.map((m) => '<option value="' + esc(m) + '"' + (m === lastModel ? " selected" : "") + '>' + esc(m) + "</option>").join("");
                     })() + "</select>";
@@ -4395,7 +4511,7 @@
                   if (!S.engineChoice) {
                     let lastEng = null;
                     try { lastEng = localStorage.getItem("cc-deck-005-last-engine"); } catch (_) {}
-                    S.engineChoice = lastEng === "auto" ? "auto" : (lastEng && catalogEntries().some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId()); // R-7：auto 记忆直取（不查 ready）
+                    S.engineChoice = lastEng === "auto" ? "auto" : (lastEng && catalogEntries(createSourceNow()).some((e) => e.id === lastEng && e.state === "ready") ? lastEng : defaultEngineId(createSourceNow())); // R-7：auto 记忆直取（不查 ready）
                   }
                   const back = document.createElement("div");
                   back.className = "pair-pop-backdrop";
@@ -4422,27 +4538,56 @@
                   pop.addEventListener("keydown", (ev) => {
                     if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.createField) { ev.preventDefault(); submitCreate(); }
                   });
+                  // W-ENGINESOURCE：切「创建到」=切引擎目录数据源——重绘弹体（引擎/模型区随
+                  // catalogEntries 源感知联动；事件委托挂 pop 容器层，重绘零丢监听），已输的
+                  // 指令/目录先落草稿再回填（切源不清用户输入——#236 A 草稿桶同族口径）
+                  pop.addEventListener("change", (ev) => {
+                    const sel = ev.target.closest("[data-create-field='source']");
+                    if (!sel) return;
+                    S.createSource = sel.value === "cloud" ? "cloud" : "local";
+                    const keep = {};
+                    for (const k of ["prompt", "cwd"]) { const el = pop.querySelector("[data-create-field='" + k + "']"); if (el) keep[k] = el.value; }
+                    // W-ENGINESOURCE-R1 P2-③：切源重绘保留 checkbox 勾选态（原 innerHTML 重建
+                    // 丢 skipPerm/autoMkdir——用户已选被静默清空）+perm-hint 预警行同保
+                    const keepChecks = {};
+                    for (const k of ["skipPerm", "autoMkdir"]) { const el = pop.querySelector("[data-create-field='" + k + "']"); if (el) keepChecks[k] = el.checked; }
+                    const keepHint = pop.querySelector("[data-perm-hint]")?.textContent ?? "";
+                    closeEngineMenu(); // 旧源引擎菜单开着则收（菜单按新源重开才真话）
+                    pop.innerHTML = buildCreateHtml();
+                    for (const [k, v] of Object.entries(keep)) { const el = pop.querySelector("[data-create-field='" + k + "']"); if (el) el.value = v; }
+                    for (const [k, v] of Object.entries(keepChecks)) { const el = pop.querySelector("[data-create-field='" + k + "']"); if (el) el.checked = v; }
+                    if (keepHint) attachPermHint(pop, keepHint); // 监听重挂（原监听随旧节点消失）+预警行回显
+                  });
                   document.body.append(back, pop);
                   const prompt = pop.querySelector("[data-create-field='prompt']");
                   if (prompt) prompt.focus();
                   // W-PERMERR：勾选「跳过权限确认」即时预警——生产/云连接下此勾选会被
                   // relay 权限闸拒绝（1016 实锤），提前一行 hint 让用户知情（提交仍走
                   // relay 裁决，双保险）；非生产连接零打扰
-                  const skipBox = pop.querySelector("[data-create-field='skipPerm']");
-                  if (skipBox) skipBox.addEventListener("change", () => {
-                    let hint = pop.querySelector("[data-perm-hint]");
-                    const prodConn = location.port === "8787" || !!(window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active());
-                    if (!(skipBox.checked && prodConn)) { if (hint) hint.remove(); return; }
-                    if (!hint) {
-                      hint = document.createElement("div");
-                      hint.dataset.permHint = "";
-                      hint.style.cssText = "margin:6px 0 0;font-size:var(--fs-C);color:var(--working);line-height:1.5";
-                      hint.textContent = "当前连接的是生产服务，「跳过权限确认」需先授权，直接创建会被拒——可取消勾选，或终端运行 org auth-bypass on 授权";
-                      pop.querySelector(".create-checks")?.after(hint);
-                    }
-                  });
+                  // W-ENGINESOURCE-R1 P2-③：预警监听抽 attachPermHint（切源重绘后可重挂）
+                  function attachPermHint(host, initialText) {
+                    const box = host.querySelector("[data-create-field='skipPerm']");
+                    const render = (text) => {
+                      let hintEl = host.querySelector("[data-perm-hint]");
+                      if (!text) { if (hintEl) hintEl.remove(); return; }
+                      if (!hintEl) {
+                        hintEl = document.createElement("div");
+                        hintEl.dataset.permHint = "";
+                        hintEl.style.cssText = "margin:6px 0 0;font-size:var(--fs-C);color:var(--working);line-height:1.5";
+                        hintEl.textContent = text;
+                        host.querySelector(".create-checks")?.after(hintEl);
+                      }
+                    };
+                    if (initialText) render(initialText);
+                    if (!box) return;
+                    box.addEventListener("change", () => {
+                      const prodConn = location.port === "8787" || !!(window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active());
+                      render(box.checked && prodConn ? "当前连接的是生产服务，「跳过权限确认」需先授权，直接创建会被拒——可取消勾选，或终端运行 org auth-bypass on 授权" : "");
+                    });
+                  }
+                  attachPermHint(pop);
                 }
-                function closeCreatePop() { closeEngineMenu(); document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); } // 件九：浮层随弹窗同收
+                function closeCreatePop() { closeEngineMenu(); S.createSource = "local"; document.querySelectorAll("#b2-create-pop, [data-create-back]").forEach((el) => el.remove()); } // 件九：浮层随弹窗同收；R1 复位 createSource（双保险——B22 链已显式恒 local，此复位保弹重开回本机默认不残留）
                 // 件九：引擎分组浮层（可用置顶 / 不可用灰置+原因小字；壳复用 .model-menu）
                 function closeEngineMenu() { const m = document.getElementById("b2-engine-menu"); if (m) m.remove(); }
                 // UI 反馈批 1029 件C（用户点名）：引擎菜单/触发胶囊徽章品牌化——复用列表卡
@@ -4467,12 +4612,19 @@
                   menu.setAttribute("role", "menu");
                   menu.setAttribute("aria-label", "选择引擎");
                   const chosen = S.engineChoice || defaultEngineId();
-                  const ready = catalogEntries().filter((e) => e.state === "ready");
+                  const ready = catalogEntries(createSourceNow()).filter((e) => e.state === "ready");
                   // #102 批 A：needs_auth 单列「未登录」组（黄点+登录指引小字）——与装都没装的
                   // 「不可用」分开（用户动作不同：登录 vs 安装），均灰置不可点（div 非 button）
-                  const na = catalogEntries().filter((e) => e.state !== "ready" && e.state !== "needs_auth");
-                  const needsAuth = catalogEntries().filter((e) => e.state === "needs_auth");
+                  const na = catalogEntries(createSourceNow()).filter((e) => e.state !== "ready" && e.state !== "needs_auth");
+                  const needsAuth = catalogEntries(createSourceNow()).filter((e) => e.state === "needs_auth");
                   let html = "";
+                  // W-ENGINESOURCE：所选源目录不可得=空态行（获取中/不可用占位——云源选定时
+                  // 菜单不再列本机引擎冒充远程真相）
+                  if (catalogSourceUnknown()) {
+                    const stx = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    const online = stx && stx.cloudStatus === "online";
+                    html += '<div class="source-option" aria-disabled="true"><span class="ep-dot na"></span><span class="so-copy"><strong>远程源引擎状态' + (online ? "获取中" : "不可用") + '</strong><small>' + (online ? "云源快照尚未携带引擎目录（旧版 relay 或首帧在途）" : "远程源离线，连上后自动获取") + "</small></span></div>";
+                  }
                   // 件C（rebase 合并版）：两行式 so-copy（分支 1029）+ ✓ 角标与徽章单口（dev 演进）；
                   // auto 行去冗余（徽章「自动」+标题不重复；副题清开发术语，W-PORT-A 岗位措辞）
                   const check = '<span class="opt-check" aria-hidden="true">✓</span>';
@@ -4533,8 +4685,8 @@
                         const dot0 = trig0.querySelector(".ep-dot");
                         if (dot0) dot0.classList.remove("na");
                         const metaEl0 = trig0.querySelector(".ep-meta");
-                        const rc = catalogEntries().filter((e) => e.state === "ready").length;
-                        if (metaEl0) metaEl0.textContent = "跟随源默认 · " + rc + " 个引擎可用";
+                        const rc = catalogEntries(createSourceNow()).filter((e) => e.state === "ready").length;
+                        if (metaEl0) metaEl0.textContent = catalogSourceUnknown() ? "引擎状态获取中" : "跟随源默认 · " + rc + " 个引擎可用";
                       }
                       const selM = pop0.querySelector("[data-create-field='model']");
                       if (selM) { selM.value = ""; selM.disabled = true; selM.setAttribute("aria-disabled", "true"); }
@@ -4543,7 +4695,7 @@
                     }
                     return;
                   }
-                  const entry = catalogEntries().find((e) => e.id === id);
+                  const entry = catalogEntries(createSourceNow()).find((e) => e.id === id);
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   S.engineChoice = id;
                   closeEngineMenu(); // 件九：选中即收浮层
@@ -4559,7 +4711,7 @@
                     const dot = trig.querySelector(".ep-dot");
                     if (dot) { dot.classList.toggle("na", entry.state !== "ready" && entry.state !== "needs_auth"); dot.classList.toggle("warn", entry.state === "needs_auth"); }
                     const metaEl = trig.querySelector(".ep-meta");
-                    const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
+                    const readyCount = catalogEntries(createSourceNow()).filter((e) => e.state === "ready").length;
                     if (metaEl) metaEl.textContent = engineStateText(entry) + (readyCount > 1 ? " · 另 " + (readyCount - 1) + " 个可用" : "");
                   }
                   const sel = pop.querySelector("[data-create-field='model']"); // B10 模型二层随引擎重灌（件九：联动保留）
@@ -4583,7 +4735,7 @@
                   if (!prompt.trim()) { b2Toast("请输入初始指令"); return; }
                   const eng = S.engineChoice || defaultEngineId();
                   const isAutoEng = eng === "auto"; // W-PORT-A R-7：auto=跟随源默认，不携带 engine、跳过 ready 检查
-                  const entry = isAutoEng ? null : catalogEntries().find((e) => e.id === eng);
+                  const entry = isAutoEng ? null : catalogEntries(createSourceNow()).find((e) => e.id === eng);
                   if (entry && entry.state === "needs_auth") { b2Toast("引擎未登录，已为你拉起登录引导"); if (window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(eng); return; } // #102 批 B：toast 升级——直接弹登录卡（把饭喂到嘴里）
                   if (entry && entry.state !== "ready") { b2Toast("引擎不可用：" + engineStateText(entry)); return; }
                   // W-PORT-A R-2：目标源路由——「创建到」选了云源时走云 shim（显式通道最高优先）；
@@ -5163,12 +5315,14 @@
 
                   // 回到底部 FAB（件十一升级：40px 圆钮+icon+淡入淡出+未读点；离底 >80px
                   // 停 300ms 复核浮现——显隐走 .show 类不再用 hidden 硬切）
+                  // W-SCROLLFIX：升级胶囊形态——离底期新消息计数>0 时变「N 条新消息 ↓」
+                  //（点击回底+清零），样式见 base.css .back-to-bottom.has-unread。
                   const btb = document.createElement("button");
                   btb.type = "button";
                   btb.className = "back-to-bottom";
                   btb.setAttribute("aria-label", "跳到最新消息");
                   btb.title = "跳到最新消息";
-                  btb.innerHTML = '<svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-down"></use></svg><span class="unread-dot" aria-hidden="true"></span>';
+                  btb.innerHTML = '<span class="unread-n" aria-hidden="true"></span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-down"></use></svg><span class="unread-dot" aria-hidden="true"></span>';
                   UI.workspace.appendChild(btb);
                   let settleTimer = 0;
                   const nearBottom = () => UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight < 80;
@@ -5180,15 +5334,18 @@
                       const k = UI.body.scrollHeight - UI.body.scrollTop - UI.body.clientHeight;
                       if (S.selected) S.scrollKeep.set(S.selected, { top: UI.body.scrollTop, bottom: k < 120 });
                       S.userPinnedBottom = k < 120;
+                      // W-SCROLLFIX：回到底（与跟随门同阈 120）=恢复跟随+chip 清零
+                      if (k < 120 && S.newBelow) { S.newBelow = 0; syncChip(); }
+                      snapConvAnchor(); // 变高度锚定快照随滚动位置刷新
                     }
                     if (!sessionActive()) { btb.classList.remove("show", "has-unread"); return; }
                     btb.classList.remove("show");
                     clearTimeout(settleTimer);
                     if (!nearBottom()) settleTimer = setTimeout(() => { if (!nearBottom() && sessionActive()) btb.classList.add("show"); }, 300);
-                    else btb.classList.remove("has-unread"); // 滚近底：未读点熄灭
+                    else { btb.classList.remove("has-unread"); if (S.newBelow) { S.newBelow = 0; syncChip(); } } // 滚近底：跟随恢复+计数熄灭
                   };
                   UI.body.addEventListener("scroll", onScroll);
-                  btb.addEventListener("click", () => { btb.classList.remove("show", "has-unread"); UI.body.scrollTo({ top: UI.body.scrollHeight, behavior: "smooth" }); });
+                  btb.addEventListener("click", () => { btb.classList.remove("show", "has-unread"); S.newBelow = 0; syncChip(); UI.body.scrollTo({ top: UI.body.scrollHeight, behavior: "smooth" }); });
 
                   // 1s 本地计时：dock 回合计时 + 自建列表卡的运行秒数
                   setInterval(() => {
@@ -5269,6 +5426,25 @@
                     cp.className = "conversation-pane";
                     panes[0].appendChild(cp);
                     UI.convPane = cp;
+                    // W-SCROLLFIX 变高度锚定：RO 挂载（snapConvAnchor/convAnchorSnap/syncChip
+                    // 定义在外层 IIFE——autoScroll 后；ready 前的渲染调用安全走 null 快照早退）。
+                    // R1（A 审 P1-2 挂载时序根修）：原挂载段在本函数更早处（btb 创建段）——彼时
+                    // UI.convPane 尚为 null（下方三行才赋值），挂载判定恒 false=**观察者从未挂上**
+                    //（A 审「防护实测无效」的底层真相；独立 RO 桩同 pane 插拔 fire 正常实锤）。
+                    // 挪到赋值后挂载，锚下钻（snapConvAnchor R1）才真正有消费通道。
+                    if ("ResizeObserver" in window) {
+                      new ResizeObserver(() => {
+                        if (!UI || !UI.body) return;
+                        if (Date.now() - S._convGrowAt < 120) { snapConvAnchor(); console.warn("[sf-dbg] RO:渲染窗跳过"); return; } // 渲染窗内：anchor 管道负责，仅刷新快照
+                        const snap = convAnchorSnap;
+                        if (!snap || !snap.n.isConnected) { snapConvAnchor(); console.warn("[sf-dbg] RO:snap缺重锚"); return; }
+                        const newTop = snap.n.getBoundingClientRect().top;
+                        const delta = newTop - snap.top;
+                        console.warn("[sf-dbg] RO delta=" + delta);
+                        if (Math.abs(delta) > 0.5) UI.body.scrollTop += delta; // 上方撑高 delta>0 跟移；上方塌缩（罕见）同式回收
+                        snapConvAnchor();
+                      }).observe(cp);
+                    }
                   }
                   // workspace 改 grid 三行两列——head 跨列/body+rail 同排/footer 跨列，禁 fixed）
                   for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }

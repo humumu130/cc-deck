@@ -228,7 +228,8 @@
     .add-server-pop .add-hint { color: var(--faint); font: var(--fs-B) var(--mono); }
     /* W-NOVAFIX B1：配对弹窗（source-menu 同壳浮层，居中位）+ 背板 */
     .pair-pop { position: fixed; top: 50%; left: 50%; display: block; z-index: 96; width: min(392px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow-y: auto; transform: translate(-50%, -50%); }
-    .pair-pop-backdrop { position: fixed; inset: 0; z-index: 95; background: transparent; background: color-mix(in srgb, var(--bg0) 55%, transparent); }
+    .pair-pop-backdrop { position: fixed; inset: 0; z-index: 95; background: transparent; background: color-mix(in srgb, var(--text-strong) 16%, transparent); animation: backdrop-fade var(--dur-enter) var(--ease-out); } /* W-TEAMPOPOLISH C2（1105 三路审查）：白雾→压暗（对齐 notifpanel 遮罩语义）+ C1 backdrop fade 入场（全 create 弹窗生态同语言——四处消费面共享一类） */
+    @keyframes backdrop-fade { from { opacity: 0; } to { opacity: 1; } }
     /* FB3 配对弹窗四件套：QR 图 / 8 位码 / 链接+复制 / 已连设备列表（参照旧版 relay 页两栏制） */
     .pair-grid { display: flex; gap: 14px; padding: 6px; }
     /* 1013 件1-3：qr-col 定宽——原 flex:none 无宽约束，智能码就绪后 small 换长文案把左栏
@@ -255,16 +256,34 @@
     @media (max-width: 400px) { .pair-grid { flex-direction: column; } .pair-qr-col { width: auto; } } /* 1013 窄宽档：360px 类视口两栏纵向堆叠（右栏不再被压到 ~130px）*/
     /* B10 新建会话弹窗：居中对话框（引擎选择/模型二层/初始指令/目录+浏览+历史/两开关）。
        浮层描边合法（军规④）；行内不再画线（军规②③），分组靠间距+小节标题 */
-    .create-pop { position: fixed; top: 50%; left: 50%; z-index: 96; display: block; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; padding: 16px 16px 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: var(--shadow); transform: translate(-50%, -50%); }
-    .create-pop h3 { margin: 0 0 4px; color: var(--text-strong); font-size: var(--fs-D); }
+    /* W-TEAMPOPOLISH C1/C2（1105 三路审查·C 路质量三件）：tcp-enter 入场（translateY+scale，
+       消费 --dur-enter/--ease-out/--dist-m token；-50% 居中基态不可复用 np-enter 的 to:none——
+       两端都持 translate）+ 三层影+inset 顶部高光（对齐 notifpanel 分层语言，单层大影平贴退役） */
+    .create-pop { position: fixed; top: 50%; left: 50%; z-index: 96; display: block; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; padding: 16px 16px 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface2); box-shadow: 0 1px 2px rgba(0,0,0,.30), 0 8px 24px rgba(0,0,0,.38), 0 24px 64px rgba(0,0,0,.32), inset 0 1px 0 color-mix(in srgb, var(--text-strong) 8%, transparent); transform: translate(-50%, -50%); animation: tcp-enter var(--dur-enter) var(--ease-out); }
+    @keyframes tcp-enter { from { opacity: 0; transform: translate(-50%, calc(-50% + var(--dist-m))) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%); } }
+    /* A1+C4（1105 排印正）：h3 提 14px/600——标题从 12.5px<正文的倒挂归位（全 create 弹窗
+       共享一处改全线正）；label 退役 mono/uppercase/.06em（CJK 字距落空+落 Courier），
+       改 600 12px sans + ls:0（与正文同族，层级靠字重与色阶） */
+    .create-pop h3 { margin: 0 0 4px; color: var(--text-strong); font-size: 14px; font-weight: 600; }
     .create-pop .create-sub { margin: 0 0 10px; color: var(--faint); font-size: var(--fs-B); }
     /* #260：字段级就近说明（锚点=relay 宿主机路径，操作端≠宿主端）——贴字段下方
-       顶掉 create-label 的下外边距，与 create-sub 同档小字 */
-    .create-pop .create-hint { margin: -3px 2px 0; color: var(--faint); font-size: var(--fs-B); line-height: 1.55; }
-    .create-label { margin: 12px 2px 6px; color: var(--faint); font: 700 var(--fs-C) var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+       顶掉 create-label 的下外边距，与 create-sub 同档小字。
+       W-TEAMPOPOLISH A4+C4：断词兜底——keep-all 禁 CJK 逐字断行（路径示例串不被拆），
+       anywhere 兜超长串整体放不下时才断 */
+    .create-pop .create-hint { margin: -3px 2px 0; color: var(--faint); font-size: var(--fs-B); line-height: 1.55; word-break: keep-all; overflow-wrap: anywhere; }
+    .create-label { margin: 12px 2px 6px; color: var(--faint); font: 600 var(--fs-B) var(--sans); letter-spacing: 0; }
     .create-pop .create-label:first-of-type { margin-top: 4px; }
     .create-field { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); font: var(--fs-A) var(--sans); }
-    .create-field:focus { border-color: var(--brand); outline: none; }
+    /* W-TEAMPOPOLISH C3（1105 焦点环）：--brand 描边与浅灰描边同亮度+outline:none=焦点态
+       不可辨——brand-hover 描边（可辨对比）+ --focus-ring 3px 环（token 已备零消费，本处
+       首消费；select 同享=同类选择器覆盖） */
+    .create-field:focus { border-color: var(--brand-hover); outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
+    /* W-TEAMPOPOLISH B3：内联校验错误态（描边+尾随提示行，.create-err-note 与 create-hint 同档） */
+    .create-field.create-err, .create-field.create-err:focus { border-color: var(--danger-line); }
+    .create-err-note { margin: 3px 2px 0; color: var(--error); font-size: var(--fs-B); line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
+    /* W-TEAMPOPOLISH B4：团队名+立项档并排两列行（窄屏 400px 下折行保竖排） */
+    .create-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 400px) { .create-two { grid-template-columns: 1fr; } }
     /* W-UIFB 追加⑬：placeholder 明显小一号+淡色（用户截图：提示文字与正文几乎同大）——
        正文 fs-A(14px)，提示 fs-B(12px) 再降透明度；输入文字不变 */
     .create-field::placeholder { color: var(--faint); font-size: var(--fs-B); opacity: .8; }
@@ -288,7 +307,7 @@
        （对齐模型下拉形态）。收起态=当前引擎胶囊（状态点·引擎徽章·可用性小字·chevron）；
        展开浮层 #b2-engine-menu 分组（可用置顶 / 不可用灰置+原因小字）；引擎区从六行
        ~380px 压到一行。浮层壳复用 .model-menu。 */
-    .engine-picker { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: var(--fs-A); text-align: left; }
+    .engine-picker { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: var(--fs-A); text-align: left; } /* W-TEAMPOPOLISH A3：弹窗域控件高度两档封顶（控件 32/成员行 28）——34 档归一 */
     .engine-picker:hover { background: var(--hover); }
     .engine-picker .ep-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--done); }
     .engine-picker .ep-dot.na { background: var(--faint); }
@@ -307,17 +326,25 @@
     .create-check input { accent-color: var(--brand); }
     .create-check:hover { color: var(--text); }
     .create-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; } /* 主操作靠右（#df2-E 全线右对齐惯例） */
+    .create-actions .primary-btn, .create-actions .secondary-btn, .create-pop .primary-btn, .create-pop .secondary-btn { min-height: 32px; } /* W-TEAMPOPOLISH A3：弹窗域钮高 32 归一（全站 34 档不动——弹窗外布局不牵连） */
+    /* W-TEAMPOPOLISH C5（1105 三路审查）：蓝框域内覆盖中性化——弹窗是单 accent 场（主钮
+       唯一品牌色），info 蓝底 banner 在域内打架；surface1 底+line-soft 描边+dim 字归中性
+       （语义=提示非告警；全局 readonly-banner 语义不动——限 team 弹窗域） */
+    #team-create-pop .readonly-banner { border: 1px solid var(--line-soft); background: var(--surface1); color: var(--dim); }
+    /* W-TEAMPOPOLISH B4：空态一行紧凑（说明+添加钮同行） */
+    .team-empty-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 4px; padding: 5px 6px; border-radius: 7px; background: var(--surface1); border: 1px solid var(--line-soft); color: var(--faint); font-size: var(--fs-B); word-break: keep-all; overflow-wrap: anywhere; }
+    .team-empty-row .team-add-btn { margin-top: 0; flex: none; }
     /* FB4 新建团队表单：成员多选清单（复选行 + 引擎徽标 + 角色输入；自由编制模板时展开） */
     .team-cand-list { display: grid; gap: 2px; margin: 2px 0 4px; max-height: 176px; overflow-y: auto; }
     .team-cand { justify-content: flex-start; gap: 8px; padding: 5px 6px; border-radius: 7px; }
     .team-cand:hover { background: var(--hover); }
     .team-cand-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-    .team-cand .team-cand-role { flex: 0 0 96px; height: 26px; padding: 0 7px; font-size: var(--fs-E); }
+    .team-cand .team-cand-role { flex: 0 0 96px; height: 28px; padding: 0 7px; font-size: var(--fs-E); } /* W-TEAMPOPOLISH A3：成员行档 28 归一 */
     /* #277 ① 建团弹窗 v2（PM 美化基调）：头行 h3+✕（标题不截断）、锚点行内浏览钮、
        分段卡片流（灰盒 create-group 退役）、滚动条弱化、select 自绘箭头（原生朴素） */
     .create-pop .create-head { display: flex; align-items: flex-start; gap: 8px; }
     .create-pop .create-head h3 { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .create-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: -3px -4px 0 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; line-height: 1; }
+    .create-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -5px -6px 0 0; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; line-height: 1; } /* W-TEAMPOPOLISH P3（C 路）：× 命中区 28px（macOS 弹窗惯例），负 margin 视觉盒不外扩 */
     .create-x:hover { background: var(--hover); color: var(--text); }
     .create-inline { display: flex; gap: 6px; align-items: center; }
     .create-inline .create-field { flex: 1; min-width: 0; }
@@ -388,7 +415,8 @@
     .queue { min-width: 235px; width: var(--queue-w, 235px); flex: 0 0 auto; } /* #201 件⑤：钳制下限与 JS（cc-deck-queue-w-shared 235–420）对齐——跨页单键已在 #201⑨，此处补 CSS 侧防挤压一致性 */
     .queue-resizer::after { content: ""; position: absolute; left: 3px; top: 50%; width: 1px; height: 34px; transform: translateY(-50%); background: transparent; transition: background .15s ease; }
     .queue-resizer:hover::after, .queue-resizer:active::after { background: var(--border-strong); }
-    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+    .queue-head { display: flex; align-items: center; gap: 13px; margin-bottom: 13px; } /* 基线档回填（W-NOTIFYFIX-R1 P2-1：件二全局收窄退役——见下行限定版） */
+    #d-session .queue-head { gap: 8px; margin-bottom: 8px; } /* W-NOTIFYFIX 件二+R1 收窄（1105 用户问「间距是不是太大」）：13→8px **限定会话面板**（原全局选择器五面板齐伤：团队/项目/设置/#d-notify 标题全收=commit 叙事「会话面板」与实现不符——A 审 P2-1，任务书本意即会话面板；session-list-tools 10px 相邻档） */
     .queue-head h2 {flex: 1; margin: 0; color: var(--text-strong); font-size: var(--fs-D);}
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
     /* W-UIFB ⑨：第二列列头「＋」美化（i=11）——去边框、加号增大增粗（悬停淡底兜可发现性）；
@@ -815,7 +843,7 @@
     .composer-stopbtn .icon-inline { width: 14px; height: 14px; }
     .composer-stopbtn[hidden] { display: none; }
     .primary-btn, .secondary-btn, .danger-btn {min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: var(--fs-E);}
-    .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .primary-btn { background: linear-gradient(180deg, var(--brand-hover), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; } /* W-TEAMPOPOLISH P3（1105 A6）：渐变端点 brand-hover/brand-strong——起点不再发灰（浅桃 --brand 被选中态 token 沿用），一处改全线 */
     .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
     .primary-btn.composer-secondary-action { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: none; }
     .primary-btn.composer-secondary-action:hover { background: var(--hover); filter: none; box-shadow: none; }
@@ -858,7 +886,7 @@
     .stopped-mark {display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: var(--fs-C);}
     .stopped-mark::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--dim); }
     .primary-btn:disabled, .secondary-btn:disabled, .danger-btn:disabled, .artifact-group-action:disabled { opacity: .52; cursor: not-allowed; filter: none; transform: none; box-shadow: none; }
-    .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
+    .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text-strong) 6%, transparent); } /* W-TEAMPOPOLISH P3（C 路）：bezel 底缘——平面钮的一点厚度暗示，对齐主钮 inset 高光的分层语言 */
     .secondary-btn:hover { background: var(--hover); }
     .danger-btn { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     /* W-NOVAUI ③：inspector 浮层化——absolute 贴 screen 右缘全高，宽走 --inspector-w（JS 拖宽
@@ -2464,12 +2492,21 @@
        absolute（footer 上方右侧不遮输入框）、透明度+位移淡入淡出（替代 hidden 硬切）、
        离底期间有新消息点亮未读点（点击/滚近底熄灭） */
     .workspace { position: relative; }
-    .back-to-bottom { position: absolute; right: 18px; bottom: 122px; z-index: 20; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface2); color: var(--dim); cursor: pointer; box-shadow: var(--card-shadow); opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .18s ease, visibility .18s ease, transform .18s ease, border-color .15s ease, color .15s ease; }
+    .back-to-bottom { position: absolute; right: 18px; bottom: 122px; z-index: 20; display: grid; place-items: center; grid-auto-flow: column; gap: 0; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface2); color: var(--dim); cursor: pointer; box-shadow: var(--card-shadow); opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity .18s ease, visibility .18s ease, transform .18s ease, border-color .15s ease, color .15s ease; }
     .back-to-bottom.show { opacity: 1; visibility: visible; transform: translateY(0); }
     .back-to-bottom:hover { border-color: var(--brand); color: var(--brand); }
     .back-to-bottom .icon-inline { width: 16px; height: 16px; }
     .back-to-bottom .unread-dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); border: 2px solid var(--bg1); opacity: 0; transform: scale(.5); transition: opacity .15s ease, transform .15s ease; }
     .back-to-bottom.has-unread .unread-dot { opacity: 1; transform: scale(1); }
+    /* W-SCROLLFIX：离底新消息 chip 形态——has-unread 时圆钮变胶囊「N 条新消息 ↓」（贴消息区
+       底居中浮层语义不变，此处右下原位升级）；文本 150ms 淡入（reduced-motion 静态显示） */
+    .back-to-bottom .unread-n { display: none; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+    .back-to-bottom.has-unread { width: auto; min-width: 40px; height: 32px; padding: 0 12px; gap: 6px; border-radius: 99px; color: var(--fg1); opacity: 0; visibility: hidden; }
+    .back-to-bottom.has-unread.show { opacity: 1; visibility: visible; }
+    .back-to-bottom.has-unread .unread-n { display: inline; animation: ccFadeIn .15s ease; }
+    .back-to-bottom.has-unread .unread-dot { display: none; } /* 胶囊文本即计数，圆点退役防双示 */
+    @keyframes ccFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .back-to-bottom.has-unread .unread-n { animation: none; } }
     /* 行变量三档语义（原 --density-card-* 卡变量改造为行变量；档位循环与设置键不变）：
        紧凑=压缩两行（头像 26px/字号降档，对齐手机「简洁列表」）——见上方 body 三条 */
     /* 组头 sticky（旧版 #78 同拍板）：滚动时组名钉在列表顶，底色盖住穿行的行淡底 */
@@ -2998,10 +3035,10 @@
       font-size: 14px; font-weight: 600; color: var(--text-strong);
     }
     .notifpanel .np-head .nsub {
-      margin-left: auto; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
-      color: var(--brand-strong, var(--brand)); background: transparent; background: color-mix(in srgb, var(--brand) 14%, transparent);
-      border: 1px solid transparent; border-color: color-mix(in srgb, var(--brand) 24%, transparent);
-      border-radius: 9px; padding: 1px 7px; line-height: 16px; white-space: nowrap;
+      /* W-NOTIFYPOLISH ③A3：计数 pill 退役（843 双显口径不一+三处计数两零差）——
+         降纯文字承载增量信息（「最早需行动 16 小时前」），计数单源=组头+rail 99+ */
+      margin-left: auto; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums;
+      color: var(--dim); background: none; border: 0; padding: 0; line-height: 16px; white-space: nowrap;
     }
     .notifpanel .np-head .n-x { flex: none; margin-left: 4px; }
     /* A8 滚动容器：上下渐隐 mask + 主题滚动条（宽 8/thumb 14% hover 24%） */
@@ -3025,11 +3062,14 @@
     /* p2-batch2 修（notify 审 A7 残）：组间距 20~24px（首组除外——贴头部） */
     .ngrp + .nrow + .ngrp, .np-body > .ngrp:nth-of-type(n+2) { margin-top: 22px; }
     .ngrp {
-      /* P1-1 重落：sticky 撤（平铺组头同钉叠加；首落随 worktree 误删遗失） */
-      font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .05em;
-      margin: 0; padding: 8px 12px 6px; display: flex; align-items: center; gap: 6px;
+      /* P1-1 重落：sticky 撤（平铺组头同钉叠加；首落随 worktree 误删遗失）。
+         W-NOTIFYPOLISH ⑦A8：CJK 字距 .05em→0+左缘 padding 14px 对齐行缘（2px 错位根修）。
+         W-NOTIFYPOLISH ⑤C3：backdrop-filter 退役——非 sticky 组头的 blur 是视觉死代码
+        （背后只有面板底），且 WKWebView blur 冻结是 1101 P0 先例族（防复发）；实底
+         color-mix 分层承担组头底。 */
+      font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: 0;
+      margin: 0; padding: 8px 12px 6px 14px; display: flex; align-items: center; gap: 6px;
       background: var(--surface1); background: color-mix(in srgb, var(--surface1) 86%, transparent);
-      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--line-soft);
       border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent);
     }
@@ -3050,48 +3090,55 @@
     .ngrp:hover .grp-clr, .ngrp .grp-clr:focus-visible { opacity: 1; }
     .ngrp .grp-clr:hover { color: var(--text-strong); }
     .ndot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex: none; }
-    .ndot.r { background: #F87171; } .ndot.y { background: #FBBF24; } .ndot.n { background: var(--faint); }
-    /* A5/A6 去卡片化行流（对齐 Linear）：透明底+行间 1px 分隔；hover 提亮；语义=左缘 2px 色条 */
+    .ndot.r { background: var(--error); } .ndot.y { background: var(--working); } .ndot.n { background: var(--faint); } /* W-NOTIFYPOLISH ⑧C6：硬码色→语义 token（随主题域走） */
+    /* A5/A6 去卡片化行流（对齐 Linear）：透明底+行间 1px 分隔；hover 提亮。
+       W-NOTIFYPOLISH ④A1+B4：.ic 图标列退役——icon+kind 徽章+chip 三套符号→两套
+      （色相只留红组点/琥珀 chip/橙链三件），16px+gap10 腾给标题列；行栅格两列。
+       W-NOTIFYPOLISH ②B2：active 行整行可点（cursor 显意——jump 可达面=全行）。 */
     .nrow {
-      position: relative; display: grid; grid-template-columns: 16px 1fr auto; gap: 10px;
+      position: relative; display: grid; grid-template-columns: 1fr auto; gap: 10px;
       padding: 10px 12px 10px 14px; border: 0; border-radius: 0; margin: 0;
       border-bottom: 1px solid var(--line-soft);
       border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent);
       font-size: var(--fs-B); background: transparent; align-items: start;
       transition: background var(--dur-fast) var(--ease-out);
     }
+    .nrow[data-notify-active="true"] { cursor: pointer; }
     .nrow:hover { background: var(--hover); background: color-mix(in srgb, var(--text-strong) 4%, transparent); }
     .nrow::before { /* 用户实锤 1101 晚：左缘语义色条退役（kind 徽章已带色，双重编码别扭）——alert/warn 色语义只留徽章 */
       content: none;
     }
-    .nrow .ic { grid-column: 1; flex: none; margin-top: 2px; display: inline-flex; color: var(--dim); }
-    .nrow .ic .icon-inline { width: 16px; height: 16px; }
-    .nrow.alert .ic { color: #F87171; } .nrow.warn .ic { color: #FBBF24; }
-    /* A3 kind badge 六色体系（bg 14%/字亮色/border 24%） */
+    /* W-NOTIFYPOLISH ①：同质簇子项——缩进一级（代表行右缘对齐主列），降一档存在感 */
+    .nrow.sub { padding-left: 26px; opacity: .92; }
+    /* A3 kind badge。
+       W-NOTIFYPOLISH ④A2+B4 中性化：六色体系退役——kind 是低价值维度（来源分类），
+       色相编码让一屏四色族打架+红组内躺绿「验收」反冲；整体 dim+6% 底单条规则。
+       色相预算收敛到三件：红组点（ndot.r）/琥珀 chip（awaitu）/橙链（act）。 */
     .nbadge {
       display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px;
       font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; vertical-align: 1px;
+      color: var(--dim); background: color-mix(in srgb, var(--text-strong) 6%, transparent);
+      border: 1px solid color-mix(in srgb, var(--text-strong) 10%, transparent);
     }
-    .nbadge-waiting { color: #FBBF24; background: rgba(245, 158, 11, .14); border: 1px solid rgba(245, 158, 11, .24); }
-    .nbadge-confirm { color: #C4B5FD; background: rgba(167, 139, 250, .14); border: 1px solid rgba(167, 139, 250, .24); }
-    .nbadge-dispatch { color: #93C5FD; background: rgba(96, 165, 250, .14); border: 1px solid rgba(96, 165, 250, .24); }
-    .nbadge-acceptance { color: #6EE7B7; background: rgba(52, 211, 153, .14); border: 1px solid rgba(52, 211, 153, .24); }
-    .nbadge-system { color: #CBD5E1; background: rgba(148, 163, 184, .14); border: 1px solid rgba(148, 163, 184, .24); }
-    .nbadge-alarm { color: #FCA5A5; background: rgba(248, 113, 113, .14); border: 1px solid rgba(248, 113, 113, .24); }
-    /* [W-AWAITUSER] 等你拍板 chip：橙=待动作既有语义色轴（与 nbadge-waiting 同
-       amber 族，禁新色纪律），实底 dot 脉冲一行内唯一动效——「等你拍板」与
-       kind badge 并列（kind 说来源，chip 说紧急度） */
+    /* [W-AWAITUSER] 等你拍板 chip：橙=待动作既有语义色轴（amber 族，禁新色纪律）。
+       W-NOTIFYPOLISH ④A1：userPending 行 kind 徽章不输出（rowMarkup 门控）——chip 独扛
+       紧急度语义，双胶囊堆叠零信息熵根修。W-NOTIFYPOLISH ⑧A5：dot 静态实点——脉冲
+       只留组点（6 脉冲源违反「唯一脉冲位」纪律；reduced 钳闸随 animation 删除自愈） */
     .awaitu-chip { color: #FBBF24; background: rgba(245, 158, 11, .18); border: 1px solid rgba(245, 158, 11, .38); gap: 5px; }
-    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; animation: awaitu-pulse 2.2s ease-in-out infinite; }
-    @keyframes awaitu-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .stale-chip { color: var(--faint); background: transparent; border: 1px solid var(--line); } /* W-NOTIFYFIX：过时徽章（版本退役/重复/陈年三因）——弱化灰系（过时≠行动） */
+    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; }
     html[data-theme="light"] .awaitu-chip { color: #B45309; }
     html[data-theme="light"] .awaitu-chip .awaitu-dot { background: #B45309; }
-    @media (prefers-reduced-motion: reduce) { .awaitu-chip .awaitu-dot { animation: none; } }
-    html[data-theme="light"] .nbadge-waiting { color: #B45309; } html[data-theme="light"] .nbadge-confirm { color: #7C3AED; }
-    html[data-theme="light"] .nbadge-dispatch { color: #2563EB; } html[data-theme="light"] .nbadge-acceptance { color: #059669; }
-    html[data-theme="light"] .nbadge-system { color: #64748B; } html[data-theme="light"] .nbadge-alarm { color: #DC2626; }
-    /* A6 行栅格：L1（badge+时间右贴）/L2 标题 clamp2/L3 摘要+内联操作 */
-    .nrow .t { grid-column: 2; min-width: 0; }
+    /* W-NOTIFYPOLISH ①：聚合 ×N 展开钮（小计数 chip——button 语义，非徽章） */
+    .agg-n {
+      border: 0; background: none; font: 600 11px/1 inherit; color: var(--dim); cursor: pointer;
+      font-variant-numeric: tabular-nums; padding: 2px 5px; border-radius: 5px; white-space: nowrap;
+      transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast);
+    }
+    .agg-n:hover, .agg-n:focus-visible { background: color-mix(in srgb, var(--text-strong) 8%, transparent); color: var(--text-strong); }
+    /* A6 行栅格：L1（badge+聚合钮+时间右贴）/L2 标题 clamp2/L3 摘要+内联操作。
+       W-NOTIFYPOLISH ④：ic 列退役→.t 升 grid-column 1 */
+    .nrow .t { grid-column: 1; min-width: 0; }
     .nrow .t .l1 { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
     .nrow .t .l1 .nrow-time {
       margin-left: auto; flex: none; color: var(--faint); font-size: 11px;
@@ -3104,10 +3151,16 @@
     .nrow .t .s { color: var(--faint); font-size: var(--fs-C); margin-top: 2px; display: flex; align-items: baseline; min-width: 0; } /* 复审P1-2：flex 容器，裁剪下沉 s-txt */
     .nrow .t .s .s-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     /* p2-batch2 修（notify 审 P2-4 act/× 同列纵叠让位）：act 挪 L3 摘要行内联（第三列只留 ×），
-       行动链与摘要同读线=视觉让位；nid=A9 等宽（hex/版本号/单号 mono+浅底） */
-    .nrow .t .s .act-slot { margin-left: 8px; white-space: nowrap; flex: none; } /* 复审P1-2：恒可见 */
-    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: var(--fs-C); }
-    .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); }
+       行动链与摘要同读线=视觉让位；nid=A9 等宽（hex/版本号/单号 mono+浅底）。
+       W-NOTIFYPOLISH ②A6：L3 两端分离——act-slot 推右+左竖线断口（8px 贴身读成一句根修） */
+    .nrow .t .s .act-slot {
+      margin-left: auto; white-space: nowrap; flex: none; padding-left: 12px;
+      border-left: 1px solid color-mix(in srgb, var(--text-strong) 10%, transparent);
+    }
+    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: 12px; }
+    /* W-NOTIFYPOLISH ⑦A4：.nid nowrap 三连——版本号芯片（v0.7.0-test.97-nova 类长 token）
+       在窄列劈行破损根修；inline-block 让 overflow 生效，超宽走 ellipsis（title 全文有 tooltip） */
+    .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
     /* A6 操作钮降权=文字链（12px/500 强调色 hover 下划线） */
     .nrow .act {
       grid-column: 3; align-self: center; flex: none; font-size: 12px; font-weight: 500; color: var(--brand);
@@ -3136,6 +3189,25 @@
     .nrow.leaving { animation: nrow-collapse 160ms var(--ease-in) forwards; pointer-events: none; }
     @keyframes nrow-collapse { to { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; } }
     .np-head .nsub.notify-badge-pop { animation: badge-pop 220ms var(--ease-spring); }
+    /* ===== W-NOTIFYPOLISH ⑤C1+C4+⑥C2+C5（1105 三路审查·光主题材质与可读底线） =====
+       ⑤C1 浮层亮度方向修正：光主题面板比底层亮（#FAFAF8 > 页面 #F7F7F5）+浅影
+       (.06/.10/.12)+白内高光——旧值是暗主题材质漏光主题（#E5E5E5 更暗+煤烟影=灰贴纸）；
+       ⑤C4 分隔线统一 color-mix 暗线族（头部 8% 微重）+头部 2.5% 微色带=titlebar 质感；
+       ⑥C2 act 链光主题 --brand-strong（#96391A≈6.1:1——badge 族有 override 唯独 act 漏）；
+       ⑥C5 11px 次级层（时间戳/摘要）光主题统一 70% text-strong（≈#686868 达 4.5:1）。
+       暗主题零变化：本块全部 light-only override（材质恒等由探针 material.json 对照）。 */
+    html[data-theme="light"] .notifpanel {
+      background: #FAFAF8;
+      box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.12), inset 0 1px 0 rgba(255, 255, 255, .9);
+    }
+    html[data-theme="light"] .notifpanel .np-head {
+      background: color-mix(in srgb, var(--text-strong) 2.5%, transparent); /* titlebar 微色带 */
+      border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 8%, transparent);
+    }
+    html[data-theme="light"] .notifpanel .np-foot { border-top: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent); }
+    html[data-theme="light"] .notifpanel .ngrp { background: color-mix(in srgb, var(--surface1) 92%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 6%, transparent); }
+    html[data-theme="light"] .nrow .act { color: var(--brand-strong); }
+    html[data-theme="light"] .nrow .t .l1 .nrow-time, html[data-theme="light"] .nrow .t .s { color: color-mix(in srgb, var(--text-strong) 70%, var(--bg1)); }
     @keyframes badge-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
     .rail-btn[data-domain="notify"] .badge { transition: transform 220ms var(--ease-spring); }
     .rail-btn[data-domain="notify"] .badge.notify-badge-pop { animation: badge-pop 220ms var(--ease-spring); }
@@ -3169,9 +3241,10 @@
       box-shadow: var(--shadow);
       padding: 12px;
     }
-    .pair-pop-backdrop {
-      background: transparent; background: color-mix(in srgb, var(--bg0) 72%, transparent);
-    }
+    /* W-TEAMPOPOLISH-R1（A 审 P1）：.pair-pop-backdrop 本块已删——原 bg0 72% 白雾档与 :231
+       新 16% 压暗档同特异度、源序在后恒胜（级联覆盖=运行时白雾未除的根因，A 审 computed
+       实证 #0C1320@72%）。backdrop 唯一定义=:231（position/z-index/16% 背景/backdrop-fade
+       全量），此处不再重述——防再漂移见 test-teampolish.ts C2 单源断言。 */
     .pair-code-box {
       border-color: var(--brand-line);
       background: var(--surface2);
@@ -3327,7 +3400,7 @@ html[data-theme="light"] .mobile-project-card .pc2m-r1 .cc-badge.is-neutral { ba
 /* 无障碍降级：位移/缩放/脉冲/stagger 全清零，仅留 ≤80ms opacity（可感知不眩晕） */
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-enter: 80ms; --dur-exit: 60ms; --dur-fast: 0ms; --dur-move: 0ms; --dist-s: 0px; --dist-m: 0px; --ease-spring: linear; }
-  .np-stagger, .np-body.np-stagger > .nrow, .nrow.enter, .notifpanel.opening, .notifpanel.closing, .notify-badge-pop, .rail-btn.bell-swing { animation: none !important; /* P2-1 重落：行级 stagger 入 kill list */ transition: opacity var(--dur-enter) linear !important; }
+  .np-stagger, .np-body.np-stagger > .nrow, .nrow.enter, .notifpanel.opening, .notifpanel.closing, .notify-badge-pop, .rail-btn.bell-swing, .create-pop, .pair-pop-backdrop { animation: none !important; /* P2-1 重落：行级 stagger 入 kill list；W-TEAMPOPOLISH C1：tcp-enter/backdrop-fade 同入（位移退役保纯淡入） */ transition: opacity var(--dur-enter) linear !important; }
 }
 
     /* A8 面板展开 toggle（底栏「查看全部通知」）：高度过渡走 token（max-height 由 JS 内联切换） */
