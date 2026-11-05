@@ -3168,6 +3168,14 @@
       transition: opacity var(--dur-fast) var(--ease-out);
     }
     .nrow .act:hover, .nrow .act:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+    /* W-INBOX-V1 刀1/刀3：「稍后」「恢复」次级文字链（与主 act 同槽并排但降一档——
+    主行动=brand 强调色，次级行动=faint 前景+hover 提亮；notifypolish 聚合语言同族） */
+    .nrow .act.act-snooze, .nrow .act.act-restore { color: var(--faint); font-weight: 400; }
+    .nrow .act.act-snooze:hover, .nrow .act.act-restore:hover,
+    .nrow .act.act-snooze:focus-visible, .nrow .act.act-restore:focus-visible { color: var(--text-strong); text-decoration: underline; text-underline-offset: 3px; }
+    /* W-INBOX-V1 刀3：已归档组灰点（ndot.a——中性归档语义，r/y/n 三色之外第四点） */
+    .ndot.a { background: var(--faint); opacity: 0.7; }
+    .ngrp.ngrp-arch { opacity: 0.85; }
     .nrow .x {
       grid-column: 3; align-self: center; flex: none; border: 0; background: none; font-size: 13px; line-height: 1;
       color: var(--faint); width: 22px; height: 22px; margin: 0; cursor: pointer; border-radius: 5px;

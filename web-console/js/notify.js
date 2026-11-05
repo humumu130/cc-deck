@@ -20,6 +20,25 @@
                 // relay 重启漂移成脏过滤；actionable 行清除时另发 ACK 同步权威账面）。
                 // 挂 window 与移动端 renderNotify 共账（桌面/手机同一浏览器才共，跨设备各自清）
                 const dismissedNotifyKeys = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
+                // W-INBOX-V1 刀1：「稍后」本地账（key→until 毫秒）——relay snoozed_until 锚
+                // 权威（跨刷新/跨端），本地图补 ACK 往返窗与旧 relay 无锚降级（刷新即回箱）。
+                const snoozedNotifyKeys = window.__ccDeck005SnoozedNotifyKeys || (window.__ccDeck005SnoozedNotifyKeys = new Map());
+                const SNOOZE_DEFAULT_MS = 30 * 60 * 1000; // 稍后=30 分钟（relay 侧同款钳位缺省）
+                // W-INBOX-V1 刀3：已归档分区独立折叠态（默认折叠——健康态零占位，同 observe3 语言）
+                let archivedCollapsed = true;
+                // snooze 到点回箱唤醒钟：最早到期点 +300ms 一拍 render（render 现算 snoozed
+                // 标记，#sn: 签名变即真重渲——「到点自动回箱」的端上腿；relay 不主动推送）
+                let snoozeWakeTimer = null;
+                function scheduleSnoozeWake(rows) {
+                  if (snoozeWakeTimer) { clearTimeout(snoozeWakeTimer); snoozeWakeTimer = null; }
+                  const now = Date.now();
+                  let earliest = 0;
+                  for (const r of rows) {
+                    const t = r.snoozedUntil || 0; // buildRows 算好的生效锚（本地/relay 取大）
+                    if (t > now && (!earliest || t < earliest)) earliest = t;
+                  }
+                  if (earliest) snoozeWakeTimer = setTimeout(() => { snoozeWakeTimer = null; render(); }, earliest - now + 300);
+                }
                 let lastRows = [];
                 let lastRenderSig = ""; // #282 签名跳帧（等待/降级分支置空防回跳脏数据） // FB18：清除动作要行信息（synth/actionable），渲染期留账
                 // observe3（1104 用户令·注意力经济学）：动态组（已处理/已读=健康态）默认折叠
@@ -88,6 +107,14 @@
                   return set;
                 }
                 const isUserPending = (set, kind, entityId) => !!(set && kind && entityId && set.has(kind + ":" + entityId));
+                // W-INBOX-V1 刀2（行键归一）：synth 行键消费 pua[].key（通知账 stableKey 同口径
+                // ——kind:entity[:revision]）。pua 清单随 SNAPSHOT/增量帧全量在场，synth 行按
+                // (kind, entity_id) 对位取键；取不到（旧 relay 无 pua）回落旧本地键（端上兜底）。
+                const puaKeyOf = (kind, entityId) => {
+                  const list = Array.isArray(bridge.pendingUserActions) ? bridge.pendingUserActions : [];
+                  const hit = list.find((p) => p && p.kind === kind && p.entity_id === entityId);
+                  return hit && typeof hit.key === "string" && hit.key ? hit.key : "";
+                };
                 // ── W-NOTIFYFIX（1105 用户实锤）：过时（stale）判定单点 ──
                 // 用户口径三连：「843 项需行动」计数虚高（陈年通知全累计）+test.96/97 已作废
                 // 版本验收单还挂着+同张 test.97 单重复 4 条（出单工具重跑=同 title 异 id 四张）。
@@ -142,8 +169,15 @@
                   const rows = [];
                   const pending = userPendingIndex();
                   const acceptanceCurrentIds = acceptanceCurrentIdsOf(); // 惰性：本帧 accepts 池聚合
+                  // W-INBOX-V1 刀2/刀3 数据面：账本终态键集（handled/dismissed 且未 resolved
+                  // 的 channel 行=「已归档」面数据源——×/知道了过的可找回）；归档判定不滤行，
+                  // 行照常入 rows（archived 标记），分组消费面再分流。
+                  const ledgerArchivedKey = (n) => (n && (n.handled_at || n.dismissed_at) && !n.resolved_at) ? n.key : "";
                   for (const n of bridge.notifications) {
-                    if (flight.has(n.key) || dismissedNotifyKeys.has(n.key)) continue;
+                    if (flight.has(n.key)) continue;
+                    // W-INBOX-V1 刀3：本地 × 过的行不再跳过——标记 dismissed 进「已归档」
+                    // 分区（可找回），主分组消费面统一排除。
+                    const dismissedLocal = dismissedNotifyKeys.has(n.key);
                     const session = sessionOf(n);
                     const entityId = n.kind === "waiting"
                       ? (n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "")
@@ -152,23 +186,28 @@
                       synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: normTs(n.created_at),
                       unresolved: !doneOf(n), active: !doneOf(n) && n.actionable === true, actionable: n.actionable === true,
                       userPending: isUserPending(pending, n.kind, entityId) && !doneOf(n),
+                      dismissed: dismissedLocal, archived: dismissedLocal || !!ledgerArchivedKey(n), // W-INBOX-V1 刀3：归档标记（本地× 或账本 handled/dismissed 未 resolved——×/知道了过的可找回）
                       source: n, engine: session ? session.engine : "", sessionTitle: session ? (session.title || session.initial_prompt || "") : "",
                       sessionId: n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "",
                       segment: n.sourceContext && typeof n.sourceContext.segment === "string" ? n.sourceContext.segment : "",
                     });
                   }
                   for (const confirm of bridge.pendingConfirms) {
-                    if (dismissedNotifyKeys.has("confirm:" + confirm.id)) continue;
-                    const covered = bridge.notifications.some((n) => n.kind === "org-confirm" && !doneOf(n) && n.sourceContext && n.sourceContext.entityId === confirm.id);
-                    if (covered) continue;
-                    rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, userPending: isUserPending(pending, "org-confirm", confirm.id), source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                    // W-INBOX-V1 刀2（行键归一）：synth 行键=pua[].key（通知账 stableKey 同口径）
+                    // ——dismiss/ACK 落账、刷新不复活错乱；channel 行**同键在场即整行让位**
+                    //（旧 covered 判定只看未 done 行=handled 后 synth 复活 active 的根）。
+                    const cKey = puaKeyOf("org-confirm", confirm.id) || "confirm:" + confirm.id;
+                    if (dismissedNotifyKeys.has(cKey)) continue;
+                    if (bridge.notifications.some((n) => n.key === cKey)) continue;
+                    rows.push({ synth: true, ledgerKey: cKey.startsWith("org-confirm:"), kind: "org-confirm", key: cKey, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, userPending: isUserPending(pending, "org-confirm", confirm.id), source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
                   }
-                  const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
-                  if (!hasAcceptanceChannel) {
-                    for (const acceptance of bridge.accepts) {
-                      if (dismissedNotifyKeys.has("acceptance:" + acceptance.id)) continue;
-                      rows.push({ synth: true, kind: "acceptance", key: "acceptance:" + acceptance.id, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, userPending: isUserPending(pending, "acceptance", acceptance.id), source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
-                    }
+                  // W-INBOX-V1 刀2：acceptance 同款键归一（旧 hasAcceptanceChannel 整段判定
+                  // 退役——同键让位已覆盖「channel 在则不 synth」，且不因 handled 复活）
+                  for (const acceptance of bridge.accepts) {
+                    const aKey = puaKeyOf("acceptance", acceptance.id) || "acceptance:" + acceptance.id;
+                    if (dismissedNotifyKeys.has(aKey)) continue;
+                    if (bridge.notifications.some((n) => n.key === aKey)) continue;
+                    rows.push({ synth: true, ledgerKey: aKey.startsWith("acceptance:"), kind: "acceptance", key: aKey, title: (acceptance.submitted ? "验收单：" : "验收单待填：") + acceptance.title, body: "共 " + acceptance.total + " 项 · 已回填 " + acceptance.judged + (acceptance.submitted ? " · 已提交" : ""), ts: normTs(acceptance.created_at), unresolved: acceptance.submitted !== true, active: acceptance.submitted !== true, actionable: false, userPending: isUserPending(pending, "acceptance", acceptance.id), source: acceptance, engine: "", sessionTitle: "", sessionId: "", segment: "" }); // 件十二扩充 B3 + W-WINPAIR-R8② ts 秒级归一（1970-01-22 根修）
                   }
                   // [W-AWAITUSER] 待拍板顶格：扩同一排序器（需人优先 active 键之前加
                   // userPending 键——不造第二排序器、不改三分组结构，observe3
@@ -180,6 +219,17 @@
                   for (const r of rows) {
                     const why = staleWhyOf(r, nowMs, acceptanceCurrentIds);
                     if (why) { r.staleWhy = why; r.active = false; r.unresolved = false; }
+                  }
+                  // W-INBOX-V1 刀1（「稍后」）：snooze 生效中标记——本地 Map 与 relay
+                  // snoozed_until 取大者（relay 锚权威、本地图补 ACK 往返窗）；到点自然
+                  // 翻 false（render 每 calling 现算）。snoozed 行不进任何主分组、不计数、
+                  // 不入归档（暂避≠归档），wake timer 到点重渲即「回箱」。
+                  for (const r of rows) {
+                    const local = snoozedNotifyKeys.get(r.key) || 0;
+                    const remote = (r.source && typeof r.source.snoozed_until === "number") ? r.source.snoozed_until : 0;
+                    const until = Math.max(local, remote);
+                    if (until <= nowMs) { if (local) snoozedNotifyKeys.delete(r.key); r.snoozed = false; r.snoozedUntil = 0; }
+                    else { r.snoozed = true; r.snoozedUntil = until; }
                   }
                   return rows;
                 }
@@ -216,15 +266,30 @@
                   const jump = jumpOf(row) || (row.kind === "acceptance" && row.source && row.source.id ? { acceptance: row.source.id, label: "打开验收单" } : null); /* W-NOTIFYFIX：过时验收单按钮保留——退役≠不可查（jumpOf 对非 active 恒 null 的旁路） */
                   const km = kindMetaOf(row.kind);
                   const cls = row.active ? "alert" : row.unresolved ? "warn" : "read";
-                  const canAck = !row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported;
+                  // W-INBOX-V1 刀2 联动：canAck 扩「键归一的 synth 行」（ledgerKey=通知账
+                  // stableKey 在场——ACK 可落账）；旧回落键（confirm:/acceptance: 前缀无
+                  // revision 段）不 ACK（relay 无此账，发必 404 空转）。
+                  const canAck = row.unresolved && !bridge.notifyAckUnsupported && ((!row.synth && row.actionable) || row.ledgerKey === true);
                   const sub = String(row.body || "").split("\n")[0]; // A2 时间单轨：正文只留摘要，时间归 L1 右贴
                   // A6 操作钮降权=文字链（12px/500 强调色 hover 下划线）
                   const act = jump
                     ? (jump.acceptance
                       ? '<button class="act" type="button" data-notify-open-acceptance="' + escapeHtml(jump.acceptance) + '">' + escapeHtml(jump.label) + '</button>'
                       : '<button class="act" type="button"' + jumpAttrs(jump) + ">" + escapeHtml(jump.label) + "</button>")
-                    : canAck ? '<button class="act" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）">知道了</button>' : "";
-                  const x = '<button class="x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="清除这条通知" aria-label="清除通知">×</button>';
+                    : canAck ? '<button class="act" type="button" data-notify-ack="' + escapeHtml(row.key) + '" title="标记已处理（handled）——可到面板底部「已归档」找回">知道了</button>' : "";
+                  // W-INBOX-V1 刀1（× 语义分层）：active 行 × 退役——「知道了/稍后」双钮承载
+                  //（需行动项不许一键蒸发，PRD 收件箱铁律）；× 只留非 active 行（瞬态通知
+                  // 清理语义不变）。稍后=本地隐藏+relay snooze 锚（到点回箱）。
+                  const snoozeBtn = row.active && !row.archived
+                    ? '<button class="act act-snooze" type="button" data-notify-snooze="' + escapeHtml(row.key) + '" title="暂避 30 分钟，到点自动回箱">稍后</button>'
+                    : "";
+                  // W-INBOX-V1 刀3（可找回）：本地 × 过的归档行给「恢复」钮（撤销本地隐藏
+                  // 回主分组）；账面终态行（知道了/源已解决）留档可查+act 可再入，不提供
+                  // 反账重开（reopen 不在本刀词表——B0 冻结面）。
+                  const restoreBtn = row.archived && row.dismissed
+                    ? '<button class="act act-restore" type="button" data-notify-restore="' + escapeHtml(row.key) + '" title="撤销清除，回到原分组">恢复</button>'
+                    : "";
+                  const x = row.active ? "" : '<button class="x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="归档这条通知（可在面板底部「已归档」找回）" aria-label="清除通知">×</button>';
                   const engMark = row.engine && window.__ccDeck005EngineMarkHtml
                     ? '<span class="nrow-eng" title="会话引擎">' + window.__ccDeck005EngineMarkHtml(row.engine) + "</span>"
                     : "";
@@ -235,7 +300,7 @@
                   // L3 摘要+内联操作）+右侧 act/× 列
                   return '<div class="nrow ' + cls + (isSub ? " sub" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
                     + '<div class="t"><div class="l1">' + (row.userPending ? "" : '<span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + "</span>") + (row.staleWhy ? '<span class="nbadge stale-chip" title="' + (row.staleWhy === "version" ? "验收单对应版本已被新版取代——已退役归档，不计需行动" : row.staleWhy === "dup" ? "同名单的早期重复生成——已归档" : "超过 7 天未处理的陈年通知——已归档，不计需行动") + '">过时</span>' : "") + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + aggBtn + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
-                    + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + (act ? '<span class="act-slot">' + act + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪 */
+                    + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + ((act || snoozeBtn || restoreBtn) ? '<span class="act-slot">' + act + snoozeBtn + restoreBtn + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪；W-INBOX-V1 刀1/刀3：act+稍后+恢复 同槽并排 */
                     + x + "</div>";
                 }
 
@@ -288,16 +353,25 @@
                   // #282 N1 ①签名跳帧（置于 FX 之前防重复响铃）：通知数据与 isNew/active/
                   // unresolved 态整列签名未变 → 零 DOM 零副作用直接返回——bridge 任何事件
                   // 都触发 render，多数与通知无关（每帧全量重渲+重复 FX 的双重根治）。
-                  const actionRows0 = rows.filter((r) => r.active);
-                  const attentionRows0 = rows.filter((r) => !r.active && r.unresolved);
-                  const dynamicRows0 = rows.filter((r) => !r.unresolved);
+                  // W-INBOX-V1 刀1/刀3：可见性三态入过滤（archived=×/知道了过、snoozed=稍后
+                  // 暂避）——主分组与归档分区按此分流；sig 计数同口径（跳帧判定不撒谎）。
+                  const visible = (r) => !r.archived && !r.snoozed;
+                  const actionRows0 = rows.filter((r) => r.active && visible(r));
+                  const attentionRows0 = rows.filter((r) => !r.active && r.unresolved && visible(r));
+                  const dynamicRows0 = rows.filter((r) => !r.unresolved && visible(r));
+                  const archivedRows0 = rows.filter((r) => r.archived && !r.snoozed);
+                  scheduleSnoozeWake(rows); // 到点回箱唤醒钟（含跳帧路径——数据未变钟也要挂）
                   const sig = rows.map((r) => r.key + ":" + (r.isNew ? 1 : 0) + ":" + (r.active ? 1 : 0) + ":" + (r.unresolved ? 1 : 0)).join("|")
-                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length
+                    + "#" + actionRows0.length + "," + attentionRows0.length + "," + dynamicRows0.length + "," + archivedRows0.length
                     + (dynamicCollapsed ? "#dyn-collapsed" : "#dyn-open") // observe3：折叠态入签名（切换必重渲）
+                    + (archivedCollapsed ? "#arch-collapsed" : "#arch-open") // W-INBOX-V1 刀3：归档分区折叠态入签名
                     // [W-AWAITUSER] userPending 位入签名（顶格/chip 变化必重渲）
                     + "#au:" + rows.filter((r) => r.userPending).map((r) => r.key).join(",")
                     // W-NOTIFYPOLISH ①：聚合态入签名（簇大小变化/开合切换必重渲）
-                    + "#agg:" + [...aggOpenKeys].join(",") + "|" + rows.map((r) => r.kind + "`" + r.title).sort().join(";");
+                    + "#agg:" + [...aggOpenKeys].join(",") + "|" + rows.map((r) => r.kind + "`" + r.title).sort().join(";")
+                    // W-INBOX-V1：归档/snooze 态入签名（× 撤销、稍后到点、账面 handled 帧到达必重渲；
+                    // snooze 带 until 值——锚值变化（短锚改期/relay 帧改期）也要重挂唤醒钟）
+                    + "#dm:" + archivedRows0.map((r) => r.key).join(",") + "#sn:" + rows.filter((r) => r.snoozed).map((r) => r.key + ":" + (r.snoozedUntil || 0)).join(",");
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
@@ -313,9 +387,10 @@
                       if (bell) { bell.classList.remove("bell-swing"); void bell.offsetWidth; bell.classList.add("bell-swing"); }
                     }
                   }
-                  const actionRows = rows.filter((r) => r.active);
-                  const attentionRows = rows.filter((r) => !r.active && r.unresolved);
-                  const dynamicRows = rows.filter((r) => !r.unresolved);
+                  const actionRows = rows.filter((r) => r.active && visible(r));
+                  const attentionRows = rows.filter((r) => !r.active && r.unresolved && visible(r));
+                  const dynamicRows = rows.filter((r) => !r.unresolved && visible(r));
+                  const archivedRows = rows.filter((r) => r.archived && !r.snoozed); // W-INBOX-V1 刀3：已归档分区数据源（账本 handled/dismissed 未 resolved + 本地 ×）
                   // W-NOTIFYPOLISH ①B1+B6：组内同质聚合（kind+title 同簇——843 重复单实锤形态）。
                   // 代表行=簇内最新（rows 已 ts 降序，首见即最新）；aggN 入 L1 ×N 展开钮；
                   // 时间归聚=代表行时刻即簇最新（同簇同刻的逐行重复时间列随之消解）；
@@ -354,11 +429,21 @@
                       + "</div>" + (collapsible && dynamicCollapsed ? "" : items.map((r) => rowMarkup(r, r.isSub === true)).join(""))
                     : "";
                   if (rows.length) {
+                    // W-INBOX-V1 刀3：已归档分区（面板底部折叠组——×/知道了 过的行数据在账
+                    // 可找回；本地 × 行带「恢复」钮、账面终态行留档可查+act 可再入。独立折叠
+                    // 态不入 group()（dynamicCollapsed 绑死），同款组头语言手拼）。
+                    const archiveHtml = archivedRows.length
+                      ? '<div class="ngrp ngrp-fold ngrp-arch"' + ' data-notify-arch-toggle="1" role="button" tabindex="0" title="展开/收起已归档（×/知道了过的——可找回）"><i class="ndot a"></i>已归档'
+                        + '<span class="caret">' + (archivedCollapsed ? "▸" : "▾") + '</span>'
+                        + '<span class="cnt">' + archivedRows.length + "</span></div>"
+                        + (archivedCollapsed ? "" : archivedRows.map((r) => rowMarkup(r, false)).join(""))
+                      : "";
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
                     const flatHtml = group("需你行动", "r", rowsOf(aggregate(actionRows)), "", false, actionRows.length) /* R1 P1-1：cnt=原始组行数（rail 同源），不随聚合/开合变 */
                       + group("注意", "y", rowsOf(aggregate(attentionRows)), "y", false, attentionRows.length)
-                      + group("动态", "n", rowsOf(aggregate(dynamicRows)), "n", true, dynamicRows.length); // observe3：健康态默认折叠零占位，组头点开
+                      + group("动态", "n", rowsOf(aggregate(dynamicRows)), "n", true, dynamicRows.length) // observe3：健康态默认折叠零占位，组头点开
+                      + archiveHtml;
                     const rkN = window.__ccDeck005Reconcile;
                     if (rkN) {
                       const t = document.createElement("template");
@@ -407,11 +492,32 @@
 
                 // FB18 清除：行级 ✕ 与全部清除共用——本地即刻隐藏；actionable 行另发 ACK 同步
                 // 权威账（失败不回滚——清除意图优先，relay 账面随后自愈）
+                // W-INBOX-V1 刀2：ACK 条件扩「键归一 synth 行」（ledgerKey——账上真有此键）；
+                // 刀3：× 语义=归档可找回（非 active 行专属——active 行已是 知道了/稍后 双钮）。
                 function dismissRow(row) {
                   dismissedNotifyKeys.add(row.key);
-                  if (!row.synth && row.actionable && row.unresolved && !bridge.notifyAckUnsupported) {
+                  if (((!row.synth && row.actionable) || row.ledgerKey === true) && row.unresolved && !bridge.notifyAckUnsupported) {
                     void bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: row.key, action: "handled" });
                   }
+                }
+                // W-INBOX-V1 刀1：「稍后」——本地即刻隐藏 + relay snooze 锚（action=snooze +
+                // snooze_ms；钳位/持久在 relay 侧）。锚写失败不回滚（稍后意图优先——本页
+                // 会话内仍隐藏，刷新回箱=可接受降级）；到点 wake timer 重渲回箱。
+                function snoozeRowByKey(key) {
+                  if (flight.has(key)) return;
+                  flight.add(key);
+                  snoozedNotifyKeys.set(key, Date.now() + SNOOZE_DEFAULT_MS);
+                  if (!bridge.notifyAckUnsupported) {
+                    void bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: key, action: "snooze", snooze_ms: SNOOZE_DEFAULT_MS });
+                  }
+                  flight.delete(key);
+                  render();
+                  toast("已稍后 · 30 分钟后自动回箱");
+                }
+                // W-INBOX-V1 刀3：恢复——本地 × 的撤销（清本地键，行回原分组；账面若已
+                // handled，行照常出现在归档分区留档可查——反账重开不在本刀词表）。
+                function restoreRowByKey(key) {
+                  if (dismissedNotifyKeys.delete(key)) { render(); toast("已恢复"); }
                 }
                 function dismissRowByKey(key) {
                   const row = lastRows.find((r) => r.key === key);
@@ -427,7 +533,7 @@
                   } else render();
                 }
                 function clearAllNotifications() {
-                  const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key));
+                  const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key) && !r.archived && !r.snoozed); // W-INBOX-V1：归档/snoozed 不在清空池（分区独立管理）
                   if (!rows.length) { toast("没有可清除的通知"); return; }
                   for (const row of rows) dismissRow(row);
                   render();
@@ -435,10 +541,12 @@
                 }
 
                 // p2-batch2：按组清空（notify 审 P2-组清空越组修）——只清指定组（y=注意/n=动态）
+                // W-INBOX-V1 刀3：池排除已归档行（归档分区独立管理——「清空」不该把归档又清一遍
+                // 计数虚高；snoozed 行同样不在池——暂避中非清理对象）
                 function clearGroupNotifications(grp) {
                   const pool = grp === "y"
-                    ? lastRows.filter((r) => !r.active && r.unresolved)
-                    : lastRows.filter((r) => !r.unresolved);
+                    ? lastRows.filter((r) => !r.active && r.unresolved && !r.archived && !r.snoozed)
+                    : lastRows.filter((r) => !r.unresolved && !r.archived && !r.snoozed);
                   const rows = pool.filter((r) => !dismissedNotifyKeys.has(r.key));
                   if (!rows.length) { toast(grp === "y" ? "注意组没有可清除的通知" : "动态组没有可清除的通知"); return; }
                   for (const row of rows) dismissRow(row);
@@ -447,7 +555,7 @@
                 }
                 // W-V8 批5 温和清空（v8「清空 info/warn」语义）：只清注意+动态组，保留需你行动项
                 function clearSoftNotifications() {
-                  const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key) && !r.active);
+                  const rows = lastRows.filter((r) => !dismissedNotifyKeys.has(r.key) && !r.active && !r.archived && !r.snoozed);
                   if (!rows.length) { toast("没有可清除的注意/动态通知"); return; }
                   for (const row of rows) dismissRow(row);
                   render();
@@ -556,6 +664,11 @@
                   if (grpClear) { clearGroupNotifications(grpClear.dataset.notifyGrpClear === "y" ? "y" : "n"); return; } // p2-batch2：按组精确清（y=注意/n=动态）
                   const grpToggle = target.closest("[data-notify-grp-toggle]");
                   if (grpToggle) { dynamicCollapsed = !dynamicCollapsed; render(); return; } // observe3：健康态折叠开合（组头空白区点击）
+                  if (target.closest("[data-notify-arch-toggle]")) { archivedCollapsed = !archivedCollapsed; render(); return; } // W-INBOX-V1 刀3：已归档分区开合（独立折叠态）
+                  const snoozeBtn = target.closest("[data-notify-snooze]"); // W-INBOX-V1 刀1：「稍后」（button 先命中=不与整行 jump 冲突）
+                  if (snoozeBtn) { snoozeRowByKey(snoozeBtn.dataset.notifySnooze); return; }
+                  const restoreBtn = target.closest("[data-notify-restore]"); // W-INBOX-V1 刀3：本地 × 的撤销恢复
+                  if (restoreBtn) { restoreRowByKey(restoreBtn.dataset.notifyRestore); return; }
                   const aggBtn = target.closest("[data-notify-agg-toggle]"); // W-NOTIFYPOLISH ①：同质簇展开/收起（button 先命中=不与整行 jump 冲突）
                   if (aggBtn) {
                     const ak = aggBtn.dataset.notifyAggToggle;

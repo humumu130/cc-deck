@@ -5,12 +5,14 @@
 export function createNotifyCommands(mgr: any) {
   return {
     COMMAND_NOTIFICATION_ACK(cmd: any, by: string): any {
-          // #018-R1c 通知生命周期（B0 冻结 action 词表 handled|dismissed；resolved
-          // 由来源事件驱动不经此）。幂等：已 resolved 的账 ok 不复活；未知 key 拒收
+          // #018-R1c 通知生命周期（B0 词表 handled|dismissed+snooze（W-INBOX-V1 刀1）；
+          // resolved 由来源事件驱动不经此）。幂等：已 resolved 的账 ok 不复活；未知 key 拒收
           if (typeof cmd.payload.notification_key !== "string" || !cmd.payload.notification_key) {
             return { command_id: cmd.command_id, ok: false, error: "notification_key 必填" };
           }
-          const r = mgr.notificationAck(cmd.payload.notification_key, cmd.payload.action);
+          // W-INBOX-V1：snooze_ms 透传（「稍后」时长毫秒；仅 action=snooze 消费，钳位在 notificationAck）
+          const snoozeMs = typeof cmd.payload.snooze_ms === "number" ? cmd.payload.snooze_ms : undefined;
+          const r = mgr.notificationAck(cmd.payload.notification_key, cmd.payload.action, snoozeMs);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? {} : { error: r.error }) };
     },
   };
