@@ -35,7 +35,14 @@ const relayRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const root = join(relayRoot, "..");
 
 const argTagIdx = process.argv.indexOf("--expect-tag");
-const expectTag = argTagIdx !== -1 ? process.argv[argTagIdx + 1] : undefined;
+// W-RELAYFRESHCI-R1（A 审 P0）：剥 -nova 后缀归一——真实 tag 形如 v0.7.1-test.1-nova
+//（W-NOVAONLY 门强制 tag 必带），workflow 剥 v 后仍带 -nova，而 VERSION 永不带
+//（-nova 是打包通道标记非版本语义）。脚本内单点归一（A 审修法口径：勿在三个
+// workflow 各改——冗余易漏）。修前：--expect-tag 0.7.1-test.1-nova vs VERSION
+// 0.7.1-test.1 → exit 1 = 下次发版 tag 一触发 desktop Win/mac+android 三 job
+// freshness gate 全红、发布管线断（A 审亲测复现）。
+const expectTagRaw = argTagIdx !== -1 ? process.argv[argTagIdx + 1] : undefined;
+const expectTag = expectTagRaw !== undefined ? expectTagRaw.replace(/-nova$/, "") : undefined;
 
 const errors = [];
 const fail = (msg) => {

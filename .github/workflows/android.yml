@@ -78,7 +78,7 @@ jobs:
           npm ci --no-audit --no-fund
           node scripts/build-plugin.mjs
           ARGS=""
-          if [[ "$GITHUB_REF_NAME" == v* ]]; then ARGS="--expect-tag ${GITHUB_REF_NAME#v}"; fi
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then ARGS="--expect-tag ${GITHUB_REF_NAME#v}"; fi  # W-RELAYFRESHCI-R1 P2：REF_TYPE 判 tag（v 开头分支 dispatch 不误传）
           node scripts/check-embedded-freshness.mjs $ARGS
 
       - name: Build release APK
