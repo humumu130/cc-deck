@@ -1272,6 +1272,17 @@ export class Bridge {
       const prev = this.mgr.getExternal(id);
       const stalePidReport = !!prev?.cli_pid && prev.cli_pid !== ev.cli_pid
         && cliHostAlive(prev.cli_pid) && !cliHostAlive(ev.cli_pid);
+      // W-SESSIONMUTEX（孪生暴露面）：两活=孪生实锤——记录 pid 活**且**事件 pid 也活
+      //（同 sid 两个进程都在发事件/工作）。原逻辑只拦「记录活/事件死」的陈旧回退，
+      // 「两活」静默采新=双跑不可见（撞车三部曲共通盲区）。此处不杀不断（谁是正主
+      // 归 PM/用户裁决）——审计+告警回流，CLI 侧不静默双跑。
+      if (!stalePidReport && prev?.cli_pid && prev.cli_pid !== ev.cli_pid
+        && cliHostAlive(prev.cli_pid) && cliHostAlive(ev.cli_pid)) {
+        try {
+          this.mgr.emitChainAudit("session-twin-detected", `${id.slice(0, 16)} 孪生实锤：记录 pid ${prev.cli_pid} 活 × 事件 pid ${ev.cli_pid} 活——两进程并行工作（W-SESSIONMUTEX，待裁决不自动处置）`);
+          this.mgr.notifyLeaderSystem(`[孪生实例] ${id.slice(0, 12)} 检测到两个活进程（pid ${prev.cli_pid} + ${ev.cli_pid}）同 sid 并行——请裁决正主（杀其一/显式接管）；relay 侧已拒新拉起（W-SESSIONMUTEX）`);
+        } catch { /* 暴露面尽力而为 */ }
+      }
       if (!stalePidReport) {
         // #50（2026-09-11 用户实测）compact 换代归档：CLI /compact 后续接会开新
         // session_id（进程不变、无 SessionEnd），旧 ext 会话永久残留——同一台
