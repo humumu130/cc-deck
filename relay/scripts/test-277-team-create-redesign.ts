@@ -61,12 +61,12 @@ console.log("#277 建团弹窗重设计+团队域多源化+成员tab修坏（六
     ["s1", { session_id: "s1", relay_source: "Mac本机", updated_at: 3 }],
     ["s2", { session_id: "s2", relay_source: "公司机", updated_at: 2 }],
     ["s3", { session_id: "s3", updated_at: 1 }], // 旧 relay 无源标记 → 按本机计
-    ["s4", { session_id: "s4", relay_source: "公司机", external: true }], // external 剔除
+    ["s4", { session_id: "s4", relay_source: "公司机", external: true }], // W-AGGREGATE-V1：external 保留（野生观察位——托管优先排序垫底）
   ]) };
   const cands = link(blockFrom("function teamCandsForSource(which, st)"), ["which", "st"], { state: stateStub });
-  const cloud = cands("cloud", { lanRelayName: "Mac本机", cloudRelayName: "公司机" }) as Array<{ session_id: string }>;
+  const cloud = cands("cloud", { lanRelayName: "Mac本机", cloudRelayName: "公司机" }) as Array<{ session_id: string; external?: boolean }>;
   const local = cands("local", { lanRelayName: "Mac本机", cloudRelayName: "公司机" }) as Array<{ session_id: string }>;
-  ok(cloud.length === 1 && cloud[0].session_id === "s2", "A3 云源候选=relay_source 对位该源的会话（external 剔除）");
+  ok(cloud.length === 2 && cloud.map((x) => x.session_id).join(",") === "s2,s4", "A3 云源候选=relay_source 对位该源的会话（W-AGGREGATE-V1：external 观察位保留+托管优先排序——野生垫底不挤视野）");
   ok(local.length === 2 && local.map((x) => x.session_id).join(",") === "s1,s3", "A3 本机源候选=本机名+无标记兜底（旧快照兼容）");
   const listHtml = link(blockFrom("function teamCandListHtml(cands)"), ["cands"], {
     banner: (t: string) => "<p>" + t + "</p>",
