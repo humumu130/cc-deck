@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- version-sentinel launchd 捕获哨（W-VERSIONREVERT，1105）
+<!-- version-sentinel launchd 捕获哨（W-VERSIONREVERT，1105；R1 返修补 bin 监听）
      实装位：~/Library/LaunchAgents/online.humumu.ccdeck.version-sentinel.plist
-     语义：WatchPaths 盯 App 的 Info.plist（.app 整体交换必 touch）+ RunAtLoad（会话
-     启动即检一次=启动自检部署态）。触发即跑 scripts/version-sentinel.sh：版本/指纹
-     变化 → 告警账 ~/.cc-deck/data/version-revert-log.ndjson + ps 现场快照 +
-     /api/notify 黄框推手机。与 relay 单实例纪律无冲突（独立哨进程，不碰 8787 监听）。
+     语义：WatchPaths 盯三路——Info.plist（.app 整体交换）+ **MacOS/cc-deck-nova
+     （bin 级热换——R1-P1：1105 07:24:33 真实漏捕实证，fp a162e288→c67b137c 而
+     Info.plist 未动）**+ Resources（内容级热换残余面）+ RunAtLoad（会话启动即检=
+     启动自检部署态）。触发即跑 scripts/version-sentinel.sh：版本/指纹变化 → 告警账
+     ~/.cc-deck/data/version-revert-log.ndjson + ps 现场快照 + /api/notify 黄框推手机
+     （mtime-only 静默记账不推——R1-P2-1）。与 relay 单实例纪律无冲突（独立哨进程）。
      部署/卸载：
        cp deploy/online.humumu.ccdeck.version-sentinel.plist ~/Library/LaunchAgents/
        launchctl unload ~/Library/LaunchAgents/online.humumu.ccdeck.version-sentinel.plist 2>/dev/null
@@ -21,6 +23,8 @@
   <key>WatchPaths</key>
   <array>
     <string>/Applications/CC Deck Nova.app/Contents/Info.plist</string>
+    <string>/Applications/CC Deck Nova.app/Contents/MacOS/cc-deck-nova</string>
+    <string>/Applications/CC Deck Nova.app/Contents/Resources</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>ProcessType</key><string>Interactive</string>
