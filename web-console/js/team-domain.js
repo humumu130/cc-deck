@@ -1485,21 +1485,28 @@
                 function teamCandsForSource(which, st) {
                   const lanName = String((st && st.lanRelayName) || "");
                   const cloudName = String((st && st.cloudRelayName) || "");
+                  // W-AGGREGATE-V1：放开 external 滤——野生 CLI 会话（用户自开窗口）是聚合
+                  // 推荐的目标场景主体（PCS 多窗口），可勾入编；语义=只挂名观察（#279 纳管
+                  // 不管制）：观察位以 pm 身份行挂名（PM 行不接派单+relay seatGate 对 pm 词表
+                  // 角色豁免外部门禁——零 relay 改动的现成通道），不接派单不被打断；真要转正
+                  // 接活须换 deck 托管会话补员（行内 title 注明）。候选排序托管优先（野生垫底
+                  // 不挤占常规建团视野）。
                   return [...state.sessions.values()]
-                    .filter((x) => x && typeof x.session_id === "string" && !x.external)
+                    .filter((x) => x && typeof x.session_id === "string")
                     .filter((x) => {
                       const src = String(x.relay_source || x.source || "");
                       return which === "cloud" ? src === cloudName : (!src || src === lanName);
                     })
-                    .sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0))
+                    .sort((a, b) => (Number(a.external === true) - Number(b.external === true)) || (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0))
                     .slice(0, 12);
                 }
                 // 候选行 v2（#277 美化）：去引擎徽标（引擎身份归成员卡头像，行内省空间防截断）
                 function teamCandListHtml(cands) {
                   if (!cands.length) return '<div class="team-empty-row"><span>该源暂无可入编会话，可先建团稍后补员</span><button type="button" class="team-add-btn" data-team-add-member>＋ 添加</button></div>'; // W-TEAMPOPOLISH B4：空态一行紧凑（banner+添加钮合并）
                   return '<div class="team-cand-list" data-team-cands>' + cands.map((x) =>
-                    '<label class="create-check team-cand"><input type="checkbox" data-team-member="' + escape(x.session_id) + '">'
+                    '<label class="create-check team-cand' + (x.external ? " team-cand-ext" : "") + '" title="' + escape(x.external ? "野生会话 · 观察位入编（不接派单不被打断；转正接活须换 deck 托管会话补员）" : "") + '"><input type="checkbox" data-team-member="' + escape(x.session_id) + '"' + (x.external ? ' data-team-member-ext="1"' : "") + '>'
                     + '<span class="team-cand-name">' + escape(x.title || x.session_id.slice(0, 12)) + '</span>'
+                    + (x.external ? '<span class="cand-ext-badge">野生·观察</span>' : "")
                     + '<input class="create-field team-cand-role" data-team-role="' + escape(x.session_id) + '" list="team-role-list" placeholder="worker" aria-label="成员角色" hidden></label>').join("") + "</div>";
                 }
                 // ④ 本机目录选择器闸（#158-批3 createCwdBrowseable 同款：dialog 插件在场 + 本机 loopback 源）
@@ -1715,7 +1722,13 @@
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
                     const roleInput = pop.querySelector("[data-team-role='" + cssEscape(sid) + "']");
-                    const role = template === "free" ? String(roleInput?.value ?? "").trim() : template === "pm-led" ? "worker" : template;
+                    let role = template === "free" ? String(roleInput?.value ?? "").trim() : template === "pm-led" ? "worker" : template;
+                    // W-AGGREGATE-V1：野生（external）勾选行角色强制 pm 身份行——观察位语义
+                    //（#279 纳管不管制：挂名可见不接派单）。relay seatGate 对 worker 席拒
+                    // external（整单拒连累其他成员）；pm 词表角色豁免外部门禁（PM 行不接
+                    // 派单=现成观察通道）。用户改角色也拦回（free 模式手填无效——防误配
+                    // 触发整单拒）。
+                    if (el.dataset.teamMemberExt === "1") role = "pm";
                     return { session_id: sid, role: role || "worker" };
                   });
                   // W-TEAMSNC ①：PM 带队默认档——pm_session_id=会话域当前选中会话（跨域取
@@ -2143,7 +2156,7 @@
                   });
                   render();
                 }
-                window.ccDeckTeam = Object.freeze({ mount, bind, snapshot, onEvent, detail, select });
+                window.ccDeckTeam = Object.freeze({ mount, bind, snapshot, onEvent, detail, select, openTeamCreate }); // W-AGGREGATE-V1：暴露 prefill 建团口（项目域推荐条消费）
                 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount, { once: true });
                 else mount();
               })();

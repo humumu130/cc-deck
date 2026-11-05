@@ -163,6 +163,15 @@
                     if (covered) continue;
                     rows.push({ synth: true, kind: "org-confirm", key: "confirm:" + confirm.id, title: confirm.title || "组织确认单", body: confirm.reason || "", ts: normTs(confirm.created_at), unresolved: true, active: true, actionable: false, userPending: isUserPending(pending, "org-confirm", confirm.id), source: confirm, engine: "", sessionTitle: "", sessionId: "", segment: "" });
                   }
+                  // W-AGGREGATE-V1 升级时机（决策表二阶）：散会话聚合建议 ≥3 天未交互且桶
+                  // 仍达阈值 → 本组单条（注意=琥珀非红；active=false 恒不进需行动组/不计
+                  // badge）。清单由项目域 renderQueue 刷新（window.__ccDeck005AggUpgrades，
+                  // 已含阈值/冷却/静默名单闸）；行可 ✗（dismissedNotifyKeys 同账）。
+                  for (const upg of (Array.isArray(window.__ccDeck005AggUpgrades) ? window.__ccDeck005AggUpgrades : [])) {
+                    const key = "agg:" + String(upg.dir || "");
+                    if (!upg || !upg.dir || dismissedNotifyKeys.has(key)) continue;
+                    rows.push({ synth: true, kind: "system", key, title: "聚合建议：" + (upg.n || 0) + " 个散会话同目录 " + String(upg.name || ""), body: String(upg.evidence || "") + " · 点项目域「未入项目」桶卡的「聚合为团队 →」可一键预填建团", ts: Number(upg.ts) || Date.now(), unresolved: true, active: false, actionable: false, userPending: false, source: upg, engine: "", sessionTitle: "", sessionId: "", segment: "" });
+                  }
                   const hasAcceptanceChannel = bridge.notifications.some((n) => n.kind === "acceptance" && !doneOf(n));
                   if (!hasAcceptanceChannel) {
                     for (const acceptance of bridge.accepts) {
