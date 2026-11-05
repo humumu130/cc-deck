@@ -4995,7 +4995,9 @@ export class SessionManager {
         // recordRouting=false = 挂起联动收口：回合中断是用户决策不是 worker 干砸，
         // 熟手评价无感
         if (recordRouting) {
-          recordRoutingResult(e.gid, key, status, receipt);
+          // W-REVIEWSEAT-R1 P1-5：评审席收口现判带角色（评审单路由史标 reviewer——
+          // pickVeteranEligible 历史维排除依据，运行态 isReviewerSeat 之外的兜底）
+          recordRoutingResult(e.gid, key, status, receipt, this.isReviewerSeat(key) ? "reviewer" : undefined);
           // #92 W-NOTIFY2 E：失败升级链——worker 连败（failed≥阈值 且 failed>count，无成功
           // 穿插的计数近似）不只进台账：action 桶可操作通知直达用户（retire/换人/重派决策）
           if (status === "failed") this.escalateWorkerFailures(e.gid, key);
@@ -7220,7 +7222,8 @@ ${lines.join("\n")}
         // set=动态调整（enabled/default_size/team_override 三键任意子集）——写 store+
         // 池组 cap 同步+REVIEW_SEAT_UPDATED 全端广播（热生效：路由每次现读 store，零重启）。
         case "review-seat-get": {
-          try { ensureReviewPoolGroup(); } catch { /* ensure 幂等尽力 */ }
+          // W-REVIEWSEAT-R1 P2-5：get 纯读——ensureReviewPoolGroup（建组+弃确认卡+激活）
+          // 副作用移到 set 面；get 只读快照（首次部署前 get 不再产生「评审池被拒」历史噪音）
           return { ok: true, data: { config: reviewSeatSnapshotPayload() } };
         }
         case "review-seat-set": {
@@ -7232,7 +7235,16 @@ ${lines.join("\n")}
             : undefined;
           if (enabled === undefined && size === undefined && team_override === undefined) return { ok: false, error: "无有效字段（enabled:boolean / default_size:1-8 / team_override:{gid:0-8}）" };
           try { ensureReviewPoolGroup(); } catch { /* 幂等 */ }
-          const next = writeReviewSeatConfig({ ...(enabled !== undefined ? { enabled } : {}), ...(size !== undefined ? { default_size: size } : {}), ...(team_override !== undefined ? { team_override } : {}) });
+          // W-REVIEWSEAT-R1 P1-2：写失败真抛→orgAction 返 fail（不广播假成功/不落「已更新」
+          // 审计——原链 writeReviewSeatConfig 吞错后照发 REVIEW_SEAT_UPDATED+toast 热生效）
+          let next;
+          try {
+            next = writeReviewSeatConfig({ ...(enabled !== undefined ? { enabled } : {}), ...(size !== undefined ? { default_size: size } : {}), ...(team_override !== undefined ? { team_override } : {}) });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.emitChainAudit("pm-wake", `review-seat 配置写盘失败（未生效）：${msg}`);
+            return { ok: false, error: msg };
+          }
           this.bus.emitTransient("REVIEW_SEAT_UPDATED", reviewSeatSnapshotPayload());
           this.emitChainAudit("pm-wake", `review-seat 配置更新：enabled=${next.enabled} size=${next.default_size} override=${JSON.stringify(next.team_override)}（热生效）`);
           return { ok: true, data: { config: next } };
@@ -7249,7 +7261,19 @@ ${lines.join("\n")}
             exclude: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined,
             anchorKey: g.anchor_dir,
           });
-          return { ok: true, data: { routed: rr.routed, reviewers: rr.reviewers, ...(rr.reason ? { reason: rr.reason } : {}) } };
+          // W-REVIEWSEAT-R1 P1-4：池席落席指引——routeReviewers 的池跳命中席不在项目组
+          // 编制（池组跨团队），PM 按项目 gid 派单会被编制闸拒（定席不在组内）。响应按
+          // source 附落席组合：pool 席→gid=池组 gid + anchor=项目仓（dispatchWorker 编
+          // 制闸按池组过+worktree 锚定项目仓）；peer 席→目标所在组 gid。落席闭环文档化
+          // （原组合「能用但无文档无提示无测试」=三跳断在第 3 跳——A 审 P1-4）。
+          const poolGid = (rr.reviewers ?? []).some((x) => x.source === "pool") ? readReviewSeatConfig().pool_gid : undefined;
+          return {
+            ok: true,
+            data: {
+              routed: rr.routed, reviewers: rr.reviewers, ...(rr.reason ? { reason: rr.reason } : {}),
+              ...(poolGid ? { dispatch_hint: `池席落席：leader-dispatch --gid ${poolGid} --anchor ${g.anchor_dir}（gid=评审池组[编制闸过]，anchor=项目仓[worktree 锚定]）——勿用项目组 gid 派池席` } : {}),
+            },
+          };
         }
         // W-PRREVIEW：PR 互审台账段行——原单链 in_review（审查发起，phase=begin）/
         // done（squash-merge 收割收口，phase=end）段，时序证据链落权威台账。幂等：
@@ -8728,7 +8752,7 @@ ${lines.join("\n")}
       if ((this.openDispatches.get(t)?.length ?? 0) > 0)
         return { ok: false, error: `定席会话有在途单未收口: ${t.slice(0, 8)}——稍后重跑 review-route` };
       if (input.gid && !(findGroup(input.gid)?.headcount ?? []).some((h) => h.session_id === t))
-        return { ok: false, error: `定席会话不在组 ${input.gid} 编制内: ${t.slice(0, 8)}（互审员=在编 worker，非编制走 PM 子代理）` };
+        return { ok: false, error: `定席会话不在组 ${input.gid} 编制内: ${t.slice(0, 8)}（池席跨团队：review-route 响应 dispatch_hint 带「gid=评审池组+anchor=项目仓」落席组合；或成员 member-add 入组）` };
     }
     // C-MODE-B2 模块10 复拉优先于新开（C 模式「席位常驻+会话可换」的选席序补档）：routing
     // 高分熟手已被退休（roster 无）而编制有空位时，先 member-add 拉回再重跑选席——上下文
@@ -8872,7 +8896,7 @@ ${lines.join("\n")}
     //（bizRole 占位 "worker" 不消费）、求值/forbidden/审计全跳、spawnMode 硬传 bypass
     //（恢复 P81 前两处 create 硬传点原样）
     const policyOn = permissionPolicyEnabled();
-    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "worker" ? "worker" : null;
+    const bizRole = !policyOn ? "worker" : role === "pm" || role === "team_pm" ? "team_pm" : role === "review" || role === "review_pm" ? "review_pm" : role === "reviewer" ? "reviewer" : role === "worker" ? "worker" : null; // W-REVIEWSEAT-R1 P1-6：reviewer 入权限主体映射（恒 plan 只读档——P2-1 词表互认收口）
     const auditRow = (p: {
       requested_mode: string | null; normalized_mode: string | null; effective_mode: string; native_mode: string | null;
       capability_state: string | null; engine: string | null; reason: string; policy_source: string | null;
@@ -8886,7 +8910,7 @@ ${lines.join("\n")}
         capability_state: engineCapabilityState(engineForPolicy), engine: engineForPolicy,
         reason: "unknown_role_mapping", policy_source: null,
       }, null));
-      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm）` };
+      return { ok: false, error: `forbidden: unknown_role_mapping（未知岗位名 ${role}——权限主体映射词表 worker/pm/team_pm/review/review_pm/reviewer）` };
     }
     // P81-9 off：perm=null 跳过求值与 forbid 面；spawnMode 恢复 P81 前硬传 bypass
     const perm = policyOn ? evaluatePermission({
@@ -9546,6 +9570,11 @@ ${lines.join("\n")}
     );
     for (const e of routingFor(gid)) {
       if (exclude?.has(e.session_id)) continue; // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话——全过滤链最前置）
+      // W-REVIEWSEAT-R1 P1-5：评审席排除——运行态权威（isReviewerSeat=池/peer 评审席
+      // 在册）+历史记录兜底（e.role==="reviewer"：评审单收口写的路由记录，转岗/池席
+      // 跨组场景运行态可能查不到，记录在即排除）。原链只查 roster 资不查角色=实施单
+      // 可零守卫落评审席（A 审 P1-5：团队专属席互审单 gid=项目组即写路由史）。
+      if (e.role === "reviewer" || this.isReviewerSeat(e.session_id)) continue;
       if (e.rating === "bad") continue;
       if (e.failed >= 2 && e.failed > e.count) continue;
       if (!roster.has(e.session_id)) continue;

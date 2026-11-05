@@ -64,7 +64,12 @@ export function readReviewSeatConfig(dir?: string): ReviewSeatConfig {
 }
 
 /** 写配置（原子写 tmp+rename，rules.json 同款）。写后池组 headcount_cap 同步=default_size
- * （池大小的权威落点=组编制面——设置面改大小即改组 cap，成员增删走 org member-add/remove）。 */
+ * （池大小的权威落点=组编制面——设置面改大小即改组 cap，成员增删走 org member-add/remove）。
+ * W-REVIEWSEAT-R1：
+ *  - P1-3 team_override **逐键 patch 合并**（值=0=删该键）——原整表替换让 CLI 口
+ *    `set ov:pg-B=1` 静默抹掉设置页先配的 pg-A（A 审复现实锤：双口一写一毁）；
+ *  - P1-2 写失败**真抛**（原空 catch 假成功：orgAction 返 ok+广播 UPDATED+toast 热生效
+ *    而 store 实未写、重启回翻——配置面要响亮）。 */
 export function writeReviewSeatConfig(patch: Partial<Pick<ReviewSeatConfig, "enabled" | "default_size" | "team_override">> & { pool_gid?: string }, dir?: string): ReviewSeatConfig {
   const cur = readReviewSeatConfig(dir);
   const next: ReviewSeatConfig = {
@@ -72,10 +77,13 @@ export function writeReviewSeatConfig(patch: Partial<Pick<ReviewSeatConfig, "ena
     default_size: typeof patch.default_size === "number" ? Math.max(1, Math.min(8, Math.floor(patch.default_size))) : cur.default_size,
     team_override: (() => {
       if (!patch.team_override || typeof patch.team_override !== "object") return cur.team_override;
-      const ov: Record<string, number> = {};
+      // P1-3：从 cur 展开逐键覆写（0=删）——CLI/设置页/删除语义三口同构
+      const ov: Record<string, number> = { ...cur.team_override };
       for (const [k, v] of Object.entries(patch.team_override)) {
         const n = Number(v);
-        if (typeof k === "string" && k.startsWith("pg-") && Number.isFinite(n) && n >= 0) ov[k] = Math.min(8, Math.floor(n));
+        if (typeof k !== "string" || !k.startsWith("pg-") || !Number.isFinite(n) || n < 0) continue;
+        if (n === 0) { delete ov[k]; continue; } // 0=删键（与设置页 ± 删行/CLI ov:gid=0 同语义）
+        ov[k] = Math.min(8, Math.floor(n));
       }
       return ov;
     })(),
@@ -90,7 +98,10 @@ export function writeReviewSeatConfig(patch: Partial<Pick<ReviewSeatConfig, "ena
     const tmp = p + ".tmp";
     writeFileSync(tmp, JSON.stringify(body, null, 2) + "\n", "utf-8");
     renameSync(tmp, p);
-  } catch { /* 写失败抛给调用方 orgAction 报错（配置面要响亮） */ }
+  } catch (e) {
+    // P1-2：真抛——orgAction 透传为 fail（不广播假成功/不落「已更新」审计/toast 报错）
+    throw new Error(`review-seat 配置写盘失败：${e instanceof Error ? e.message : String(e)}`);
+  }
   syncPoolCap(next, d, next.pool_gid);
   return next;
 }

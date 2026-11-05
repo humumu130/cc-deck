@@ -53,7 +53,7 @@
 export type NormalizedMode = "ask" | "plan" | "edit-auto" | "full-auto";
 export type EffectiveMode = NormalizedMode | "forbidden";
 export type CapabilityState = "confirmed" | "unverified" | "unsupported";
-export type PolicyRole = "team_pm" | "worker" | "review_pm";
+export type PolicyRole = "team_pm" | "worker" | "review_pm" | "reviewer";
 
 import type { ManagedPermissionMode, PermissionCapabilitySummary } from "./types.js";
 
@@ -117,7 +117,7 @@ export function normalizeLegacyPermissionMode(value: string | null | undefined):
 }
 
 const ENGINES = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"] as const;
-const ROLES: readonly PolicyRole[] = ["team_pm", "worker", "review_pm"];
+const ROLES: readonly PolicyRole[] = ["team_pm", "worker", "review_pm", "reviewer"];
 const CAPS: readonly CapabilityState[] = ["confirmed", "unverified", "unsupported"];
 const CONSERV: Record<NormalizedMode, number> = { ask: 0, plan: 1, "edit-auto": 2, "full-auto": 3 };
 
@@ -128,6 +128,8 @@ const CEILING: Record<PolicyRole, Record<string, NormalizedMode>> = {
   team_pm: { 咨询: "edit-auto", 随手办: "full-auto", 轻立项: "full-auto", 正经立项: "full-auto", 暂缓: "plan", 看门狗: "plan" },
   worker: { 咨询: "edit-auto", 随手办: "full-auto", 轻立项: "full-auto", 正经立项: "full-auto", 暂缓: "ask", 看门狗: "ask" },
   review_pm: { 咨询: "plan", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan", 看门狗: "plan" },
+  // W-REVIEWSEAT-R1：评审席天花板恒 plan（review_pm 也压不到 full，但评审纪律面恒只读上限）
+  reviewer: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" },
 };
 
 /** §5.2 tier×角色「默认」列（policy_source=tier_default 时物化 requested；轻立项/看门狗
@@ -136,6 +138,8 @@ const TIER_DEFAULT: Record<PolicyRole, Record<string, NormalizedMode>> = {
   team_pm: { 咨询: "plan", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "plan", 看门狗: "plan" },
   worker: { 咨询: "ask", 随手办: "edit-auto", 轻立项: "edit-auto", 正经立项: "edit-auto", 暂缓: "ask", 看门狗: "ask" },
   review_pm: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" },
+  // W-REVIEWSEAT-R1 P1-6/P2-1（watchdogperm 同构——恒 plan 只读档）：评审席跨全档只读
+  reviewer: { 咨询: "plan", 随手办: "plan", 轻立项: "plan", 正经立项: "plan", 暂缓: "plan", 看门狗: "plan" },
 };
 
 export interface PolicyInput {

@@ -161,6 +161,41 @@ async function main() {
   ok(s3.ok === true && readReviewSeatConfig().enabled === true, "D6 重开即恢复");
   ok(reviewPoolSnapshot().cap === 3, "D7 cap 随 set=3 同步（池组编制面联动）");
 
+  // ---------- E 组：R1 六 P1 断言（W-REVIEWSEAT-R1，A 审必修清单） ----------
+  // E1（P1-3）team_override 逐键 patch：先配 pg-A，CLI 形态再 set pg-B → A 保留
+  writeReviewSeatConfig({ team_override: { "pg-aaa": 2 } });
+  writeReviewSeatConfig({ team_override: { "pg-bbb": 1 } });
+  const ovAfter = readReviewSeatConfig().team_override;
+  ok(ovAfter["pg-aaa"] === 2 && ovAfter["pg-bbb"] === 1, `E1 CLI set 不再抹别组（A 审复现实锤修——patch 合并：${JSON.stringify(ovAfter)}）`);
+  writeReviewSeatConfig({ team_override: { "pg-aaa": 0 } });
+  ok(!readReviewSeatConfig().team_override["pg-aaa"] && readReviewSeatConfig().team_override["pg-bbb"] === 1, "E1b 0=删键（单键删除不伤他键）");
+  // E2（P1-5）pickVeteranEligible 排 reviewer：评审席路由记录在册→实施单不落席
+  const { recordRoutingResult, routingFor } = await import("../src/routing.js");
+  recordRoutingResult("g-e5", "sm-e5-rv", "done", "审查回执", "reviewer");
+  ok(routingFor("g-e5").some((x: { session_id: string; role?: string }) => x.session_id === "sm-e5-rv" && x.role === "reviewer"), "E2a 路由记录带 role=reviewer（收口角色维）");
+  // E2b：pickVeteranEligible 排除行源码锚（判错力=删排除即红；真链行为面被 roster 夹具
+  // 成本挡住——字段断言 E2a+本锚双锁，转岗/池席跨组场景由 e.role 历史维承接）
+  const pvSrc = (await import("node:fs")).readFileSync(join(process.cwd(), "src", "session-manager.ts"), "utf8");
+  ok(pvSrc.includes('if (e.role === "reviewer" || this.isReviewerSeat(e.session_id)) continue;'), "E2b pickVeteranEligible 排 reviewer 席（运行态+历史双维——守卫路由面洞补）");
+  // E3（P1-6）reviewer 入权限映射——两行为面（§5.3.2 设计语义）：
+  //  ① tier_default 源（评审席派单不带显式 bypass 的真形态）→ TIER_DEFAULT 恒 plan；
+  //  ② 显式 bypassPermissions 越权 → forbidden above_role_tier_ceiling（不静默降=只读纪律的拒绝面）
+  const { evaluatePermission } = await import("../src/permission-policy.js");
+  const permTier = evaluatePermission({ role: "reviewer", tier: "正经立项", requested_mode: null, capability_state: "confirmed", policy_source: "tier_default", engine: "claude", materialized_default: null } as never) as { effective_mode?: string };
+  ok(permTier.effective_mode === "plan", `E3a reviewer tier_default 恒 plan（实 ${permTier.effective_mode}——评审席开卡即只读）`);
+  const permBypass = evaluatePermission({ role: "reviewer", tier: "正经立项", requested_mode: "bypassPermissions", capability_state: "confirmed", policy_source: "explicit", engine: "claude", materialized_default: null } as never) as { effective_mode?: string; reason?: string };
+  ok(permBypass.effective_mode === "forbidden" && permBypass.reason === "above_role_tier_ceiling", `E3b 显式 bypass 被拒（${permBypass.reason}——恒 plan 上限的拒绝面，非静默降级）`);
+  // E4（P2-5）get 纯读：orgAction review-seat-get 不再建组（断言查**调用行**——get 段
+  // 注释里提 ensureReviewPoolGroup 是说明文字非调用）
+  const smSrc = (await import("node:fs")).readFileSync(join(process.cwd(), "src", "session-manager.ts"), "utf8");
+  const getCase = smSrc.slice(smSrc.indexOf('case "review-seat-get"'), smSrc.indexOf('case "review-seat-set"'));
+  ok(!/^\s*[^/\s].*ensureReviewPoolGroup\(/m.test(getCase), "E4 get 纯读（ensure 调用移 set 面——弃卡噪音绝迹；注释提及不算）");
+  // E5（P1-1）CI matrix 真挂
+  const yml = (await import("node:fs")).readFileSync(join(process.cwd(), "..", ".github", "workflows", "relay.yml"), "utf8");
+  ok(yml.includes("test:reviewseat"), "E5 CI matrix 含 test:reviewseat（回执证据勘误闭环）");
+  // E6（P1-4）dispatch_hint：route 响应池席带落席指引（源码锚+文案新口径）
+  ok(smSrc.includes("dispatch_hint") && smSrc.includes("勿用项目组 gid 派池席"), "E6 池席落席指引（gid=池组+anchor=项目仓——三跳第 3 跳闭环文档化）");
+
   console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
   process.exit(fail > 0 ? 1 : 0);
 }
