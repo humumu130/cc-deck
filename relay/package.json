@@ -158,7 +158,7 @@
     "test:planlane": "tsx scripts/test-planlane.ts",
     "test:halfconn": "node --import tsx/esm ../expo-app/scripts/test-halfconn.mts",
     "test:prchip": "tsx scripts/test-prchip.ts",
-    "test:linkquality": "tsx scripts/test-linkquality.ts"
+    "test:linkquality": "tsx scripts/test-linkquality.ts",
     "test:boardrecon": "tsx scripts/test-boardrecon.ts"
   },
   "dependencies": {
