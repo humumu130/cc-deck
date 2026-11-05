@@ -1491,10 +1491,23 @@
                   // 角色豁免外部门禁——零 relay 改动的现成通道），不接派单不被打断；真要转正
                   // 接活须换 deck 托管会话补员（行内 title 注明）。候选排序托管优先（野生垫底
                   // 不挤占常规建团视野）。
-                  return [...state.sessions.values()]
+                  // W-AGGREGATE-V1 配套：候选池兜底 B4 桥数据——聚合推荐条从**项目域**直开
+                  // 建团弹窗（ccDeckTeam.openTeamCreate）时，本域可能尚未锚定快照（Team.onFrame
+                  // 视角门——域激活补喂前的窗口），state.sessions 空=预勾全员落空；B4 桥
+                  // sessions 全量双源持有（项目域桶卡同源——推荐链路数据一致性），空时回落。
+                  let pool = state.sessions;
+                  if (!pool || pool.size === 0) {
+                    const b4 = window.__ccDeck005B4;
+                    if (b4 && b4.sessions && typeof b4.sessions.values === "function") pool = b4.sessions;
+                  }
+                  return [...pool.values()]
                     .filter((x) => x && typeof x.session_id === "string")
                     .filter((x) => {
                       const src = String(x.relay_source || x.source || "");
+                      // W-AGGREGATE-V1：lanName 空/未知（单源形态·探测未完成）=不按源滤
+                      //（Team 链可能已给 sessions 打 relay_source 源标——无源名对照时全滤
+                      // 会清空候选池，聚合推荐直开弹窗形态首当其冲）
+                      if (which !== "cloud" && !lanName) return true;
                       return which === "cloud" ? src === cloudName : (!src || src === lanName);
                     })
                     .sort((a, b) => (Number(a.external === true) - Number(b.external === true)) || (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0))
