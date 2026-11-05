@@ -284,6 +284,23 @@ export class PatrolModule {
       // #92 W-NOTIFY2 D：40min 无帧自动升级——可操作通知（点跳会话卡）替代纯文本
       // 推送（notifyDone 只兜底到首个 external，丢面大）；stableKey 同键幂等，恢复
       // resolve 面不变。首卡 actionable 跳转，severity=waiting 提级
+      const first = stale[0];
+      if (first) {
+        // observe3 R1 P1-1（面③）：stale-escalate 绕 push 直写通知账（actionable 面更重）
+        // ——observe 档只记 observe 账不写通知账；审计行（记录非动作）两档都留
+        if (this.patrolObserve()) this.wouldDo("stale-escalate", "升级停滞通知", text.slice(0, 120));
+        else {
+          try {
+            (this.mgr as any).upsertNotification("system", "stale-escalate", String(Math.floor(now / 60_000)), {
+              title: `会话停滞升级（${stale.length} 个 >${WORKER_STALE_MIN}min 无帧）`,
+              body: text,
+              severity: "waiting", group: "attention", actionable: true, sessionId: first.session_id, domain: "session", returnPath: "/",
+            });
+          } catch { /* 升级尽力而为 */ }
+        }
+        try { (this.mgr as any).emitChainAudit?.("stale-escalate", text, first.session_id); } catch { /* 审计尽力而为 */ }
+      }
+    } else this.resolve(`worker-stale`);
     // [W-BOARDRECON R1]（1104 第三现；R1 按 A 审返修）：三方对账器——claimed 卡 ×
     // owner 会话活跃（多源判死+两拍确认）× dispatch 台账 running 行。R1-P1-3：档位
     // 挂 autoTierOf("boardrecon") 单点（原私有 env 绕过=审查打回项；块移到 patrol off
@@ -291,6 +308,9 @@ export class PatrolModule {
     // autoBoardrecon 切）。R1-P1-2：终态收殓归 recon（本件只管孤儿/滞留/告警）。
     try {
       const mode = autoTierOf("boardrecon");
+      // R2-P2：off 早退——off 档零动作（不加载板/零审计零通知；不能用 return——
+      // 本方法后续还有看板漂移等扫描段）
+      if (mode !== "off") {
       const boards: Array<{ gid: string; board: NonNullable<ReturnType<typeof loadBoardFile>> }> = [];
       for (const g of listGroups()) {
         if (g.status !== "active") continue;
@@ -328,26 +348,13 @@ export class PatrolModule {
         this.reconLastMismatch = r.mismatch;
         this.push("board-recon", `账实不符告警：${r.mismatch}`);
       }
+      } // R2-P2 off 早退门闭
     } catch (e) {
       console.warn(`[patrol] 三方对账失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
-      const first = stale[0];
-      if (first) {
-        // observe3 R1 P1-1（面③）：stale-escalate 绕 push 直写通知账（actionable 面更重）
-        // ——observe 档只记 observe 账不写通知账；审计行（记录非动作）两档都留
-        if (this.patrolObserve()) this.wouldDo("stale-escalate", "升级停滞通知", text.slice(0, 120));
-        else {
-          try {
-            (this.mgr as any).upsertNotification("system", "stale-escalate", String(Math.floor(now / 60_000)), {
-              title: `会话停滞升级（${stale.length} 个 >${WORKER_STALE_MIN}min 无帧）`,
-              body: text,
-              severity: "waiting", group: "attention", actionable: true, sessionId: first.session_id, domain: "session", returnPath: "/",
-            });
-          } catch { /* 升级尽力而为 */ }
-        }
-        try { (this.mgr as any).emitChainAudit?.("stale-escalate", text, first.session_id); } catch { /* 审计尽力而为 */ }
-      }
-    } else this.resolve(`worker-stale`);
+    // W-BOARDRECON-R2（P1 移位返修）：对账块与 stale 分支平级——深夜 0 在岗+孤儿卡群
+    // （stale.length=0）时对账器照跑（R1 误嵌 if(stale.length) 体内=目标场景整支不跑）。
+    // P2 off 早退：off 档零动作（不加载板/零审计零通知——autoTierOf 三档语义完整）。
     // ② 看板对账漂移（active 组）
     const boardAlerts: string[] = [];
     try {

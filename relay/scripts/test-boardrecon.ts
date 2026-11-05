@@ -30,6 +30,16 @@ async function main(): Promise<void> {
     assert(pj.includes("convergeBoardsWithDispatchLog") && pj.includes("reconAutoCloseStaleCards") || sm.includes("reconAutoCloseStaleCards"), "boardfix converge/recon 在（台账终态翻面既有件）");
     const pt = readFileSync(join(process.cwd(), "src", "patrol.ts"), "utf8");
     assert(pt.includes('autoTierOf("boardrecon")') && pt.includes("board-recon"), "patrol 挂三方对账（R1-P1-3：autoTierOf 单点——原 CCR_BOARDRECON_MODE 绕过已退役）");
+    // R2-P1 结构断言（判错力=挪回嵌套即红）：对账块（autoTierOf 行）必须在
+    // stale 分支闭括（else resolve worker-stale）**之后**——平级；R1 误嵌
+    // if(stale.length) 体内时它在该行之前=stale=0 整支不跑（R1 验收 P1 定罪形态）
+    const ptLines = pt.split("\n");
+    const lineOf = (pred: (l: string) => boolean): number => ptLines.findIndex(pred);
+    const staleClose = lineOf((l) => l.includes("else this.resolve(`worker-stale`)"));
+    const reconMode = lineOf((l) => l.includes('autoTierOf("boardrecon")'));
+    assert(staleClose >= 0 && reconMode > staleClose, `对账块与 stale 分支平级（mode 行 ${reconMode} > stale 闭 ${staleClose}——嵌回体内即红）`);
+    // R2-P2 结构断言：off 早退门在场（off 档零板加载/零审计/零通知）
+    assert(pt.includes('if (mode !== "off")') && pt.includes("R2-P2：off 早退"), "boardrecon off 档早退门（off=零动作——autoTierOf 三档语义完整）");
   }
 
   console.log("② 孤儿判死多源聚合+两拍确认（R1-P0-1）:")
