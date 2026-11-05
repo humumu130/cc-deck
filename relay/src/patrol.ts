@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
+import { reconcileBoardCards } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）
 import { readDispatchLog, orgDir } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
@@ -53,6 +54,11 @@ const num = (v: string | undefined, d: number): number => {
 
 export class PatrolModule {
   private lightTimer: NodeJS.Timeout | null = null;
+  /** R1-P0 两拍确认跨拍状态：上拍孤儿候选集（entryId） */
+  private reconFlagged = new Set<string>();
+  /** R1-P2-1 审计/告警签名去重（同判定不重发） */
+  private reconLastSig = "";
+  private reconLastMismatch = "";
   private fullTimer: NodeJS.Timeout | null = null;
   // 去重账本：key → 上次告警文本（onset-only）
   private lastAlerts = new Map<string, string>();
@@ -238,6 +244,7 @@ export class PatrolModule {
     } catch (e) {
       console.warn(`[patrol] 板收敛扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
     }
+    // [W-BOARDRECON]（1104 第三现「工作中 5 沃克 vs 进行中 8 卡」）：三方对账器——
     // observe3 R1 P2⑥ 下半：patrol 族 off 而 converge 档仍活时，converge 段跑完即退——
     // 后续 worker 帧新鲜度/看板漂移/演练/对账皆 patrol 族面，off 不执行
     if (autoTierOf("patrol") === "off") { this.appendReport("full: patrol off（仅 converge 段运行）"); return; }
@@ -298,6 +305,60 @@ export class PatrolModule {
         try { (this.mgr as any).emitChainAudit?.("stale-escalate", text, first.session_id); } catch { /* 审计尽力而为 */ }
       }
     } else this.resolve(`worker-stale`);
+    // [W-BOARDRECON R1]（1104 第三现；R1 按 A 审返修）：三方对账器——claimed 卡 ×
+    // owner 会话活跃（多源判死+两拍确认）× dispatch 台账 running 行。R1-P1-3：档位
+    // 挂 autoTierOf("boardrecon") 单点（原私有 env 绕过=审查打回项；块移到 patrol off
+    // 早退后——patrol=off 对账不跑）；缺省 observe（PM 过目干跑清单后 config
+    // autoBoardrecon 切）。R1-P1-2：终态收殓归 recon（本件只管孤儿/滞留/告警）。
+    try {
+      const mode = autoTierOf("boardrecon");
+      // R2-P2：off 早退——off 档零动作（不加载板/零审计零通知；不能用 return——
+      // 本方法后续还有看板漂移等扫描段）
+      if (mode !== "off") {
+      const boards: Array<{ gid: string; board: NonNullable<ReturnType<typeof loadBoardFile>> }> = [];
+      for (const g of listGroups()) {
+        if (g.status !== "active") continue;
+        const b = loadBoardFile(g.id);
+        if (b && !b.frozen) boards.push({ gid: g.id, board: b }); // R1-P2-3：frozen 板豁免（人工意图——converge hold 同口径）
+      }
+      const sessions = this.mgr.snapshot().map((x) => ({ session_id: x.session_id, done_reason: x.done_reason ?? null, status: x.status, cli_pid: x.cli_pid ?? null, last_active_at: x.updated_at ?? 0 }));
+      const dispatchLog = readDispatchLog(undefined, 20_000); // R1-P2-4：台账窗 20k（converge 教训）
+      const flagNow = new Set<string>();
+      const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow });
+      this.reconFlagged = flagNow; // 两拍确认跨拍状态推进（候选标记→下拍复核）
+      const sig = r.actions.map((a) => a.entryId + a.reason).sort().join("|") + (r.mismatch ?? "");
+      if (r.actions.length && sig !== this.reconLastSig) { // R1-P2-1 审计签名去重
+        this.reconLastSig = sig;
+        const lines2 = r.actions.slice(0, 8).map((a) => `${a.entryId}「${a.text}」${a.reason}：${a.detail}`);
+        this.mgr.emitChainAudit("board-recon", `三方对账（${mode}）：${r.actions.length} 张判定——${lines2.join("；").slice(0, 400)}`);
+        if (mode === "auto") {
+          let moved = 0;
+          for (const a of r.actions) {
+            if (a.advisory) continue; // R1-P1-1：owner 活跃（长任务静默）只提醒不搬
+            const b = boards.find((x) => x.gid === a.gid)?.board;
+            const e = b?.entries.find((x) => x.id === a.entryId);
+            if (e && e.status === "claimed") {
+              const up = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${new Date().toLocaleDateString("zh-CN")}] ${a.reason} 归位可重派：${a.detail}` });
+              if (up.ok) moved++; // R1-P2-3：核返回——拒写不计数
+            }
+          }
+          this.push("board-recon", `三方对账（auto）：${moved} 张孤儿卡归位（advisory ${r.actions.filter((a) => a.advisory).length} 条 owner 活跃仅提醒）`);
+        } else {
+          this.wouldDo("boardrecon", "归位孤儿卡", `${r.actions.filter((a) => !a.advisory).length} 张候选（两拍确认+旁证聚合后）——干跑不执行`);
+          this.push("board-recon", `三方对账（observe）：${r.actions.length} 张判定（孤儿候选/滞留提醒）——清单在审计流，PM 过目后 config autoBoardrecon=auto 生效`);
+        }
+      }
+      if (r.mismatch && r.mismatch !== this.reconLastMismatch) { // R1-P2-1 告警去重
+        this.reconLastMismatch = r.mismatch;
+        this.push("board-recon", `账实不符告警：${r.mismatch}`);
+      }
+      } // R2-P2 off 早退门闭
+    } catch (e) {
+      console.warn(`[patrol] 三方对账失败（跳过）: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    // W-BOARDRECON-R2（P1 移位返修）：对账块与 stale 分支平级——深夜 0 在岗+孤儿卡群
+    // （stale.length=0）时对账器照跑（R1 误嵌 if(stale.length) 体内=目标场景整支不跑）。
+    // P2 off 早退：off 档零动作（不加载板/零审计零通知——autoTierOf 三档语义完整）。
     // ② 看板对账漂移（active 组）
     const boardAlerts: string[] = [];
     try {
