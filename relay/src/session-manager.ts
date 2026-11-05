@@ -1598,12 +1598,31 @@ export class SessionManager {
     }
   }
 
-  // COMMAND_NOTIFICATION_ACK 后端（B0 冻结 action 词表 handled|dismissed；resolved
-  // 由来源事件驱动不经此）。已 resolved 的账幂等 ok 不复活；未知 key 拒收
-  notificationAck(key: string, action: "handled" | "dismissed"): { ok: boolean; error?: string } {
+  // COMMAND_NOTIFICATION_ACK 后端（B0 词表 handled|dismissed+snooze；resolved
+  // 由来源事件驱动不经此）。已 resolved 的账幂等 ok 不复活；未知 key 拒收。
+  // W-INBOX-V1 刀1：action="snooze"（「稍后」锚）——snooze_ms 毫秒时长（钳位
+  // 60s..24h，缺省 30 分钟），落 snoozed_until 持久锚（到点回箱由端上 wake timer
+  // 承担，relay 不主动推送——SNAPSHOT/增量帧携带锚即权威）。
+  notificationAck(key: string, action: "handled" | "dismissed" | "snooze", snoozeMs?: number): { ok: boolean; error?: string } {
+    // R1（A 审 P2-5）：词表外 action fail-fast 拒——HTTP/WS 载荷的 action 是运行时字符串
+    // （类型标注拦不住），原实现未知值（如 "snozze" 拼错）静默落 else 分支按 handled
+    // 收口=永久 handled（误拼一次即丢）。拒绝并回错，调用方可感知重试。
+    if (action !== "handled" && action !== "dismissed" && action !== "snooze") {
+      return { ok: false, error: `action 必须是 handled|dismissed|snooze（收到: ${String(action).slice(0, 24)}）` };
+    }
     const item = this.notifications.get(key);
     if (!item) return { ok: false, error: `通知不存在: ${key.slice(0, 48)}` };
     if (item.resolved_at !== undefined) return { ok: true };
+    if (action === "snooze") {
+      const ms = Math.max(60_000, Math.min(24 * 3600_000, Number(snoozeMs) > 0 ? Number(snoozeMs) : 30 * 60_000)); // 钳位 1 分钟..24 小时，缺省 30 分钟
+      const until = Date.now() + ms;
+      const before = this.notifications.get(key)!;
+      const next = transitionNotification(before, "snoozed", Date.now(), until);
+      this.notifications.set(key, next);
+      this.persistNotifications();
+      this.projectNotifications();
+      return { ok: true };
+    }
     this.transitionNotifications((n) => n.key === key, action === "dismissed" ? "dismissed" : "source_succeeded");
     return { ok: true };
   }

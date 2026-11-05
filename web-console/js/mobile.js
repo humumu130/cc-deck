@@ -686,7 +686,14 @@
       }
       function renderNotify() {
         const dismissed = window.__ccDeck005DismissedNotifyKeys; // FB18：与桌面通知域共账
-        const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !(dismissed && dismissed.has(n.key)));
+        // W-INBOX-V1-R1（A 审 P1）：「稍后」共账消费——桌面点稍后手机不再显示+角标不含。
+        // 生效锚=本地 Map（window.__ccDeck005SnoozedNotifyKeys，与桌面共账）与 relay
+        // 投影锚（n.snoozed_until）取大（桌面 buildRows 同式）；到点自然回显（render 现
+        // 算）。原实现零接入：桌面稍后→手机照常显示+角标计入=双形态计数矛盾（A 审实锤）。
+        const snoozedMap = window.__ccDeck005SnoozedNotifyKeys;
+        const snoozeUntilOf = (n) => Math.max((snoozedMap && snoozedMap.get(n.key)) || 0, (n && typeof n.snoozed_until === "number") ? n.snoozed_until : 0);
+        const nowMs = Date.now();
+        const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !(dismissed && dismissed.has(n.key)) && snoozeUntilOf(n) <= nowMs); // R1：稍后生效中不显示（不计角标——items 已排）
         const isDone = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
         const activeN = items.filter((n) => !isDone(n)).length;
         const countEl = document.querySelector("#m-notify [data-notify-action-count]"); // F11 根修：作用域锁定手机壳——裸 [data-notify-action-count] 会命中桌面节点把 chip 覆盖成裸数字
@@ -703,13 +710,19 @@
         const MB = { acceptance: ["验收单", "acceptance"], "org-confirm": ["确认", "confirm"], dispatch: ["派单", "dispatch"], waiting: ["待办", "waiting"], system: ["系统", "system"] };
         const rowOf = (n) => {
           const act = !isDone(n);
+          const actionable = act && n.actionable === true;
           const sid = n.sourceContext && n.sourceContext.sessionId;
           const domain = n.sourceContext && n.sourceContext.domain;
           const km = MB[n.kind] || MB.system;
           const mainBtn = !act ? "" : sid
             ? `<button class="notify-light-action" type="button" data-notify-mobile-jump="${esc(sid)}">回会话处理</button>`
             : domain ? `<button class="notify-light-action" type="button" data-notify-jump-domain="${esc(domain)}">回${domain === "team" ? "团队" : domain === "project" ? "项目" : "会话"}域处理</button>` : "";
-          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="nbadge nbadge-${km[1]}">${km[0]}</span><span class="nrow-time">${esc(relT(n.created_at && n.created_at < 1e11 ? n.created_at * 1000 : n.created_at))}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button>` : ""}${mainBtn}<button class="notify-light-action" type="button" data-mobile-notify-dismiss="${esc(n.key)}" title="清除这条通知" aria-label="清除通知">✕</button></div></article>`;
+          // W-INBOX-V1-R1（A 审 P1·真丢点②手机面收口）：active（需行动）行×退役——
+          // 原 ✕ 对 active 行发 ACK handled=一键蒸发（PRD 宣布根除的真丢点②在手机面
+          // 原样保留）。active 行改桌面同款双钮：「标记已读（handled，可找回）+稍后
+          // （snooze 30min，到点自动回箱——与桌面共账）」；✕ 只留非 active 行（归档
+          // 语义，非蒸发——桌面刀1 同语言）。
+          return `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${act}"><div class="row"><span class="avatar">${svg(act ? "alert" : "info")}</span><strong>${esc(n.title || n.kind || "通知")}</strong><span class="nbadge nbadge-${km[1]}">${km[0]}</span><span class="nrow-time">${esc(relT(n.created_at && n.created_at < 1e11 ? n.created_at * 1000 : n.created_at))}</span></div><p>${esc(oneLine(n.body))}</p><div class="notify-actions">${act ? `<button class="notify-light-action" type="button" data-mobile-notify-ack="${esc(n.key)}">标记已读</button><button class="notify-light-action" type="button" data-mobile-notify-snooze="${esc(n.key)}" title="暂避 30 分钟，到点自动回箱（与桌面共账）">稍后</button>` : ""}${mainBtn}${act ? "" : `<button class="notify-light-action" type="button" data-mobile-notify-dismiss="${esc(n.key)}" title="清除这条通知" aria-label="清除通知">✕</button>`}</div></article>`;
         };
         const rkN = window.__ccDeck005Reconcile;
         if (rkN) rkN(list, items.length ? items.map((n) => ["n:" + n.key, rowOf(n)]) : [["n:empty", '<div class="readonly-banner">暂无通知 · 行动项到达时在此提示。</div>']]);
@@ -900,10 +913,29 @@
           renderNotify();
           return;
         }
+        // W-INBOX-V1-R1（A 审 P1）：「稍后」双钮之二——本地共账（window Map 与桌面同键）
+        // +relay snooze 锚 ACK（action=snooze+snooze_ms 30min，relay 钳位同款）；到点
+        // renderNotify 现算自然回箱（过滤条件 snoozeUntilOf<=now 翻真即回显）。
+        const snoozeBtn = target.closest("[data-mobile-notify-snooze]");
+        if (snoozeBtn) {
+          const key = snoozeBtn.dataset.mobileNotifySnooze;
+          const n = (Array.isArray(bridge.notifications) ? bridge.notifications : []).find((x) => x && x.key === key);
+          const ms = 30 * 60 * 1000;
+          const m = window.__ccDeck005SnoozedNotifyKeys || (window.__ccDeck005SnoozedNotifyKeys = new Map());
+          m.set(key, Date.now() + ms);
+          if (n && !(n.resolved_at || n.handled_at || n.dismissed_at) && n.actionable === true) {
+            void bridge.sendCommand("COMMAND_NOTIFICATION_ACK", { notification_key: key, action: "snooze", snooze_ms: ms });
+          }
+          renderNotify();
+          toast("已稍后 · 30 分钟后自动回箱");
+          return;
+        }
         if (target.closest("[data-notify-clear-all]")) {
           const dismissed = window.__ccDeck005DismissedNotifyKeys || (window.__ccDeck005DismissedNotifyKeys = new Set());
+          const snoozedMapC = window.__ccDeck005SnoozedNotifyKeys;
           const isDoneM = (n) => !!(n && (n.resolved_at || n.handled_at || n.dismissed_at));
-          const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !dismissed.has(n.key));
+          const snoozedC = (n) => Math.max((snoozedMapC && snoozedMapC.get(n.key)) || 0, (n && typeof n.snoozed_until === "number") ? n.snoozed_until : 0) > Date.now();
+          const items = (Array.isArray(bridge.notifications) ? bridge.notifications : []).filter((n) => n && !dismissed.has(n.key) && !snoozedC(n)); // R1：稍后中的行不吃批量清除（暂避≠清除——桌面同语义）
           if (!items.length) { toast("没有可清除的通知"); return; }
           for (const n of items) {
             dismissed.add(n.key);

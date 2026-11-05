@@ -87,20 +87,39 @@ export type NotificationLifecycleAction =
   | "reconnected"
   | "source_succeeded"
   | "dismissed"
-  | "resolved";
+  | "resolved"
+  // W-INBOX-V1 刀1（B0 词表扩一项）：「稍后」锚——snoozed_until 由调用方随 opts 传入
+  //（transitionNotification 纯函数不猜时长；session-manager.notificationAck 按
+  // snooze_ms 求值）。非终态锚：handled/dismissed/resolved 任一收口即清（账终态>暂避）。
+  | "snoozed";
 
 export function transitionNotification<T extends NotificationLifecycleItem>(
   item: T,
   action: NotificationLifecycleAction,
   at: number,
+  snoozeUntil?: number,
 ): T {
   const next = { ...item } as T;
-  if (action === "source_succeeded" && next.handled_at === undefined) next.handled_at = at;
+  if (action === "source_succeeded") {
+    if (next.handled_at === undefined) next.handled_at = at;
+    if (next.snoozed_until !== undefined) delete next.snoozed_until; // 收口清锚（账终态）
+  }
   if (action === "dismissed") {
     if (next.dismissed_at === undefined) next.dismissed_at = at;
     if (next.handled_at === undefined) next.handled_at = at;
+    if (next.snoozed_until !== undefined) delete next.snoozed_until;
   }
-  if (action === "resolved" && next.resolved_at === undefined) next.resolved_at = at;
+  if (action === "resolved" && next.resolved_at === undefined) {
+    next.resolved_at = at;
+    if (next.snoozed_until !== undefined) delete next.snoozed_until;
+  }
+  if (action === "snoozed") {
+    // 仅未终态行可 snooze（终态行无「回箱」语义）；到点毫秒时戳由调用方给。
+    // R1（A 审 P2-2）：终态挡从「只挡 resolved」扩 handled/dismissed——handled/dismissed
+    // 行 snooze=锚挂在终态行上（投影端按锚隐藏=账面 handled 却「暂时不可见」的矛盾态，
+    // 收口检查漏三态之二的缝隙）。
+    if (next.resolved_at === undefined && next.handled_at === undefined && next.dismissed_at === undefined && typeof snoozeUntil === "number" && snoozeUntil > at) next.snoozed_until = snoozeUntil;
+  }
   return next;
 }
 
