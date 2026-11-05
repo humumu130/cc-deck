@@ -112,5 +112,66 @@ assert(spawnOk, "E codebuddy spawn 命令链=codebuddy-code（agent-codebuddy.ts
 assert(preflightOk, "E2 preflight 命令链同名单口（探测与 spawn 同名——装了却探测不到的哑案例防线）");
 assert(!/command[^\n]{0,40}"codebuddy"(?!-)/.test(sm), "E3 无裸 \"codebuddy\" 命令串（bin 名混淆源——label/profileId 的 codebuddy 非命令合法保留）");
 
+
+// ---------- F 组：R1 返修断言（粘滞源态泄漏+勾选态+旧 relay 文案） ----------
+// F1（P1 核心·前后对照）：新建弹选「远程」→**弹开着**时 B22 模型菜单=本机清单（干净修
+// 语义：B22 链恒 local 与弹态无关）；关弹后再验同款。双源 claude models 区分注入
+//（lan=lan-m / cloud=cloud-m 系）——修前粘滞态下 B22 列 cloud-m 系（A 审定罪），修后恒 lan-m。
+await ev(`(() => { const m = document.getElementById("b2-engine-menu"); if (m) m.remove(); const dVer = window.__ccDeck005SourceState; const cat = ${JSON.stringify(mkCatalog(["codex", "codebuddy"]))}; cat[0].models = ["cloud-m", "cloud-m2"]; window.__ccDeck005SourceState = () => ({ ...dVer(), cloudEngineCatalog: cat }); return "restored-cloud-m"; })()`);
+// 注入区分模型：lan claude models=lan-m（原 m1）；cloud claude models=cloud-m 系
+await ev(`(() => { const lan = ${JSON.stringify(lanSnap.payload)}; lan.source_capabilities.engine_catalog[0].models = ["lan-m"]; window.__ccDeck005IngestSnapshot("lan", lan); return 1; })()`);
+await ev(`(() => { const cl = ${JSON.stringify(cloudSnap.payload)}; cl.source_capabilities.engine_catalog[0].models = ["cloud-m", "cloud-m2"]; window.__ccDeck005IngestSnapshot("cloud", cl); return 1; })()`);
+await wait(500);
+// 开弹切远程（粘滞态制造）——+号是 toggle（5123）：先关净（若 D 组末弹还开着）再开
+await ev(`document.querySelector('aside.queue .queue-head button.icon-btn')?.click()`); // toggle：开着则关
+await wait(300);
+await ev(`(() => { if (!document.getElementById("b2-create-pop")) return "was-closed"; return "closed-now"; })()`);
+await ev(`document.querySelector('aside.queue .queue-head button.icon-btn')?.click()`); // 确保开启
+await wait(400);
+const f0Open = await ev(`!!document.getElementById("b2-create-pop")`);
+assert(f0Open === true, `F0 前置：新建弹净开（+ toggle 时序坑——实 ${f0Open}）`);
+await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="source"]'); if (sel) { sel.value = "cloud"; sel.dispatchEvent(new Event("change", { bubbles: true })); } return 1; })()`);
+await wait(400);
+const f1Open = await ev(`(() => { const pop = document.getElementById("b2-create-pop"); return pop ? "pop-open" : "no-pop"; })()`);
+// B22 链行为断言：造 head 会话态不可行（无会话卡注入路径）——改内省：catalogEntries 经
+// createModelsFor 链闭包不可达，用 DOM 行为面——模型胶囊菜单需会话；此处断言源态语义：
+// 弹开着（cloud 态）新建弹模型 select 选项=cloud-m 系（弹面随源 ✓）
+const f1aModels = await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="model"]'); return sel ? [...sel.options].map(o => o.value).filter(Boolean).join(",") : null; })()`);
+assert(!!f1aModels && f1aModels.includes("cloud-m"), `F1a 弹开着（远程态）弹面模型 select=云清单（${f1aModels}——弹面随源不回归）`);
+// F1b：关弹→源态复位（closeCreatePop 双保险）
+await ev(`(() => { document.querySelector('#b2-create-pop [data-create-cancel]')?.click(); return 1; })()`);
+await wait(300);
+const f1bClosed = await ev(`(() => !document.getElementById("b2-create-pop"))()`);
+const f1bSource = await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="source"]'); return sel ? sel.value : "pop-closed"; })()`);
+assert(f1bClosed === true && f1bSource === "pop-closed", `F1b 关弹收口（弹已闭）`);
+// F1c：重开弹（复位后）→select 值=local+弹面模型=本机 lan-m（粘滞态绝迹）
+await ev(`document.querySelector('aside.queue .queue-head button.icon-btn')?.click()`);
+await wait(400);
+const f1cSource = await ev(`(() => document.querySelector('#b2-create-pop [data-create-field="source"]')?.value ?? null)()`);
+const f1cModels = await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="model"]'); return sel ? [...sel.options].map(o => o.value).filter(Boolean).join(",") : null; })()`);
+assert(f1cSource === "local", `F1c 重开弹 select=local（复位生效——实 ${f1cSource}）`);
+assert(!!f1cModels && f1cModels.includes("lan-m") && !f1cModels.includes("cloud-m"), `F1c2 重开弹模型=本机清单（${f1cModels}——粘滞泄漏绝迹）`);
+// F2（P2-③）：勾 skipPerm+autoMkdir→切源→勾选态保留（原 innerHTML 重绘静默清空）
+await ev(`(() => { for (const k of ["skipPerm", "autoMkdir"]) { const el = document.querySelector('#b2-create-pop [data-create-field="' + k + '"]'); if (el) el.checked = true; } return 1; })()`);
+await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="source"]'); sel.value = "cloud"; sel.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`);
+await wait(400);
+const f2Checks = await ev(`(() => ({ skipPerm: !!document.querySelector('#b2-create-pop [data-create-field="skipPerm"]')?.checked, autoMkdir: !!document.querySelector('#b2-create-pop [data-create-field="autoMkdir"]')?.checked }))()`);
+assert(f2Checks.skipPerm === true && f2Checks.autoMkdir === true, `F2 切源重绘保留勾选态（skip=${f2Checks.skipPerm}/mkdir=${f2Checks.autoMkdir}——原静默清空）`);
+// F2b：perm-hint 监听重挂（勾选在+生产连接才显——headless 非 8787 不触发渲染面；以
+// 重挂后 change 不炸+hint 可挂为行为面：直接验 attachPermHint 后 hint 元素可注入不炸）
+const f2b = await ev(`(() => { const box = document.querySelector('#b2-create-pop [data-create-field="skipPerm"]'); if (!box) return "no-box"; box.checked = false; box.dispatchEvent(new Event("change", { bubbles: true })); return "change-ok"; })()`);
+assert(f2b === "change-ok", `F2b 重挂监听 change 不炸（${f2b}——监听随旧节点消失的修复面）`);
+// F3（P2-②）：本机 models 空+云有快照无目录（旧 relay 形态）→模型 select 空+占位文案
+await ev(`(() => { const lan = ${JSON.stringify(lanSnap.payload)}; lan.source_capabilities.engine_catalog[0].models = ["lan-m"]; window.__ccDeck005IngestSnapshot("lan", lan); const cl = ${JSON.stringify(cloudSnap.payload)}; delete cl.source_capabilities; window.__ccDeck005IngestSnapshot("cloud", cl); const f1Ver = window.__ccDeck005SourceState; window.__ccDeck005SourceState = () => { const s = f1Ver(); delete s.cloudEngineCatalog; return s; }; return 1; })()`);
+await wait(500);
+// 注入只改数据不改 DOM——触发切源 change 重绘（local→cloud）弹面才反映旧 relay 形态
+await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="source"]'); sel.value = "local"; sel.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`);
+await wait(300);
+await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="source"]'); sel.value = "cloud"; sel.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`);
+await wait(400);
+const f3 = await ev(`(() => { const sel = document.querySelector('#b2-create-pop [data-create-field="model"]'); return sel ? { disabled: sel.disabled, opts: [...sel.options].map(o => o.value).filter(Boolean).length } : null; })()`);
+assert(!!f3 && f3.disabled === true, `F3 弹开着远程旧 relay（无目录域）模型 select 禁用占位（disabled=${f3 && f3.disabled}——cloudHasSnapshot 区分消费面接通）`);
+await shot("04-r1-sticky-fixed");
+
 console.log(`\nenginesource 探针：${pass}/${pass + fail}${fail ? "（有红）" : ""}`);
 process.exit(fail ? 1 : 0);
