@@ -1555,7 +1555,7 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-wake", "pm-claim", "dispatch-reroute", "stale-escalate", "failure-escalate",
   "dispatch-close", "gate-release", "transition-illegal", "recon-autoclose",
   "xmsg-send", "xmsg-recv", "xmsg-reject", "xmsg-inject", "xmsg-ack", "xmsg-first-contact",
-  "harvest-violation", "worktree-busy", "worktree-lock-race", "hold-overtime", "hold-release", "zombie-retire", "receipt-drop", "wt-guard",
+  "harvest-violation", "worktree-busy", "worktree-lock-race", "hold-overtime", "hold-release", "zombie-retire", "receipt-drop", "wt-guard", "rate-limit-backoff", "worker-cap",
   "continuity-disclose", // C-MODE-B2 模块5：续接断链披露（resume 失败/对准退役/上下文不可用→新会话承接时 prompt 注入连续性声明）
   "board-adopt", // boardfix（1103 板面说谎）：重派接卡——题名匹配 backlog 陈卡接续单（note 留痕不另开新卡）
   "board-force-close", // boardfix R3：72h 断链残留强翻（hold/人工重开两道豁免后）——自愈动作入审计流（converge 回调发射）

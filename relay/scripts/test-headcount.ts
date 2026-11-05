@@ -70,7 +70,10 @@ const createSession = (mgr: SessionManager, cwd: string): string =>
   (mgr as unknown as { create: (cwd: string, prompt: string, pm?: string, autoMkdir?: boolean, opts?: object) => string }).create(cwd, "", "default", false, { employee: true });
 
 async function main() {
-  const ORG = mkdtempSync(join(tmpdir(), "ccr-org-hc-"));
+  // ratelimit429 R1（B1-a）：drain 重放不再豁免全局并发闸——本套件测编制帽面，
+// 全局帽抬至 20 隔离（fixture spawn+排水不撞全局帽；全局闸行为由 test-ratelimit429 管）。
+process.env.CCR_WORKER_CONCURRENCY_CAP = "20";
+const ORG = mkdtempSync(join(tmpdir(), "ccr-org-hc-"));
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-hc-"));
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevCap = process.env.CCR_ORG_HEADCOUNT_CAP;
