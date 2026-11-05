@@ -2788,6 +2788,9 @@
     .team-drawer .readonly-banner.slim { margin: 2px 2px 4px; padding: 6px 8px; font-size: var(--fs-C); }
     .team-drawer .lane-bar { display: flex; gap: 2px; height: 7px; margin: 2px 2px 5px; border-radius: 4px; overflow: hidden; }
     .team-drawer .lane-bar i { min-width: 2px; border-radius: 1px; } /* 段宽走内联 flex-grow（team-domain board-progress 同语汇） */
+    .team-drawer .lane-bar-row { display: flex; align-items: center; gap: 8px; } /* sidebarbar（1105）：条+✓N 徽章同行——#d-team board-progress-row 同款（boardpolish ②视觉语言） */
+    .team-drawer .lane-bar-row .lane-bar { flex: 1 1 auto; min-width: 0; margin-right: 0; }
+    .team-drawer .ov-done { flex: 0 0 auto; display: inline-flex; align-items: center; margin: 2px 2px 5px; padding: 2px 8px; border-radius: 9px; background: color-mix(in srgb, var(--p-done) 13%, transparent); color: var(--p-done); font-size: var(--fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; } /* 完成计数独立徽章——#d-team .ov-done 同参数（字号随抽屉域 micro） */
     .team-drawer .lane-bar i.backlog { background: var(--p-backlog); }
     .team-drawer .lane-bar i.planned { background: var(--p-planned); } /* planlane：规划中段（灰系同 backlog） */
     .team-drawer .lane-bar i.claimed { background: var(--p-claimed); }
