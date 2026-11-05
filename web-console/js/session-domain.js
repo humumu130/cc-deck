@@ -1516,11 +1516,19 @@
                   // 区一：在办概览（板比例条+关键任务；板缺席=降级文案，入口钮兜底——B 稿 §3 降级口径）
                   let overview;
                   if (model.lanes) {
-                    const segs = model.lanes.filter((l) => l.n > 0).map((l) => '<i class="' + l.k + '" style="flex-grow:' + l.n + '" title="' + l.label + " " + l.n + '"></i>').join("");
-                    const legend = model.lanes.map((l) => '<span style="--legend-color:var(--p-' + (l.k === "ready_to_install" ? "ready" : l.k) + ')"><i></i>' + l.label + " <b>" + l.n + "</b></span>").join("");
+                    // sidebarbar（1105 用户实锤「团队侧边栏里这里也是」）：done 段剥离比例条——
+                    // boardpolish ② 同款同治（dev 4483851e，勿造第二套）：done 量级碾压活跃态
+                    // 致条全绿、活跃分布不可辨；条内只分布五活跃态（图例同步），完成计数移
+                    // 条尾独立「✓ N」徽章（--p-done 同源绿，title 带全量口径）；每段 title
+                    // 带该类计数（hover 可辨，既有）；min-width 2px 底可见（CSS :2790 既有）。
+                    const doneN = (model.lanes.find((l) => l.k === "done") || { n: 0 }).n;
+                    const segLanes = model.lanes.filter((l) => l.k !== "done");
+                    const segs = segLanes.filter((l) => l.n > 0).map((l) => '<i class="' + l.k + '" style="flex-grow:' + l.n + '" title="' + l.label + " " + l.n + '"></i>').join("");
+                    const legend = segLanes.map((l) => '<span style="--legend-color:var(--p-' + (l.k === "ready_to_install" ? "ready" : l.k) + ')"><i></i>' + l.label + " <b>" + l.n + "</b></span>").join("");
                     const keys = model.keyTasks.length ? '<div class="key-task-head">⚠ 关键任务 ' + model.keyTasks.length + "</div>" + model.keyTasks.map((e) => '<div class="key-task" title="' + esc(String(e.text || "").slice(0, 80)) + '">⚠ ' + esc(String(e.text || "").slice(0, 26)) + " · 阻塞：" + esc(String((e.gate && e.gate.reason) || "").slice(0, 18)) + "</div>").join("") : "";
                     overview = '<div class="dr-sec"><span>在办 ' + (model.activeN || 0) + '</span><span class="dr-sub">板未完任务</span></div>'
-                      + '<div class="lane-bar" role="img" aria-label="任务状态分布">' + segs + '</div><div class="lane-legend">' + legend + "</div>" + keys;
+                      + '<div class="lane-bar-row"><div class="lane-bar" role="img" aria-label="活跃任务分布（完成已移出）">' + segs + '</div><span class="ov-done" title="完成 ' + doneN + '（量级碾压活跃态，已移出比例条）">✓ ' + doneN + "</span></div>"
+                      + '<div class="lane-legend">' + legend + "</div>" + keys;
                   } else {
                     overview = '<div class="dr-sec"><span>在办 ' + model.running + '</span><span class="dr-sub">成员口径</span></div><div class="readonly-banner slim">板未同步 · 深度板况去团队域看板 ↓</div>';
                   }
