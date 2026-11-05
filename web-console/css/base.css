@@ -3198,9 +3198,10 @@
       box-shadow: var(--shadow);
       padding: 12px;
     }
-    .pair-pop-backdrop {
-      background: transparent; background: color-mix(in srgb, var(--bg0) 72%, transparent);
-    }
+    /* W-TEAMPOPOLISH-R1（A 审 P1）：.pair-pop-backdrop 本块已删——原 bg0 72% 白雾档与 :231
+       新 16% 压暗档同特异度、源序在后恒胜（级联覆盖=运行时白雾未除的根因，A 审 computed
+       实证 #0C1320@72%）。backdrop 唯一定义=:231（position/z-index/16% 背景/backdrop-fade
+       全量），此处不再重述——防再漂移见 test-teampolish.ts C2 单源断言。 */
     .pair-code-box {
       border-color: var(--brand-line);
       background: var(--surface2);

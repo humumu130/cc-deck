@@ -67,6 +67,11 @@ const zhLen = (s: string) => [...s].reduce((n, ch) => n + (/[\u2E80-\u9FFF\uF900
   ok(kill.includes(".create-pop") && kill.includes(".pair-pop-backdrop"), "C1 tcp-enter/backdrop-fade 入 reduced-motion kill list");
   ok(/\.create-pop \{[^}]*box-shadow: 0 1px 2px rgba\(0,0,0,\.30\), 0 8px 24px rgba\(0,0,0,\.38\), 0 24px 64px rgba\(0,0,0,\.32\), inset 0 1px 0/.test(css), "C2 三层影+inset 顶部高光（notifpanel 分层语言）");
   ok(/\.pair-pop-backdrop \{[^}]*color-mix\(in srgb, var\(--text-strong\) 16%, transparent\)/.test(css), "C2 backdrop 白雾→压暗 16%（text-strong 混合）");
+  // R1（A 审 P1 双失明补盲）：原断言只证「16% 档存在」不证「唯一」——:3201 旧 bg0 72% 档
+  // 同特异度源序在后恒胜，正则两处各自命中=测试绿而运行时白雾。单源守卫：backdrop 的
+  // background 声明全文件只允许 :231 一处（含 16% 档），bg0 混合档零残留。
+  const bdBlocks = css.match(/\.pair-pop-backdrop \{[^}]*\}/g) ?? [];
+  ok(bdBlocks.filter((b) => /background/.test(b)).length === 1 && !/var\(--bg0\) 72%/.test(css), `C2 backdrop 单源守卫（含 background 的定义块=${bdBlocks.filter((b) => /background/.test(b)).length} 处，bg0 72% 旧档零残留）`);
   ok(/\.create-field:focus \{[^}]*border-color: var\(--brand-hover\);[^}]*box-shadow: 0 0 0 3px var\(--focus-ring\);/.test(css), "C3 焦点环：brand-hover 描边+focus-ring 3px（token 首消费）");
 }
 

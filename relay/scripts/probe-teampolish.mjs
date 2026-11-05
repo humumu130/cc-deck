@@ -23,6 +23,13 @@ const args = ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT
 if (RM) args.push("--force-prefers-reduced-motion");
 args.push(URL0);
 globalThis.__p = spawn(CHROME, args, { stdio: "ignore" });
+// R1（A 审 P2-2①）：spawn 的 Chrome 必随进程退场——A 审盘点过 109 个泄漏残留实例。
+// exit/SIGINT/SIGTERM/uncaughtException 四钩全挂（探针早退/异常路径同样清场）。
+const killChrome = () => { try { globalThis.__p.kill(); } catch {} };
+process.on("exit", killChrome);
+process.on("SIGINT", () => { killChrome(); process.exit(130); });
+process.on("SIGTERM", () => { killChrome(); process.exit(143); });
+process.on("uncaughtException", (e) => { console.error("uncaught:", e?.message ?? e); killChrome(); process.exit(1); });
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 let list = null;
 for (let i = 0; i < 30 && !list; i++) {
@@ -30,7 +37,10 @@ for (let i = 0; i < 30 && !list; i++) {
   try { list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json(); } catch { list = null; }
 }
 if (!list) { console.error("Chrome CDP 15s 未就绪，退出"); process.exit(2); }
-const tab = list.find(t => t.type === "page");
+// R1（A 审 P2-2②）：tab 取用验归属——原 list.find(type==="page") 不校验 url，端口碰撞/
+// 残留实例在听时连错页面（A 审首跑 18 FAIL 假红的根因）。非本探针 index-005 页拒用。
+const tab = list.find(t => t.type === "page" && String(t.url || "").includes("web-console/index-005.html"));
+if (!tab) { console.error(`CDP tab 归属校验失败：list 无 index-005 页（候选=${list.map(t => t.url).join(",") ?? ""}——疑似连到残留实例，先清场再跑`); process.exit(2); }
 const ws = new WebSocket(tab.webSocketDebuggerUrl, { maxPayload: 64 * 1024 * 1024 });
 await new Promise(r => ws.once("open", r));
 let seqn = 0; const pend = new Map();
@@ -105,6 +115,13 @@ const bannerColor = await ev(`getComputedStyle(document.querySelector('#team-cre
 ok(!/rgb\(7[0-9], 1[0-9][0-9], 2[0-9][0-9]\)/.test(String(bannerColor)) || TAG === "before", `C5 banner 色（${bannerColor}——info 蓝族绝迹）`);
 const shadow = await ev(`getComputedStyle(document.querySelector('#team-create-pop')).boxShadow`);
 ok(shadow.split("rgba").length >= 4, `C2 三层影+inset（${shadow.slice(0, 70)}…）`);
+// R1（A 审 P1 验证闸补盲）：backdrop computed 色——源码正则对「同特异度级联覆盖」双失明
+//（:231 与 :3201 各自命中正则=测试绿而运行时白雾），computed 是唯一真相。压暗档=
+// color-mix(text-strong 16%) 解析为 alpha≈0.16；旧白雾档 bg0 72% alpha≈0.72 恒红。
+const backColor = String(await safeEv(`(() => { const e = document.querySelector('[data-team-create-back]'); return e ? getComputedStyle(e).backgroundColor : "NONE"; })()`));
+const backA = (() => { const m1 = /rgba?\(\d+, \d+, \d+, ([\d.]+)\)/.exec(backColor); const m2 = /\/\s*([\d.]+)/.exec(backColor); return m1 ? parseFloat(m1[1]) : m2 ? parseFloat(m2[1]) : NaN; })();
+ok(Math.abs(backA - 0.16) < 0.02, `C2 backdrop computed 压暗 16%（${backColor}，alpha=${backA}——白雾 72% 运行时绝迹实证）`);
+await shot("01b-backdrop-dim");
 
 // ---------- ② 焦点环 ----------
 await ev(`document.querySelector('[data-team-field="name"]').focus()`);
