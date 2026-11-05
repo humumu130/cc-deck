@@ -10340,8 +10340,15 @@ ${lines.join("\n")}
               if (flip.ok) {
                 this.emitChainAudit("cardlife-receipt-late", `dispatch ${entry.id.slice(0, 8)} 回执迟写补翻：卡 ${card.id} →submitted（收口拦→90s 复查合规→补位）`);
                 this.emitBoard(entry.gid);
+                // R4（A 审 P2-A）：补齐通知换独立键（receipt-gate- 前缀）——原 rgate-<id>
+                // 与初拦告警同键，upsertNotification 非 dispatch kind 同键静默 return=
+                // 「已补齐」卡永不出现；同时旧「卡已拦」卡走 resolved 消除（告警解除语义
+                // 双向闭环：新卡出现+旧卡收口）。
                 try {
-                  this.upsertNotification("system", `rgate-${entry.id}`, this.leaderId ?? "leaderless", {
+                  this.transitionNotifications((n) => n.key === stableKey("system", `rgate-${entry.id}`, this.leaderId ?? "leaderless"), "resolved");
+                } catch { /* 通知尽力而为 */ }
+                try {
+                  this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
                     title: "回执已补齐·卡补翻",
                     body: truncate(`派单 ${entry.id.slice(0, 8)} 回执军规行就位——卡已补翻 submitted（rgate 告警解除）`, 200),
                     severity: "waiting", group: "attention", actionable: false, domain: "org", returnPath: "/",

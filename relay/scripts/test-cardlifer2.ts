@@ -207,6 +207,18 @@ async function main() {
       await sleep(100);
       const cA = cardOf("d-r3a");
       ok(cA?.status === "submitted", `R3-A1 >400 字长回执→行锚放行 submitted（实 ${cA?.status}——R2 slice(-400) 此形态误拦 27% 真实回执）`);
+      // R4-B（A 审 P2-B）军规行本体 >400 字单行：老 400 窗（slice(-400)）把行首切掉=
+      // 必拦（前缀「结果：」丢失形态识别失败）；行锚全行扫=必放——R3-A1（长正文+短军规
+      // 行）对老窗零判别力（窗内完整含短行=老代码也放），本形态老必拦新必放=真判别。
+      f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R4B：超长军规行卡", status: "claimed" });
+      attachR3("W-CLR2R4B", "d-r4b");
+      const hugeLineReceipt = join(f.ART, "w-r4b.md");
+      const hugeRule = "结果：超长军规行本体交付（" + "合规细节与影响面说明。".repeat(60) + "）｜改动文件：a.ts、b.ts、c.ts";
+      writeFileSync(hugeLineReceipt, "# 回执\n\n" + hugeRule + "\n", "utf-8");
+      closeAs("s-r4b", "d-r4b", hugeLineReceipt);
+      await sleep(100);
+      const cB = cardOf("d-r4b");
+      ok((hugeRule.length > 400) && cB?.status === "submitted", `R4-B 军规行本体 ${hugeRule.length} 字（>400）单行→行锚放行 submitted（实 ${cB?.status}——老 slice(-400) 切掉行首必拦，本形态=新老真判别）`);
       // R3-A2 后置补记形态（军规行后有 PR 补记节——w-linkquality 先例）→末个合规行锚命中
       f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3A2：补记形态卡", status: "claimed" });
       attachR3("W-CLR2R3A2", "d-r3a2");
@@ -236,6 +248,16 @@ async function main() {
       ok(cardOf("d-r3b")?.status === "submitted", `R3-C1 回执迟写补齐→90s 复查补翻 submitted（实 ${cardOf("d-r3b")?.status}——遗留项「回调翻卡未接」接上）`);
       const auditC = (() => { try { return readFileSync(join(f.DATA, "chain-audit.jsonl"), "utf-8"); } catch { return ""; } })();
       ok(auditC.includes("cardlife-receipt-late"), "R3-C2 补翻审计在（cardlife-receipt-late）");
+      // R4-A（A 审 P2-A）rgate 告警解除双向闭环：补翻回调换独立键 receipt-gate-（出现）
+      // +旧 rgate- 同键卡 transitionNotifications resolved（消除）——原同键重投被
+      // upsertNotification 非 dispatch kind 静默 return=「已补齐」永不出现（A 审实锤）。
+      type NoteRow = { key: string; resolved_at?: number };
+      const emptyNotes: { notifications: NoteRow[] } = { notifications: [] };
+      const noteAccount: { notifications: NoteRow[] } = (() => { try { return JSON.parse(readFileSync(join(f.DATA, "notifications.json"), "utf-8")) as { notifications: NoteRow[] }; } catch { return emptyNotes; } })();
+      const newCard = noteAccount.notifications.find((n) => n.key.includes("receipt-gate-d-r3b"));
+      const oldCard = noteAccount.notifications.find((n) => n.key.includes("rgate-d-r3b") && !n.key.includes("receipt-gate"));
+      ok(!!newCard, `R4-A1 补翻后「已补齐」卡出现（独立键 receipt-gate- 在场——原同键静默 return 根除）`);
+      ok(!!oldCard?.resolved_at, `R4-A2 旧「卡已拦」卡 resolved 消除（resolved_at 在场——告警解除双向闭环）`);
       // R3-D note 拼接：前代卡带旧打回 note→同链闭链不洗
       f.mgr.orgAction("board", { op: "upsert", gid, text: "W-CLR2R3D：带痕前代", status: "claimed" });
       attachR3("W-CLR2R3D", "d-r3d0");
