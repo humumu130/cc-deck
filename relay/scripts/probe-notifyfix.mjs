@@ -98,6 +98,11 @@ await wait(900);
 // 展开历史动态组：stale 行落折叠组（observe3 健康态默认折叠）——组头空白区点击 toggle
 await ev(`document.querySelector('.ngrp[data-notify-grp="n"]')?.click()`);
 await wait(600);
+// W-NOTIFYPOLISH-R1：展开全部聚合簇再计数（双保险——C2/C4/C6 按行计数语义恒真：
+// P1-2 后 stale 行豁免聚合本就逐行在场，活跃同题簇若折叠会让按行 DOM 计数漏项；
+// 先展开再计数，断言语义零改）
+await ev(`[...document.querySelectorAll('[data-notify-agg-toggle]')].forEach(b => b.click())`);
+await wait(600);
 const badge = await ev(`document.querySelector('.rail-btn[data-domain="notify"] [data-notify-badge]')?.textContent || document.querySelector('[data-notify-badge]')?.textContent || "?"`);
 const staleChips = await ev(`document.querySelectorAll('.nrow .stale-chip').length`);
 const staleTitles = await ev(`[...document.querySelectorAll('.nrow')].filter(r => r.querySelector('.stale-chip')).map(r => (r.querySelector('b')||{}).textContent?.slice(0, 26) || '?').slice(0, 8).join('｜')`);

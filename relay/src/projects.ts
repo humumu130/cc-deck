@@ -822,7 +822,7 @@ export function addMember(
   dir?: string,
   // P0 编制上限：缺省启闸（新席位受 headcountCapOf 管）；已在编席位走更新分支不触闸。
   // 复用/改档路径（dispatchWorker 复用、member-add 复拉已在编熟手）天然不受影响
-  opts?: { enforceCap?: boolean },
+  opts?: { enforceCap?: boolean; explicitRole?: boolean }, // R2 P1-5：显式改岗口令（member-add 用户口）；派单入编缺省=不覆盖既有标注
 ): TransitionResult  {
   // #292-B3 B-P2：selectionOrDir 的 string 形态=Inner 实写目录（dataDir）——锁目录
   // 与写目录对齐（否则锁错库=互斥失效）
@@ -837,7 +837,7 @@ function addMemberInner(
   dir?: string,
   // P0 编制上限：缺省启闸（新席位受 headcountCapOf 管）；已在编席位走更新分支不触闸。
   // 复用/改档路径（dispatchWorker 复用、member-add 复拉已在编熟手）天然不受影响
-  opts?: { enforceCap?: boolean },
+  opts?: { enforceCap?: boolean; explicitRole?: boolean }, // R2 P1-5：口令透传 Inner
 ): TransitionResult {
   const selection = typeof selectionOrDir === "string" ? undefined : selectionOrDir;
   const dataDir = typeof selectionOrDir === "string" ? selectionOrDir : dir;
@@ -856,7 +856,17 @@ function addMemberInner(
     g.updated_at = Date.now();
     if (!saveGroup(g, dataDir)) return { ok: false, error: "索引写入失败" };
   } else if (selection || current.role !== role) {
-    current.role = role;
+    // W-REVIEWSEAT-R2 P1-5（R1 验收实锤击穿）：dispatchWorker 每笔 gid 派单以缺省
+    // role="worker" 重入编——member-add 显式设的 reviewer/watchdog 等岗位标注被首笔
+    // 派单覆盖（selection 恒真分支 role 必写）。修：显式名册 role（opts.role 显式传）
+    // 才允许改写；派单入编（role 缺省透传 worker）不再覆盖既有标注——「缺省写入仅在
+    // 名册无 role 时」。护栏：从 worker 升格显式 role（reviewer→pm 等主动改岗）仍走
+    // 显式口（opts.role 在场即写）。
+    if (role && current.role && role !== current.role && !opts?.explicitRole) {
+      // 派单缺省透传撞既有显式标注：跳过 role 改写（其余 selection 字段照常刷新）
+    } else {
+      current.role = role;
+    }
     if (selection?.nick !== undefined) { if (selection.nick) current.nick = selection.nick; else delete current.nick; } // 空串=清除别名
     if (selection?.engine !== undefined) current.engine = selection.engine;
     if (selection?.model !== undefined) current.model = selection.model;

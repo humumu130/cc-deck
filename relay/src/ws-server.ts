@@ -27,7 +27,8 @@ import { listModels } from "./models.js";
 import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
 import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
 import { subFanTarget } from "./subfanout.js"; // W-SUBFANOUT：订阅直通判定单点（架构升级期一①）
-import { harvestCheck } from "./harvest.js"; // W-CMDIMPL ①：收割机器闸
+import { harvestCheck } from "./harvest.js";
+import { reviewSeatSnapshotPayload } from "./review-seat.js"; // W-REVIEWSEAT：SNAPSHOT.review_seat 数据源 // W-CMDIMPL ①：收割机器闸
 import { ReleaseModule } from "./release.js"; // W-CMDIMPL ③：发版编排
 import { listExperience } from "./experience.js"; // W-EXPP2：SNAPSHOT.experience 锚定帧数据源
 import { listRules } from "./team-rules.js"; // W-RULES2：SNAPSHOT.rules 锚定帧数据源
@@ -1180,6 +1181,9 @@ export function startServer(
             // 的 HTTP/WS 面）——hold=流程扣留位写面（PM 工具/通知一键破锁），非决议类
             //（无确认卡语义；破锁动作有 hold-release 审计帧全链可查）。
             "board-hold", "board-release",
+            // W-REVIEWSEAT（1105 用户拍板）：评审池配置读写面（get=设置页数据源含模型
+            // 分布；set=动态调整热生效——非决议类，配置语义同 rules 直写档）
+            "review-seat-get", "review-seat-set",
             // W-PRREVIEW（期一④ PR 互审，1104 拍板）：review-route=互审员路由**只读查询**
             //（零派发零台账，同 chain 信任级）；review-ledger=PR 审查期台账段行写面
             //（leader-harvest PM 工具调用，log-append 同级审计行——非决议类：审查/收割
@@ -1465,7 +1469,9 @@ export function startServer(
           schema_version: SNAPSHOT_SCHEMA_VERSION,
           // bootfast2（移交§三）：boot 相位——listen 先起后数据渐进加载期端上可感
           //（「已连接，数据加载中」替代「relay 未启动」空屏）；loaded=当前会话数
-          boot: { phase: mgr.bootDataReady ? ("ready" as const) : ("loading" as const), loaded: ((globalThis as any).__bootSnapSessions as unknown[] | undefined)?.length ?? 0 }, // P2-1：复用上 sessions 数组（snapshot() 全量 clone 成本×2 根除）
+          boot: { phase: mgr.bootDataReady ? ("ready" as const) : ("loading" as const), loaded: ((globalThis as any).__bootSnapSessions as unknown[] | undefined)?.length ?? 0 },
+          // W-REVIEWSEAT：评审池配置+池现状随 SNAPSHOT（设置页首屏数据源；REVIEW_SEAT_UPDATED 增量）
+          review_seat: reviewSeatSnapshotPayload(), // P2-1：复用上 sessions 数组（snapshot() 全量 clone 成本×2 根除）
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）

@@ -27,6 +27,10 @@ export interface RoutingEntry {
   last_ts: number;
   /** 最近一次回执摘要（≤80 字，leader 评鉴参考） */
   last_receipt?: string;
+  /** W-REVIEWSEAT-R1 P1-5：末次派单角色（"reviewer"=评审单收口所写——pickVeteranEligible
+   * 据此排除评审席防实施单落席；普通实施单缺省不写）。历史维角色兜底：运行态
+   * isReviewerSeat 查不到的转岗/池席跨组场景由本字段拦 */
+  role?: string;
   /** Leader 评价（手动，org rate）：bad = 下次派单避开 */
   rating?: "good" | "bad";
   /** 技能标签（手动，org tag；整组替换） */
@@ -74,6 +78,11 @@ export function recordRoutingResult(
   status: "done" | "failed",
   receipt?: string,
   dir?: string,
+  // W-REVIEWSEAT-R1 P1-5 角色维（评审单收口带 "reviewer"）。**尾插位**（R3 CI 实锤）：
+  // dev 侧调用（test-routing/test-projects 及 closeOpenDispatches）以位置参数传 dir
+  //（第 5 位）——role 插在 dir 前会让 dir 落进 role、账写错目录（CI test:routing/
+  // test:projects 三红根因）。新增参数一律尾插，不动既有位置约定。
+  role?: string,
 ): RoutingEntry | null {
   if (!gid || !sessionId) return null;
   const s = load(dir);
@@ -85,6 +94,7 @@ export function recordRoutingResult(
   if (status === "done") e.count++;
   else e.failed++;
   e.last_ts = Date.now();
+  if (role) e.role = role; // W-REVIEWSEAT-R1 P1-5：角色维（评审单收口带 reviewer——pickVeteran 排除依据）
   const r = (receipt ?? "").trim();
   if (r) e.last_receipt = r.length > 80 ? r.slice(0, 80) : r;
   save(s, dir);
