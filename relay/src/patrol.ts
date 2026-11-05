@@ -14,10 +14,11 @@
 import { statfsSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { statSync } from "node:fs";
+import { execFileSync } from "node:child_process"; // W-BOARDRECON-R3：dev log 证据子进程（10min 缓存）
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
-import { reconcileBoardCards } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）
-import { readDispatchLog, orgDir } from "./org.js";
+import { reconcileBoardCards, harvestKeyOf } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）；R3 harvestKeyOf（已收割未翻判定）
+import { readDispatchLog, orgDir, dispatchLogPath } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
 import type { SessionManager } from "./session-manager.js";
@@ -56,6 +57,8 @@ export class PatrolModule {
   private lightTimer: NodeJS.Timeout | null = null;
   /** R1-P0 两拍确认跨拍状态：上拍孤儿候选集（entryId） */
   private reconFlagged = new Set<string>();
+  /** W-BOARDRECON-R3：dev git log 证据缓存（slug 文本+时刻——10min TTL，对账低频子进程一次取回） */
+  private reconDevLogCache = { text: "", at: 0 };
   /** R1-P2-1 审计/告警签名去重（同判定不重发） */
   private reconLastSig = "";
   private reconLastMismatch = "";
@@ -323,8 +326,64 @@ export class PatrolModule {
       }
       const sessions = this.mgr.snapshot().map((x) => ({ session_id: x.session_id, done_reason: x.done_reason ?? null, status: x.status, cli_pid: x.cli_pid ?? null, last_active_at: x.updated_at ?? 0 }));
       const dispatchLog = readDispatchLog(undefined, 20_000); // R1-P2-4：台账窗 20k（converge 教训）
+      // W-BOARDRECON-R3：收割证据三源构建（已收割未翻判定）——①台账 done+receipt 聚合
+      // ②dev git log（子进程一次取回 10min 缓存——对账低频可接受）③回执文件尾行合规扫描
+      // （artifacts/w-*.md 含「结果：…｜改动文件：」即合规，slug 键与卡/台账统一）。
+      const harvest = ((): Parameters<typeof reconcileBoardCards>[0]["harvest"] => {
+        const doneLedger = new Map<string, { count: number; hasReceipt: boolean }>();
+        // R1-P2-1（A 审）：台账 done 终态行不带 title（appendDispatch 只在 dispatched 首行
+        // 写——readDispatchLog 同 id 收敛取末行即丢；生产 1840 条仅 2 条带）→ 证据①恒死。
+        // 修=ndjson 原始行两段聚合（chainrecall R1 同款直读）：按 id 聚「任意行提 title+
+        // 末行判 done+任意行 receipt」，再按 slug 键聚合 count/hasReceipt。
+        const byId = new Map<string, { title?: string; done: boolean; hasReceipt: boolean }>();
+        try {
+          for (const line of readFileSync(dispatchLogPath(), "utf-8").split("\n")) {
+            const t = line.trim();
+            if (!t) continue;
+            try {
+              const r = JSON.parse(t) as { id?: string; title?: string; status?: string; receipt?: string };
+              if (typeof r.id !== "string" || !r.id) continue;
+              const cur = byId.get(r.id);
+              byId.set(r.id, {
+                title: r.title || cur?.title, // 首行（dispatched）title 保住——终态行不带
+                done: r.status === "done" || (cur?.done ?? false), // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done）
+                hasReceipt: !!r.receipt || (cur?.hasReceipt ?? false),
+              });
+            } catch { /* 损坏行跳过 */ }
+          }
+        } catch { /* 台账不可读：证据①缺席（②仍可用——R1-P1-1 后①本就是弱证） */ }
+        for (const { title, done, hasReceipt } of byId.values()) {
+          if (!done || !title) continue;
+          const key = harvestKeyOf(title);
+          if (!key) continue;
+          const cur = doneLedger.get(key);
+          doneLedger.set(key, { count: (cur?.count ?? 0) + 1, hasReceipt: (cur?.hasReceipt ?? false) || hasReceipt });
+        }
+        if (Date.now() - this.reconDevLogCache.at > 10 * 60_000) {
+          try {
+            const anchor = listGroups().find((g) => g.status === "active")?.anchor_dir;
+            if (anchor) {
+              this.reconDevLogCache.text = execFileSync("git", ["-C", anchor, "log", "--oneline", "-400"], { encoding: "utf-8", timeout: 10_000 }).toLowerCase();
+              this.reconDevLogCache.at = Date.now();
+            }
+          } catch { /* git 不可达=证据②缺席（①③仍可用） */ }
+        }
+        const receiptSlugs = new Set<string>();
+        try {
+          const artDir = process.env.CCR_ARTIFACTS_DIR ?? join(homedir(), ".cc-deck", "artifacts");
+          for (const f of readdirSync(artDir)) {
+            const m = f.match(/^w-[a-z0-9][a-z0-9-]{1,40}\.md$/i);
+            if (!m) continue;
+            try {
+              const tail = readFileSync(join(artDir, f), "utf-8").slice(-400);
+              if (tail.includes("结果：") && tail.includes("改动文件：")) receiptSlugs.add(m[0].replace(/\.md$/i, "").toLowerCase());
+            } catch { /* 单文件读失败跳过 */ }
+          }
+        } catch { /* artifacts 目录不可读=证据③缺席 */ }
+        return { doneLedger, devLogText: this.reconDevLogCache.text, receiptSlugs };
+      })();
       const flagNow = new Set<string>();
-      const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow });
+      const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow, harvest });
       this.reconFlagged = flagNow; // 两拍确认跨拍状态推进（候选标记→下拍复核）
       const sig = r.actions.map((a) => a.entryId + a.reason).sort().join("|") + (r.mismatch ?? "");
       if (r.actions.length && sig !== this.reconLastSig) { // R1-P2-1 审计签名去重
@@ -333,16 +392,24 @@ export class PatrolModule {
         this.mgr.emitChainAudit("board-recon", `三方对账（${mode}）：${r.actions.length} 张判定——${lines2.join("；").slice(0, 400)}`);
         if (mode === "auto") {
           let moved = 0;
+          let flipped = 0;
           for (const a of r.actions) {
-            if (a.advisory) continue; // R1-P1-1：owner 活跃（长任务静默）只提醒不搬
+            if (a.advisory) continue; // R1-P1-1：owner 活跃（长任务静默）只提醒不搬；R3 多义降告警同面
             const b = boards.find((x) => x.gid === a.gid)?.board;
             const e = b?.entries.find((x) => x.id === a.entryId);
+            // W-BOARDRECON-R3：已收割未翻——submitted→done（journal action 定制=审计行
+            // 可检索 boardrecon-auto-done；note 记证据依据——三证任一 Chain closure）
+            if (a.toDone && e && e.status === "submitted") {
+              const up = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "done", note: `[boardrecon auto ${new Date().toLocaleDateString("zh-CN")}] 已收割未翻自动收口：${a.detail}`, journal_action: "boardrecon-auto-done" });
+              if (up.ok) flipped++;
+              continue;
+            }
             if (e && e.status === "claimed") {
               const up = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${new Date().toLocaleDateString("zh-CN")}] ${a.reason} 归位可重派：${a.detail}` });
               if (up.ok) moved++; // R1-P2-3：核返回——拒写不计数
             }
           }
-          this.push("board-recon", `三方对账（auto）：${moved} 张孤儿卡归位（advisory ${r.actions.filter((a) => a.advisory).length} 条 owner 活跃仅提醒）`);
+          this.push("board-recon", `三方对账（auto）：${moved} 张孤儿卡归位 + ${flipped} 张已收割未翻收口（advisory ${r.actions.filter((a) => a.advisory).length} 条仅提醒）`);
         } else {
           this.wouldDo("boardrecon", "归位孤儿卡", `${r.actions.filter((a) => !a.advisory).length} 张候选（两拍确认+旁证聚合后）——干跑不执行`);
           this.push("board-recon", `三方对账（observe）：${r.actions.length} 张判定（孤儿候选/滞留提醒）——清单在审计流，PM 过目后 config autoBoardrecon=auto 生效`);

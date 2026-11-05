@@ -1186,6 +1186,9 @@ export type UpsertBoardEntryInput = {
    * （orgAction pr-report 单口）。 */
   pr_url?: string | null;
   pr_state?: string | null;
+  /** W-BOARDRECON-R3：journal action 定制口（缺省 update/create 照旧——boardrecon
+   * auto 翻 done 传 "boardrecon-auto-done" 使审计行可检索证据依据） */
+  journal_action?: string;
 };
 export function upsertBoardEntry(
   gid: string,
@@ -1292,7 +1295,7 @@ function upsertBoardEntryInner(
   // W-CMDIMPL T0b：reducer 写严格——板卡 schema 校验拒写（建/改共用此口）
   const chk = applyOrgChange("board-entry", e);
   if (!chk.ok) return { ok: false, error: chk.error };
-  if (!saveBoardFile(w.board, dir, { action: jPrev ? "update" : "create", entry_id: e.id, ...(jPrev ? { prev: jPrev } : {}), next: sideOf(e) })) return { ok: false, error: "板写入失败" };
+  if (!saveBoardFile(w.board, dir, { action: entry.journal_action ?? (jPrev ? "update" : "create"), entry_id: e.id, ...(jPrev ? { prev: jPrev } : {}), next: sideOf(e) })) return { ok: false, error: "板写入失败" };
   return { ok: true, entry: e };
 }
 
