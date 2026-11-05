@@ -3577,6 +3577,12 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       window.__ccDeck005SourceState = () => ({ view: viewSource(), shellCloud: !!shellCloud, cloudMode: !!cloudMode,
         cloudWsUrl: String(cloudCtx.cfg.wsUrl || ""), cloudStatus: cloudCtx.status, cloudRelayName: String(cloudCtx.relayName || ""),
         cloudPaired: !!(cloudCtx.cfg.cloud && cloudCtx.cfg.cloud.paired), cloudSessions: cloudCtx.sessions.size,
+        // W-ENGINESOURCE（1105 用户实锤）：云源 engine_catalog 只读口——「创建到」选远程时
+        // 新建弹引擎下拉按源取数（本机视角下不能再沿用本机探测结果串台）。数据面=
+        // #236 B 双槽 lastSnapshotPayload（云 SNAPSHOT 完整 payload，各 relay 探测自己
+        // 宿主机的目录在此）；cloudHasSnapshot 供端上区分「获取中/旧 relay 无目录」占位态
+        cloudEngineCatalog: (() => { const caps = cloudCtx.lastSnapshotPayload && cloudCtx.lastSnapshotPayload.source_capabilities; return caps && Array.isArray(caps.engine_catalog) ? caps.engine_catalog : null; })(),
+        cloudHasSnapshot: !!cloudCtx.hasSnapshot,
         lanStatus: String(ctx.status || ""), lanSessions: ctx.sessions.size,
         lanRelayName: String(ctx.relayName || ""), // #110：B2 域建卡打源标读点（跨 script 块不可直引 ctx；S.relayName 会被后到云快照覆写，LAN 名必须取链上真值）
         lanWsReady: !!(ctx.ws && ctx.ws.readyState === 1), lanWsUrl: String(ctx.cfg.wsUrl || "") });

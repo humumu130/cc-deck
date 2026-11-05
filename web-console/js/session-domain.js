@@ -93,7 +93,7 @@
                   status: "offline",
                   hasSnapshot: false, relayName: location.host, homedir: "", platform: "",
                   sessions: new Map(), timelines: new Map(), logsTruncated: new Map(),
-                  engineCatalog: null, models: [], projects: [],
+                  engineCatalog: null, models: [], projects: [], createSource: "local", // W-ENGINESOURCE：新建弹「创建到」所选源（local|cloud），引擎目录随之切换
                   collabMode: undefined, // W-MODE：SNAPSHOT.collab_mode（undefined=旧 relay 不渲染开关；"leader"|"no-leader"）
                   leaderSessionId: "", // #240 W-LEADERHIDE：SNAPSHOT.leader_session_id（组织锚 Leader 会话 id，空串=无锚/旧 relay）——列表滤 Leader 卡用
                   leaderSessionIds: new Set(), // UI 反馈批 1029 件B：全源 Leader 锚 id 并集（源→id 记账见 S._leaderIdBySource）——单值 leaderSessionId 在聚合视角被双源快照互相覆写（后到者赢），远程源 Leader 卡漏滤=「公司电脑源 leader 会话卡删不掉」的根因；过滤改并集判
@@ -4250,7 +4250,25 @@
                 }
 
                 // ---------- 「+」新建：#75 引擎选择菜单 ----------
+                // W-ENGINESOURCE（1105 用户实锤）：引擎目录**按「创建到」所选源取数**——选远程时
+                // 读云源快照的 engine_catalog（各 relay 探测自己宿主机），本机视角下不再沿用
+                // 本机探测结果串台（公司电脑连本机、创建到远程·mac，下拉曾全显本机「未安装」
+                // 而远程 Mac 实装 Codex/CodeBuddy）。S.createSource 由新建弹「创建到」select 维护。
+                function createSourceNow() { return S.createSource === "cloud" ? "cloud" : "local"; }
+                function catalogSourceUnknown() {
+                  // 云源被选但其目录不可得：在线未及快照（获取中）/旧 relay 无目录（不支持）/
+                  // 离线——占位「该源引擎状态获取中/不可用」，绝不用本机数据冒充
+                  if (createSourceNow() !== "cloud") return false;
+                  const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                  return !(st && st.cloudEngineCatalog && st.cloudEngineCatalog.length);
+                }
                 function catalogEntries() {
+                  if (createSourceNow() === "cloud") {
+                    const st = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    const cat = st ? st.cloudEngineCatalog : null;
+                    if (cat && cat.length) return cat;
+                    return []; // 占位空集——胶囊/菜单走 catalogSourceUnknown 文案，不回落本机
+                  }
                   if (S.engineCatalog && S.engineCatalog.length) return S.engineCatalog;
                   return [{ id: "claude", label: "Claude", state: "ready", preflight: { state: "pass", reason: "" }, models: S.models }];
                 }
@@ -4266,8 +4284,21 @@
                   if (e.state === "unsupported" || /枚举占位/.test(raw)) return "即将支持 · 当前版本暂不可用";
                   if (/未配置 CLI 命令/.test(raw)) return "未配置 · 请在源端补全引擎命令";
                   if (/provider|密钥|base ?URL/i.test(raw)) return "配置未完成 · " + raw;
-                  return "未安装 · 需先安装 " + label + " CLI";
+                  // W-ENGINESOURCE 顺带①：unavailable 补安装指引（有核实命令的给一行命令，
+                  // 没有的给官网占位——不编造命令）；「该源」口径：目录按创建到源取数后，
+                  // 指引也要落在源端执行（远程源的 CLI 装在远程机器上）
+                  const srcNote = createSourceNow() === "cloud" ? "（在所选源机器上执行）" : "";
+                  const hint = (typeof INSTALL_HINT !== "undefined" && INSTALL_HINT[e.id]) || "";
+                  return "未安装 · 需先安装 " + label + " CLI" + (hint ? " · " + hint + srcNote : "");
                 }
+                // W-ENGINESOURCE 顺带①：安装指引表——只列核实过的官方命令（codex/codebuddy
+                // 命令经 PM 在远程 Mac 实证；trae/qwen 不确定的只给官网占位，绝不编造命令）
+                const INSTALL_HINT = {
+                  codex: "npm i -g @openai/codex",
+                  codebuddy: "npm i -g @tencent-ai/codebuddy-code",
+                  trae: "安装指引见官网 trae.cn",
+                  "qwen-code": "安装指引见官网 qwen.ai",
+                };
                 // UI 反馈批 1029 件C：不可用行的悬停原文（运维口径不上面板但可查）
                 function engineStateHint(e) {
                   if (e.state === "ready") return "";
@@ -4339,9 +4370,10 @@
                     if (st && st.cloudPaired && st.cloudStatus === "online") {
                       const lanName = String(S.relayName || location.host || "本机");
                       const cloudName = String(st.cloudRelayName || st.cloudWsUrl || "远程源");
+                      // W-ENGINESOURCE：select 渲染 S.createSource 态（切源重绘后不回跳默认）
                       html += '<div class="create-label">创建到</div><select class="create-field" data-create-field="source" aria-label="目标源">'
-                        + '<option value="local">本机 · ' + esc(lanName) + "</option>"
-                        + '<option value="cloud">远程 · ' + esc(cloudName) + "</option>"
+                        + '<option value="local"' + (createSourceNow() === "local" ? " selected" : "") + '>本机 · ' + esc(lanName) + "</option>"
+                        + '<option value="cloud"' + (createSourceNow() === "cloud" ? " selected" : "") + '>远程 · ' + esc(cloudName) + "</option>"
                         + "</select>";
                     }
                   }
@@ -4351,13 +4383,24 @@
                     // W-PORT-A R-7：auto 档（跟随源默认）——选中态收起胶囊显「自动」，与手机 75-E
                     // 「auto=不发 engine，relay 按 role/源默认」同口径；显式选引擎维持件九形态
                     const isAuto = chosen === "auto";
-                    const entry = isAuto ? null : (catalogEntries().find((e) => e.id === chosen) || catalogEntries()[0] || null);
+                    const entries = catalogEntries();
+                    const srcUnknown = catalogSourceUnknown();
+                    const entry = isAuto || srcUnknown ? null : (entries.find((e) => e.id === chosen) || entries[0] || null);
                     const meta = entry ? (ENGINES[entry.id] || [entry.label || entry.id, ""]) : ["自动", "claude"];
-                    const readyCount = catalogEntries().filter((e) => e.state === "ready").length;
+                    const readyCount = entries.filter((e) => e.state === "ready").length;
+                    // W-ENGINESOURCE：所选源目录不可得=占位文案（获取中/不可用），绝不显示
+                    // 本机数据冒充远程（本机「未安装 4」与远程实装 3 的串台正是用户实锤形态）
+                    if (srcUnknown) {
+                      const stx = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                      const online = stx && stx.cloudStatus === "online";
+                      html += '<div class="create-label">引擎</div>'
+                        + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot na"></span><span class="engine-badge">远程</span><span class="ep-meta">' + (online ? "远程源引擎状态获取中…" : "远程源不可用，引擎状态未知") + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                    } else {
                     // #102 批 A：胶囊状态点三色——绿 ready / 黄 needs_auth（未登录）/ 灰 其余不可用
                     const dotCls = !isAuto && entry ? (entry.state === "needs_auth" ? " warn" : entry.state !== "ready" ? " na" : "") : "";
                     html += '<div class="create-label">引擎</div>'
                       + '<button type="button" class="engine-picker" data-engine-trigger aria-haspopup="menu" aria-expanded="false"><span class="ep-dot' + dotCls + '"></span><span class="engine-badge ' + (isAuto ? "auto" : meta[1]) + '">' + engineBadgeInner(isAuto ? "" : meta[1], isAuto ? "自动" : meta[0]) + '</span><span class="ep-meta">' + esc(isAuto ? "跟随源默认 · " + readyCount + " 个引擎可用" : (entry ? engineStateText(entry) : "无引擎数据") + (readyCount > 1 ? ' · 另 ' + (readyCount - 1) + ' 个可用' : "")) + '</span><svg class="cap-chev" aria-hidden="true"><use href="#icon-chev-down"></use></svg></button>';
+                    } // W-ENGINESOURCE：else（非占位态）块尾
                   }
                   html += '<div class="create-label">模型</div><select class="create-field" data-create-field="model" aria-label="模型（缺省用引擎默认）"' + (createModelsFor(chosen).length ? "" : " disabled aria-disabled=\"true\"") + "><option value=\"\">默认模型</option>"
                     + (() => { // FB15：上次用的模型在同清单内则预选
@@ -4422,6 +4465,19 @@
                   pop.addEventListener("keydown", (ev) => {
                     if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.createField) { ev.preventDefault(); submitCreate(); }
                   });
+                  // W-ENGINESOURCE：切「创建到」=切引擎目录数据源——重绘弹体（引擎/模型区随
+                  // catalogEntries 源感知联动；事件委托挂 pop 容器层，重绘零丢监听），已输的
+                  // 指令/目录先落草稿再回填（切源不清用户输入——#236 A 草稿桶同族口径）
+                  pop.addEventListener("change", (ev) => {
+                    const sel = ev.target.closest("[data-create-field='source']");
+                    if (!sel) return;
+                    S.createSource = sel.value === "cloud" ? "cloud" : "local";
+                    const keep = {};
+                    for (const k of ["prompt", "cwd"]) { const el = pop.querySelector("[data-create-field='" + k + "']"); if (el) keep[k] = el.value; }
+                    closeEngineMenu(); // 旧源引擎菜单开着则收（菜单按新源重开才真话）
+                    pop.innerHTML = buildCreateHtml();
+                    for (const [k, v] of Object.entries(keep)) { const el = pop.querySelector("[data-create-field='" + k + "']"); if (el) el.value = v; }
+                  });
                   document.body.append(back, pop);
                   const prompt = pop.querySelector("[data-create-field='prompt']");
                   if (prompt) prompt.focus();
@@ -4473,6 +4529,13 @@
                   const na = catalogEntries().filter((e) => e.state !== "ready" && e.state !== "needs_auth");
                   const needsAuth = catalogEntries().filter((e) => e.state === "needs_auth");
                   let html = "";
+                  // W-ENGINESOURCE：所选源目录不可得=空态行（获取中/不可用占位——云源选定时
+                  // 菜单不再列本机引擎冒充远程真相）
+                  if (catalogSourceUnknown()) {
+                    const stx = (window.__ccDeck005SourceState && window.__ccDeck005SourceState()) || null;
+                    const online = stx && stx.cloudStatus === "online";
+                    html += '<div class="source-option" aria-disabled="true"><span class="ep-dot na"></span><span class="so-copy"><strong>远程源引擎状态' + (online ? "获取中" : "不可用") + '</strong><small>' + (online ? "云源快照尚未携带引擎目录（旧版 relay 或首帧在途）" : "远程源离线，连上后自动获取") + "</small></span></div>";
+                  }
                   // 件C（rebase 合并版）：两行式 so-copy（分支 1029）+ ✓ 角标与徽章单口（dev 演进）；
                   // auto 行去冗余（徽章「自动」+标题不重复；副题清开发术语，W-PORT-A 岗位措辞）
                   const check = '<span class="opt-check" aria-hidden="true">✓</span>';
