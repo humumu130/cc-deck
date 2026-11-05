@@ -4,6 +4,9 @@
 //   node scripts/version.mjs --check    任一处与 VERSION 不一致 → 非零退出（pre-commit 钩子用）
 //   node scripts/version.mjs --write    把 VERSION 的值写入全部落点
 // 事实源：仓库根 VERSION 文件（单行 semver，如 0.3.26）。发版只改这里 + 跑 --write。
+// 撞顶自动升段（2026-11-05 用户拍板，W-VERSIONLIFT）：VERSION 写 -test.N/-snap.N 且
+// N>99 时不再拒收——自动 patch+1、序号重置 1 并回写 VERSION（0.7.0-test.100 →
+// 0.7.1-test.1），任一模式（含 --check）生效、幂等；N≤99 原路径零变化。
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(join(root, p), "utf8");
 const write = (p, s) => writeFileSync(join(root, p), s);
 
-const canonical = read("VERSION").trim();
+let canonical = read("VERSION").trim(); // let：预发序号撞顶时自动升段重写（见下方推导段升板块）
 // 三段主干 + 可选预发段（2026-10-07 ⑥d）：0.7.0 起 test 通道版本（-test.N）也走
 // 单一事实源出包；四段号（0.4.18.1）依旧禁止——Tauri/npm 不兼容，2026-09-11 废止
 if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(canonical)) {
@@ -27,22 +30,39 @@ if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(canonical)) {
 // --write 自动得值、--check 可精确校验，遗忘类事故根除：
 //   base = major*1e6 + minor*1e4 + patch*100（minor/patch 各留两位槽）
 //   预发（-test.N/-snap.N）再减 (100-N)：同版本 test 包排在正式版之下
-//   （0.7.0-test.99=69999 < 0.7.0=70000，test 用户可升正式版；N 限两位）
+//   （0.7.0-test.99=69999 < 0.7.0=70000，test 用户可升正式版；N 限两位，撞顶
+//   N>99 自动升段而非拒收——不能放宽槽位，见下方升板块算例）
 // 值域对照：0.6.3=60300（历史已发 104，新值只需后续 >104）、0.7.0-test.10=69910、
 // 0.7.0=70000、0.7.1=70100——对 104/101 均严格递增
-const vc = /^(\d+)\.(\d+)\.(\d+)(?:-(test|snap)\.(\d+))?$/.exec(canonical);
+const vcRe = /^(\d+)\.(\d+)\.(\d+)(?:-(test|snap)\.(\d+))?$/;
+let vc = vcRe.exec(canonical);
 if (!vc) {
   console.error(`VERSION 预发段只认 -test.N/-snap.N 两位数（versionCode 推导需要）：${canonical}`);
   process.exit(1);
 }
-const [, vcMaj, vcMin, vcPat, vcPre, vcPreN] = vc;
+let [, vcMaj, vcMin, vcPat, vcPre, vcPreN] = vc;
 if (Number(vcMin) > 99 || Number(vcPat) > 99) {
   console.error(`VERSION minor/patch 超两位槽（${vcMin}.${vcPat}）：versionCode 推导会跨槽串位，请换新 major`);
   process.exit(1);
 }
+// 撞顶自动升段（2026-11-05 用户拍板，W-VERSIONLIFT）：预发序号 N>99 不再拒收退出，
+// 自动升段——patch+1（patch=99 时 minor+1、patch 归 0；minor=99 同理进 major，两位
+// 槽理由同上）、序号重置 1，并回写 VERSION 使事实源与输出一致。任一模式（含 --check）
+// 均生效且幂等：升段后 N=1，再跑不再触发；N≤99 与正式版路径零变化。
+// 为什么是升段而不是放宽槽位到三位数：test 槽借的是「正式版之下 100 格」的补丁段
+// 空间，宽到 1000 格会吃掉低版本历史段——宽槽下 0.7.0-test.900 = 70000-(1000-900)
+// = 69900 恰是 0.6.99 正式版的 versionCode，仍然撞号；升段是唯一保持推导确定性、
+// 不与任何历史段冲突的改法。先例：0.7.0-test.99 → 0.7.1-test.1 人肉升段
+// （dev cf1fd078），本块把该决策自动化。
 if (vcPre && Number(vcPreN) > 99) {
-  console.error(`VERSION 预发序号超两位（${vcPre}.${vcPreN}）：versionCode 推导只容 N≤99（否则与正式版撞号），请发新版本号`);
-  process.exit(1);
+  let maj = Number(vcMaj), min = Number(vcMin), pat = Number(vcPat) + 1;
+  if (pat > 99) { min += 1; pat = 0; }
+  if (min > 99) { maj += 1; min = 0; }
+  canonical = `${maj}.${min}.${pat}-${vcPre}.1`;
+  console.error(`⚠ ${vc[0]} 预发序号撞顶（N>99）→ 自动升段 ${canonical}（序号重置 1；槽位不能放宽——宽槽会吃低版本历史段撞号，算例见上方注释）；VERSION 已回写，各落点以升段后为准`);
+  write("VERSION", `${canonical}\n`);
+  vc = vcRe.exec(canonical);
+  [, vcMaj, vcMin, vcPat, vcPre, vcPreN] = vc;
 }
 const versionCode = Number(vcMaj) * 1e6 + Number(vcMin) * 1e4 + Number(vcPat) * 100 - (vcPre ? 100 - Number(vcPreN) : 0);
 
