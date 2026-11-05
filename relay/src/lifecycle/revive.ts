@@ -396,6 +396,8 @@ export interface PmKeepaliveParams {
   resumeCooldownUntil?: number;  // W-LEADFIX 熔断冷却期不拉
   now: number;
   idleStreak: number;            // 连续「拉起后无任何回合活动即退出」计数（防死循环闸）
+  /** R1（A-P1-2）：429 退避到期时刻（退避窗内不拉——防拉起即再吃 429） */
+  rateLimitBackoffUntil?: number;
 }
 
 export function pmKeepaliveEligible(p: PmKeepaliveParams): boolean {
@@ -405,6 +407,9 @@ export function pmKeepaliveEligible(p: PmKeepaliveParams): boolean {
   if (!p.isDutyTarget) return false;
   if (p.resumePending) return false;
   if (p.resumeCooldownUntil && p.resumeCooldownUntil > p.now) return false;
+  // R1（A-P1-2）：退避窗内不拉——429 打断流形态（stream closed）恰是 keepalive 目标
+  // 形态，原判据无退避=风暴窗内 duty 会话被反复拉起再吃 429。
+  if (p.rateLimitBackoffUntil && p.rateLimitBackoffUntil > p.now) return false;
   if (p.idleStreak >= PM_KEEPALIVE_MAX_IDLE_STREAK) return false; // 拉起即退死循环闸：连续无活动退出≥2 停拉，等真实消息/回合复位（onTurnEnd 清零）
   return true;
 }
