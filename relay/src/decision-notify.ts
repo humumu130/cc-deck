@@ -114,8 +114,11 @@ export function transitionNotification<T extends NotificationLifecycleItem>(
     if (next.snoozed_until !== undefined) delete next.snoozed_until;
   }
   if (action === "snoozed") {
-    // 仅未终态行可 snooze（终态行无「回箱」语义）；到点毫秒时戳由调用方给
-    if (next.resolved_at === undefined && typeof snoozeUntil === "number" && snoozeUntil > at) next.snoozed_until = snoozeUntil;
+    // 仅未终态行可 snooze（终态行无「回箱」语义）；到点毫秒时戳由调用方给。
+    // R1（A 审 P2-2）：终态挡从「只挡 resolved」扩 handled/dismissed——handled/dismissed
+    // 行 snooze=锚挂在终态行上（投影端按锚隐藏=账面 handled 却「暂时不可见」的矛盾态，
+    // 收口检查漏三态之二的缝隙）。
+    if (next.resolved_at === undefined && next.handled_at === undefined && next.dismissed_at === undefined && typeof snoozeUntil === "number" && snoozeUntil > at) next.snoozed_until = snoozeUntil;
   }
   return next;
 }

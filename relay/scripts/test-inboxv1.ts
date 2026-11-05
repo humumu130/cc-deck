@@ -67,6 +67,35 @@ async function main() {
   assert(js.includes("scheduleSnoozeWake"), "C9 刀1 wake timer（到点自动回箱——最早到期+300ms 一拍重渲）");
   assert(bridge.includes("snoozed_until: item.snoozed_until"), "C10 bridge 归一透传 snoozed_until（端上消费 relay 锚）");
 
+  // ---------- R 组（W-INBOX-V1-R1 返修：mobile 接入 P1+四小刀——A 审） ----------
+  console.log("R 组（R1：mobile 通知面接入+四小刀）:");
+  const mob = readFileSync(join(repoRoot, "web-console/js/mobile.js"), "utf-8");
+  // P1：mobile「稍后」共账消费（过滤+角标不含）
+  assert(mob.includes("snoozeUntilOf") && mob.includes("__ccDeck005SnoozedNotifyKeys"), "R1 mobile 过滤 snoozed（本地 Map+relay 锚取大——桌面稍后手机不显示）");
+  assert(mob.includes("snoozeUntilOf(n) <= nowMs"), "R2 mobile items 过滤生效（稍后中不进列表=角标自然不含）");
+  // P1：active 行去一键蒸发（×退役+双钮）
+  assert(mob.includes("data-mobile-notify-snooze") && mob.includes("到点自动回箱（与桌面共账）"), "R3 mobile active 行「稍后」钮（双钮之二——桌面同语言）");
+  assert(mob.includes("${act ? ``") === false && /\$\{act \? "" : `<button[^>]*data-mobile-notify-dismiss/.test(mob), "R4 mobile × 只留非 active 行（active 行 ✕ 退役——ACK handled 一键蒸发口根除）");
+  assert(mob.includes("action: \"snooze\", snooze_ms: ms"), "R5 mobile 稍后走 relay snooze 锚 ACK（跨端生效——桌面同锚）");
+  // P2-1：恢复钮条件收紧 localDismissed（账面终态行零谎报）
+  assert(js.includes("row.archived && row.dismissed && row.localDismissed"), "R6 恢复钮条件含 localDismissed（账面终态行无钮——restoreRowByKey 静默 no-op/谎报已恢复根除）");
+  // P2-2：snoozed 终态挡扩三态（纯函数真跑）
+  const itemHandled: NotificationLifecycleItem = { key: "r-p22", created_at: 1, title: "t", body: "b" } as NotificationLifecycleItem;
+  const snoozedOnHandled = transitionNotification({ ...itemHandled, handled_at: 100 }, "snoozed", 200, 99999);
+  assert(snoozedOnHandled.snoozed_until === undefined, "R7 handled 行 snooze 不落锚（终态挡三态——resolved/handled/dismissed）");
+  const snoozedOnResolved = transitionNotification({ ...itemHandled, resolved_at: 100 }, "snoozed", 200, 99999);
+  const snoozedOnDismissed = transitionNotification({ ...itemHandled, dismissed_at: 100 }, "snoozed", 200, 99999);
+  assert(snoozedOnResolved.snoozed_until === undefined && snoozedOnDismissed.snoozed_until === undefined, "R8 resolved/dismissed 行同挡（收口检查三态齐）");
+  const snoozedActive = transitionNotification({ ...itemHandled }, "snoozed", 200, 99999);
+  assert(snoozedActive.snoozed_until === 99999, "R9 活跃行 snooze 正常落锚（挡终态不挡正常路径）");
+  // P2-3：归档分区走 aggregate
+  assert(js.includes("rowsOf(aggregate(archivedRows))"), "R10 归档分区 aggregate+rowsOf（同质簇聚合与主分组语言一致——裸拼退役）");
+  // P2-5：词表外 action fail-fast（源码锚——notificationAck 入口守卫）
+  const smR1 = readFileSync(join(repoRoot, "relay/src/session-manager.ts"), "utf-8");
+  assert(smR1.includes("action 必须是 handled|dismissed|snooze"), "R11 notificationAck 词表外拒（fail-fast——'snozze' 误拼不再静默按 handled 永久落账）");
+  // P1 顺带：批量清除排 snoozed 中行（暂避≠清除）
+  assert(mob.includes("!snoozedC(n)"), "R12 mobile 批量清除排除稍后中行（暂避≠清除——桌面同语义）");
+
   console.log(`\n== test-inboxv1：${pass} passed / ${fail} failed ==`);
   process.exit(fail ? 1 : 0);
 }

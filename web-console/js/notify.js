@@ -186,7 +186,7 @@
                       synth: false, kind: n.kind, key: n.key, title: n.title, body: n.body, ts: normTs(n.created_at),
                       unresolved: !doneOf(n), active: !doneOf(n) && n.actionable === true, actionable: n.actionable === true,
                       userPending: isUserPending(pending, n.kind, entityId) && !doneOf(n),
-                      dismissed: dismissedLocal, archived: dismissedLocal || !!ledgerArchivedKey(n), // W-INBOX-V1 刀3：归档标记（本地× 或账本 handled/dismissed 未 resolved——×/知道了过的可找回）
+                      dismissed: dismissedLocal, archived: dismissedLocal || !!ledgerArchivedKey(n), localDismissed: dismissedLocal, // W-INBOX-V1 刀3：归档标记（本地× 或账本 handled/dismissed 未 resolved——×/知道了过的可找回）；R1（A 审 P2-1）：localDismissed 独立标记——恢复钮条件用（账面终态行无恢复钮=零谎报）
                       source: n, engine: session ? session.engine : "", sessionTitle: session ? (session.title || session.initial_prompt || "") : "",
                       sessionId: n.sourceContext && typeof n.sourceContext.sessionId === "string" ? n.sourceContext.sessionId : "",
                       segment: n.sourceContext && typeof n.sourceContext.segment === "string" ? n.sourceContext.segment : "",
@@ -286,7 +286,11 @@
                   // W-INBOX-V1 刀3（可找回）：本地 × 过的归档行给「恢复」钮（撤销本地隐藏
                   // 回主分组）；账面终态行（知道了/源已解决）留档可查+act 可再入，不提供
                   // 反账重开（reopen 不在本刀词表——B0 冻结面）。
-                  const restoreBtn = row.archived && row.dismissed
+                  // R1（A 审 P2-1）：条件收紧 localDismissed——账面终态行（archived 由
+                  // ledgerArchivedKey 而来）原也给恢复钮，点击 restoreRowByKey 对本地键
+                  // delete 失败=静默 no-op（或 toast 谎报「已恢复」而行不回）——按钮语义
+                  // 只对本地 × 生效，账面行无钮即无谎。
+                  const restoreBtn = row.archived && row.dismissed && row.localDismissed
                     ? '<button class="act act-restore" type="button" data-notify-restore="' + escapeHtml(row.key) + '" title="撤销清除，回到原分组">恢复</button>'
                     : "";
                   const x = row.active ? "" : '<button class="x" type="button" data-notify-dismiss="' + escapeHtml(row.key) + '" title="归档这条通知（可在面板底部「已归档」找回）" aria-label="清除通知">×</button>';
@@ -436,7 +440,7 @@
                       ? '<div class="ngrp ngrp-fold ngrp-arch"' + ' data-notify-arch-toggle="1" role="button" tabindex="0" title="展开/收起已归档（×/知道了过的——可找回）"><i class="ndot a"></i>已归档'
                         + '<span class="caret">' + (archivedCollapsed ? "▸" : "▾") + '</span>'
                         + '<span class="cnt">' + archivedRows.length + "</span></div>"
-                        + (archivedCollapsed ? "" : archivedRows.map((r) => rowMarkup(r, false)).join(""))
+                        + (archivedCollapsed ? "" : rowsOf(aggregate(archivedRows)).map((r) => rowMarkup(r, r.isSub === true)).join("")) /* R1（A 审 P2-3）：归档分区走 aggregate+rowsOf——裸拼逐行=同质簇在归档面反聚合（与主分组「需你行动/注意/动态」语言不一致，notifypolish 同质聚合先例）；stale 行 aggregate 内自豁免逐行出 */
                       : "";
                     // #282 N1 ②keyed reconcile：组头 grp:R/Y/N + 行 row:<key>，未变行零触碰
                     //（滚动位/入场动画不重放/hover 全保），变化行单节点替换。工具缺席回落旧全量写。
