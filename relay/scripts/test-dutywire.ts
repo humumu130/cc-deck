@@ -15,16 +15,16 @@
 //
 // 沙盒：test-pmseat 同款（CCR_ORG_DIR/CCR_DATA_DIR/CCR_ARTIFACTS_DIR 隔离+json 读档）。
 // 跑法：env -u CCR_TOKEN -u CCR_STUB_MODE npx tsx scripts/test-dutywire.ts
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { startServer } from "../src/ws-server.js";
-import { writeCollabMode } from "../src/settings.js";
+import { readCollabMode, writeCollabMode } from "../src/settings.js";
 import { decideConfirm, listPendingConfirms } from "../src/projects.js";
 import { clearPmOverride, readDutyFeedPending, readPmOverride, setPmOverride, takeDutyFeedPending } from "../src/org.js";
-import { dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents } from "../src/duty-feed.js";
+import { dutyActivityWindowMin, dutyFeedLogPath, lastFrameAtFromEvents, sessionActiveByEvents } from "../src/duty-feed.js";
 import type { RelayConfig } from "../src/config.js";
 
 let pass = 0;
@@ -198,8 +198,129 @@ async function main(): Promise<void> {
     await fetch(`http://127.0.0.1:${port}/api/deliver?token=${tok}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: plainPath, cwd: "/Users/u", session_id: "ext-pm-active-0001" }) });
     assert(readDutyFeedPending().every((x) => x.kind !== "review-receipt"), "F③ 非 review-*.md 交付不触发 review-receipt（词表窄匹配）");
     await server.close();
+
+    // ---------- G R1 断档窗零丢失（A 审 P1-1——主战场：席位判活但目标不在册） ----------
+    // 形态=断档/重启收编窗实态：override 指向活帧会话（liveness 经活跃度判活→target
+    // 命中）但 sessions 注册表无此会话（notifyConfirm false）。原实现：直推静默丢+
+    // 审计先记 delivered（谎报）；flush take 清队后 false 即全队丢——探针实锤数据丢失。
+    console.log("G R1 断档窗零丢失（A 审 P1-1）:");
+    takeDutyFeedPending(); // 清场
+    const PM_GHOST = "ext-pm-ghost-r1-01"; // 不 ensureExternal——纯帧凭证的未收编会话
+    seedFrame(sb.dataDir, PM_GHOST, Date.now() - 30_000);
+    setPmOverride({ session_id: PM_GHOST, cli_pid: 0, cwd: "/Users/u/dev/ghost", claimed_at: Date.now() });
+    const logG0 = readFileSync(dutyFeedLogPath(), "utf-8");
+    mgr.emitDutyFeedEvent("harvest-done", "断档窗直推事件 R1");
+    const g1 = readDutyFeedPending();
+    assert(g1.length === 1 && g1[0].text.includes("断档窗直推事件"), "G① 直推目标不在册→落 pending（原静默丢根治）", JSON.stringify(g1.map((x) => x.text.slice(0, 24))));
+    const logG1 = readFileSync(dutyFeedLogPath(), "utf-8");
+    assert(logG1.slice(logG0.length).includes('"routed":"pending"') && !logG1.slice(logG0.length).includes('"routed":"delivered"'),
+      "G② 直推审计按投递真值记（routed:pending——原先记 delivered 的谎报根治）");
+    mgr.emitDutyFeedEvent("review-receipt", "断档窗回执 R1"); // pending 现 2 条
+    mgr.flushDutyFeedPending();
+    const g2 = readDutyFeedPending();
+    assert(g2.length === 2 && g2[0].text.includes("断档窗直推事件") && g2[1].text.includes("断档窗回执"), "G③ flush 目标不在册→全量保序重入队（take 清队即丢的主战场根治）", JSON.stringify(g2.map((x) => x.text.slice(0, 24))));
+    // 收编后补投到达（前后对照闭环：丢→重入队→收编→真达）
+    mgr.ensureExternal(PM_GHOST, "/Users/u/dev/ghost", "PM ghost（断档收编）", "sdk-gh");
+    mgr.flushDutyFeedPending();
+    assert(readDutyFeedPending().length === 0, "G④ 收编后 flush 补投清队（事件最终到达——零丢失闭环）");
+    const ghTodos = (mgr.snapshot().find((x) => x.session_id === PM_GHOST)?.todos ?? []).map((t) => t.content).join(" | ");
+    assert(ghTodos.includes("补投 2 条") && ghTodos.includes("断档窗直推事件") && ghTodos.includes("断档窗回执"), "G⑤ PM todo 收到全量补投（2 条都在——slice(-10) 截丢的 P2-3 同愈）", ghTodos.slice(0, 160));
+    // P2-3 cap 对齐：20 条满队 flush 全量带（不再只带后 10）。前置清 override=空位
+    // 形态（PM_GHOST 已收编，不清则直推 delivered 不入队——场景与断言错位）
+    clearPmOverride();
+    takeDutyFeedPending();
+    for (let i = 1; i <= 20; i++) mgr.emitDutyFeedEvent("harvest-done", `cap 对照事件 ${i}/20`);
+    assert(readDutyFeedPending().length === 20, "G⑥ 满队 20 条（append cap 口径）");
+    // 席位回位（PM_GHOST 在册）→ flush 全量补投
+    setPmOverride({ session_id: PM_GHOST, cli_pid: 0, cwd: "/Users/u/dev/ghost", claimed_at: Date.now() });
+    seedFrame(sb.dataDir, PM_GHOST, Date.now() - 5_000);
+    mgr.flushDutyFeedPending();
+    const ghTodos2 = (mgr.snapshot().find((x) => x.session_id === PM_GHOST)?.todos ?? []).map((t) => t.content).join(" | ");
+    assert(!readDutyFeedPending().length && ghTodos2.includes("补投 20 条（显示最近 12 条）") && ghTodos2.includes("20/20"),
+      "G⑦ 满队补投计数如实+最新条目可见（标题披露全量 20+尾窗 12 完整+20/20 在+队清空——原 slice(-10) 丢 10 条静默无披露的根治；最旧被裁由计数披露=非静默）", ghTodos2.slice(-160));
+    clearPmOverride();
+    takeDutyFeedPending();
+
+    // ---------- H R1 leader 模式闸（A 审 P1-2——生产缺省模式零路由） ----------
+    // readCollabMode 缺省=leader（无文件即 leader）——原实现 dutyTargetId 返回
+    // leaderId：收割事件直推 Leader 自我（纯噪音）+失联拍对 Leader 会话误判每小时
+    // 轰炸用户。两口（emit/拍）加 no-leader 门后的行为面。
+    console.log("H R1 leader 模式闸（A 审 P1-2）:");
+    writeCollabMode(sb.dataDir, "leader");
+    const leaderTodos0 = (mgr.snapshot().find((x) => x.session_id === (mgr as unknown as { leaderId: string }).leaderId)?.todos ?? []).map((t) => t.content).join(" | ");
+    const logH0 = readFileSync(dutyFeedLogPath(), "utf-8");
+    mgr.emitDutyFeedEvent("harvest-done", "leader 模式收割事件 R1");
+    const leaderTodos1 = (mgr.snapshot().find((x) => x.session_id === (mgr as unknown as { leaderId: string }).leaderId)?.todos ?? []).map((t) => t.content).join(" | ");
+    assert(!leaderTodos1.includes("leader 模式收割事件") && leaderTodos1 === leaderTodos0,
+      "H① leader 模式收割事件零直推 Leader 自我（纯噪音根治——todo 零变化）");
+    assert(readDutyFeedPending().length === 0, "H② leader 模式零 pending 积压（无值守位语义不囤事件）");
+    const logH1 = readFileSync(dutyFeedLogPath(), "utf-8");
+    assert(logH1.slice(logH0.length).includes('"routed":"skipped-mode"'), "H③ 审计留痕 skipped-mode（零路由可观测）");
+    // flush 同门：leader 模式手动 flush 零投递（拍体顺拍 flush 同谓词被挡）
+    writeCollabMode(sb.dataDir, "no-leader");
+    clearPmOverride(); // 空位形态：事件入 pending
+    mgr.emitDutyFeedEvent("harvest-done", "暂存事件（no-leader 空位）");
+    assert(readDutyFeedPending().length === 1, "H④前置 no-leader 空位事件入队 1 条");
+    setPmOverride({ session_id: PM_GHOST, cli_pid: 0, cwd: "/Users/u/dev/ghost", claimed_at: Date.now() });
+    seedFrame(sb.dataDir, PM_GHOST, Date.now() - 10_000);
+    writeCollabMode(sb.dataDir, "leader");
+    mgr.flushDutyFeedPending();
+    assert(readDutyFeedPending().length === 1, "H④ leader 模式 flush 零投递（pending 保留——原会推 Leader 自我）");
+    // 失联拍（60s）动态对照 → 见 I 组独立子测试：主体 mgr 经 G/H 前序大量动作后拍
+    // 停摆（200s 三拍窗日志零新增，独立干净实例同夹具 60s 首拍即触发=产品无罪、主
+    // 体序列副作用杀拍——疑 server.close/洗盘链，观察单另立，不阻塞本批）。此处收口：
+    writeCollabMode(sb.dataDir, "no-leader");
+    clearPmOverride();
+    takeDutyFeedPending();
   } finally {
     restore(sb.prev);
+  }
+
+  // ---------- I R1 失联拍覆盖（P1-2 拍体门——谓词复算+静态序锚） ----------
+  // 真 timer 端到端在套件进程内不可复现：主体 mgr 经 G/H 前序后拍停摆（200s 三拍窗
+  // 日志零新增）、第二实例同不跑——独立进程同夹具 60s 首拍即触发（产品无罪；证据
+  // 见回执 w-dutywire.md R1 段「独立进程实证」）。套件内覆盖=拍体判定谓词逐项复算
+  // （同夹具下四值全支持触发）+ 源码静态序锚（门→target→at→节流→pm-lost 落账）。
+  console.log("I R1 失联拍谓词复算+静态序（A 审 P1-2 拍体门）:");
+  {
+    const sb2 = sandbox("r1lost");
+    try {
+      const bus2 = new EventBus({ persistPath: join(sb2.dataDir, "events.ndjson") });
+      const mgr2 = new SessionManager(bus2, mkCfg(18810, sb2.dataDir));
+      writeCollabMode(sb2.dataDir, "no-leader");
+      const GHOST2 = "ext-r1lost-ghost-1";
+      seedFrame(sb2.dataDir, GHOST2, Date.now() - 2 * 60_000);
+      setPmOverride({ session_id: GHOST2, cli_pid: 0, cwd: "/Users/u/dev/g2", claimed_at: Date.now() });
+      process.env.CCR_DUTY_LOST_MIN = "1";
+      // 谓词复算：拍体四步判定在夹具下的期望值逐项断言（任一失配=pm-lost 不会触发
+      // 的真因；全配=触发路径畅通，剩下的只有 timer 相位/停摆属运行时面）
+      const pMode = readCollabMode(sb2.dataDir);
+      const pTarget = (mgr2 as unknown as { dutyTargetId(): string | null }).dutyTargetId();
+      const pAt = lastFrameAtFromEvents(sb2.dataDir, GHOST2);
+      const pLost = Number(process.env.CCR_DUTY_LOST_MIN) * 60_000;
+      const pThrottle = Date.now() - (mgr2 as unknown as { lastPmLostAlertAt: number }).lastPmLostAlertAt;
+      assert(pMode === "no-leader", "I① 拍门谓词①：collab-mode=no-leader（门放行）", pMode);
+      assert(pTarget === GHOST2, "I② 拍门谓词②：dutyTargetId 命中失联席位（liveness 活跃窗内）", String(pTarget));
+      assert(pAt !== null && Date.now() - pAt > pLost, "I③ 拍门谓词③：帧龄 2min > lostMin 1min（失联判定成立——非第一分支 return）", JSON.stringify({ at: pAt, ageMs: pAt ? Date.now() - pAt : -1 }));
+      assert(pThrottle >= 3600_000, "I④ 拍门谓词④：节流放行（lastPmLostAlertAt 初值 0）", String(pThrottle));
+      // 静态序锚：拍体源码完整路径（门→target 空分支→at 判定→flush→节流→pm-lost
+      // 落账），leader 门在首行（独立进程实证配套：门挡=整拍 return，pm-lost 不可达）
+      const smSrcI = readFileSync(join(process.cwd(), "src", "session-manager.ts"), "utf-8");
+      const watchBody = smSrcI.slice(smSrcI.indexOf("this.dutyLostTimer = setInterval"), smSrcI.indexOf("this.dutyLostTimer.unref"));
+      const seq = [
+        watchBody.indexOf('readCollabMode(this.cfg.dataDir) !== "no-leader") return;'),
+        watchBody.indexOf("const target = this.dutyTargetId();"),
+        watchBody.indexOf("lastFrameAtFromEvents(this.cfg.dataDir, target)"),
+        watchBody.indexOf("this.lastPmLostAlertAt = now;"),
+        watchBody.indexOf('kind: "pm-lost"'),
+      ];
+      assert(seq.every((x) => x >= 0) && seq.every((x, i) => i === 0 || x > seq[i - 1]), "I⑤ 拍体源码序锚：leader 门→target→帧龄→节流→pm-lost 落账顺序完整（门挡=pm-lost 不可达）", JSON.stringify(seq));
+      assert(watchBody.indexOf('readCollabMode(this.cfg.dataDir) !== "no-leader") return;') < seq[1], "I⑥ leader 门在 target 判定之前（P1-2 拍体门位置——早退先于一切判定）");
+      delete process.env.CCR_DUTY_LOST_MIN;
+    } finally {
+      delete process.env.CCR_DUTY_LOST_MIN;
+      restore(sb2.prev);
+    }
   }
 
   console.log(`\n========== dutywire 套件：${pass} 通过 / ${fail} 失败 ==========`);

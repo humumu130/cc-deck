@@ -27,7 +27,7 @@ import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
   clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
-  appendDutyFeedPending, takeDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投）
+  appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
 import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
@@ -6010,10 +6010,23 @@ ${lines.join("\n")}
    *  落盘=/api/deliver 登记边（review-*.md）；PM 失联=下方 watch 拍。 */
   emitDutyFeedEvent(kind: DutyFeedKind, text: string): void {
     try {
-      const target = dutyEnabled() ? this.dutyTargetId() : null;
+      // R1 P1-2（A 审）：leader 模式（生产缺省）无值守位概念——dutyTargetId 在该模式
+      // 返回 leaderId=收割事件直推 Leader 自我（纯噪音）+失联拍误报轰炸用户的根源。
+      // feed 事件在 leader 模式零路由零 pending（该模式永远不会有值守位，pending 积压
+      // 无消费方）；审计留痕 routed:"skipped-mode" 保可观测。
+      if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") {
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), routed: "skipped-mode" });
+        return;
+      }
+      const target = this.dutyTargetId();
       if (target) {
-        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), target, routed: "delivered" });
-        this.notifyConfirm(target, `[值守唤醒] ${text}`);
+        // R1 P1-1（A 审）：直推按投递真值记审计 + false 落 pending——原实现先记
+        // routed:"delivered" 再忽略 notifyConfirm 返回值：目标不在注册表（断档/重启
+        // 收编窗）时事件静默丢且审计谎报 delivered。notifyConfirm false = 目标会话
+        // 不在册，落 pending 等收编/回活后 flush 补投（零丢失主战场路径）。
+        const ok = this.notifyConfirm(target, `[值守唤醒] ${text}`);
+        appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), target, routed: ok ? "delivered" : "pending" });
+        if (!ok) appendDutyFeedPending({ ts: Date.now(), kind, text: truncate(text, 200) });
       } else {
         appendDutyFeedLog({ ts: Date.now(), kind, text: truncate(text, 200), routed: "pending" });
         appendDutyFeedPending({ ts: Date.now(), kind, text: truncate(text, 200) });
@@ -6024,12 +6037,27 @@ ${lines.join("\n")}
   /** pending 补投（任命 ✓ 落位 / relay 重启回活时）：合并单条推（逐条推=todo 轰炸） */
   flushDutyFeedPending(): void {
     try {
-      const target = dutyEnabled() ? this.dutyTargetId() : null;
+      // R1 P1-2：leader 模式不补投（emit 侧已不积压，历史遗留 pending 留队等模式
+      // 切回 no-leader——不推 Leader 自我）
+      if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") return;
+      const target = this.dutyTargetId();
       if (!target) return;
       const items = takeDutyFeedPending();
       if (!items.length) return;
-      const lines = items.slice(-10).map((it) => `${new Date(it.ts).toLocaleTimeString("sv-SE")} ${it.text}`).join("；");
-      this.notifyConfirm(target, `[值守唤醒·补投 ${items.length} 条] ${truncate(lines, 400)}`);
+      // R1 P2-3：slice(-10) 撤——cap 20 的队列补投只带 10 条=静默丢。全量计数披露+
+      // 尾窗展示：标题如实「N 条（最近 M 条）」，正文取最新 12 条完整拼行（truncate
+      // 400 兜底只裁最旧——最新事件优先可见，丢弃由计数披露=非静默）
+      const show = items.length > 12 ? items.slice(-12) : items;
+      const lines = show.map((it) => `${new Date(it.ts).toLocaleTimeString("sv-SE")} ${it.text}`).join("；");
+      // R1 P1-1（A 审 主战场实锤）：投递真值——notifyConfirm false（目标不在册=断档/
+      // 重启收编窗，构造器 :1005 flush 恰在 adopt 前注册表必空）时**全量保序重入队**
+      // （原 take 清队后静默丢=本特性主战场路径丢数据）；审计如实记 pending。
+      const ok = this.notifyConfirm(target, `[值守唤醒·补投 ${items.length} 条${items.length > show.length ? `（显示最近 ${show.length} 条）` : ""}] ${truncate(lines, 400)}`);
+      if (!ok) {
+        restoreDutyFeedPending(items);
+        appendDutyFeedLog({ ts: Date.now(), kind: "flush", text: `补投未达（目标 ${target.slice(0, 8)} 不在册——断档/收编窗），${items.length} 条重入队`, target, routed: "pending" });
+        return;
+      }
       appendDutyFeedLog({ ts: Date.now(), kind: "flush", text: `补投 ${items.length} 条空窗期积压事件`, target, routed: "delivered" });
     } catch { /* 尽力而为 */ }
   }
@@ -6044,7 +6072,10 @@ ${lines.join("\n")}
     if (this.dutyLostTimer) return;
     this.dutyLostTimer = setInterval(() => {
       try {
-        if (!dutyEnabled()) return;
+        // R1 P1-2（A 审）：leader 模式（生产缺省）不拍失联——dutyTargetId 在该模式
+        // 返回 leaderId，帧龄判定对 Leader 会话失真=每小时误报轰炸用户手机的根源。
+        // 观测拍只在 no-leader（值守位语义存在的唯一模式）运行。
+        if (!dutyEnabled() || readCollabMode(this.cfg.dataDir) !== "no-leader") return;
         const target = this.dutyTargetId();
         if (!target) { this.flushDutyFeedPending(); return; }
         const v = Number(process.env.CCR_DUTY_LOST_MIN);

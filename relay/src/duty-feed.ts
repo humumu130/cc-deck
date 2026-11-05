@@ -7,7 +7,7 @@
 //   ③ duty feed 审计日志：<orgDir>/duty-feed.ndjson append-only（appendJournal 5MB
 //      滚动）——每条唤醒事件一行（投递结果由调用方回写 pending 队列状态承载，日志
 //      只记发生不记状态机）
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs"; // R1 P2-1：尾窗读三件+statSync 键控缓存（readFileSync 全量读退役）
 import { join } from "node:path";
 import { orgDir } from "./org.js";
 import { appendJournal } from "./fs-safe.js";
@@ -22,14 +22,32 @@ export function dutyActivityWindowMin(): number {
 
 /** events.ndjson 尾窗扫描：session_id 最近帧 ts（无帧=null）。尾窗 bytes 缺省 2MB——
  *  PM 会话心跳 5s/帧，2MB≈数千帧≈数小时覆盖，远超 15min 窗；快筛（行含 sid 才
- *  parse）保热路径便宜。读失败容错 null（=无凭证，判定侧保守拒绝）。 */
+ *  parse）保热路径便宜。读失败容错 null（=无凭证，判定侧保守拒绝）。
+ *  R1 P2-1（A 审）：原 readFileSync 全量读（41MB 级×多候选同步阻塞——审方实测
+ *  332ms/轮）改 open+fstat+readSync 尾窗（只读最后 tailBytes）；mtime+size 键控
+ *  缓存同轮多候选共享一次读（同文件未变零重读——候选扫描/失联拍同拍多查场景）。 */
+const _eventsTailCache = new Map<string, { mtimeMs: number; size: number; raw: string; at: number }>();
 export function lastFrameAtFromEvents(dataDir: string, sessionId: string, tailBytes = 2 * 1024 * 1024): number | null {
   if (!sessionId) return null;
   const p = join(dataDir, "events.ndjson");
   let raw = "";
   try {
-    const fd = readFileSync(p); // 全量读后取尾（events 41MB 级全读偏重——open+read 尾窗）
-    raw = fd.length > tailBytes ? fd.subarray(fd.length - tailBytes).toString("utf-8") : fd.toString("utf-8");
+    const st = statSync(p);
+    const hit = _eventsTailCache.get(p);
+    if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size && Date.now() - hit.at < 60_000) {
+      raw = hit.raw; // 同文件未变（60s 防粘滞兜底）：零重读
+    } else {
+      const fd = openSync(p, "r");
+      try {
+        const len = Math.min(st.size, tailBytes);
+        const buf = Buffer.alloc(len);
+        const n = readSync(fd, buf, 0, len, Math.max(0, st.size - len)); // 只读尾窗
+        raw = buf.subarray(0, n).toString("utf-8");
+      } finally {
+        closeSync(fd);
+      }
+      _eventsTailCache.set(p, { mtimeMs: st.mtimeMs, size: st.size, raw, at: Date.now() });
+    }
   } catch {
     return null;
   }
@@ -55,8 +73,11 @@ export function dutyFeedLogPath(dir?: string): string {
   return join(dir ?? orgDir(), "duty-feed.ndjson");
 }
 
-export function appendDutyFeedLog(row: { ts: number; kind: DutyFeedKind; text: string; target?: string; routed: "delivered" | "pending" | "user" }): void {
+export function appendDutyFeedLog(row: { ts: number; kind: DutyFeedKind; text: string; target?: string; routed: "delivered" | "pending" | "user" | "skipped-mode" }): void { // R1：skipped-mode=leader 模式零路由留痕（不落 pending——该模式无值守位，积压无消费方）
   try {
-    appendJournal(dutyFeedLogPath(), JSON.stringify(row) as unknown as Record<string, unknown>);
+    // R1：双层序列化退役——原 JSON.stringify(row) 传入后被 appendJournal 再序列化
+    // =每行是「JSON 字符串字面量」而非 ndjson 对象行（读取侧需 parse 两次；本批
+    // 审计真值断言因此失明实锤）。传对象本体，行=标准 ndjson。
+    appendJournal(dutyFeedLogPath(), row as unknown as Record<string, unknown>);
   } catch { /* 审计尽力而为 */ }
 }

@@ -437,6 +437,16 @@ export function takeDutyFeedPending(dir?: string): DutyFeedPendingItem[] {
   return out;
 }
 
+/** R1（A 审 P1-1）：批量重入队——take 的对称体。投递失败（目标不在册=断档/重启
+ *  收编窗）时全量保序回写（append 逐条×N 次读写盘且各自 slice 截尾有乱序险，
+ *  批量单写口一次落）。cap 20 同 append 口径（溢出截尾保最新）。 */
+export function restoreDutyFeedPending(items: DutyFeedPendingItem[], dir?: string): void {
+  const clean = items.filter((r) => r && typeof r === "object" && typeof r.ts === "number" && typeof r.kind === "string" && typeof r.text === "string");
+  if (!clean.length) return;
+  const next = [...readDutyFeedPendingRaw(dir), ...clean].slice(-20);
+  writeDutyFile({ ...readDutyFile(dir), duty_feed_pending: next }, dir);
+}
+
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会
 // 抹掉积累。existsSync 为准（内容不比对，存在即认）。增量按标记追加（M2 → M2 补强，
 // 缺哪个补哪个，已有内容零写入——同 id 收敛语义）。
