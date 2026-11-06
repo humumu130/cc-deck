@@ -807,6 +807,8 @@ export class SessionManager {
   // W-DUTYBACKOFF 刀2：无进展退避账（内存——重启即清=重启本身即复位事件）
   private dutyLastTopKey: string | null = null;
   private dutyNoProgressStreak = 0;
+  private dutyReceiptFeedIds = new Set<string>(); // R1 P2-2：DUTY_RECEIPT feed_id 去重账（流式重复帧幂等）
+  private dutyUserActiveTimer: ReturnType<typeof setTimeout> | null = null; // R1 P1-2：活跃窗到期一次性补发 timer（窗内新事件重置）
   private dutyNextFeedAllowedAt = 0;
   // W-PMWAKE：worker 回合 DONE 且未被 Leader 处理的计数（Leader turn_end 归零）——
   // dutySnapshot.worker_done_pending → 值守候选「worker_done」→ PM 注入唤醒（1013 夜
@@ -3034,11 +3036,13 @@ export class SessionManager {
 
   /** W-DUTYBACKOFF 刀3（D2 收尾）：DUTY_RECEIPT 协议消费单点——值守回合产出的末行
    * JSON（prompt 声明的协议，原「解析/副作用从未接线」：session-manager 旧注释自认）。
-   * 两调用口：pushExternalLog（external PM 流/回显）+ managed onLog。副作用：
+   * 调用口：pushExternalLog（external 席位流/回显）+ managed onLog（托管席位——R1
+   * P1-1 补真挂；原 create-cwd fallbackNote 挂点系死代码已撤）。副作用：
    * accept→对应 receipt sid 标 reviewed（org/duty-reviewed.json 持久化，重启不丢——
    * 候选永续过滤 38h+ 实锤的根治）；dispatch/board/notify→审计落账；文本含协议
-   * 标记但 parse 失败→receipt_missing 审计（不惩罚）。幂等：行内 feed_id 已消费过
-   * 静默（防流式重复帧多次触发）。 */
+   * 标记但 parse 失败→receipt_missing 审计（不惩罚——R1 P2-2：仅完整行判 missing，
+   * 流式尾帧（无闭合 }）跳过等下一帧，假阳审计根除）。幂等：feed_id 已消费静默
+   * （R1 P2-2：Set 去重账——原注释宣称但无实现，流式重复帧会重复副作用+审计灌水）。 */
   private maybeConsumeDutyReceipt(sessionId: string, text: string): void {
     if (!text || typeof text !== "string") return;
     const idx = text.lastIndexOf("DUTY_RECEIPT ");
@@ -3046,8 +3050,19 @@ export class SessionManager {
     const line = text.slice(idx + "DUTY_RECEIPT ".length).split("\n")[0].trim();
     const receipt = parseDutyReceipt(line);
     if (!receipt) {
+      // R1（A 审 P2-2）尾帧假阳守卫：流式尾 400 字节帧常截掉闭合 }——行不完整时
+      // parse 失败是流式中间态不是真畸形，跳过审计等下一帧（完整行仍判 missing）。
+      if (line.length > 0 && !line.endsWith("}")) return;
       this.emitChainAudit("duty-receipt-missing", `${sessionId.slice(0, 12)} 值守回合含 DUTY_RECEIPT 标记但解析失败（截 80：${line.slice(0, 80)}）——不惩罚，协议锚在`);
       return;
+    }
+    // R1（A 审 P2-2）feed_id 去重账：原注释宣称幂等但无实现——流式重复帧会重复
+    // markDutyReviewed+审计灌水。内存 Set（重启丢=副作用幂等（markDutyReviewed 同
+    // id 重标无差）+审计面偶重一条无害，不值得持久化）。
+    if (receipt.feed_id) {
+      if (this.dutyReceiptFeedIds.has(receipt.feed_id)) return;
+      this.dutyReceiptFeedIds.add(receipt.feed_id);
+      if (this.dutyReceiptFeedIds.size > 500) { const it = this.dutyReceiptFeedIds.values().next().value; if (it) this.dutyReceiptFeedIds.delete(it); }
     }
     const acceptIds = (receipt.actions ?? []).filter((a: { kind?: string }) => a.kind === "accept").flatMap((a: { ids?: string[] }) => a.ids ?? []);
     if (acceptIds.length) {
@@ -3378,7 +3393,9 @@ export class SessionManager {
     if (fallbackNote) {
       const entry: LogEntry = { ts: Date.now(), kind: "system", text: fallbackNote };
       managed.logs.push(entry);
-      this.maybeConsumeDutyReceipt(managed.state.session_id, typeof (entry as { text?: unknown }).text === "string" ? (entry as { text: string }).text : "");
+      // R1（A 审 P1-1）更正：此处原挂 maybeConsumeDutyReceipt 系死代码（create-cwd
+      // fallbackNote 是 system 行，永不含 DUTY_RECEIPT 协议行）——「双挂口」宣称失实，
+      // 真挂点=managed onLog（:3763 区，Leader 模式 PM 产出唯一落点）。
       this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
       console.log(`[create-cwd] ${agent.id.slice(0, 8)} ${fallbackNote}`);
     }
@@ -3773,6 +3790,11 @@ export class SessionManager {
             managed.logs.push(entry);
             if (managed.logs.length > 1500) managed.logs.splice(0, managed.logs.length - 1500); // W-INJECT④
           }
+          // R1（A 审 P1-1）刀3 托管面真接线：managed onLog=Leader 模式 PM 产出的唯一
+          // 落点（原只挂 pushExternalLog=external 席位，leader 模式 DUTY_RECEIPT 无人
+          // 消费——38h 重复投喂根因原样保留）。流式同 id 帧每帧过单点（内部 feed_id
+          // 去重+尾帧假阳守卫）。
+          this.maybeConsumeDutyReceipt(managed.state.session_id, typeof entry.text === "string" ? entry.text : "");
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
           // 不入 dock；thinking 归 assistant_text（B0 的 ActivityKind 词表无 thinking）
@@ -6291,6 +6313,18 @@ ${lines.join("\n")}
           detail: `PM 目标 ${Math.round((from0 - lastUser) / 60_000)}min 前有真实用户消息（活跃窗 ${dutyUserActiveMin()}min）——对话进行中不巡检`,
           from: from0,
         });
+        // R1（A 审 P1-2）剩余窗到期一次性补发：原直接 return=补发全押下一事件边沿，
+        // chat 结束+全静默时 worker_done 候选延迟无上界（重演 1013 形态）。窗到期
+        // +500ms 一拍喂（continuation 跳过本检查）；窗内新消息再进本分支自然重置
+        // timer（单 timer 字段去重，多事件不叠拍）。不带 continuation 复检活跃窗
+        // （审者口径：复检=活跃窗变相无上界）。
+        const remain = lastUser + dutyUserActiveMin() * 60_000 - from0;
+        if (this.dutyUserActiveTimer) clearTimeout(this.dutyUserActiveTimer);
+        this.dutyUserActiveTimer = setTimeout(() => {
+          this.dutyUserActiveTimer = null;
+          if (dutyEnabled()) this.feedPM(trigger, { continuation: true });
+        }, Math.max(0, remain) + 500);
+        this.dutyUserActiveTimer.unref?.();
         return;
       }
     }
@@ -6377,12 +6411,20 @@ ${lines.join("\n")}
     const transition = transitionDutyFeedCount(this.dutyFeed, "feed");
     this.dutyFeed = transition.state;
     if (transition.shouldSleep) {
-      // K=3 到顶（019 §3.4）：不注入防 token 忙等，退避一次延迟喂活（wake_once）
-      const delay = dutyContinuationMs();
+      // K=3 到顶（019 §3.4）：不注入防 token 忙等，退避一次延迟喂活（wake_once）。
+      // R1（A 审 P1-3）饱和环与退避级数联动：k_exhausted 不注入=「喂不进去」的无进展
+      // 延续形态——原实现不推进 streak/不设退避窗，同 top 永不变场景第 2 次注入后
+      // consecutive=3 即冻结在 5min 自续环（15/30/60 不可达，「不互踩」只在窗活跃相
+      // 成立）。饱和轮同按无进展推进级数+设窗，wake 取 max(K 续办, 当前级数)——
+      // 稳态下级数单调爬升至 60min 封顶。
+      this.dutyNoProgressStreak += 1;
+      this.dutyNextFeedAllowedAt = from + dutyNoProgressDelayMs(this.dutyNoProgressStreak);
+      const delay = Math.max(dutyContinuationMs(), dutyNoProgressDelayMs(this.dutyNoProgressStreak));
       this.appendDutyRound({
         feed_id: feedId, feed_generation: generation, trigger: [trigger],
         result: "sleep", reason: "k_exhausted", observed, from,
         continuation: { delay_ms: delay, once: true },
+        detail: `K=3 饱和（连续 3 轮喂活）+ 同 top 无进展级数 ${this.dutyNoProgressStreak}——wake ${Math.round(delay / 60_000)}min（R1：饱和环推退避级数，5min 自续环根除）`,
       });
       const t = setTimeout(() => {
         if (dutyEnabled()) this.feedPM(trigger, { continuation: true });

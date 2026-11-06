@@ -124,15 +124,11 @@ export class PatrolModule {
 
   // ---------- 轻探针（5min）：磁盘 / dataDir 可写 / 事件循环漂移 ----------
   runLight(): void {
-    // W-DUTYBACKOFF 刀1（巡检口径）：PM-用户对话活跃窗内跳过本轮巡检（用户实锤
-    // 「一直在对话中还巡什么检」——活跃期巡检=纯噪音）。判据同 feedPM 单点：最近真实
-    // user_message <10min（排除值守注入回显）。dutyUserActiveSkip 单点读（patrol 无
-    // dutyTargetId 访问权——经 mgr 只读口）。
+    // R1（A 审 P2-1）撤活跃窗连坐：轻探针=infra 职责（磁盘满/dataDir 只读/事件循环
+    // 卡死——对话进行中这些照样会杀 relay，连坐抑制=对话窗全暗期 infra 盲区——原单
+    // 把刀1 活跃窗从 feedPM 外推到此处系过度外推）。活跃窗抑制只留 runFull（业务
+    // 巡检面：worker 帧/看板漂移——对话期确属噪音）。
     try {
-      if ((this.mgr as unknown as { dutyUserActiveSkip?: () => boolean }).dutyUserActiveSkip?.()) {
-        console.log("[patrol] PM-用户对话活跃窗内——本轮巡检跳过（W-DUTYBACKOFF 刀1）");
-        return;
-      }
     } catch { /* 判定失败不阻巡检（保守巡） */ }
 
     if (!this.opts.enabled()) return;
