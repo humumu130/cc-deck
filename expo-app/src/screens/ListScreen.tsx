@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import { memo, startTransition, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 
 // dda6490+6fb7180 并集合并残留收口：w63（TextInput/PanResponder）与 w54（Modal）两行 import 并存致重复标识符——合一行取并集
 import { Alert, Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, StyleSheet, Text, TextInput, useWindowDimensions, Vibration, View } from "react-native"
@@ -22,7 +22,7 @@ import { artPoolGate } from "../artpool";
 import { FadeIn, useLayoutPulse } from "../motion";
 import { hasActivityCapability, type ProjectGroup, type SessionState, type SessionStatus } from "../protocol";
 import { notifActionableOf } from "../notify-jump";
-import NotifCenterSheet from "./NotifCenterPage";
+import NotifCenterSheet, { notifPerfMark } from "./NotifCenterPage";
 import { EngineBadge, engineBadgeable } from "./TeamDetailPage";
 import { EngineIcon, hasEngineIcon } from "../engine-icon";
 import RenameModal from "./RenameModal";
@@ -1710,7 +1710,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         <Pressable
           style={styles.bellBtn}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-          onPress={() => setNotifOpen(true)}
+          onPress={() => {
+            // W-MOBNOTIFYLAG 刀 b（点击让路——桌面 bbdebdfe 同款思想）：状态翻转进
+            // startTransition 低优车道，按压反馈（ripple/badge）先落主线程，面板
+            // mount 长任务（几百行通知首帧，刀 a 分帧后仍重）不堵点击响应
+            notifPerfMark("press");
+            startTransition(() => setNotifOpen(true));
+          }}
           hitSlop={4}
           accessibilityLabel={notifPending.length > 0 ? `通知中心，${notifPending.length} 项需行动` : "通知中心"}
         >

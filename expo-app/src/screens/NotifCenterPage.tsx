@@ -17,7 +17,7 @@
 //   · 行左/右滑删（NotifSwipeRow：横滑跟手位移，|dx|≥72 判删触发 dismissed ACK
 //     +滑出动画，未过阈 spring 回弹；纵滑放行给列表滚动——横占优判定同 Shell 域滑切）
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Dimensions, Easing, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Dimensions, Easing, InteractionManager, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -31,6 +31,19 @@ import { TeamDetailPage } from "./TeamDetailPage";
 
 // main 区三分组投影（纯函数——scripts/test-mv8a.ts 断言面）：actionable 拆
 // 「需你行动」，其余未处理归「动态」。两组合计 = main 全集（不丢行），各保池序
+// W-MOBNOTIFYLAG 埋点（真机 onPress→面板首帧耗时——装机批回数口径）：press 打点在
+// ListScreen 铃铛 onPress，first-frame 打点在本面板 ScrollView 首个 onLayout；两戳
+// 差值 console.log（Hermes 日志可读）+global 暂存（adb logcat / Console.app 可捞）。
+const perfG = globalThis as { __notifPerf?: { stage: string; at: number }[] };
+export function notifPerfMark(stage: "press" | "first-frame"): void {
+  try {
+    perfG.__notifPerf = [...(perfG.__notifPerf ?? []), { stage, at: Date.now() }];
+    const all = perfG.__notifPerf;
+    const press = all.find((x) => x.stage === "press");
+    if (stage === "first-frame" && press) console.log(`[notif-perf] onPress→首帧 ${Date.now() - press.at}ms（桌面达标线 251ms/目标 300ms）`);
+  } catch { /* 埋点尽力而为 */ }
+}
+
 export function splitNotifGroups<T extends { item: NotificationItem }>(
   rows: T[],
   actionableKeys: Set<string>,
@@ -158,6 +171,21 @@ export default function NotifCenterSheet({ open, onClose, onOpenSession }: {
   useEffect(() => {
     if (!open) setResolvedOpen(false);
   }, [open]);
+  // W-MOBNOTIFYLAG 刀 a（挂载分帧——桌面 bbdebdfe「面板 mount 最重 flusher 822ms」
+  // 同构）：修前量测=320 行×~14 元素 ≈4480 元素+320 PanResponder/Animated 实例首帧
+  // 同步 mount（数据管线仅 0.12ms 已排除）——首帧只挂 FIRST_CHUNK 条，剩余经
+  // InteractionManager.runAfterInteractions 每交互帧补 CHUNK 条（渐进不白屏，滚动
+  // 追加可见）；面板开=骨架先出内容渐进。
+  const FIRST_CHUNK = 15;
+  const CHUNK = 40;
+  const [visibleCount, setVisibleCount] = useState(FIRST_CHUNK);
+  const totalMain = action.length + feed.length;
+  useEffect(() => {
+    if (!open) { setVisibleCount(FIRST_CHUNK); return; }
+    if (visibleCount >= totalMain) return;
+    const t = InteractionManager.runAfterInteractions(() => setVisibleCount((v) => Math.min(v + CHUNK, totalMain)));
+    return () => t.cancel();
+  }, [open, visibleCount, totalMain]);
 
   // 动作 ACK 门：双击闸防重复 ACK；乐观回滚由 store 负责（E3b 行回来），本层只呈现
   // 行内错误；无自动重试（重试=重点按钮）
@@ -367,7 +395,7 @@ export default function NotifCenterSheet({ open, onClose, onOpenSession }: {
             </Pressable>
           </View>
         </View>
-        <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false} onLayout={() => notifPerfMark("first-frame")}>
           {rows.length === 0 ? (
             <Text style={styles.notiEmpty}>暂无通知</Text>
           ) : (
@@ -375,14 +403,17 @@ export default function NotifCenterSheet({ open, onClose, onOpenSession }: {
               {action.length ? (
                 <View>
                   {groupHead("需你行动", action.length, c.error, "· 横滑删除 · 手动关")}
-                  {action.map((r) => renderRow(r, "action"))}
+                  {action.slice(0, visibleCount).map((r) => renderRow(r, "action"))}
                 </View>
               ) : null}
               {feed.length ? (
                 <View>
                   {groupHead("动态", feed.length, c.faint, "· 横滑删除")}
-                  {feed.map((r) => renderRow(r, "feed"))}
+                  {feed.slice(0, Math.max(0, visibleCount - action.length)).map((r) => renderRow(r, "feed"))}
                 </View>
+              ) : null}
+              {visibleCount < totalMain ? (
+                <Text style={styles.footNote}>加载中… {visibleCount}/{totalMain} 条（渐进补齐防首帧卡顿）</Text>
               ) : null}
               {resolved.length > 0 ? (
                 <View>
