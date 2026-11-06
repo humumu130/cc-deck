@@ -166,7 +166,8 @@
     "test:linkquality": "tsx scripts/test-linkquality.ts",
     "test:boardrecon": "tsx scripts/test-boardrecon.ts",
     "test:reviewseat": "tsx scripts/test-reviewseat.ts",
-    "test:inboxv1": "tsx scripts/test-inboxv1.ts"
+    "test:inboxv1": "tsx scripts/test-inboxv1.ts",
+    "test:boardtruth": "tsx scripts/test-boardtruth.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

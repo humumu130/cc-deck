@@ -37,7 +37,7 @@ jobs:
         # test:sqlite-resilience（#158 批1）：better-sqlite3 驱动失败降级 json 档——纯
         #   fs 夹具+驱动注入（不真换二进制），linux runner 上驱动本就可载，CI 可跑
         # W-CARDLIFE-R4 第二轮解并（1106）：dev 再进（aggregatev1 #44+inboxv1r1 #47）——全量并集任何一侧不丢
-        script: [test:277-team-create-redesign, test:artifacts-dead, test:autorevive, test:bridge, test:bus, test:cardlife, test:cardlifer2, test:cloud, test:codex, test:deliver-session, test:dispatch, test:dispatchbomb, test:dutywire, test:history, test:inboxv1, test:leader, test:linkquality, test:org, test:org-defects, test:pmseat, test:prbackflow, test:prchip, test:projects, test:prreview, test:reviewseat, test:routing, test:settings, test:settings-ws, test:sqlite-resilience, test:teampolish]
+        script: [test:boardtruth, test:277-team-create-redesign, test:artifacts-dead, test:autorevive, test:bridge, test:bus, test:cardlife, test:cardlifer2, test:cloud, test:codex, test:deliver-session, test:dispatch, test:dispatchbomb, test:dutywire, test:history, test:inboxv1, test:leader, test:linkquality, test:org, test:org-defects, test:pmseat, test:prbackflow, test:prchip, test:projects, test:prreview, test:reviewseat, test:routing, test:settings, test:settings-ws, test:sqlite-resilience, test:teampolish]
     defaults:
       run:
         working-directory: relay
