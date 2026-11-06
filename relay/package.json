@@ -57,6 +57,7 @@
     "test:leader": "tsx scripts/test-leader.ts",
     "test:projects": "tsx scripts/test-projects.ts",
     "test:cardlifer2": "tsx scripts/test-cardlifer2.ts",
+    "test:seatlive": "tsx scripts/test-seatlive.ts",
     "test:boardfix": "tsx scripts/test-boardfix.ts",
     "test:observe3": "tsx scripts/test-observe3.ts",
     "test:chainrecall": "tsx scripts/test-chainrecall.ts",
@@ -117,6 +118,7 @@
     "test:prbackflow": "tsx scripts/test-prbackflow.ts",
     "test:dutywire": "tsx scripts/test-dutywire.ts",
     "test:cardlife": "tsx scripts/test-cardlife.ts",
+    "test:subagent": "tsx scripts/test-subagent.ts",
     "test:pmseat": "tsx scripts/test-pmseat.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
     "test:pmresume": "tsx scripts/test-pmresume.ts",
@@ -166,7 +168,8 @@
     "test:linkquality": "tsx scripts/test-linkquality.ts",
     "test:boardrecon": "tsx scripts/test-boardrecon.ts",
     "test:reviewseat": "tsx scripts/test-reviewseat.ts",
-    "test:inboxv1": "tsx scripts/test-inboxv1.ts"
+    "test:inboxv1": "tsx scripts/test-inboxv1.ts",
+    "test:boardtruth": "tsx scripts/test-boardtruth.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

@@ -18,6 +18,8 @@ import { execFileSync } from "node:child_process"; // W-BOARDRECON-R3：dev log 
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
 import { reconcileBoardCards, harvestKeyOf } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）；R3 harvestKeyOf（已收割未翻判定）
+import { unclaimedStaleDispatches, unclaimedTtlMs, prStaleBoardActions, type PrTruthSnap, type TruthBoardEntry } from "./board-truth.js"; // [W-BOARDTRUTH] 刀2 未认领 TTL+刀3 审查中泳道×PR 真值对账（第三现治本）
+import { appendDispatch } from "./org.js"; // W-BOARDTRUTH 刀2：撤单台账收口行
 import { readDispatchLog, orgDir, dispatchLogPath } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
 import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
@@ -283,6 +285,88 @@ export class PatrolModule {
       }
       if (stale.length) this.push("board-submitted-stale", `审查中卡滞留超 ${Math.floor(staleMs / 3600_000)}h：${stale.length} 张待收割——${stale.slice(0, 3).join("、")}`);
     } catch { /* 尽力而为（铃不是闸） */ }
+    // ── W-BOARDTRUTH 刀2（t-1e731c9c 第三现治本）：未认领 TTL 扫尾 ──
+    // 派单 queued/dispatched 停滞超阈（CCR_UNCLAIMED_TTL_H 缺省 6h，"0"=关）=「未认领
+    // 陈卡」真身（派了没开工，claimed 泳道虚高第三现成因之二）：台账 failed 收口+
+    // 板卡回 backlog 标注+审计+PM 日聚合通知（同 key 幂等=非轰炸）。判定=board-truth
+    // 纯函数（末行赢——早行 queued 晚行 done 的单不看早行）。
+    try {
+      const ttlH = Math.floor(unclaimedTtlMs() / 3600_000);
+      if (Number.isFinite(ttlH)) {
+        const staleD = unclaimedStaleDispatches(readDispatchLog(undefined, 20_000));
+        if (staleD.length) {
+          const dayKey = new Date().toISOString().slice(0, 10);
+          let flippedN = 0;
+          for (const r of staleD) {
+            const did = String(r.id || "");
+            if (!did) continue;
+            appendDispatch({ ts: Date.now(), id: did, tier: "轻立项", target: "org-command", status: "failed", receipt: `未认领超时撤单（TTL ${ttlH}h——派单停滞 queued/dispatched 未开工，看板不说谎第三现治本刀2）`, session_id: "", actor: "system", failure_reason: "logic_error" }); // leaderId 私有——撤单行 session 空账（target=org-command 面已足）
+            // W-BOARDTRUTH-R1（P1 撤单驱逐）：同步逐出 cap-queue 重放队列——否则 queued
+            // 单在 drain 时照样重放，台账成 queued→failed→running 矛盾链（A 审定罪）
+            try { this.mgr.evictQueuedDispatch(did); } catch { /* 驱逐尽力而为（drain 前查终态闸兜底） */ }
+            // 板卡：dispatch_id 匹配的 claimed/在途卡回 backlog+标注（无卡=纯台账单零动作）
+            for (const g of listGroups().filter((x) => x.status === "active")) {
+              const board = loadBoardFile(g.id);
+              if (!board) continue;
+              const hit = board.entries.find((x) => x.dispatch_id === did);
+              if (!hit || hit.status === "done" || hit.status === "backlog") continue;
+              upsertBoardEntry(g.id, { id: hit.id, text: hit.text, status: "backlog", note: `${hit.note ? hit.note + " " : ""}[boardtruth ${new Date().toLocaleDateString("zh-CN")}] 未认领超时撤单（>${ttlH}h 未开工）——回待认领` });
+              flippedN += 1;
+              this.mgr.emitBoard(g.id);
+            }
+            this.mgr.emitChainAudit("boardtruth-unclaimed-ttl", `dispatch ${did.slice(0, 8)} 未认领超时撤单（>${ttlH}h 停滞）——台账 failed 收口${flippedN ? "+板卡回 backlog" : ""}`);
+          }
+          try {
+            this.mgr.upsertNotification("system", `boardtruth-unclaimed-${dayKey}`, String(staleD.length), {
+              title: `未认领超时撤单 ×${staleD.length}（日聚合）`,
+              body: `超 ${ttlH}h 未开工派单自动撤：${staleD.slice(0, 3).map((x) => String(x.id || "").slice(0, 8)).join("、")}${staleD.length > 3 ? " 等" : ""}——板卡已回待认领（如需重派走原任务书）`,
+              severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/",
+            });
+          } catch { /* 通知尽力而为 */ }
+          this.appendReport(`BOARDTRUTH-TTL 撤单 ${staleD.length} 单（>${ttlH}h 未认领，板卡回 ${flippedN} 张）`);
+        }
+      }
+    } catch (e) { console.warn(`[patrol] boardtruth TTL 扫失败（跳过）: ${e instanceof Error ? e.message : String(e)}`); }
+    // ── W-BOARDTRUTH 刀3：审查中泳道 × 开 PR 真值强对账 ──
+    // 板卡 submitted/ready_to_install 带 pr_url（prchip 落值）× gh pr list --state all
+    // 真值：PR closed→翻 backlog 标陈；merged（事件丢失形态）→翻 done（pr-report 状态机
+    // 补网）。gh 不可用=降级跳过（审计留痕）——无把握不动（任务书「无把握项标待核销推
+    // PM」：无 pr_url 的审查中卡=无真值源不臆断，由 submitted 滞留铃（上方）兜底推收割）。
+    try {
+      const prRaw = execFileSync("gh", ["pr", "list", "--state", "all", "--json", "number,state,url,headRefName", "--limit", "100"], { encoding: "utf-8", timeout: 10_000 });
+      const prs = JSON.parse(prRaw) as PrTruthSnap[];
+      const boards: Array<{ gid: string; entries: TruthBoardEntry[] }> = [];
+      for (const g of listGroups().filter((x) => x.status === "active")) {
+        const board = loadBoardFile(g.id);
+        if (board) boards.push({ gid: g.id, entries: board.entries as unknown as TruthBoardEntry[] });
+      }
+      const acts = prStaleBoardActions(boards, prs);
+      let doneN = 0, backlogN = 0;
+      for (const a of acts) {
+        const board = boards.find((x) => x.gid === a.gid);
+        const ent = board?.entries.find((x) => x.id === a.entryId);
+        if (!ent) continue;
+        if (a.reason === "pr-merged-missed") {
+          const r = upsertBoardEntry(a.gid, { id: ent.id, text: ent.text ?? "", status: "done", note: `${ent.note ? ent.note + " " : ""}[boardtruth ${new Date().toLocaleDateString("zh-CN")}] PR merged 对账补翻（merged 事件丢失形态——pr-report 状态机补网）`, journal_action: "boardtruth-pr-merged-missed" });
+          if (r.ok) doneN += 1;
+        } else {
+          const r = upsertBoardEntry(a.gid, { id: ent.id, text: ent.text ?? "", status: "backlog", note: `${ent.note ? ent.note + " " : ""}[boardtruth ${new Date().toLocaleDateString("zh-CN")}] PR 已关闭（非 merged）——审查中翻回待认领标陈`, journal_action: "boardtruth-pr-closed-stale" });
+          if (r.ok) backlogN += 1;
+        }
+        this.mgr.emitChainAudit(a.reason === "pr-merged-missed" ? "boardtruth-pr-merged-missed" : "boardtruth-pr-closed-stale", a.detail);
+        this.mgr.emitBoard(a.gid);
+      }
+      if (acts.length) {
+        this.appendReport(`BOARDTRUTH-PR 对账处置 ${acts.length} 张（merged 补翻 ${doneN}+closed 退回 ${backlogN}）`);
+        try {
+          this.mgr.upsertNotification("system", "boardtruth-pr-reconcile", String(acts.length), {
+            title: `审查中泳道对账处置 ×${acts.length}`,
+            body: `PR 真值对账：merged 补翻 done ${doneN} 张+PR 已闭退 backlog ${backlogN} 张——泳道数字与 GitHub 真值强一致（第三现治本刀3）`,
+            severity: "info", group: "activity", actionable: false, domain: "org", returnPath: "/",
+          });
+        } catch { /* 通知尽力而为 */ }
+      }
+    } catch { this.appendReport("BOARDTRUTH-PR gh 降级跳过（gh 不可用/超时——下拍重试）"); }
     // ① worker 帧新鲜度：WORKING 且静默 >40min（压缩期静默合法，排除）
     // #199 B3：盲面双补——①WAITING 久滞（等用户确认超 2h=疑似确认卡丢失/没人管，与
     // WORKING 停滞分列报告）②compacting 挂死（压缩标志 >90min 不落=看门狗状态机卡死，

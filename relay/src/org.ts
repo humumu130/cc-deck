@@ -299,6 +299,8 @@ interface DutyFile {
   appoint_rejected?: AppointRejected[];
   /** [W-DUTYWIRE] 值守位空窗期的关键事件待投队列（claim/回活补投；cap 20 截旧） */
   duty_feed_pending?: DutyFeedPendingItem[];
+  /** W-SEATALIVE 刀3：最近批准任命（同 sid 24h 内 claim 免卡续任） */
+  pm_last_approved?: PmLastApproved | null;
 }
 // [W-PMSEAT] 缓存按解析目录键控（Map<orgDir, DutyFile>）：同进程多沙盒并存（测试
 // 夹具逐块换 CCR_ORG_DIR——CI 实锤：前夹具 approve 落的 override 带测试进程 pid 恒活，
@@ -365,6 +367,17 @@ export function setPmOverride(v: PmOverride, dir?: string): { ok: boolean; error
   } catch (e) {
     return { ok: false, error: `duty.json 写入失败: ${e instanceof Error ? e.message : String(e)}` };
   }
+}
+
+// W-SEATALIVE 刀3（续任免卡）：最近一次用户批准的值守任命（sid+时刻）——同 sid 在
+// TTL（24h）内重复 claim 免确认卡（上次批准即续任授权，消灭「每重启一次 CLI 批一次
+// 卡」；1106 用户实锤当日同 sid 第三张卡）。换 sid 才重新出卡。
+export interface PmLastApproved { session_id: string; at: number }
+export function readPmLastApproved(dir?: string): PmLastApproved | null {
+  try { return readDutyFile(dir ?? orgDir()).pm_last_approved ?? null; } catch { return null; }
+}
+export function recordPmLastApproved(v: PmLastApproved, dir?: string): void {
+  try { writeDutyFile({ ...readDutyFile(dir ?? orgDir()), pm_last_approved: v }, dir ?? orgDir()); } catch { /* 记档尽力而为 */ }
 }
 
 export function clearPmOverride(dir?: string): void {
