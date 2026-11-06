@@ -293,7 +293,7 @@ jobs:
     # 不签名不公证——无 Apple 账号永久可用（首次右键→打开绕 Gatekeeper），
     # 有账号后可加 Developer ID 签名 + notarize 消除首次摩擦
     name: Tauri dmg（macOS-aarch64，未签名）
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 40
 
     steps:
