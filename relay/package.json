@@ -57,6 +57,7 @@
     "test:leader": "tsx scripts/test-leader.ts",
     "test:projects": "tsx scripts/test-projects.ts",
     "test:cardlifer2": "tsx scripts/test-cardlifer2.ts",
+    "test:seatlive": "tsx scripts/test-seatlive.ts",
     "test:boardfix": "tsx scripts/test-boardfix.ts",
     "test:observe3": "tsx scripts/test-observe3.ts",
     "test:chainrecall": "tsx scripts/test-chainrecall.ts",
