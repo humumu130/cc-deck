@@ -37,32 +37,28 @@ const PRESETS: { label: string; text: string }[] = [
   { label: "继续未完成", text: "查看当前工作状态，继续完成未完成的任务。" },
 ];
 
-// 75-E 状态词徽章配色（跨端 token 陷阱对照 theme.ts 后钉死）：ready=done 绿 /
-// unavailable=working 琥珀（警示非错误，P81-8EFIX 三态色同语义档）/ unsupported=
-// error 红橙 / unknown=faint 灰。expo waiting=#F0524F 是红（跨端 token 同名异色，
-// 非 web waiting 语义），本映射全程不用 waiting——引擎标识色另走 ENGINE_ACCENT
-//（005 词表），两套不同轴勿混
-const ENGINE_STATE_COLOR: Record<EngineCatalogState, keyof ThemeColors> = {
-  ready: "done",
-  unavailable: "working",
-  needs_auth: "working", // #102 批 B：未登录黄点（与 web 黄点同语义档）
-  unsupported: "error",
-  unknown: "faint",
-};
+// enginemobile-R1 P3-1（A 审指认）：ENGINE_STATE_COLOR 常量退役——R1 徽章词表接管后
+// 零引用（原 75-E 时代配裸拼 engState 用，engState 删后成死键；色轴语义已并入
+// ENGINE_BADGE.tone 注释）。token 陷阱备注保留在 ENGINE_BADGE 注释（waiting 跨端
+// 同名异色勿混）。
 
 // enginemobile（t-fe213f37，1106 用户截图 606df423 八病灶重构）：引擎列表视觉徽章词
-// 表——**视觉面人话化**（对齐桌面 W-ENGINESLIM 语言：未安装/未接入短标、状态胶囊化不
-// 裸拼、禁开发者术语直出），与 protocol.ts ENGINE_STATE_LABEL（三端同词钉死、供 a11y
-// 读屏完整语义）分轨：徽章只用这里的短词，读屏 label 仍拼 ENGINE_STATE_LABEL 原词
-//（视觉降噪 ≠ 语义丢失）。tone 三态=徽章胶囊色（绿可用/灰未装或未知/红不支持/橙未登
-// 录=行动态可点拉起登录）。needs_auth 徽章词「未登录」而非「未安装或校验未过」——行
-// 动语义优先（点行即拉起扫码，#102 批 B）。
+// 表——**视觉面人话化**（对齐桌面 W-ENGINESLIM 语言：状态胶囊化不裸拼、禁开发者术语
+// 直出），与 protocol.ts ENGINE_STATE_LABEL（三端同词钉死、供 a11y 读屏完整语义）分轨
+// ：徽章只用这里的短词，读屏 label 仍拼 ENGINE_STATE_LABEL 原词（视觉降噪 ≠ 语义丢
+// 失）。
+// enginemobile-R1（t-c1ae5fd5，A 审 P1 跨端词表统一——PM 拍板桌面已验收词表为准）：
+// 四态短词与桌面 settings-domain.js:1585（engineslim #53 用户验收 tag）**逐词钉死同词
+// ：已接/待装/未登录/未接入**——原「可用/未安装/未登录/不支持/未知」自立第二套词=「学
+// 习桌面端」主旨半边未收口。unknown 并入「待装」（桌面 else 分支同口径——探测不出与
+// 未装对用户的行动语义同：去装）。tone 色轴不变（绿已接/灰待装/红未接入/橙未登录=行
+// 动态可点拉起登录）。
 const ENGINE_BADGE: Record<EngineCatalogState, { t: string; tone: keyof ThemeColors }> = {
-  ready: { t: "可用", tone: "done" },
-  unavailable: { t: "未安装", tone: "faint" },
+  ready: { t: "已接", tone: "done" },
+  unavailable: { t: "待装", tone: "faint" },
   needs_auth: { t: "未登录", tone: "working" },
-  unsupported: { t: "不支持", tone: "error" },
-  unknown: { t: "未知", tone: "faint" },
+  unsupported: { t: "未接入", tone: "error" },
+  unknown: { t: "待装", tone: "faint" },
 };
 
 export default function NewSessionModal({ visible, presetCwd, onClose }: { visible: boolean; presetCwd?: string | null; onClose: () => void }) {
@@ -424,7 +420,10 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                           if (!e.models || !e.models.length) setPickerOpen(false); // 无模型清单一步完成
                         }}
                       >
-                        <EngineBrandTile engine={e.id} size={18} dim={e.state !== "ready"} />
+                        {/* enginemobile-R1 P3-2（A 审）：dim 收窄到「禁用行」——原 state!=="ready"
+                            波及 needs_auth 行动行（可点拉起扫码的行，瓦片被洗 0.4=行动引导
+                            图标弱化）；行动行不 dim，blocked 行照灰度。 */}
+                        <EngineBrandTile engine={e.id} size={18} dim={!!block && !loginRow} />
                         <View style={m.engMain}>
                           <View style={m.engNameRow}>
                             <Text style={[m.engName, on && m.engNameOn]} numberOfLines={1}>{engineLabelOf(e)}</Text>
