@@ -301,6 +301,9 @@ export class PatrolModule {
             const did = String(r.id || "");
             if (!did) continue;
             appendDispatch({ ts: Date.now(), id: did, tier: "轻立项", target: "org-command", status: "failed", receipt: `未认领超时撤单（TTL ${ttlH}h——派单停滞 queued/dispatched 未开工，看板不说谎第三现治本刀2）`, session_id: "", actor: "system", failure_reason: "logic_error" }); // leaderId 私有——撤单行 session 空账（target=org-command 面已足）
+            // W-BOARDTRUTH-R1（P1 撤单驱逐）：同步逐出 cap-queue 重放队列——否则 queued
+            // 单在 drain 时照样重放，台账成 queued→failed→running 矛盾链（A 审定罪）
+            try { this.mgr.evictQueuedDispatch(did); } catch { /* 驱逐尽力而为（drain 前查终态闸兜底） */ }
             // 板卡：dispatch_id 匹配的 claimed/在途卡回 backlog+标注（无卡=纯台账单零动作）
             for (const g of listGroups().filter((x) => x.status === "active")) {
               const board = loadBoardFile(g.id);

@@ -4814,12 +4814,14 @@ export class SessionManager {
     const execFileAsync = promisify(execFile);
     const run = (args: string[]) => execFileAsync("gh", args, { encoding: "utf-8", timeout: 10_000 });
     try {
-      const view = JSON.parse(String((await run(["pr", "view", mergedPrUrl, "--json", "number,headRefName"])).stdout)) as { number: number; headRefName: string };
+      // R1：view 增 mergedAt（P2 时序门）+list 增 createdAt——gh 同名字段直传
+      const view = JSON.parse(String((await run(["pr", "view", mergedPrUrl, "--json", "number,headRefName,mergedAt"])).stdout)) as { number: number; headRefName: string; mergedAt?: string };
       const mergedNumber = Number(view.number) || 0;
       const mergedBranch = String(view.headRefName || "");
+      const mergedAt = view.mergedAt;
       if (!mergedNumber || !mergedBranch) { this.emitChainAudit("boardtruth-pr-close-degraded", `同链 PR 自动闭降级：后继 PR 元数据提取失败（${mergedPrUrl}）——人工核销`); return; }
-      const openPrs = JSON.parse(String((await run(["pr", "list", "--state", "open", "--json", "number,headRefName,title,url", "--limit", "60"])).stdout)) as OpenPrSnap[];
-      const hits = supersededChainPrs(openPrs, mergedBranch, mergedNumber);
+      const openPrs = JSON.parse(String((await run(["pr", "list", "--state", "open", "--json", "number,headRefName,title,url,createdAt", "--limit", "60"])).stdout)) as OpenPrSnap[];
+      const hits = supersededChainPrs(openPrs, mergedBranch, mergedNumber, mergedAt);
       if (!hits.length) return; // 无同链开 PR——常态静默（每 merged 都全量关才是异常）
       let closed = 0;
       for (const pr of hits) {
@@ -10256,6 +10258,22 @@ ${lines.join("\n")}
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
   }
 
+  /** W-BOARDTRUTH-R1（P1 撤单驱逐）：按 dispatch_id 从 cap-queue 重放队列移除排队单
+   *（内存+落盘）——撤单（patrol 刀2 TTL/未来任何收口口）只写台账 failed 不清队列的
+   * 旧形态=drain 照样重放已撤单，台账成 queued→failed→running 矛盾链（A 审定罪）。
+   * 返回驱逐数（0=队列本无此单——幂等）。 */
+  evictQueuedDispatch(dispatchId: string): number {
+    if (!dispatchId) return 0;
+    const before = this.dispatchQueueItems.length;
+    this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId);
+    const n = before - this.dispatchQueueItems.length;
+    if (n > 0) {
+      saveDispatchQueue(this.dispatchQueueItems);
+      this.emitChainAudit("boardtruth-queue-evict", `排队单 ${dispatchId.slice(0, 8)} 已随撤单驱逐出重放队列（×${n}——台账/队列不再矛盾）`);
+    }
+    return n;
+  }
+
   // 排队排水：组内出现空闲（回合收口/成员除名释放）时按 FIFO 接续。重入 dispatchWorker
   // （queue_replay 带原单 id，台账同 id 收敛 queued→dispatched/failed）。重入又 queued =
   // 仍触顶全忙（enqueueCapDispatch 已把单挪回队首），break 等下一轮空闲。drainReentrant
@@ -10265,6 +10283,20 @@ ${lines.join("\n")}
     this.drainReentrant = true;
     try {
       for (;;) {
+        // W-BOARDTRUTH-R1（P1 兜底闸）：重放前查终态——队列里挂着台账已终态（failed/
+        // done，撤单/其他收口口写的）的单直接弃（不 dispatchWorker、不再写行）。
+        // evictQueuedDispatch 是主驱逐口（撤单时点即清）；本闸兜住绕过主口的任何
+        // 未来收口路径（一次台账末行读，drain 低频路径成本可忽略）。
+        try {
+          const terminalIds = new Set(readDispatchLog(undefined, 500).filter((r) => r.status === "failed" || r.status === "done").map((r) => r.id));
+          if (terminalIds.size) {
+            const kept = this.dispatchQueueItems.filter((x) => !terminalIds.has(x.dispatch_id));
+            if (kept.length !== this.dispatchQueueItems.length) {
+              this.emitChainAudit("boardtruth-queue-evict", `drain 前查终态弃 ${this.dispatchQueueItems.length - kept.length} 个已终态排队单（台账/队列矛盾链兜底闸）`);
+              this.dispatchQueueItems = kept;
+            }
+          }
+        } catch { /* 台账读失败不阻断排水（保守——照旧重放，主驱逐口兜） */ }
         // R1（A-P0）：双桶排水——先本 gid 项，无则试无 gid 桶（FIFO）。无 gid 排队单
         //（随手办）原六触发点全 string 键控=永不排水+台账 queued 行永悬+目录锁把
         // queued 算活单致锚永久拒收（A/B 双审独立实锤）——任何释放边 drain 顺带排

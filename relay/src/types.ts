@@ -1598,5 +1598,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "boardtruth-unclaimed-ttl", // 刀2：未认领超时撤单（queued/dispatched 停滞超阈）
   "boardtruth-pr-merged-missed", // 刀3：审查中卡×PR merged 真值对账补翻（merged 事件丢失形态）
   "boardtruth-pr-closed-stale", // 刀3：审查中卡×PR 已闭（非 merged）——翻回 backlog 标陈 // W-CARDLIFE-R3 P1-2：回执迟写补翻——90s 复查军规行合规，被拦卡自动补位 submitted
+  "boardtruth-queue-evict", // W-BOARDTRUTH-R1（P1）：撤单驱逐 cap-queue 重放队列（主口=撤单时点清，兜底闸=drain 前查终态弃——台账 queued→failed→running 矛盾链根除）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];
