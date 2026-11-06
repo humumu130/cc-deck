@@ -1,7 +1,7 @@
 // #75 无人值守自动拉起专项（纯单元）：relay 重启收养后，任务存储里有未完成
 // 待办（pending/in_progress）的托管会话被 resume 拉起并注入续跑指令；无待办/
 // 外部会话/无 resume 锚点/开关关闭的都不拉。
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -293,6 +293,57 @@ delete process.env.CCR_ORG_DIR;
   const rAct2 = mgr2.reviveManagedSession("cdx-error2", "test", "回合失败");
   assert(rAct2.ok === true, `激活器事件驱动复活 codex 死流可达 got=${JSON.stringify(rAct2)}`);
   assert(resumes2.some((r) => r.resume === "cdx-thread-eee" && r.text.includes("激活器")), "激活器路径 codex 同拉起（含 engine 感知文案）");
+}
+
+// ---------- [W-RESUMEBANNER] 复活横幅降噪双态断言（1106 每消息刷屏实锤） ----------
+// 判定单点 sdkReviveAbnormal（last_error/ERROR 态/熔断连败账/冷却——零新状态）；
+// 常态拉起（上回合正常 DONE→按需拉起=SDK 每回合退出生命周期）横幅 0 条；真异常
+// 复活横幅恰 1 条。防恒真：每例同时断言「确被拉起」（拉起计数+WORKING 态）。
+{
+  const busR = new EventBus();
+  const mgrR = new SessionManager(busR, loadConfig());
+  const resumesR: string[] = [];
+  mgrR.setAgentFactory((_c, _m, _cb, _p, opts) => {
+    resumesR.push(opts?.resume ?? "");
+    return { id: `fake-rb-${resumesR.length}`, startedAt: Date.now(), ended: false,
+      sendMessage() {}, allow: () => false, deny: () => false, answer: () => false,
+      stop: async () => {}, setPermissionMode: async () => {} } as AgentLike;
+  });
+  const banners: Record<string, number> = {};
+  busR.subscribe((env) => {
+    if (env.type !== "SESSION_LOG") return;
+    const e = env.payload as { kind?: string; text?: string };
+    if (e?.kind === "system" && String(e.text ?? "").startsWith("已恢复 SDK 会话")) {
+      banners[String(env.session_id)] = (banners[String(env.session_id)] ?? 0) + 1;
+    }
+  });
+  const SID_RB_NORM = "autorevive-test-rb-norm-cli";
+  const SID_RB_ERR = "autorevive-test-rb-err-cli";
+  const SID_RB_STREAK = "autorevive-test-rb-streak-cli";
+  putTodo(SID_RB_NORM, "1.json", { id: 1, subject: "常态拉起待办", status: "in_progress" });
+  putTodo(SID_RB_ERR, "1.json", { id: 1, subject: "异常复活待办", status: "in_progress" });
+  putTodo(SID_RB_STREAK, "1.json", { id: 1, subject: "熔断复拉待办", status: "in_progress" });
+  mgrR.adopt(new Map([
+    mk2("rb-norm", SID_RB_NORM, false, Date.now(), {}), // 常态：DONE 无错账无熔断（mk 默认 DONE）
+    mk2("rb-err", SID_RB_ERR, false, Date.now(), { status: "ERROR", last_error: "stream-error: 上游断流" }),
+    mk2("rb-streak", SID_RB_STREAK, false, Date.now(), {}), // 熔断连败账在 ManagedSession 层（非 state）——adopt 后直捣置位
+  ]));
+  (mgrR as unknown as { sessions: Map<string, { resumeFailStreak?: number }> }).sessions.get("rb-streak")!.resumeFailStreak = 2; // 冷却后复拉形态（连败账在场）
+  const nR = mgrR.autoReviveManaged();
+  const pulled = (sid: string) => mgrR.snapshot().find((x) => x.session_id === sid)?.status === "WORKING";
+  assert(nR === 3 && pulled("rb-norm") && pulled("rb-err") && pulled("rb-streak"),
+    `RB 前置：三席全被拉起（横幅断言防恒真的前提）got=${nR}`);
+  assert((banners["rb-norm"] ?? 0) === 0, `RB① 常态拉起横幅 0 条（上回合正常结束→按需拉起=SDK 生命周期，不刷屏）got=${banners["rb-norm"] ?? 0}`);
+  assert((banners["rb-err"] ?? 0) === 1, `RB② 真异常复活（ERROR+last_error）横幅恰 1 条 got=${banners["rb-err"] ?? 0}`);
+  assert((banners["rb-streak"] ?? 0) === 1, `RB③ 熔断连败后复拉横幅恰 1 条 got=${banners["rb-streak"] ?? 0}`);
+  // 源码序锚：reviveSaved 两卫兵与 resumeAgent 同判定（待命/积压分支无消息路径
+  // 夹具不可直达——PM 保活 timer 驱动，走卫兵计数锚）
+  const smSrc = readFileSync(fileURLToPath(new URL("../src/session-manager.ts", import.meta.url)), "utf-8");
+  const guarded = smSrc.match(/if \(reviveAbnormal\) this\.pushExternalLog\(s\.state\.session_id, "system", `已恢复 SDK 会话/g) ?? [];
+  assert(guarded.length === 3, `RB④ 三站全卫兵化（resumeAgent+reviveSaved×2——守卫恰 3 处）got=${guarded.length}`);
+  assert(smSrc.includes("sdkReviveAbnormal(s: ManagedSession)") && smSrc.includes('s.state.status === "ERROR"') && smSrc.includes("(s.resumeFailStreak ?? 0) > 0") && smSrc.includes("(s.resumeCooldownUntil ?? 0) > 0"),
+    "RB⑤ 判定单点四信号在册（last_error/ERROR/连败/冷却——零新状态）");
+  for (const sid of [SID_RB_NORM, SID_RB_ERR, SID_RB_STREAK]) rmSync(join(TASKS, sid), { recursive: true, force: true });
 }
 
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
