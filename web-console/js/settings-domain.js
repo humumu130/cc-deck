@@ -1586,7 +1586,12 @@ function connectLan(ctx) {
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
               // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
-              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}" title="${esc(oneLine(e.auth_hint || "点此扫码登录"))}"` : ""}><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${label}${na ? ' <span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd">${copy}</div></div>${loginBtn || tag}</div>`;
+              // W-ENGINESLIM-R1（A 审 P1·1106 用户令②视觉面）：与新建会话下拉同款——徽章
+              //（图标+名称文字）即标签，v8-swtxt 不再并排 label 名称重复（A 审实锤双显）；
+              // 引擎名进行 title/aria-label（可访问性不丢）；needs_auth 黄点保留（信号位），
+              // 其 title 升「名 · 扫码提示」全量（旧 title 只 auth_hint 丢名）。
+              const rowTitle = esc(`${label}${na ? " · 点此扫码登录 · " + oneLine(e.auth_hint || "") : " · " + copy}`);
+              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}"` : ""} title="${rowTitle}" aria-label="${rowTitle}"><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${na ? '<span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd v8-swd-solo">${copy}</div></div>${loginBtn || tag}</div>`;
             }).join(""));
           }
           // 件B：已隐藏远程卡恢复行（renderHiddenRemoteLive 挂 window 供 click 委托复渲）

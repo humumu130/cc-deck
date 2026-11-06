@@ -97,6 +97,34 @@ const autoStrong = await ev(`(() => { const a = document.querySelector('#b2-engi
 ok(strongN === 1 && autoStrong === true, `S4b strong 仅剩 auto 行（跟随源默认=语义说明非引擎名；计 ${strongN} 处）——引擎行零名称重复`);
 await shot("02-after-slim");
 
+// ---------- S5 设置→Agent 引擎面（W-ENGINESLIM-R1 A 审 P1：视觉与新建面同款） ----------
+// 关闭引擎下拉/新建弹 → 切设置域 → 直切 provider 面板 active（tab 交互链由 CSS 类控制，
+// live 容器渲染不依赖 active——SNAPSHOT 时已灌，探针直显断言）
+await ev(`document.getElementById("b2-engine-menu")?.remove(); document.getElementById("b2-create-pop")?.closest(".pair-pop-backdrop")?.remove();`);
+await ev(`document.querySelector('.rail-btn[data-domain="settings"]').click()`);
+await wait(300);
+await ev(`window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive()`); // 探针形态补触发（生产=连接事件链驱动，mock frames 不走该链）
+await wait(400);
+await ev(`(() => { document.querySelectorAll(".settings-panel").forEach(p => p.classList.remove("active")); const t = document.querySelector('[data-settings-panel="provider"]'); if (t) t.classList.add("active"); })()`);
+await wait(300);
+const setRow = await ev(`(() => { const rows = [...document.querySelectorAll('[data-settings-live="provider"] .engine-row')]; const r = rows.find(x => (x.querySelector(".engine-badge")?.textContent || "").includes("Claude")); if (!r) return "NOROW"; const swtxt = r.querySelector(".v8-swtxt"); const swdOnly = swtxt.querySelector(".v8-swd"); return JSON.stringify({ badgeText: r.querySelector(".engine-badge")?.textContent ?? "", swtxtTop: swtxtTop(swtxt, swdOnly), swd: swdOnly?.textContent ?? "", title: r.getAttribute("title") ?? "", aria: r.getAttribute("aria-label") ?? "", soloCls: !!swdOnly?.classList.contains("v8-swd-solo") }); function swtxtTop(sw, swd) { const c = sw.cloneNode(true); const d = c.querySelector(".v8-swd"); if (d) d.remove(); c.querySelectorAll(".eng-auth-dot").forEach(x => x.remove()); return (c.textContent || "").trim(); } })()`);
+const sr = JSON.parse(setRow === "NOROW" ? "{}" : setRow);
+ok(setRow !== "NOROW", "S5a 设置面引擎行在（provider live 渲染）");
+ok((sr.badgeText || "").includes("Claude"), `S5b 徽章含名称文字（标签在场，"${sr.badgeText}"）`);
+ok((sr.swtxtTop || "") === "", `S5c swtxt 主体无名称重复（A 审 P1 根治——旧形态 label 双显，实「${sr.swtxtTop}」）`);
+ok((sr.swd || "").includes("已接") && (sr.swd || "").includes("模型"), `S5d 单行状态位（"${sr.swd}"）`);
+ok(sr.soloCls === true, "S5d2 v8-swd-solo 升主字号形态（视觉重量对齐新建面）");
+ok((sr.title || "").includes("Claude") && (sr.aria || "").includes("Claude"), `S5e 行 title/aria 带引擎名（可访问性不丢，"${(sr.title || "").slice(0, 30)}"）`);
+const setNA = await ev(`(() => { const rows = [...document.querySelectorAll('[data-settings-live="provider"] .engine-row')]; const r = rows.find(x => (x.querySelector(".engine-badge")?.textContent || "").includes("Codex")); if (!r) return "NOROW"; return JSON.stringify({ swd: r.querySelector(".v8-swd")?.textContent ?? "", title: r.getAttribute("title") ?? "" }); })()`);
+const sn = JSON.parse(setNA === "NOROW" ? "{}" : setNA);
+ok(setNA !== "NOROW" && sn.swd === "未安装", `S5f 未装行=「未安装」二字（"${sn.swd}"）`);
+ok((sn.title || "").includes("Codex"), "S5f2 未装行 title 带名");
+const setUns = await ev(`(() => { const rows = [...document.querySelectorAll('[data-settings-live="provider"] .engine-row')]; const r = rows.find(x => (x.querySelector(".engine-badge")?.textContent || "").includes("iFlow")); return r ? (r.querySelector(".v8-swd")?.textContent ?? "") : "NOROW"; })()`);
+ok(setUns === "未接入", `S5g unsupported=「未接入」二字（"${setUns}"）`);
+const setTxt = await ev(`(document.querySelector('[data-settings-live="provider"]')?.textContent || "")`);
+ok(!setTxt.includes("需先安装") && !setTxt.includes("暂不可用"), "S5h 设置面「需先安装/暂不可用」绝迹");
+await shot("03-settings-engine");
+
 console.log(BEFORE ? `\n${TAG}(before 基线): ${pass} passed（baseline-red=改动面证据）` : `\n${TAG}: ${pass} passed, ${fail} failed`);
 writeFileSync(`${OUT}/summary.txt`, `pass=${pass} fail=${fail}\n`);
 killChrome();

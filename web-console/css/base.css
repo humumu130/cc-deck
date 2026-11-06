@@ -2059,6 +2059,7 @@
     .v8-relaystat { display: flex; align-items: flex-start; gap: 10px; }
     .v8-relaystat .st { color: var(--text-strong); font-size: var(--fs-A-item); font-weight: 600; }
     .v8-relaystat .meta, .v8-swd { margin-top: 1px; color: var(--faint); font-size: var(--fs-C); }
+    .v8-swtxt .v8-swd-solo { margin-top: 0; color: var(--text-strong); font-size: var(--fs-B); font-weight: 500; } /* W-ENGINESLIM-R1：设置引擎行去 label 后 swd 单行状态位升主字号主色（与新建面 .so-solo 同视觉重量） */
     .v8-relaystat .meta { font-family: var(--mono, ui-monospace, monospace); } /* W-SETTINGS3 批2（视觉清单）：端口/路径等值类文本回 V3 mono 码值语言 */
     .v8-rdot2 { flex: none; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--done); box-shadow: none; box-shadow: 0 0 8px color-mix(in srgb, var(--done) 45%, transparent); }
     .v8-rdot2.off { background: var(--working); box-shadow: none; box-shadow: 0 0 8px color-mix(in srgb, var(--working) 45%, transparent); }
