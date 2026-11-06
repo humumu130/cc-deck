@@ -23,6 +23,7 @@ export function workerConcurrencyCap(): number {
   return Number.isFinite(v) && v >= 2 ? Math.floor(v) : 6;
 }
 import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Report 六态（回执落账枚举位——散文本 waiting 不认）
+import { appendSubagentRow, countRunningSubagents, markPendingDispose, readSubagentLedger, scanOrphanSubagents, shouldLessonBackfill, SUBAGENT_KINDS, type SubagentKind, type SubagentRow } from "./subagent-ledger.js"; // W-PMRESOURCE-V1（#106）：子代理轻账（件1 模块——register/done/fail/list+orphan 扫描+回流门控）
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
@@ -1005,6 +1006,32 @@ export class SessionManager {
     r.unref();
     this.startDutyLostWatch(); // [W-DUTYWIRE]：值守失联观测拍（60s）+pending 补投顺拍（重启窗收口）
     this.flushDutyFeedPending(); // [W-DUTYWIRE]：重启补投——席位经活跃度凭证判活存活时，空窗期积压事件即达
+    this.sweepOrphanSubagents(); // W-PMRESOURCE-V1（#106 件3）：重启 flush 边扫孤儿子代理任务——父会话随重启消亡，running 残行即断档候选，新 PM 上位即见处置卡
+  }
+
+  /** W-PMRESOURCE-V1（#106 件3）：孤儿子代理任务扫描+处置卡。挂点=PM claim 落位边与
+   *  relay 重启 flush 边（dutywire 两挂点同族——账行 running 即 pending，缺的只是接管
+   *  扫描）。语义：registered 无 done 超阈（缺省 10min，CCR_SUBAGENT_ORPHAN_MS）→
+   *  notifyConfirm 推值守 PM 一张「子代理任务断档处置」卡（**不自动复活进程**——判断
+   *  复活不救活，调研 Q2 定调：新 PM 读 artifact_path 判定结论已成可结案/半途须重派）；
+   *  推送成功才 markPendingDispose（失败留 running=下次扫描重试，不静默丢卡）。 */
+  sweepOrphanSubagents(): void {
+    try {
+      const target = this.dutyTargetId() ?? this.leaderId;
+      if (!target) return; // 无值守位无 Leader：下轮挂点再试（行仍 running 不丢）
+      const orphans = scanOrphanSubagents(this.cfg.dataDir, Date.now());
+      if (!orphans.length) return;
+      for (const o of orphans) {
+        const ageMin = Math.round(o.ageMs / 60_000);
+        const text = `[子代理任务断档处置] ${o.row.title}（${o.row.kind}，已 ${ageMin} 分钟无上报）——父会话疑似断档。产物=${o.row.artifact_path ?? "未登记"}。处置二选一：①读产物判定结论已成 → org subagent-report op=done 收口（结论可回流 lesson）；②半途无产物 → op=fail 放弃记账后按需重派（不自动复活进程）。[${o.row.id}]`;
+        if (this.notifyConfirm(target, text)) {
+          markPendingDispose(o.row.id, this.cfg.dataDir, `断档处置卡已推（${ageMin} 分钟无上报，target=${target.slice(0, 8)}）`);
+          console.log(`[subagent] 孤儿处置卡已推：${o.row.id}（${ageMin}min）→ ${target.slice(0, 8)}`);
+        } else {
+          console.warn(`[subagent] 孤儿处置卡未达（target 不在册）：${o.row.id}——留 running 下轮重试`);
+        }
+      }
+    } catch { /* 尽力而为（挂点边不炸主链） */ }
   }
 
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
@@ -7639,6 +7666,59 @@ ${lines.join("\n")}
           }
           return { ok: false, error: `phase 只收 begin|end（收到 ${phase || "空"}）` };
         }
+        // W-PMRESOURCE-V1（#106 件2）：PM 子代理任务台账单口——register/done/fail/list
+        // 四态（非决议类：PM 工具面，review-route/review-ledger 同信任级，不走 org_confirm；
+        // 断档处置卡由件3 扫描面推，不经此）。行落 data/subagent-log.ndjson（件1 模块）。
+        // done 边件5：kind∈{research,review} 且 summary 非空且 gid 在场 → lesson-append
+        // 摘要行回流（:5123 派单收口回流同构——analyze 类中间步骤不进记忆，防垃圾账）。
+        case "subagent-report": {
+          const op = str("op") || "list";
+          if (op === "register") {
+            const kind = str("kind") || "other";
+            if (!(SUBAGENT_KINDS as readonly string[]).includes(kind)) return { ok: false, error: `kind 只收 ${SUBAGENT_KINDS.join("|")}` };
+            const title = str("title");
+            if (!title) return { ok: false, error: "title 必填" };
+            const id = "sa-" + randomUUID().slice(0, 8);
+            const gid = str("gid");
+            appendSubagentRow({ ts: Date.now(), id, kind: kind as SubagentKind, title: truncate(title, 120), parent_sid: str("parent_sid"), status: "running", registered_at: Date.now(), ...(gid ? { gid } : {}) }, this.cfg.dataDir);
+            return { ok: true, data: { id } };
+          }
+          if (op === "done" || op === "fail") {
+            const id = str("id");
+            if (!id) return { ok: false, error: "id 必填" };
+            const cur = readSubagentLedger(this.cfg.dataDir).find((r) => r.id === id);
+            if (!cur) return { ok: false, error: `子代理任务不存在: ${id}` };
+            if (cur.status !== "running" && cur.status !== "pending_dispose") return { ok: false, error: `已收口（${cur.status}）不可重复上报` };
+            const summary = str("summary");
+            const artifact = str("artifact_path");
+            const row: SubagentRow = op === "done"
+              ? { ...cur, ts: Date.now(), status: "done", done_at: Date.now(), ...(artifact ? { artifact_path: artifact } : {}), ...(summary ? { summary: truncate(summary, 400) } : {}) }
+              : { ...cur, ts: Date.now(), status: "failed", done_at: Date.now(), reason: truncate(str("reason") || "未注明原因", 200), ...(artifact ? { artifact_path: artifact } : {}) };
+            appendSubagentRow(row, this.cfg.dataDir);
+            // 件5：done 边 lesson 回流（门控单点 shouldLessonBackfill——analyze 不进记忆；
+            // 失败不阻断上报主链，审计行留痕即可）
+            if (op === "done" && shouldLessonBackfill(row)) {
+              const lr = this.orgAction("lesson-append", {
+                gid: row.gid,
+                text: `[子代理·${row.kind}] ${truncate(row.title, 60)}｜结论：${truncate(row.summary ?? "", 120)}｜产物=${row.artifact_path ?? "无"}｜${row.id}`,
+                tags: ["子代理", row.kind],
+              });
+              appendDispatch({ ts: Date.now(), id: randomUUID(), tier: "随手办", target: "org-command", session_id: "", status: lr.ok ? "done" : "failed", receipt: truncate(`subagent lesson 回流 · ${row.id}：${lr.ok ? "已回流" : `失败 ${lr.error}`}`, 160), actor: "system" });
+            }
+            return { ok: true, data: { id, status: row.status } };
+          }
+          if (op === "list") {
+            // 账即索引（调研 V1 主张）：「我发过哪些子代理任务、结论在哪」——running/
+            // pending_dispose 前置，终态按 ts 降序尾随；kind/status 可过滤
+            const kf = str("kind"), sf = str("status");
+            let rows = readSubagentLedger(this.cfg.dataDir);
+            if (kf) rows = rows.filter((r) => r.kind === kf);
+            if (sf) rows = rows.filter((r) => r.status === sf);
+            rows.sort((a, b) => (a.status === "running" || a.status === "pending_dispose" ? 0 : 1) - (b.status === "running" || b.status === "pending_dispose" ? 0 : 1) || b.ts - a.ts);
+            return { ok: true, data: { rows: rows.slice(0, 50), running: countRunningSubagents(this.cfg.dataDir) } };
+          }
+          return { ok: false, error: `op 只收 register|done|fail|list（收到 ${op}）` };
+        }
         // X1 多机编排（PRD §4.2-2）：org dispatch --remote <dev>——派单任务书经密封 xmsg
         // 送对端值班位，**对端权威消化**（对端 PM 按其本机 org 现状分诊；对端无值班位/
         // 无编制=回 rejected 附人话指引，发送方 CLI 阻塞回显）。深水区（回程/PM 跨机感知/
@@ -8584,6 +8664,7 @@ ${lines.join("\n")}
           clearDutyAppoint(sid);
           this.emitChainAudit("pm-appoint-approved", `session=${sid.slice(0, 8)} pid=${pid} origin=${typeof c.payload.origin === "string" ? c.payload.origin : "auto"}——值守喂活恢复`);
           this.flushDutyFeedPending(); // [W-DUTYWIRE]：席位落位即补投空窗期积压事件（claim 后首拍可见）
+          this.sweepOrphanSubagents(); // W-PMRESOURCE-V1（#106 件3）：PM claim 落位边顺扫孤儿子代理——新 PM 上位第一拍即见断档处置卡
           break;
         }
         case "dispatch-closeout": {
