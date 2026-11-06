@@ -4083,6 +4083,7 @@ export class SessionManager {
   // prompt：每轮 duty 重推导队列重新生成）。可再生消息失败即丢弃：不进 unacked
   // 重放账（fresh 回退/看门狗接管/冷却补投全部跳过），下一轮 duty 注入全新 prompt
   private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[], opts?: { renewable?: boolean }): void {
+    const reviveAbnormal = this.sdkReviveAbnormal(s); // [W-RESUMEBANNER]：入口捕获（spawn 成功路径即清 last_error，事后判不可行）
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
@@ -4320,7 +4321,9 @@ export class SessionManager {
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     // FB14：恢复路径回显同样带图引用（refs 由调用侧从落盘结果/重放台账续带）
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker, undefined, refs?.length ? { images: refs } : undefined);
-    this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+    // [W-RESUMEBANNER]：仅真异常复活打横幅——常态拉起（上回合正常 DONE→新消息按需
+    // 拉起=SDK 每回合退出的生命周期）不打（1106 每消息刷屏实锤降噪）
+    if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
     this.emitUpdated(s, true);
   }
 
@@ -4333,6 +4336,7 @@ export class SessionManager {
   // 帧「初始化超时（30s）」即出自这里的旧硬编码；大上下文 Leader 必超时），fail
   // 同时进熔断记账；用户点卡是手动意图，不受熔断压制（本函数无闸）
   private reviveSaved(s: ManagedSession): void {
+    const reviveAbnormal = this.sdkReviveAbnormal(s); // [W-RESUMEBANNER]：入口捕获（onInit 前的状态才是「拉起前」信号）
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法恢复");
@@ -4418,7 +4422,7 @@ export class SessionManager {
           this.transition(s.state.session_id, "WORKING", "revive"); /* W-SMIMPL③ 直写收口 */
           s.state.turn_started_at = Date.now(); // #291 审查 A-P3-1：积压补投起回合——秒表起点
           s.state.action_summary = "已恢复，处理排队消息";
-          this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+          if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`); // [W-RESUMEBANNER]：仅真异常复活打横幅
           this.emitUpdated(s, true);
           return;
         }
@@ -4426,7 +4430,7 @@ export class SessionManager {
         s.state.done_reason = "已恢复（等待输入）";
         s.state.action_summary = "已恢复，等待输入";
         s.state.turn_started_at = undefined;
-        this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+        if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`); // [W-RESUMEBANNER]：仅真异常复活打横幅（常态 parked 拉起静默）
         this.emitUpdated(s, true);
       },
       onSessionEnd: (reason) => {
@@ -5241,6 +5245,15 @@ export class SessionManager {
   // ② 用户手动意图（发消息/点卡）不过闸——手动恢复路径永不封锁；③ pin 停放休眠
   //（pinned+saved）的自动拉起同闸压制——置顶语义是「点卡片按需恢复」（#49，2026-09-09
   // 用户拍板），自动注入不得绕过。
+
+  /** [W-RESUMEBANNER]（1106 用户实锤：每条消息前「已恢复 SDK 会话」横幅刷屏）真异常
+   * 复活判定：拉起前 last_error 非空 / 前状态 ERROR / 熔断连败账或冷却在场 = 异常复活
+   * （打横幅可观测——断档治理本意）；上回合正常结束（DONE 无错账）→新消息/新命令
+   * 按需拉起 = SDK 进程每回合退出的**常态生命周期**（不打横幅）。全部用既有信号不造
+   * 新状态；streak/冷却在 init 成功即复位（agentCallbacks.onInit）=信号有界不粘滞。 */
+  private sdkReviveAbnormal(s: ManagedSession): boolean {
+    return !!(s.state.last_error || s.state.status === "ERROR" || (s.resumeFailStreak ?? 0) > 0 || (s.resumeCooldownUntil ?? 0) > 0);
+  }
 
   // 熔断记账：resume init 失败（resumeAgent 看门狗 ERROR 分支 / reviveSaved fail /
   // 看门狗接管失败）连击 → 冷却。指数退避 2^(streak-threshold)×base 封顶 cap；

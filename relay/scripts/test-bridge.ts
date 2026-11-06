@@ -2582,6 +2582,13 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 
   // b) 流断（ended，模拟半开早断/换流代际错位）→ 消息触发接管 resume（互斥窗打戳）
   recs189[0]!.a.ended = true;
+  // [W-RESUMEBANNER] 夹具写实：真实半开断流在接管前会留下错账（流关闭/watchdog 边
+  // ERROR+last_error）——裸 ended 翻位绕过标记，横幅判定（sdkReviveAbnormal）会按
+  // 「常态拉起」误判成不打横幅。补错账使夹具=生产形态（异常接管应恰一次横幅）
+  {
+    const m = (mgr as unknown as { sessions: Map<string, { state: { last_error?: string; status?: string } }> }).sessions.get(sid189);
+    if (m) { m.state.status = "ERROR"; m.state.last_error = "stream-error: 半开早断（夹具写实）"; }
+  }
   assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m1" }))).ok, "189b m1 acked（接管路径）");
   assert(fac189 === 2, "189b 接管拉起第 2 个 agent");
   assert(!!recs189[1]!.prompt && recs189[1]!.prompt.includes("m1"), "189b resume 以 m1 为首条消息");
