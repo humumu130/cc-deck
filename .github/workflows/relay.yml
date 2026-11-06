@@ -68,3 +68,39 @@ jobs:
 
       - name: Run ${{ matrix.script }}
         run: npm run ${{ matrix.script }}
+
+  # W-P2BATCH4 件2（矩阵漂移守卫，1106 同日第四咬的最小版治本）：矩阵是自包含测试的
+  # 白名单精选（package.json 158 个 test:* 大量是本地/需真 CLI 的设计态排除——双向差集
+  # 不可用），守卫单向：**矩阵键必须在 package.json 注册**（拼写错/键漂移即红）——今日
+  # 两轮收割各咬一次的并集解冲突（键错/丢）在 CI 前置拦截。生成式方案回执备案不实施。
+  # 注：job 必须完整独立成块——插在 test 的 defaults 与 steps 之间会把 steps 块错挂到
+  # 本 job（YAML 映射被兄弟键打断不可续写，重复 steps 键后者覆盖=测试主 job 静默失明）。
+  matrix-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: 矩阵键守卫（双向：拼写向+丢键向）
+        run: |
+          node -e '
+            const fs = require("fs");
+            // 本 job 无 defaults working-directory，cwd=repo 根——路径用 repo 根视角
+            const yml = fs.readFileSync(".github/workflows/relay.yml", "utf8");
+            const m = yml.match(/script: \[([^\]]+)\]/);
+            if (!m) { console.error("ERR: relay.yml 未找到 script: [...] 矩阵行"); process.exit(1); }
+            const matrix = m[1].split(",").map(s => s.trim()).filter(Boolean);
+            const pkg = JSON.parse(fs.readFileSync("relay/package.json", "utf8"));
+            const scripts = new Set(Object.keys(pkg.scripts || {}));
+            // 方向①（拼写向）：矩阵键必须在 package.json 注册
+            const bad = matrix.filter(k => !scripts.has(k));
+            if (bad.length) { console.error("ERR: 矩阵键未在 package.json 注册（拼写错/漂移）: [" + bad.join(", ") + "]"); process.exit(1); }
+            // W-P2BATCH4-R1 方向②（丢键向——A 审备案法）：核心键锚定+键数下限。
+            // 全量反向不可用（pkg 158 个 test:* 大量设计态排除≠精选矩阵）；键丢=CI 静默
+            // 少跑（#46 R4 实锤形态）——锚定集与上行 script: [...] 同源维护（键增改这里）。
+            const anchored = ["test:boardtruth","test:277-team-create-redesign","test:artifacts-dead","test:autorevive","test:bridge","test:bus","test:cardlife","test:subagent","test:cardlifer2","test:cloud","test:codex","test:deliver-session","test:dispatch","test:dispatchbomb","test:dutywire","test:history","test:inboxv1","test:leader","test:linkquality","test:org","test:org-defects","test:pmseat","test:prbackflow","test:prchip","test:projects","test:prreview","test:reviewseat","test:routing","test:settings","test:settings-ws","test:sqlite-resilience","test:teampolish"];
+            const dropped = anchored.filter(k => !matrix.includes(k));
+            if (dropped.length) { console.error("ERR: 矩阵丢键（删整键盲区——键丢=测试静默不跑）: [" + dropped.join(", ") + "]（锚定集随 script 行同源维护）"); process.exit(1); }
+            if (matrix.length < 32) { console.error("ERR: 矩阵键数 " + matrix.length + " < 32 下限（批量丢键形态——键增同步抬锚定值）"); process.exit(1); }
+            console.log("OK: 矩阵 " + matrix.length + " 键双向守卫过（拼写向全注册+丢键向 32 锚定键全在+键数下限 32）");
+          '

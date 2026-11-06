@@ -310,23 +310,32 @@ delete process.env.CCR_ORG_DIR;
       stop: async () => {}, setPermissionMode: async () => {} } as AgentLike;
   });
   const banners: Record<string, number> = {};
+  const cxTexts: Record<string, string> = {};
   busR.subscribe((env) => {
     if (env.type !== "SESSION_LOG") return;
     const e = env.payload as { kind?: string; text?: string };
-    if (e?.kind === "system" && String(e.text ?? "").startsWith("已恢复 SDK 会话")) {
+    if (e?.kind === "system" && String(e.text ?? "").startsWith("已恢复 ")) {
       banners[String(env.session_id)] = (banners[String(env.session_id)] ?? 0) + 1;
+      cxTexts[String(env.session_id)] = String(e.text ?? "");
     }
   });
   const SID_RB_NORM = "autorevive-test-rb-norm-cli";
   const SID_RB_ERR = "autorevive-test-rb-err-cli";
   const SID_RB_STREAK = "autorevive-test-rb-streak-cli";
+  const SID_RB_CXN = "autorevive-test-rb-cxn-cli";
+  const SID_RB_CXE = "autorevive-test-rb-cxe-cli";
   putTodo(SID_RB_NORM, "1.json", { id: 1, subject: "常态拉起待办", status: "in_progress" });
   putTodo(SID_RB_ERR, "1.json", { id: 1, subject: "异常复活待办", status: "in_progress" });
   putTodo(SID_RB_STREAK, "1.json", { id: 1, subject: "熔断复拉待办", status: "in_progress" });
+  putTodo(SID_RB_CXN, "1.json", { id: 1, subject: "codex 常态拉起待办", status: "in_progress" });
+  putTodo(SID_RB_CXE, "1.json", { id: 1, subject: "codex 异常复活待办", status: "in_progress" });
   mgrR.adopt(new Map([
     mk2("rb-norm", SID_RB_NORM, false, Date.now(), {}), // 常态：DONE 无错账无熔断（mk 默认 DONE）
     mk2("rb-err", SID_RB_ERR, false, Date.now(), { status: "ERROR", last_error: "stream-error: 上游断流" }),
     mk2("rb-streak", SID_RB_STREAK, false, Date.now(), {}), // 熔断连败账在 ManagedSession 层（非 state）——adopt 后直捣置位
+    // W-P2BATCH4 件3/6 双态：codex 短路分支（engine=codex 走 reviveSaved 直合终态）
+    mk2("rb-cx-norm", SID_RB_CXN, false, Date.now(), { engine: "codex", relay_session_id: "cx-thread-norm-abcdef01" }),
+    mk2("rb-cx-err", SID_RB_CXE, false, Date.now(), { engine: "codex", relay_session_id: "cx-thread-err-abcdef01", status: "ERROR", last_error: "stream-error: codex 断流" }),
   ]));
   (mgrR as unknown as { sessions: Map<string, { resumeFailStreak?: number }> }).sessions.get("rb-streak")!.resumeFailStreak = 2; // 冷却后复拉形态（连败账在场）
   const nR = mgrR.autoReviveManaged();
@@ -343,7 +352,23 @@ delete process.env.CCR_ORG_DIR;
   assert(guarded.length === 3, `RB④ 三站全卫兵化（resumeAgent+reviveSaved×2——守卫恰 3 处）got=${guarded.length}`);
   assert(smSrc.includes("sdkReviveAbnormal(s: ManagedSession)") && smSrc.includes('s.state.status === "ERROR"') && smSrc.includes("(s.resumeFailStreak ?? 0) > 0") && smSrc.includes("(s.resumeCooldownUntil ?? 0) > 0"),
     "RB⑤ 判定单点四信号在册（last_error/ERROR/连败/冷却——零新状态）");
-  for (const sid of [SID_RB_NORM, SID_RB_ERR, SID_RB_STREAK]) rmSync(join(TASKS, sid), { recursive: true, force: true });
+  // W-P2BATCH4 件3/6：codex 短路分支横幅双态（常态 0/真异常 1）+守卫静态锚。
+  // codex 席不走 autoReviveManaged（reviveEligible 双闸：DONE→codex-idle、零产出
+  // ERROR→codex-empty 尸体闸），直调 reviveSaved 捣短路分支——常态 parked 拉起
+  // 静默 / 真异常复活横幅恰 1，与 SDK 通用路径同判定
+  const asMgrR = mgrR as unknown as { reviveSaved: (s: unknown) => void; sessions: Map<string, unknown> };
+  asMgrR.reviveSaved(asMgrR.sessions.get("rb-cx-norm"));
+  asMgrR.reviveSaved(asMgrR.sessions.get("rb-cx-err"));
+  const cxSt = (sid: string) => mgrR.snapshot().find((x) => x.session_id === sid);
+  assert(cxSt("rb-cx-norm")?.status === "DONE" && cxSt("rb-cx-norm")?.done_reason === "已恢复（等待输入）" && cxSt("rb-cx-err")?.status === "DONE" && cxSt("rb-cx-err")?.done_reason === "已恢复（等待输入）",
+    `RB⑥前置 两 codex 席均走短路分支收口（DONE+已恢复——横幅断言防恒真）got=${cxSt("rb-cx-norm")?.status}/${cxSt("rb-cx-norm")?.done_reason} ${cxSt("rb-cx-err")?.status}/${cxSt("rb-cx-err")?.done_reason}`);
+  assert((banners["rb-cx-norm"] ?? 0) === 0, `RB⑦ codex 常态拉起横幅 0 条（parked 自然恢复静默——codex 席保活周期不刷同族噪音）got=${banners["rb-cx-norm"] ?? 0}`);
+  assert((banners["rb-cx-err"] ?? 0) === 1 && (cxTexts["rb-cx-err"] ?? "").includes("已恢复 Codex 会话（thread"),
+    `RB⑧ codex 真异常复活横幅恰 1 条（ERROR+last_error——文案含 thread 标识）got=${banners["rb-cx-err"] ?? 0} text=${cxTexts["rb-cx-err"] ?? ""}`);
+  const cxFree = (smSrc.match(/pushExternalLog\(s\.state\.session_id, "system", `已恢复 Codex 会话/g) ?? []).length;
+  const cxGuarded = (smSrc.match(/if \(reviveAbnormal\) this\.pushExternalLog\(s\.state\.session_id, "system", `已恢复 Codex 会话/g) ?? []).length;
+  assert(cxGuarded === 1 && cxFree === cxGuarded, `RB⑨ codex 横幅调用全卫兵化（守卫恰 1 处且无裸调——守卫删失即红）guarded=${cxGuarded} total=${cxFree}`);
+  for (const sid of [SID_RB_NORM, SID_RB_ERR, SID_RB_STREAK, SID_RB_CXN, SID_RB_CXE]) rmSync(join(TASKS, sid), { recursive: true, force: true });
 }
 
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
