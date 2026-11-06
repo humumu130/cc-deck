@@ -81,3 +81,54 @@ export function appendDutyFeedLog(row: { ts: number; kind: DutyFeedKind; text: s
     appendJournal(dutyFeedLogPath(), row as unknown as Record<string, unknown>);
   } catch { /* 审计尽力而为 */ }
 }
+
+// ---------- W-DUTYBACKOFF（1106 用户实锤两连）：值守智能化三刀的数据面 ----------
+/** 刀1 数据面：PM 目标会话最近**真实用户消息**时刻——events.ndjson 尾窗扫 SESSION_LOG
+ * 行（session_id 命中 + payload.kind==="user_message"），**排除值守注入**（duty 注入的
+ * 首条消息以 "[值守喂活]" 前缀回显，非真实用户话语——用户实锤「一直在对话中还巡什么检」
+ * 的判据就是真实话语）。返回 null=尾窗内无真实用户消息。 */
+export function lastRealUserMessageAt(dataDir: string, sessionId: string, tailBytes = 2 * 1024 * 1024): number | null {
+  if (!sessionId) return null;
+  const p = join(dataDir, "events.ndjson");
+  let raw = "";
+  try {
+    const st = statSync(p);
+    const fd = openSync(p, "r");
+    try {
+      const len = Math.min(st.size, tailBytes);
+      const buf = Buffer.alloc(len);
+      const n = readSync(fd, buf, 0, len, Math.max(0, st.size - len));
+      raw = buf.subarray(0, n).toString("utf-8");
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+  let best: number | null = null;
+  for (const line of raw.split("\n")) {
+    if (!line.includes(sessionId) || !line.includes("user_message")) continue; // 快筛双词
+    try {
+      const e = JSON.parse(line) as { session_id?: unknown; ts?: unknown; payload?: { kind?: unknown; text?: unknown } };
+      if (e.session_id !== sessionId || typeof e.ts !== "number") continue;
+      if (e.payload?.kind !== "user_message" || typeof e.payload.text !== "string") continue;
+      if (e.payload.text.startsWith("[值守喂活]")) continue; // duty 注入回显排除（真实话语判据）
+      if (best === null || e.ts > best) best = e.ts;
+    } catch { /* 坏行跳过 */ }
+  }
+  return best;
+}
+
+/** 刀1 窗口：PM-用户对话活跃窗（缺省 10min；CCR_DUTY_USER_ACTIVE_MIN 覆盖，下限 1）。 */
+export function dutyUserActiveMin(): number {
+  const v = Number(process.env.CCR_DUTY_USER_ACTIVE_MIN);
+  return Number.isFinite(v) && v >= 1 ? v : 10;
+}
+
+/** 刀2 退避级数：无进展（同 top 候选不变）连续喂活轮的延迟表 5→15→30→60 封顶（分钟）。
+ * 级数从 1 起（首轮即同 top=第 2 次喂活开始退避）。dutyContinuationMs 风格常量族。 */
+export function dutyNoProgressDelayMs(streak: number): number {
+  const table = [5, 15, 30, 60];
+  const i = Math.min(Math.max(streak, 1), table.length) - 1;
+  return table[i] * 60_000;
+}

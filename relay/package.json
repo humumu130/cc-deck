@@ -51,6 +51,7 @@
     "test:acceptance": "tsx scripts/test-acceptance.ts",
     "test:version-sentinel": "node scripts/test-version-sentinel.mjs",
     "test:boardreconr3": "tsx scripts/test-boardreconr3.ts",
+    "test:dutybackoff": "tsx scripts/test-dutybackoff.ts",
     "test:org": "tsx scripts/test-org.ts",
     "test:sqlitefix": "tsx scripts/test-sqlitefix.ts",
     "test:sqlitefix-poison": "tsx scripts/test-sqlitefix-poison.ts",

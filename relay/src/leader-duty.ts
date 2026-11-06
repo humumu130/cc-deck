@@ -1,3 +1,8 @@
+// W-DUTYBACKOFF 刀3 依赖（duty-reviewed.json 持久化——orgDir 侧）
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { orgDir } from "./org.js";
+
 export type DutyCandidateKind = "receipt" | "dispatch" | "todo" | "stale_doing" | "worker_done";
 export type DutyRisk = "known" | "unknown";
 
@@ -363,4 +368,28 @@ export function evaluateDutyPolicy(candidate: DutyCandidate, policy: DutyPolicy 
     return { mode: "notify", action: "notify", reason: "overnight_budget_exhausted", auto_dispatch_enabled: autoDispatch };
   }
   return { mode: "allow", action, reason: "policy_allows", auto_dispatch_enabled: autoDispatch };
+}
+
+// ---------- W-DUTYBACKOFF 刀3：DUTY_RECEIPT reviewed 持久化（D2 收尾） ----------
+// 原 pendingAcceptanceReceipts() 硬编码 reviewed:false——receipt 候选永不过滤，
+// test.97 三张陈回执重复投喂 38h+（任务书实锤）。reviewed 集=org/duty-reviewed.json
+// （sid 数组，orgDir 侧持久化——重启不丢；验收单重新提交（mtime 变新+submitted 翻回）
+// 时由 pendingAcceptanceReceipts 的 !s.submitted 过滤兜底，无需清 reviewed——已 review
+// 且仍 pending 的单属人工复活形态，值守不重复投喂是正确行为）。
+export function readDutyReviewed(dir?: string): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(join(dir ?? orgDir(), "duty-reviewed.json"), "utf-8")) as unknown;
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function markDutyReviewed(sids: string[], dir?: string): void {
+  if (!sids.length) return;
+  const cur = new Set(readDutyReviewed(dir));
+  for (const s of sids) cur.add(s);
+  try {
+    writeFileSync(join(dir ?? orgDir(), "duty-reviewed.json"), JSON.stringify([...cur], null, 2) + "\n", "utf-8");
+  } catch { /* 尽力而为：写失败下轮候选照旧（幂等重试面） */ }
 }

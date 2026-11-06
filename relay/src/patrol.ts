@@ -124,6 +124,17 @@ export class PatrolModule {
 
   // ---------- 轻探针（5min）：磁盘 / dataDir 可写 / 事件循环漂移 ----------
   runLight(): void {
+    // W-DUTYBACKOFF 刀1（巡检口径）：PM-用户对话活跃窗内跳过本轮巡检（用户实锤
+    // 「一直在对话中还巡什么检」——活跃期巡检=纯噪音）。判据同 feedPM 单点：最近真实
+    // user_message <10min（排除值守注入回显）。dutyUserActiveSkip 单点读（patrol 无
+    // dutyTargetId 访问权——经 mgr 只读口）。
+    try {
+      if ((this.mgr as unknown as { dutyUserActiveSkip?: () => boolean }).dutyUserActiveSkip?.()) {
+        console.log("[patrol] PM-用户对话活跃窗内——本轮巡检跳过（W-DUTYBACKOFF 刀1）");
+        return;
+      }
+    } catch { /* 判定失败不阻巡检（保守巡） */ }
+
     if (!this.opts.enabled()) return;
     const alerts: PatrolAlert[] = [];
     // 磁盘余量
@@ -194,6 +205,17 @@ export class PatrolModule {
 
   // ---------- 全巡（30min）：worker 帧 / 看板漂移 ----------
   runFull(): void {
+    // W-DUTYBACKOFF 刀1（巡检口径）：PM-用户对话活跃窗内跳过本轮巡检（用户实锤
+    // 「一直在对话中还巡什么检」——活跃期巡检=纯噪音）。判据同 feedPM 单点：最近真实
+    // user_message <10min（排除值守注入回显）。dutyUserActiveSkip 单点读（patrol 无
+    // dutyTargetId 访问权——经 mgr 只读口）。
+    try {
+      if ((this.mgr as unknown as { dutyUserActiveSkip?: () => boolean }).dutyUserActiveSkip?.()) {
+        console.log("[patrol] PM-用户对话活跃窗内——本轮巡检跳过（W-DUTYBACKOFF 刀1）");
+        return;
+      }
+    } catch { /* 判定失败不阻巡检（保守巡） */ }
+
     if (!this.opts.enabled()) return;
     const now = Date.now();
     // boardfix 刀3（1103 板面说谎）：台账→看板收敛扫从 boot-only 升周期自愈——
