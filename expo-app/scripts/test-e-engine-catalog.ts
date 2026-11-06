@@ -203,9 +203,43 @@ function main(): void {
   check(modalSrc.includes("engineDowngradeNote(engineExplicit, ackEngine, engineName)"), "ACK engine 不一致 → notifyCmdError 通道标「已降级」");
   check(modalSrc.includes("engineSelectable(selEntry)"), "创建前阻止：显式选不可用引擎 → 行内原因不发送（与灰显同一把尺）");
   check((modalSrc.match(/启动会话/g) ?? []).length === 1, "提交按钮仍唯一（启动会话全文仅一处）");
-  // 跨端 token 陷阱锚（P81-8EFIX 教训）：状态映射不得用 waiting（expo=红）
-  check(!modalSrc.includes('unavailable: "waiting"'), "状态色 unavailable ≠ waiting（expo waiting=#F0524F 红，跨端同名异色）");
-  check(modalSrc.includes('unavailable: "working"'), "状态色 unavailable=working（琥珀警示，P81-8EFIX 同语义档）");
+  // 跨端 token 陷阱锚（P81-8EFIX 教训）：状态色轴不得用 waiting（expo=红）——R1 后色轴
+  // 在 ENGINE_BADGE.tone（原 ENGINE_STATE_COLOR 死键已清，见 G2 R1 P3-1 锚）
+  check(!modalSrc.includes('tone: "waiting"'), "徽章色轴 ≠ waiting（expo waiting=#F0524F 红，跨端同名异色陷阱）");
+
+  // ================= G2. enginemobile（t-fe213f37 八病灶重构——徽章单点/同构/高级分组） =================
+  SECTION("G2. enginemobile 八病灶重构锚");
+  const iconSrc = srcOf("../src/engine-icon.tsx");
+  // 病灶①⑥：状态单点徽章（视觉短词），名称旁裸拼与第二警示行全删
+  check(modalSrc.includes("ENGINE_BADGE"), "视觉徽章词表在场（ENGine_BADGE——与 a11y 词表分轨）");
+  check(!modalSrc.includes("m.engState"), "名称旁状态裸拼退役（engState 徽章化）");
+  check(modalSrc.includes("`，不可选：${block}`"), "block 完整原因仅存 a11y label（读屏语义不丢——视觉降噪≠语义丢失）");
+  // enginemobile-R1（t-c1ae5fd5，A 审 P1）：四态短词与桌面 engineslim #53 tag 逐词钉死
+  //（settings-domain.js:1585：已接/待装/未登录/未接入——三端同词）；unknown 并入待装
+  //（桌面 else 分支同口径）
+  check(modalSrc.includes('ready: { t: "已接", tone: "done" }'), "R1 词表：ready=「已接」（桌面 tag 同词）");
+  check(modalSrc.includes('unavailable: { t: "待装", tone: "faint" }'), "R1 词表：unavailable=「待装」（桌面 tag 同词——非「未安装或校验未过」非「未安装」）");
+  check(modalSrc.includes('unsupported: { t: "未接入", tone: "error" }'), "R1 词表：unsupported=「未接入」（桌面 tag 同词——ZCode 单点呈现）");
+  check(modalSrc.includes('unknown: { t: "待装", tone: "faint" }'), "R1 词表：unknown 并入「待装」（桌面 else 分支同口径）");
+  check(!modalSrc.includes('t: "不支持"') && !modalSrc.includes('t: "可用"') && !modalSrc.includes('t: "未知"'), "R1 词表：旧自立词（可用/不支持/未知）绝迹");
+  // 病灶②降橙：警示仅徽章一处，loginRow 行动行换品牌色
+  check(!modalSrc.includes("m.engBlockT"), "橙字警示行样式键退役（m.engBlockT 无样式引用——注释提及不计）");
+  check(modalSrc.includes("engLoginT"), "未登录行动行品牌色（engLoginT——降橙）");
+  // 病灶③跟随预置同构：图标列+「默认」淡徽章
+  check(modalSrc.includes('<EngineBrandTile engine="auto" size={18} />'), "跟随预置行图标列同构（品牌瓦片——原 engDot 灰点无图标列）");
+  check(modalSrc.includes("m.engBadgeFaintT}>默认"), "跟随预置行「默认」淡徽章（徽章位占位）");
+  // 病灶④权限汇总行删
+  check(!modalSrc.includes("权限 · {permLine}"), "权限汇总行退役（与逐项徽章第三次重复根除）");
+  // 病灶⑤禁用项图标=品牌 logo 灰度化（opacity）非「?」灰方块
+  check(!iconSrc.includes('const letter = dim ? "?"'), "EngineBrandTile dim 不再改「?」字母（灰方块与复选框混淆源根除）");
+  check(iconSrc.includes("opacity: dim ? 0.4 : 1"), "dim=品牌 logo 原样灰度化（opacity 0.4）");
+  check(iconSrc.includes('auto: { bg: "#3E8E7E", letter: "自" }'), "auto 瓦片条目在位（品牌色+「自」）");
+  // enginemobile-R1 P3×2：dim 收窄（行动行不灰）+ENGINE_STATE_COLOR 死键绝迹
+  check(modalSrc.includes('dim={!!block && !loginRow}'), "R1 P3-2：dim 收窄到禁用行（needs_auth 行动行瓦片不灰——原 state!==ready 误伤行动引导）");
+  check(!/const ENGINE_STATE_COLOR/.test(modalSrc) && !modalSrc.includes("ENGINE_STATE_COLOR["), "R1 P3-1：ENGINE_STATE_COLOR 死键绝迹（声明与引用双绝——注释提及退役备案不计）");
+  // 病灶⑧高级分组+警示样式
+  check(modalSrc.includes("m.advGroup") && modalSrc.includes(">高级</Text>"), "两复选框收「高级」分组卡");
+  check(modalSrc.includes("m.bypassWarnBox") && modalSrc.includes("m.bypassWarnT"), "跳过权限确认警示样式（红描边+警示字样）");
 
   // ================= H. store 透传锚 + theme 引擎色锚 =================
   SECTION("H. store engine 透传 / theme ENGINE_ACCENT");

@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENGINE_ACCENT, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay } from "../store";
-import { PERM_CAP_STATE_LABEL, effectiveNoteOf, forbiddenReasonOf } from "../permission";
+import { effectiveNoteOf, forbiddenReasonOf } from "../permission";
 import {
   ENGINE_PHRASES,
   ENGINE_STATE_LABEL,
@@ -37,17 +37,28 @@ const PRESETS: { label: string; text: string }[] = [
   { label: "继续未完成", text: "查看当前工作状态，继续完成未完成的任务。" },
 ];
 
-// 75-E 状态词徽章配色（跨端 token 陷阱对照 theme.ts 后钉死）：ready=done 绿 /
-// unavailable=working 琥珀（警示非错误，P81-8EFIX 三态色同语义档）/ unsupported=
-// error 红橙 / unknown=faint 灰。expo waiting=#F0524F 是红（跨端 token 同名异色，
-// 非 web waiting 语义），本映射全程不用 waiting——引擎标识色另走 ENGINE_ACCENT
-//（005 词表），两套不同轴勿混
-const ENGINE_STATE_COLOR: Record<EngineCatalogState, keyof ThemeColors> = {
-  ready: "done",
-  unavailable: "working",
-  needs_auth: "working", // #102 批 B：未登录黄点（与 web 黄点同语义档）
-  unsupported: "error",
-  unknown: "faint",
+// enginemobile-R1 P3-1（A 审指认）：ENGINE_STATE_COLOR 常量退役——R1 徽章词表接管后
+// 零引用（原 75-E 时代配裸拼 engState 用，engState 删后成死键；色轴语义已并入
+// ENGINE_BADGE.tone 注释）。token 陷阱备注保留在 ENGINE_BADGE 注释（waiting 跨端
+// 同名异色勿混）。
+
+// enginemobile（t-fe213f37，1106 用户截图 606df423 八病灶重构）：引擎列表视觉徽章词
+// 表——**视觉面人话化**（对齐桌面 W-ENGINESLIM 语言：状态胶囊化不裸拼、禁开发者术语
+// 直出），与 protocol.ts ENGINE_STATE_LABEL（三端同词钉死、供 a11y 读屏完整语义）分轨
+// ：徽章只用这里的短词，读屏 label 仍拼 ENGINE_STATE_LABEL 原词（视觉降噪 ≠ 语义丢
+// 失）。
+// enginemobile-R1（t-c1ae5fd5，A 审 P1 跨端词表统一——PM 拍板桌面已验收词表为准）：
+// 四态短词与桌面 settings-domain.js:1585（engineslim #53 用户验收 tag）**逐词钉死同词
+// ：已接/待装/未登录/未接入**——原「可用/未安装/未登录/不支持/未知」自立第二套词=「学
+// 习桌面端」主旨半边未收口。unknown 并入「待装」（桌面 else 分支同口径——探测不出与
+// 未装对用户的行动语义同：去装）。tone 色轴不变（绿已接/灰待装/红未接入/橙未登录=行
+// 动态可点拉起登录）。
+const ENGINE_BADGE: Record<EngineCatalogState, { t: string; tone: keyof ThemeColors }> = {
+  ready: { t: "已接", tone: "done" },
+  unavailable: { t: "待装", tone: "faint" },
+  needs_auth: { t: "未登录", tone: "working" },
+  unsupported: { t: "未接入", tone: "error" },
+  unknown: { t: "待装", tone: "faint" },
 };
 
 export default function NewSessionModal({ visible, presetCwd, onClose }: { visible: boolean; presetCwd?: string | null; onClose: () => void }) {
@@ -103,7 +114,6 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
   // 源，零权限求值复制）；75-E 引擎目录（store normalizeSnapshotPayload 已收容，
   // 旧 relay 无字段 = undefined → 选择器降级旧默认路径）
   const targetSource = (multi ? snap.sources.find((x) => x.id === effTarget) : plat) ?? null;
-  const permSummaries = targetSource?.sourceCapabilities?.permission;
   const catalog = targetSource?.sourceCapabilities?.engine_catalog;
   // 75-E 迁移（PM-75 §7.3，派单作业②）：ccr_use_codex 旧 checkbox 偏好 → 选择器
   // engine=codex 带入（记忆口径保留：选回 codex 写 1、改选/auto 写 0，兼容行为不删）；
@@ -252,14 +262,12 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
   };
 
   // ---------- 75-E 选择器渲染数据（纯函数产出，降级矩阵见 engineSummaryLine） ----------
-  // 摘要行主句/副句/可点开；预置条目（跟随预置行副句）；权限摘要行（P81 资产只读
-  // 复用，PERM_CAP_STATE_LABEL 词表钉死——此处仅「·」前主词显示裁剪，零求值零复制）
+  // 摘要行主句/副句/可点开；预置条目（跟随预置行副句）。
+  // enginemobile（t-fe213f37 病灶④）：权限摘要行退役——与逐项状态徽章第三次重复；
+  // 权限完整口径走确认回执（effectiveNoteOf）不在选择器预演。
   const summary = engineSummaryLine({ catalog, selected: engineSel, model: engineExplicit ? modelSel : null });
   const presetEntry = catalog ? enginePresetOf(catalog) : null;
   const roleCap = (role: string): string => role.charAt(0).toUpperCase() + role.slice(1);
-  const permLine = permSummaries?.length
-    ? permSummaries.map((p) => `${engineName(p.engine)} ${PERM_CAP_STATE_LABEL[p.capability_state].split(" ·")[0]}`).join(" · ")
-    : null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -331,7 +339,9 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
             </Pressable>
             {pickerOpen && summary.overridable ? (
               <View style={m.pickerBox}>
-                {/* 第一层：跟随预置（默认）+ 目录引擎行 */}
+                {/* 第一层：跟随预置（默认）+ 目录引擎行。enginemobile（t-fe213f37 病灶③）：
+                    跟随预置改列表同构形态（图标列品牌瓦片+名称+副句+「默认」淡徽章），
+                    不再特殊排版（原 engDot 灰点无图标列=与引擎行结构不同构） */}
                 <Pressable
                   style={[m.engRow, engineSel === "auto" && m.engRowOn]}
                   accessibilityLabel="跟随预置（自动）"
@@ -342,10 +352,13 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                     setPickerOpen(false);
                   }}
                 >
-                  <View style={[m.engDot, { backgroundColor: c.faint }]} />
+                  <EngineBrandTile engine="auto" size={18} />
                   <View style={m.engMain}>
-                    <Text style={[m.engName, engineSel === "auto" && m.engNameOn]}>跟随预置（自动）</Text>
-                    <Text style={m.engSub}>
+                    <View style={m.engNameRow}>
+                      <Text style={[m.engName, engineSel === "auto" && m.engNameOn]}>跟随预置（自动）</Text>
+                      <View style={m.engBadgeFaint}><Text style={m.engBadgeFaintT}>默认</Text></View>
+                    </View>
+                    <Text style={m.engSub} numberOfLines={1}>
                       {presetEntry
                         ? `${roleCap(presetEntry.default_for_roles![0])} 预置 · ${engineLabelOf(presetEntry)}`
                         : "由 relay 按源默认解析"}
@@ -379,15 +392,20 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                   const loginRow = e.state === "needs_auth";
                   const on = engineSel === e.id;
                   const accent = ENGINE_ACCENT[e.id] ?? c.faint;
-                  const stateColor = c[ENGINE_STATE_COLOR[e.state]];
+                  const badge = ENGINE_BADGE[e.state];
                   const caps = e.capabilities;
                   const capsText = caps
                     ? [caps.resume ? "可恢复" : null, caps.approval ? "审批交互" : null, caps.artifacts ? "输出物" : null].filter(Boolean).join(" · ") || ENGINE_PHRASES.basicExec
                     : null;
+                  // enginemobile（t-fe213f37 病灶①⑥⑦）：状态收敛为**单一徽章**（胶囊底色三
+                  // 态+视觉短词）——删名称旁状态裸拼（engState）与第二警示行（engBlockT
+                  // 「不可选：CLI 未在 PATH 探测到」术语直出）；完整原因仅保留在 a11y
+                  // label（读屏可得——视觉降噪≠语义丢失）。loginRow 行动行保留（是行动
+                  // 引导非状态重复）但换品牌色（整卡降橙：警示仅徽章一处）。
                   return (
                     <View key={e.id}>
                       <Pressable
-                        style={[m.engRow, on && m.engRowOn, block && !loginRow ? { opacity: 0.45 } : null]}
+                        style={[m.engRow, on && m.engRowOn, block && !loginRow ? { opacity: 0.5 } : null]}
                         disabled={!!block && !loginRow}
                         accessibilityLabel={`引擎 ${engineLabelOf(e)}，${ENGINE_STATE_LABEL[e.state]}${block && !loginRow ? `，不可选：${block}` : ""}`}
                         onPress={() => {
@@ -402,15 +420,19 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                           if (!e.models || !e.models.length) setPickerOpen(false); // 无模型清单一步完成
                         }}
                       >
-                        <EngineBrandTile engine={e.id} size={18} dim={e.state !== "ready"} />
+                        {/* enginemobile-R1 P3-2（A 审）：dim 收窄到「禁用行」——原 state!=="ready"
+                            波及 needs_auth 行动行（可点拉起扫码的行，瓦片被洗 0.4=行动引导
+                            图标弱化）；行动行不 dim，blocked 行照灰度。 */}
+                        <EngineBrandTile engine={e.id} size={18} dim={!!block && !loginRow} />
                         <View style={m.engMain}>
                           <View style={m.engNameRow}>
                             <Text style={[m.engName, on && m.engNameOn]} numberOfLines={1}>{engineLabelOf(e)}</Text>
-                            <Text style={[m.engState, { color: stateColor }]}>{ENGINE_STATE_LABEL[e.state]}</Text>
+                            <View style={[m.engBadge, { backgroundColor: withA(c[badge.tone], 0.16), borderColor: withA(c[badge.tone], 0.45) }]}>
+                              <Text style={[m.engBadgeT, { color: c[badge.tone] }]}>{badge.t}</Text>
+                            </View>
                           </View>
+                          {loginRow ? <Text style={[m.engLoginT, { color: accent }]}>点此拉起登录二维码，扫码即登录</Text> : null}
                           {capsText ? <Text style={m.engSub}>{capsText}</Text> : null}
-                          {loginRow ? <Text style={[m.engBlockT, { color: stateColor }]}>点此拉起登录二维码，扫码即登录</Text> : null}
-                          {block && !loginRow ? <Text style={[m.engBlockT, { color: c.waiting }]}>不可选：{block}</Text> : null}
                         </View>
                         {on ? <Text style={m.engCheck}>✓</Text> : null}
                       </Pressable>
@@ -453,32 +475,37 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                   );
                 })}
                 {!catalog ? <Text style={m.permLine}>{ENGINE_PHRASES.legacyRelayHint}</Text> : null}
-                {permLine ? <Text style={m.permLine}>权限 · {permLine}</Text> : null}
               </View>
             ) : null}
-            <Pressable style={m.bypassRow} hitSlop={6} onPress={() => setBypass((v) => !v)}>
-              <View style={[m.bypassBox, bypass && m.bypassBoxOn]}>
-                {bypass ? <Text style={m.bypassCheck}>✓</Text> : null}
-              </View>
-              <Text style={m.bypassT}>跳过权限确认（工具调用不再逐项审批，慎用）</Text>
-            </Pressable>
-            {/* #208 目录自动创建：同 checkbox 语言；勾选状态跨次记忆（AsyncStorage） */}
-            <Pressable
-              style={m.bypassRow}
-              hitSlop={6}
-              onPress={() =>
-                setAutoMkdir((v) => {
-                  const next = !v;
-                  void AsyncStorage.setItem("ccr_auto_mkdir", next ? "1" : "0");
-                  return next;
-                })
-              }
-            >
-              <View style={[m.bypassBox, autoMkdir && m.bypassBoxOn]}>
-                {autoMkdir ? <Text style={m.bypassCheck}>✓</Text> : null}
-              </View>
-              <Text style={m.bypassT}>目录不存在时自动创建</Text>
-            </Pressable>
+            {/* enginemobile（t-fe213f37 病灶④⑧）：权限汇总行删除（与逐项徽章第三次重复）；
+                两复选框收「高级」分组卡（浅分隔+与启动按钮留距）——「跳过权限确认」加
+                警示样式（红描边勾选框+警示字样），不再游离卡片外与主按钮贴边 */}
+            <View style={m.advGroup}>
+              <Text style={m.advHead}>高级</Text>
+              <Pressable style={m.advRow} hitSlop={6} onPress={() => setBypass((v) => !v)}>
+                <View style={[m.bypassBox, bypass && m.bypassBoxOn, m.bypassWarnBox]}>
+                  {bypass ? <Text style={m.bypassCheck}>✓</Text> : null}
+                </View>
+                <Text style={m.bypassT}>跳过权限确认 <Text style={m.bypassWarnT}>慎用 · 免逐项审批</Text></Text>
+              </Pressable>
+              {/* #208 目录自动创建：同 checkbox 语言；勾选状态跨次记忆（AsyncStorage） */}
+              <Pressable
+                style={m.advRow}
+                hitSlop={6}
+                onPress={() =>
+                  setAutoMkdir((v) => {
+                    const next = !v;
+                    void AsyncStorage.setItem("ccr_auto_mkdir", next ? "1" : "0");
+                    return next;
+                  })
+                }
+              >
+                <View style={[m.bypassBox, autoMkdir && m.bypassBoxOn]}>
+                  {autoMkdir ? <Text style={m.bypassCheck}>✓</Text> : null}
+                </View>
+                <Text style={m.bypassT}>目录不存在时自动创建</Text>
+              </Pressable>
+            </View>
             {/* 75-E：原「用 Codex 引擎」checkbox 已被上方引擎/模型选择器取代（PM-75
                 §7.4 产品入口迁移）——ccr_use_codex 记忆口径保留：开弹窗带入 engine=
                 codex、选回 codex 写 1、改选/跟随预置写 0，兼容行为不删 */}
@@ -532,9 +559,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   engNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   engName: { color: c.dim, fontSize: 13.5, fontWeight: "500", flexShrink: 1 },
   engNameOn: { color: c.brandA, fontWeight: "700" },
-  engState: { fontSize: 10.5, fontWeight: "600", flexShrink: 0 },
+  // enginemobile：状态徽章（胶囊单点——绿可用/灰未装/红不支持/橙未登录，底色+描边
+  // 同轴 16%/45% 透明度档）；「默认」淡徽章（跟随预置行徽章位）
+  engBadge: { paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 7, borderWidth: 1, flexShrink: 0 },
+  engBadgeT: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
+  engBadgeFaint: { paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 7, borderWidth: 1, borderColor: c.line, flexShrink: 0 },
+  engBadgeFaintT: { fontSize: 10, fontWeight: "600", color: c.faint },
+  // 未登录行动行（点行拉起扫码——品牌色非警示橙，整卡降橙病灶②）
+  engLoginT: { fontSize: 11, fontWeight: "500" },
   engSub: { color: c.faint, fontSize: 11 },
-  engBlockT: { fontSize: 11, fontWeight: "500" },
   engCheck: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   modelBox: { marginTop: 2, marginLeft: 24, marginBottom: 4, padding: 5, backgroundColor: c.panel, borderRadius: 9 },
   modelHead: { color: c.faint, fontSize: 10.5, fontWeight: "600", paddingHorizontal: 9, paddingTop: 4, paddingBottom: 2 },
@@ -561,7 +594,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcChipT: { fontSize: 12, color: c.dim, flexShrink: 1 },
   srcChipTOn: { color: c.brandA, fontWeight: "600" },
   srcDot: { width: 6, height: 6, borderRadius: 3 },
-  bypassRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  // enginemobile（t-fe213f37 病灶⑧）：高级分组卡——两复选框收纳（浅分隔+与启动按钮
+  // 留距）；「跳过权限确认」警示样式（红描边勾选框+警示字样）
+  advGroup: { borderWidth: 1, borderColor: c.line, borderRadius: 12, padding: 12, paddingTop: 9, marginBottom: 14, backgroundColor: c.panel2 },
+  advHead: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 7 },
+  advRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
+  bypassWarnBox: { borderColor: withA(c.error, 0.55) },
+  bypassWarnT: { color: c.error, fontSize: 11, fontWeight: "600" },
   bypassBox: {
     width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: c.line,
     alignItems: "center", justifyContent: "center",
