@@ -24,6 +24,8 @@ const BRANDS: Record<string, { bg: string; letter: string }> = {
   "qwen-code": { bg: "#6236FF", letter: "Q" },
   codebuddy: { bg: "#0052D9", letter: "C" },
   zcode: { bg: "#546784", letter: "Z" },
+  // enginemobile（t-fe213f37）：「跟随预置（自动）」图标列同构条目——品牌色底+「自」，
+  auto: { bg: "#3E8E7E", letter: "自" },
 };
 const DIM_BG = "#3A4657";
 const DIM_FG = "#9AA7B8";
@@ -55,15 +57,17 @@ function Glyph({ engine, fg }: { engine: string; fg: string }) {
   );
 }
 
-// 统一瓦片：方块底 + 图形/字母；dim=未接入灰调
+// 统一瓦片：方块底 + 图形/字母；dim=灰度化（enginemobile t-fe213f37 修：原 dim 形态
+// 把字母改「?」+灰底灰字=「灰方块与复选框混淆」病灶源（用户截图 606df423 ⑤）——
+// 改为品牌 logo 原样+整体降透明（灰度化可辨品牌，与复选框视觉区分）
 export function EngineBrandTile({ engine, size = 18, dim = false }: { engine: EngineId; size?: number; dim?: boolean }) {
   const known = engine === "claude" || engine === "codex";
   const b = BRANDS[engine] ?? { bg: "#546784", letter: (engine[0] ?? "?").toUpperCase() };
-  const bg = dim ? DIM_BG : b.bg;
-  const fg = dim ? DIM_FG : "#FFFFFF";
-  const letter = dim ? "?" : b.letter || (engine[0] ?? "?").toUpperCase();
+  const bg = b.bg;
+  const fg = "#FFFFFF";
+  const letter = b.letter || (engine[0] ?? "?").toUpperCase();
   return (
-    <View style={{ width: size, height: size, borderRadius: 4, backgroundColor: bg, alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+    <View style={{ width: size, height: size, borderRadius: 4, backgroundColor: bg, alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, opacity: dim ? 0.4 : 1 }}>
       {known ? (
         <Svg width={size} height={size} viewBox="0 0 20 20">
           <Glyph engine={engine} fg={fg} />
