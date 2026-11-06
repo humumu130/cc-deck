@@ -10,6 +10,14 @@ cd "$(dirname "$0")/.."
 V="${1:?用法: release-test.sh <版本号>}"
 case "$V" in *-test.*) ;; *) echo "ERR: 版本号须带 -test 后缀（本脚本只出 test 包）"; exit 1;; esac
 case "${2:-}" in ""|--with-cf) ;; *) echo "ERR: 未知参数 $2（仅支持 --with-cf）"; exit 1;; esac
+# W-P2BATCH4 件1（1106 晚发版事故根因）：出包必须站在 dev——当晚 checkout dev 被残留
+# worktree 挡住静默失败，bump+tag 落在 docs/org-msr-18265972 古分支（tag 不含 dev 22 笔，
+# PM 手工止损）。原 push 行 CURRENT_BRANCH:-HEAD 缺省对非 dev 分支零拦截——分支守卫前置。
+CUR_BR="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$CUR_BR" != "dev" ]; then
+  echo "ERR: 必须在 dev 分支出包（当前: ${CUR_BR}）——先 git checkout dev 并确认工作区干净再跑；非 dev 出包=发版事故（1106 实锤）"
+  exit 1
+fi
 git diff --quiet || { echo "ERR: 工作区有未提交改动，先收口"; exit 1; }
 
 echo "[1/7] VERSION → $V"

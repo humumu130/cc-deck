@@ -7,12 +7,12 @@
 // fake timer≈真 timer 短窗（CCR_SEAT_TURN_GAP_MIN=0.02≈1.2s——够断言窗内/窗外两态）。
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
-import { setPmOverride, readPmOverride, recordPmLastApproved } from "../src/org.js";
+import { setPmOverride, readPmOverride, recordPmLastApproved, readPmLastApproved } from "../src/org.js";
 import { listPendingConfirms } from "../src/projects.js";
 import { writeCollabMode } from "../src/settings.js";
 import type { RelayConfig } from "../src/config.js";
@@ -121,9 +121,91 @@ async function main() {
       (f.mgr as unknown as { orgAction: Function }).orgAction("pm-release", {});
       const sid2 = "ext-seatlive-other";
       f.mgr.ensureExternal(sid2, "/Users/xdd/dev/other", "另一会话", "sdk-other");
-      f.mgr.setExternalCliPid(sid2, process.pid);
-      const r3 = f.mgr.orgAction("pm-claim", { cwd: "/Users/xdd/dev/other", pid: process.pid }) as { ok: boolean; data?: { needsConfirm?: boolean } };
+      // pid 用不同值（生产每 CLI 进程 pid 唯一）——件5 伴生修复后 pid 匹配优先于
+      // cwd，夹具共用 process.pid 会命中先注册的原会话走 renewed，测不到换 sid
+      f.mgr.setExternalCliPid(sid2, process.pid + 1);
+      const r3 = f.mgr.orgAction("pm-claim", { cwd: "/Users/xdd/dev/other", pid: process.pid + 1 }) as { ok: boolean; data?: { needsConfirm?: boolean } };
       ok(r3.data?.needsConfirm === true, "C4 换 sid→重新出卡（授权不跨会话）");
+      f.cleanup();
+    }
+
+    // ---------- E 组（W-P2BATCH4 件4-F2/件5）：批准边真链+任命并卡 ----------
+    console.log("E 批准边+任命并卡（P2BATCH4）:");
+    {
+      // E1（F2）：真实批准链——claim 出卡→confirm-decide approve:true→readPmLastApproved 落点
+      const f = mkEnv();
+      const sid = "ext-p2b4-approve";
+      f.mgr.ensureExternal(sid, "/Users/xdd/dev/p2b4a", "批准边 PM", "sdk-p2b4a");
+      f.mgr.setExternalCliPid(sid, process.pid);
+      const r1 = f.mgr.orgAction("pm-claim", { cwd: "/Users/xdd/dev/p2b4a", pid: process.pid }) as { ok: boolean; data?: { needsConfirm?: boolean; confirm?: { id: string } } };
+      ok(r1.data?.needsConfirm === true && !!r1.data?.confirm?.id, "E1前置 claim 出卡（真实批准链入口）");
+      if (r1.data?.confirm?.id) {
+        const r2 = (f.mgr as unknown as { orgAction: Function }).orgAction("confirm-decide", { confirm_id: r1.data.confirm.id, approve: true, by: "u" }) as { ok: boolean };
+        ok(r2.ok === true, "E1a confirm-decide approve:true ok");
+        const la = readPmLastApproved(f.ORG);
+        ok(la?.session_id === sid, "E1b 批准边真链：readPmLastApproved().session_id===sid（:8647 recordPmLastApproved 误删即红——原 C2 手灌绕过）");
+        ok(readPmOverride()?.session_id === sid, "E1c override 落位（批准即就位）");
+      }
+      // E2（件5）：已是现任（提名/认领刚批准落位）→同 sid 再 claim→零二卡幂等。
+      // pid 传 number（与生产 org CLI json.dumps({"pid": os.getppid()}) 同型）——
+      // 逼出 str() 只认 string 的定位死代码（件5 伴生修复），测试留 number 防回退。
+      const before = listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending").length;
+      const r3 = f.mgr.orgAction("pm-claim", { cwd: "/Users/xdd/dev/p2b4a", pid: process.pid }) as { ok: boolean; error?: string; data?: { incumbent?: boolean; renewed?: boolean; already?: boolean; needsConfirm?: boolean } };
+      ok(r3.ok === true && r3.data?.needsConfirm !== true, "E2a 现任同 sid claim→幂等零二卡（形态: " + (r3.data?.already === true ? "already" : r3.data?.incumbent === true ? "incumbent" : r3.data?.renewed === true ? "renewed" : (r3.error ?? JSON.stringify(r3.data ?? {})).slice(0, 50)) + "——1106 双卡摩擦根除）");
+      const after = listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending").length;
+      ok(after === before, "E2b 零新任命卡（pending 计数不变——两次拍板一个意图绝迹）");
+      // E3（件5 守卫）：换 sid claim 仍出卡（授权不跨会话）。pid 用不同值——生产每
+      // CLI 进程 pid 唯一，夹具共用 process.pid 会被 pid 精确匹配先命中 E1 会话
+      //（件5 伴生修复后 pid 优先于 cwd，夹具须对齐生产的 pid 唯一性）
+      (f.mgr as unknown as { orgAction: Function }).orgAction("pm-release", {});
+      const sid2 = "ext-p2b4-other";
+      f.mgr.ensureExternal(sid2, "/Users/xdd/dev/p2b4b", "另一会话", "sdk-p2b4b");
+      f.mgr.setExternalCliPid(sid2, process.pid + 1);
+      const r4 = f.mgr.orgAction("pm-claim", { cwd: "/Users/xdd/dev/p2b4b", pid: process.pid + 1 }) as { ok: boolean; error?: string; data?: { needsConfirm?: boolean } };
+      ok(r4.data?.needsConfirm === true || (r4.error ?? "").includes("已有"), "E3 换 sid claim 仍出卡或互斥闸拒（守卫语义——实: " + ((r4.error ?? "") .slice(0, 40) || JSON.stringify(r4.data ?? {}).slice(0, 40)) + "）");
+      f.cleanup();
+    }
+
+    // ---------- F 组（W-P2BATCH4 件4-F1 组合）：between-turns 席位+feedPM→extInput ----------
+    // 三层判活（A 组）与外部喂活通道（#105）各自的单测都在，但「回合间隙席位 + 喂活
+    // 真投外部终端」的组合链无断言——1106 断档第四现正是这条链（席位守住了，喂活
+    // 有没有真到 PM 终端没人证）。F 组补组合：死 pid+回合 TTL 内守位 → feedPM →
+    // bridge.extInput 真收到含候选的 prompt。
+    console.log("F between-turns 席位+feedPM→extInput（P2BATCH4 组合链）:");
+    {
+      const f = mkEnv();
+      const sid = "ext-p2b4-f1";
+      const dp = spawn("sleep", ["0.03"]); const deadPid = dp.pid ?? 1;
+      await sleep(120); // 等 sleep 退出（pid 真死——between-turns 判定前提）
+      f.mgr.ensureExternal(sid, "/Users/xdd/dev/p2b4f1", "组合 PM", "sdk-f1");
+      f.mgr.setExternalCliPid(sid, deadPid);
+      // 首发边（ensureExternal/setExternalCliPid）席位空会机会主义提名出 pm-appoint
+      // 卡——卡在决=值守全线 blocked。先 reject 决卡（进否决档防再提名），本组测的
+      // 是「已任命席位的回合间隙喂活」，任命走手落 override（C 组先例）
+      for (const c of listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending")) {
+        (f.mgr as unknown as { orgAction: Function }).orgAction("confirm-decide", { confirm_id: c.id, approve: false, by: "u" });
+      }
+      // ensureExternal 缺省 WORKING 会被「PM WORKING 合并语义」无声拦（:6474——回合
+      // 在跑不追加值守回合）；between-turns 形态=回合已收口，翻 IDLE 对齐真实态
+      (f.mgr as unknown as { sessions: Map<string, { state: { status: string } }> }).sessions.get(sid)!.state.status = "IDLE";
+      f.bus.emit(sid, "SESSION_UPDATED", { status: "IDLE", action_summary: "回合结束" }); // 回合尾帧（TTL 窗内）
+      setPmOverride({ session_id: sid, cli_pid: deadPid, cwd: "/Users/xdd/dev/p2b4f1", claimed_at: Date.now() });
+      // bridge stub：extInput 真链终点（#105 终端按键注入）
+      const calls: Array<{ sid: string; text: string }> = [];
+      f.mgr.setBridge({
+        resolvePending: () => true, answerPending: () => null,
+        extInput: (s: string, text: string) => { calls.push({ sid: s, text }); return { ok: true }; },
+        extStop: () => ({ ok: true }), refreshTodos: () => ({ ok: true }), hideTodo: () => ({ ok: true }), forget: () => {},
+      } as never);
+      // actionable 候选：pending 验收回执（dutybackoff B3 同款 40h 未提交形态）
+      const accDir = join(f.DATA, "acceptances"); mkdirSync(accDir, { recursive: true });
+      writeFileSync(join(accDir, "f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6.json"), JSON.stringify({ id: "f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6", submitted: false, updated_at: Date.now() - 40 * 3600_000, rows: [{ label: "回归", result: "", note: "" }] }), "utf-8");
+      (f.mgr as unknown as { feedPM: (t: string) => void }).feedPM("turn_end");
+      await sleep(150); // 喂活链异步收口（轮账落盘）
+      const rounds = (() => { try { return readFileSync(join(f.DATA, "duty-rounds.ndjson"), "utf-8"); } catch { return ""; } })();
+      ok(rounds.includes('"result":"continue"'), `F1 between-turns 席位喂活 continue（轮账含 continue——回合间隙席位照投不死等 pid）`);
+      ok(calls.length >= 1 && calls[0]!.sid === sid, `F1b 喂活经 bridge.extInput 真达外部 PM（calls=${calls.length} sid=${calls[0]?.sid ?? "无"}——#105 外部通道组合链）`);
+      ok((calls[0]?.text ?? "").includes("验收") || (calls[0]?.text ?? "").length > 40, `F1c prompt 携带候选内容（${(calls[0]?.text ?? "").slice(0, 40).replace(/\n/g, " ")}…）`);
       f.cleanup();
     }
 

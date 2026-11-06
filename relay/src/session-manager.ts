@@ -4404,7 +4404,11 @@ export class SessionManager {
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.phase = "idle";
-      this.pushExternalLog(s.state.session_id, "system", `已恢复 Codex 会话（thread ${sdkId.slice(0, 8)}…）`);
+      // [W-RESUMEBANNER]+W-P2BATCH4 件3/6：codex/reinjection 短路分支横幅条件化（resumebanner
+      // 批 A 审 P2 漏网点）——codex 席按保活周期刷同族噪音；reviveAbnormal 在函数入口已捕获
+      // （:4381），常态拉起（parked 自然恢复）静默、真异常复活（ERROR/挂死等四信号）才打横幅——
+      // 与 SDK 通用路径 :4467/:4475 同判定同语言。
+      if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 Codex 会话（thread ${sdkId.slice(0, 8)}…）`); // 仅真异常复活打横幅（常态 parked 拉起静默）
       this.emitUpdated(s, true);
       return;
     }
@@ -5995,7 +5999,9 @@ ${lines.join("\n")}
       const l = this.pmOverrideLiveness(ov);
       if (l === "alive" || l === "between-turns") return ov.session_id; // W-SEATALIVE 刀1：回合间隙守位（喂活照投该 sid——bridge ext-input 队列落盘，CLI 下回合拉起即消费，断档窗内事件零丢失）
       if (l === "stale") this.emitChainAudit("pm-override-stale-pid", `session=${ov.session_id.slice(0, 8)} override pid=${ov.cli_pid} 但在册 pid 已换代——pid 回收占位视死，值守位清档（claim/提名恢复可达）`);
-      this.emitChainAudit("pm-override-turn-gap-expired", `session=${ov.session_id.slice(0, 8)} pid 死且超回合间隙 TTL——真死清档（回合拉起后 claim 续任免卡可达）`);
+      // W-P2BATCH4 件7（seatlive P3-F4）：turn-gap-expired 审计行原在 stale/dead 公共尾——
+      // stale（pid 活但换代）≠超回合间隙（真死），语义错标；移入 dead 专属分支。
+      else this.emitChainAudit("pm-override-turn-gap-expired", `session=${ov.session_id.slice(0, 8)} pid 死且超回合间隙 TTL——真死清档（回合拉起后 claim 续任免卡可达）`);
       clearPmOverride();
     }
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
@@ -6667,6 +6673,18 @@ ${lines.join("\n")}
         feed_id: feedId, feed_generation: generation, trigger: [trigger],
         result: "pm_unwakeable", detail, observed, from,
       });
+      // W-P2BATCH4 件4-F3（seatlive 审 P3 同族）：pm_unwakeable 连击并入 noTargetStreak
+      // 告警族——「席位在但持续拉不活」原只数 no-target 分支，该形态用户无感（1106 主场景
+      // 相邻残余面）。同族同阈（≥2 轮）同 upsert；投喂成功仍统一清零（:6438 口径）。
+      this.noTargetStreak++;
+      if (this.noTargetStreak >= 2) {
+        try { this.upsertNotification("system", "pm-no-target-streak", "unwakeable-streak", {
+          title: "值守目标连续拉不活",
+          body: truncate(`已连续 ${this.noTargetStreak} 轮喂活失败（pm_unwakeable）——席位在但持续无法唤醒（最近：${detail.slice(0, 80)}），请检查值守会话终端/进程。`, 180),
+          severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
+        }); } catch { /* 尽力而为 */ }
+        this.emitChainAudit("pm-no-target-streak", `pm_unwakeable 连击 ${this.noTargetStreak} 轮（触发：${trigger}）——席位在但拉不活，升级用户`);
+      }
       try {
         this.upsertNotification("system", `duty:${targetId}`, undefined, {
           title: "需要处理：团队值守无法继续",
@@ -7652,9 +7670,13 @@ ${lines.join("\n")}
           const g = findGroup(gid);
           if (!g) return { ok: false, error: `项目组不存在: ${gid}（先 org create 立项）` };
           if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可入编` };
-          const self = this.locateSelfSession(str("cwd"), Number(str("pid")) || 0);
+          // [W-P2BATCH4 件5 伴生] str() 只认 string，而生产 org CLI json.dumps 传的
+          // pid 是 number（os.getppid()）——Number(str("pid"))||0 恒 0，pid 精确匹配
+          // 从未生效（生产只靠 cwd 兜底，同目录多会话靠 updated_at 碰运气）。number 直取。
+          const joinPid = typeof p.pid === "number" ? p.pid : Number(str("pid")) || 0;
+          const self = this.locateSelfSession(str("cwd"), joinPid);
           if (!self) {
-            return { ok: false, error: "未定位到你的会话（按 cwd 最近活跃匹配）——请在项目目录内运行 org join，或先在 cc-deck 面板打开一个会话后再试" };
+            return { ok: false, error: "未定位到你的会话（按 pid/cwd 匹配）——请在项目目录内运行 org join，或先在 cc-deck 面板打开一个会话后再试" };
           }
           // 外部会话仅可入 pm 词表身份行（seatGate 轴④既定设计：身份行非派单对象、
           // 允许外部——生产 PM 主会话即外部会话；泛 worker 席是派单对象，外部会话
@@ -7696,7 +7718,11 @@ ${lines.join("\n")}
           if (readCollabMode(this.cfg.dataDir) !== "no-leader") {
             return { ok: false, error: "当前为 leader 协作模式，值守位由 Leader 会话承担——org pm claim 属 no-leader（双机值守）场景" };
           }
-          const self = this.locateSelfSession(str("cwd"), Number(str("pid")) || 0);
+          // [W-P2BATCH4 件5 伴生] 同 member-join：number pid 直取（str() 只认 string，
+          // 生产 CLI json.dumps 的 pid 是 number——原写法 pid 匹配恒 0=死代码，
+          // E2 真链断言抓出；修后 claim 定位 pid 优先精确命中，不再赌 cwd 兜底）
+          const claimPid = typeof p.pid === "number" ? p.pid : Number(str("pid")) || 0;
+          const self = this.locateSelfSession(str("cwd"), claimPid);
           if (!self) return { ok: false, error: "未定位到你的会话——请在项目目录内运行 org pm claim" };
           const pid = self.state.cli_pid;
           // [W-DUTYWIRE]（1105 断档第三现治本）：外部 SDK 会话（无 CLI pid）claim 资格
@@ -7753,6 +7779,13 @@ ${lines.join("\n")}
           const ownPending = listPendingConfirms().find((c) => c.kind === "pm-appoint" && c.status === "pending" && c.payload?.sid === self.state.session_id);
           if (ownPending) {
             return { ok: true, data: { needsConfirm: true, confirm: ownPending, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
+          }
+          // W-P2BATCH4 件5（1106 实锤双卡摩擦）：本席已是现任（提名卡刚被 ✓ 落位/或既有
+          // 在位）——claim 是无操作幂等，直接回 ok 零二卡。原实现不查现任直开新卡=「提名
+          // 批准后又弹认领卡」（两次拍板一个意图）。换 sid 仍走下方正常开卡（守卫语义）。
+          if (readPmOverride() && readPmOverride()?.session_id === self.state.session_id) {
+            this.emitChainAudit("pm-claim-idempotent-incumbent", `session=${self.state.session_id.slice(0, 8)} 已是现任值守（任命已批准落位）——claim 幂等零二卡`);
+            return { ok: true, data: { needsConfirm: false, already: true, incumbent: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
           }
           // 提案：写 duty.json pm_appoint 镜像 + 出 pm-appoint 确认卡（不写 override）
           setDutyAppoint({ session_id: self.state.session_id, cli_pid: pid || 0, cwd: self.state.cwd || "", origin: "claim", proposed_at: Date.now() }); // [W-DUTYWIRE]：外部会话 pid=0（活跃度凭证形态）
