@@ -24,10 +24,11 @@ export function workerConcurrencyCap(): number {
   return Number.isFinite(v) && v >= 2 ? Math.floor(v) : 6;
 }
 import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Report 六态（回执落账枚举位——散文本 waiting 不认）
+import { appendSubagentRow, countRunningSubagents, markPendingDispose, readSubagentLedger, scanOrphanSubagents, shouldLessonBackfill, SUBAGENT_KINDS, type SubagentKind, type SubagentRow } from "./subagent-ledger.js"; // W-PMRESOURCE-V1（#106）：子代理轻账（件1 模块——register/done/fail/list+orphan 扫描+回流门控）
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
-  clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
+  clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, readPmLastApproved, recordPmLastApproved, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
   appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
 import { harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）
@@ -801,6 +802,8 @@ export class SessionManager {
   // X1 多机编排：密封 xmsg 子系统控制器（策略面；传输面由 index.ts 经 setXmsgTransport
   // 注入——工厂内账本惰性开，见 commands/xmsg-commands.ts 头注）
   private xmsgCtl: XmsgController = createXmsgCommands(this);
+  /** W-SEATALIVE 刀4：no_pm_target 连击计数（feedPM 成功投喂即清零；≥2 出 streak 告警卡） */
+  private noTargetStreak = 0;
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string; engine?: string; provider?: string; model?: string; receiptPath?: string; retry_of?: string; generation?: number; task_snapshot?: { text?: string; status?: string; updated_at?: number } }[]>(); /* #G5：retry_of 随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板基线比对源 */
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
@@ -1007,6 +1010,32 @@ export class SessionManager {
     r.unref();
     this.startDutyLostWatch(); // [W-DUTYWIRE]：值守失联观测拍（60s）+pending 补投顺拍（重启窗收口）
     this.flushDutyFeedPending(); // [W-DUTYWIRE]：重启补投——席位经活跃度凭证判活存活时，空窗期积压事件即达
+    this.sweepOrphanSubagents(); // W-PMRESOURCE-V1（#106 件3）：重启 flush 边扫孤儿子代理任务——父会话随重启消亡，running 残行即断档候选，新 PM 上位即见处置卡
+  }
+
+  /** W-PMRESOURCE-V1（#106 件3）：孤儿子代理任务扫描+处置卡。挂点=PM claim 落位边与
+   *  relay 重启 flush 边（dutywire 两挂点同族——账行 running 即 pending，缺的只是接管
+   *  扫描）。语义：registered 无 done 超阈（缺省 10min，CCR_SUBAGENT_ORPHAN_MS）→
+   *  notifyConfirm 推值守 PM 一张「子代理任务断档处置」卡（**不自动复活进程**——判断
+   *  复活不救活，调研 Q2 定调：新 PM 读 artifact_path 判定结论已成可结案/半途须重派）；
+   *  推送成功才 markPendingDispose（失败留 running=下次扫描重试，不静默丢卡）。 */
+  sweepOrphanSubagents(): void {
+    try {
+      const target = this.dutyTargetId() ?? this.leaderId;
+      if (!target) return; // 无值守位无 Leader：下轮挂点再试（行仍 running 不丢）
+      const orphans = scanOrphanSubagents(this.cfg.dataDir, Date.now());
+      if (!orphans.length) return;
+      for (const o of orphans) {
+        const ageMin = Math.round(o.ageMs / 60_000);
+        const text = `[子代理任务断档处置] ${o.row.title}（${o.row.kind}，已 ${ageMin} 分钟无上报）——父会话疑似断档。产物=${o.row.artifact_path ?? "未登记"}。处置二选一：①读产物判定结论已成 → org subagent-report op=done 收口（结论可回流 lesson）；②半途无产物 → op=fail 放弃记账后按需重派（不自动复活进程）。[${o.row.id}]`;
+        if (this.notifyConfirm(target, text)) {
+          markPendingDispose(o.row.id, this.cfg.dataDir, `断档处置卡已推（${ageMin} 分钟无上报，target=${target.slice(0, 8)}）`);
+          console.log(`[subagent] 孤儿处置卡已推：${o.row.id}（${ageMin}min）→ ${target.slice(0, 8)}`);
+        } else {
+          console.warn(`[subagent] 孤儿处置卡未达（target 不在册）：${o.row.id}——留 running 下轮重试`);
+        }
+      }
+    } catch { /* 尽力而为（挂点边不炸主链） */ }
   }
 
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
@@ -3074,6 +3103,17 @@ export class SessionManager {
       updated_at: s.state.updated_at,
     });
     this.maybeProposePmAppointment(); // [W-PMSEAT] pid 落位=候选判活前提齐——席位空时提名
+    // W-SEATALIVE 刀2（pid 补水自愈）：回合拉起 pid 注册边=override 补水单点——
+    // override 持本 sid 而 pid 已换代（CLI 重启常态），回写 override.cli_pid（自愈
+    // stale/dead 判据；1106 断档第四现定罪链②：cli-pids.json 缺记录+override 旧 pid
+    // 死→判死清位，本边使下回合拉起即归位）。审计可见（pm-override-pid-replenished）。
+    try {
+      const ov = readPmOverride();
+      if (ov && ov.session_id === id && ov.cli_pid !== pid) {
+        const r = setPmOverride({ session_id: id, cli_pid: pid, cwd: ov.cwd ?? "", claimed_at: ov.claimed_at ?? Date.now() });
+        if (r.ok) this.emitChainAudit("pm-override-pid-replenished", `session=${id.slice(0, 8)} override pid ${ov.cli_pid}→${pid} 回合拉起补水（CLI 重启换代自愈——判活归位）`);
+      }
+    } catch { /* 补水尽力而为不阻断注册主路径 */ }
   }
 
   clearExternalCliPid(id: string): void {
@@ -4030,6 +4070,7 @@ export class SessionManager {
   // prompt：每轮 duty 重推导队列重新生成）。可再生消息失败即丢弃：不进 unacked
   // 重放账（fresh 回退/看门狗接管/冷却补投全部跳过），下一轮 duty 注入全新 prompt
   private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string, refs?: string[], opts?: { renewable?: boolean }): void {
+    const reviveAbnormal = this.sdkReviveAbnormal(s); // [W-RESUMEBANNER]：入口捕获（spawn 成功路径即清 last_error，事后判不可行）
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
@@ -4267,7 +4308,9 @@ export class SessionManager {
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     // FB14：恢复路径回显同样带图引用（refs 由调用侧从落盘结果/重放台账续带）
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker, undefined, refs?.length ? { images: refs } : undefined);
-    this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+    // [W-RESUMEBANNER]：仅真异常复活打横幅——常态拉起（上回合正常 DONE→新消息按需
+    // 拉起=SDK 每回合退出的生命周期）不打（1106 每消息刷屏实锤降噪）
+    if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
     this.emitUpdated(s, true);
   }
 
@@ -4280,6 +4323,7 @@ export class SessionManager {
   // 帧「初始化超时（30s）」即出自这里的旧硬编码；大上下文 Leader 必超时），fail
   // 同时进熔断记账；用户点卡是手动意图，不受熔断压制（本函数无闸）
   private reviveSaved(s: ManagedSession): void {
+    const reviveAbnormal = this.sdkReviveAbnormal(s); // [W-RESUMEBANNER]：入口捕获（onInit 前的状态才是「拉起前」信号）
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法恢复");
@@ -4365,7 +4409,7 @@ export class SessionManager {
           this.transition(s.state.session_id, "WORKING", "revive"); /* W-SMIMPL③ 直写收口 */
           s.state.turn_started_at = Date.now(); // #291 审查 A-P3-1：积压补投起回合——秒表起点
           s.state.action_summary = "已恢复，处理排队消息";
-          this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+          if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`); // [W-RESUMEBANNER]：仅真异常复活打横幅
           this.emitUpdated(s, true);
           return;
         }
@@ -4373,7 +4417,7 @@ export class SessionManager {
         s.state.done_reason = "已恢复（等待输入）";
         s.state.action_summary = "已恢复，等待输入";
         s.state.turn_started_at = undefined;
-        this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+        if (reviveAbnormal) this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`); // [W-RESUMEBANNER]：仅真异常复活打横幅（常态 parked 拉起静默）
         this.emitUpdated(s, true);
       },
       onSessionEnd: (reason) => {
@@ -5230,6 +5274,15 @@ export class SessionManager {
   //（pinned+saved）的自动拉起同闸压制——置顶语义是「点卡片按需恢复」（#49，2026-09-09
   // 用户拍板），自动注入不得绕过。
 
+  /** [W-RESUMEBANNER]（1106 用户实锤：每条消息前「已恢复 SDK 会话」横幅刷屏）真异常
+   * 复活判定：拉起前 last_error 非空 / 前状态 ERROR / 熔断连败账或冷却在场 = 异常复活
+   * （打横幅可观测——断档治理本意）；上回合正常结束（DONE 无错账）→新消息/新命令
+   * 按需拉起 = SDK 进程每回合退出的**常态生命周期**（不打横幅）。全部用既有信号不造
+   * 新状态；streak/冷却在 init 成功即复位（agentCallbacks.onInit）=信号有界不粘滞。 */
+  private sdkReviveAbnormal(s: ManagedSession): boolean {
+    return !!(s.state.last_error || s.state.status === "ERROR" || (s.resumeFailStreak ?? 0) > 0 || (s.resumeCooldownUntil ?? 0) > 0);
+  }
+
   // 熔断记账：resume init 失败（resumeAgent 看门狗 ERROR 分支 / reviveSaved fail /
   // 看门狗接管失败）连击 → 冷却。指数退避 2^(streak-threshold)×base 封顶 cap；
   // streak 只在 onInit 成功复位（见 agentCallbacks.onInit）
@@ -5885,25 +5938,37 @@ ${lines.join("\n")}
       // （会话不在册=外部冷启动窗 或 绑定一致）= 真活守位。歧义窗（pid 活+不在册）
       // 保守守位，显式出口= org pm release（R1 新增）。
       const l = this.pmOverrideLiveness(ov);
-      if (l === "alive") return ov.session_id;
+      if (l === "alive" || l === "between-turns") return ov.session_id; // W-SEATALIVE 刀1：回合间隙守位（喂活照投该 sid——bridge ext-input 队列落盘，CLI 下回合拉起即消费，断档窗内事件零丢失）
       if (l === "stale") this.emitChainAudit("pm-override-stale-pid", `session=${ov.session_id.slice(0, 8)} override pid=${ov.cli_pid} 但在册 pid 已换代——pid 回收占位视死，值守位清档（claim/提名恢复可达）`);
+      this.emitChainAudit("pm-override-turn-gap-expired", `session=${ov.session_id.slice(0, 8)} pid 死且超回合间隙 TTL——真死清档（回合拉起后 claim 续任免卡可达）`);
       clearPmOverride();
     }
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
     return null; // no-leader 无（活）override：席位空——候选提名走确认卡，见 dutyCandidateId
   }
 
-  /** R1-B-F2 复合判活："alive"=pid 活且绑定一致（或会话不在册的外部冷窗）/
-   * "stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）/"dead"=pid 死。
-   * stale 与 dead 同清档（读路径顺手清档语义维持），区别只在审计措辞与定性。 */
-  private pmOverrideLiveness(ov: { cli_pid: number; session_id: string }): "alive" | "stale" | "dead" {
+  /** R1-B-F2 复合判活（W-SEATALIVE 刀1 扩三层）："alive"=pid 活且绑定一致（或会话
+   * 不在册的外部冷窗）/"stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）
+   * /"between-turns"=pid 死但回合活跃 TTL 内（external CLI 每回合结束进程退出=正常
+   * 生命周期 #49——回合间隙非死，1106 断档第四现：3h 窗内 worker_done×5 全
+   * no_pm_target、席位被清+第三张任命卡，根因即此判死）/"dead"=pid 死且超 TTL。
+   * between-turns **守位不清档**；stale/dead 清档。TTL=CCR_SEAT_TURN_GAP_MIN 缺省
+   * 30min（回合间隙常态上界；活跃度凭证与 duty-feed 同源 events.ndjson）。 */
+  private pmOverrideLiveness(ov: { cli_pid: number; session_id: string }): "alive" | "stale" | "between-turns" | "dead" {
     // [W-DUTYWIRE]（1105 断档第三现）：外部 SDK 会话席位（cli_pid=0）无进程可探——
     // 活跃度凭证判定（events.ndjson 最近帧在活跃窗内=活）。窗=CCR_DUTY_ACTIVITY_MIN
     // 缺省 15min（claim 资格/席位判活/候选提名三口同窗，duty-feed.ts 单点）
     if (!(ov.cli_pid > 0)) {
       return sessionActiveByEvents(this.cfg.dataDir, ov.session_id) ? "alive" : "dead";
     }
-    try { process.kill(ov.cli_pid, 0); } catch { return "dead"; }
+    try { process.kill(ov.cli_pid, 0); } catch {
+      // W-SEATALIVE 刀1：pid 死≠会话死——external CLI 回合结束进程退出后，回合活跃
+      // TTL 内最近帧仍在=回合间隙（CLI 下回合拉起即回，pid 由刀2 补水回写）——守位。
+      const gapMin = Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30;
+      const at = lastFrameAtFromEvents(this.cfg.dataDir, ov.session_id);
+      if (at !== null && Date.now() - at <= gapMin * 60_000) return "between-turns";
+      return "dead";
+    }
     const s = this.sessions.get(ov.session_id);
     if (s?.state.cli_pid && s.state.cli_pid > 0 && s.state.cli_pid !== ov.cli_pid) return "stale";
     return "alive";
@@ -5919,7 +5984,8 @@ ${lines.join("\n")}
     const ov = readPmOverride();
     if (ov) { // [W-DUTYWIRE]：cli_pid>0 门撤（外部席位同判活——pmOverrideLiveness 活跃度分支）
       // R1-B-F2 同款复合判活（防 override pid 回收假活→候选恒 null 永不出任命卡）
-      if (this.pmOverrideLiveness(ov) === "alive") return null;
+      // W-SEATALIVE 刀1：between-turns（回合间隙）同算占位——席位有人，不提新名
+      if (this.pmOverrideLiveness(ov) === "alive" || this.pmOverrideLiveness(ov) === "between-turns") return null;
       clearPmOverride(); // dead/stale：清档后可提新名
     }
     const rejected = new Set(readAppointRejected().map((r) => r.session_id));
@@ -5934,7 +6000,16 @@ ${lines.join("\n")}
       const pid = s.state.cli_pid;
       // [W-DUTYWIRE]：外部会话（无 CLI pid）同权入候选——活跃度凭证判活（与 claim 同窗
       // 同单点）。SDK 会话常驻心跳（5s/帧），15min 窗内无帧≈会话确已停摆
-      if (pid && pid > 0) { try { process.kill(pid, 0); } catch { continue; } }
+      if (pid && pid > 0) {
+        try { process.kill(pid, 0); } catch {
+          // W-SEATALIVE 刀2（候选补全）：pid 死≠候选死——回合活跃窗内（回合间隙，
+          // CLI 下回合拉起即回）仍可入候选（提名/claim 可达，pid 由拉起边补水）；
+          // 窗外才真跳过。静默睡升级为可观测：审计一行（节流见 noPidNote 同族——
+          // 此处每扫描一行不节流，候选扫描低频 15min 窗粒度可接受）
+          if (!sessionActiveByEvents(this.cfg.dataDir, s.state.session_id)) continue;
+          this.emitChainAudit("pm-override-pid-stale-candidate", `session=${s.state.session_id.slice(0, 8)} pid=${pid} 死但回合活跃窗内——候选保留（pid_stale，拉起边补水）`);
+        }
+      }
       else if (!(pid && pid > 0) && !sessionActiveByEvents(this.cfg.dataDir, s.state.session_id)) continue; // [W-DUTYWIRE] 外部会话（无 pid）活跃度凭证同权
       const at = s.state.updated_at || 0;
       const isExt = !!s.state.external;
@@ -6266,6 +6341,18 @@ ${lines.join("\n")}
         detail: "no-leader 模式下无在册 PM 会话（external 且进程活）",
         from: Date.now(),
       });
+      // W-SEATALIVE 刀4（审计可见）：no_pm_target 连击 ≥2 轮 → streak 告警卡（独立
+      // key 触发新推送——1106 断档第四现 3h 静默睡 worker_done×5 全睡，不允许再发生；
+      // 投喂成功即清零）。原有单发 pm-no-target 通知维持（首轮提示）。
+      this.noTargetStreak++;
+      if (this.noTargetStreak >= 2) {
+        try { this.upsertNotification("system", "pm-no-target-streak", "noleader-streak", {
+          title: "值守连续找不到 PM 目标",
+          body: truncate(`已连续 ${this.noTargetStreak} 轮事件无人接（no_pm_target）——值守座位空/判死，用户任意消息拉起 PM 或 org pm claim 续任。`, 180),
+          severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "sessions",
+        }); } catch { /* 尽力而为 */ }
+        this.emitChainAudit("pm-no-target-streak", `no_pm_target 连击 ${this.noTargetStreak} 轮（触发：${trigger}）——3h 静默睡形态告警（1106 第四现）`);
+      }
       // #199 B4：哑值守升级通知——no-leader 模式下无在册 PM=整条值守链哑（用户无感）
       try { this.upsertNotification("system", "pm-no-target", "noleader", {
         title: "值守无 PM 目标（no-leader 模式）",
@@ -6278,6 +6365,7 @@ ${lines.join("\n")}
       this.maybeProposePmAppointment();
       return;
     }
+    this.noTargetStreak = 0; // W-SEATALIVE 刀4：座位在（拿到目标）即清零连击
     const targetIsExternal = !!this.sessions.get(targetId)?.state.external;
     // PM WORKING 合并语义（019 §3.3「PM WORKING 时合并 feed 上下文而不追加回合」
     // 最小落地）：值守目标在岗干活中不追加值守回合（托管目标 resumeAgent 会换流打断
@@ -7491,6 +7579,22 @@ ${lines.join("\n")}
           if (cur.alive && cur.session_id === self.state.session_id) {
             return { ok: true, data: { pm_session_id: self.state.session_id, already: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
           }
+          // W-SEATALIVE 刀3（续任免卡）：同 sid 在续任 TTL（CCR_SEAT_RENEW_TTL_H，
+          // 缺省 24h）内曾有用户批准 → 上次批准即续任授权，直接落位免卡（消灭「每重启
+          // 一次 CLI 批一次卡」——1106 用户实锤当日同 sid 第三张卡）；换 sid 才重新
+          // 出卡。席位被他人活占（互斥）仍走下方闸——续任不越权抢占。
+          {
+            const last = readPmLastApproved();
+            const ttlH = Number(process.env.CCR_SEAT_RENEW_TTL_H) || 24;
+            if (last && last.session_id === self.state.session_id && Date.now() - last.at <= ttlH * 3600_000 && !(cur.alive && cur.session_id !== self.state.session_id)) {
+              const r = setPmOverride({ session_id: self.state.session_id, cli_pid: pid || 0, cwd: self.state.cwd || "", claimed_at: Date.now() });
+              if (r.ok) {
+                recordPmLastApproved({ session_id: self.state.session_id, at: Date.now() });
+                this.emitChainAudit("pm-claim-renewed", `session=${self.state.session_id.slice(0, 8)} 同 sid ${Math.round((Date.now() - last.at) / 3600_000)}h 内续任——上次批准即授权，免卡直接落位（喂活即刻恢复）`);
+                return { ok: true, data: { pm_session_id: self.state.session_id, renewed: true, collab_mode: readCollabMode(this.cfg.dataDir) } };
+              }
+            }
+          }
           // 互斥闸①：活值守 PM 在位且非自己 → 拒+通知现任（1104 双 PM 并存根因）
           if (cur.alive && cur.session_id) {
             try {
@@ -7686,6 +7790,59 @@ ${lines.join("\n")}
             return okw ? { ok: true, data: { status: "done" } } : { ok: false, error: "台账写入失败（见 relay 日志；schema 拒写？）" };
           }
           return { ok: false, error: `phase 只收 begin|end（收到 ${phase || "空"}）` };
+        }
+        // W-PMRESOURCE-V1（#106 件2）：PM 子代理任务台账单口——register/done/fail/list
+        // 四态（非决议类：PM 工具面，review-route/review-ledger 同信任级，不走 org_confirm；
+        // 断档处置卡由件3 扫描面推，不经此）。行落 data/subagent-log.ndjson（件1 模块）。
+        // done 边件5：kind∈{research,review} 且 summary 非空且 gid 在场 → lesson-append
+        // 摘要行回流（:5123 派单收口回流同构——analyze 类中间步骤不进记忆，防垃圾账）。
+        case "subagent-report": {
+          const op = str("op") || "list";
+          if (op === "register") {
+            const kind = str("kind") || "other";
+            if (!(SUBAGENT_KINDS as readonly string[]).includes(kind)) return { ok: false, error: `kind 只收 ${SUBAGENT_KINDS.join("|")}` };
+            const title = str("title");
+            if (!title) return { ok: false, error: "title 必填" };
+            const id = "sa-" + randomUUID().slice(0, 8);
+            const gid = str("gid");
+            appendSubagentRow({ ts: Date.now(), id, kind: kind as SubagentKind, title: truncate(title, 120), parent_sid: str("parent_sid"), status: "running", registered_at: Date.now(), ...(gid ? { gid } : {}) }, this.cfg.dataDir);
+            return { ok: true, data: { id } };
+          }
+          if (op === "done" || op === "fail") {
+            const id = str("id");
+            if (!id) return { ok: false, error: "id 必填" };
+            const cur = readSubagentLedger(this.cfg.dataDir).find((r) => r.id === id);
+            if (!cur) return { ok: false, error: `子代理任务不存在: ${id}` };
+            if (cur.status !== "running" && cur.status !== "pending_dispose") return { ok: false, error: `已收口（${cur.status}）不可重复上报` };
+            const summary = str("summary");
+            const artifact = str("artifact_path");
+            const row: SubagentRow = op === "done"
+              ? { ...cur, ts: Date.now(), status: "done", done_at: Date.now(), ...(artifact ? { artifact_path: artifact } : {}), ...(summary ? { summary: truncate(summary, 400) } : {}) }
+              : { ...cur, ts: Date.now(), status: "failed", done_at: Date.now(), reason: truncate(str("reason") || "未注明原因", 200), ...(artifact ? { artifact_path: artifact } : {}) };
+            appendSubagentRow(row, this.cfg.dataDir);
+            // 件5：done 边 lesson 回流（门控单点 shouldLessonBackfill——analyze 不进记忆；
+            // 失败不阻断上报主链，审计行留痕即可）
+            if (op === "done" && shouldLessonBackfill(row)) {
+              const lr = this.orgAction("lesson-append", {
+                gid: row.gid,
+                text: `[子代理·${row.kind}] ${truncate(row.title, 60)}｜结论：${truncate(row.summary ?? "", 120)}｜产物=${row.artifact_path ?? "无"}｜${row.id}`,
+                tags: ["子代理", row.kind],
+              });
+              appendDispatch({ ts: Date.now(), id: randomUUID(), tier: "随手办", target: "org-command", session_id: "", status: lr.ok ? "done" : "failed", receipt: truncate(`subagent lesson 回流 · ${row.id}：${lr.ok ? "已回流" : `失败 ${lr.error}`}`, 160), actor: "system" });
+            }
+            return { ok: true, data: { id, status: row.status } };
+          }
+          if (op === "list") {
+            // 账即索引（调研 V1 主张）：「我发过哪些子代理任务、结论在哪」——running/
+            // pending_dispose 前置，终态按 ts 降序尾随；kind/status 可过滤
+            const kf = str("kind"), sf = str("status");
+            let rows = readSubagentLedger(this.cfg.dataDir);
+            if (kf) rows = rows.filter((r) => r.kind === kf);
+            if (sf) rows = rows.filter((r) => r.status === sf);
+            rows.sort((a, b) => (a.status === "running" || a.status === "pending_dispose" ? 0 : 1) - (b.status === "running" || b.status === "pending_dispose" ? 0 : 1) || b.ts - a.ts);
+            return { ok: true, data: { rows: rows.slice(0, 50), running: countRunningSubagents(this.cfg.dataDir) } };
+          }
+          return { ok: false, error: `op 只收 register|done|fail|list（收到 ${op}）` };
         }
         // X1 多机编排（PRD §4.2-2）：org dispatch --remote <dev>——派单任务书经密封 xmsg
         // 送对端值班位，**对端权威消化**（对端 PM 按其本机 org 现状分诊；对端无值班位/
@@ -8628,10 +8785,12 @@ ${lines.join("\n")}
             } catch { /* 留痕尽力而为 */ }
           }
           const r = setPmOverride({ session_id: sid, cli_pid: pid, cwd: String(c.payload.cwd ?? ""), claimed_at: Date.now() });
+          if (r.ok) recordPmLastApproved({ session_id: sid, at: Date.now() }); // W-SEATALIVE 刀3：批准即续任授权基点
           if (!r.ok) return fail("任命生效", r);
           clearDutyAppoint(sid);
           this.emitChainAudit("pm-appoint-approved", `session=${sid.slice(0, 8)} pid=${pid} origin=${typeof c.payload.origin === "string" ? c.payload.origin : "auto"}——值守喂活恢复`);
           this.flushDutyFeedPending(); // [W-DUTYWIRE]：席位落位即补投空窗期积压事件（claim 后首拍可见）
+          this.sweepOrphanSubagents(); // W-PMRESOURCE-V1（#106 件3）：PM claim 落位边顺扫孤儿子代理——新 PM 上位第一拍即见断档处置卡
           break;
         }
         case "dispatch-closeout": {
