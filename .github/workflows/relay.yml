@@ -85,11 +85,12 @@ jobs:
         run: |
           node -e '
             const fs = require("fs");
-            const yml = fs.readFileSync("../.github/workflows/relay.yml", "utf8");
+            // 本 job 无 defaults working-directory，cwd=repo 根——路径用 repo 根视角
+            const yml = fs.readFileSync(".github/workflows/relay.yml", "utf8");
             const m = yml.match(/script: \[([^\]]+)\]/);
             if (!m) { console.error("ERR: relay.yml 未找到 script: [...] 矩阵行"); process.exit(1); }
             const matrix = m[1].split(",").map(s => s.trim()).filter(Boolean);
-            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const pkg = JSON.parse(fs.readFileSync("relay/package.json", "utf8"));
             const scripts = new Set(Object.keys(pkg.scripts || {}));
             const bad = matrix.filter(k => !scripts.has(k));
             if (bad.length) { console.error("ERR: 矩阵键未在 package.json 注册（拼写错/漂移）: [" + bad.join(", ") + "]"); process.exit(1); }
