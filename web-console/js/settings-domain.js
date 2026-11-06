@@ -1581,7 +1581,7 @@ function connectLan(ctx) {
                 ? (Array.isArray(e.models) && e.models.length ? `已接 · ${e.models.length} 个模型` : "已接 · 使用引擎默认模型")
                 : na
                   ? esc(oneLine(e.auth_hint || "请先完成引擎登录"))
-                  : (e.state === "unsupported" ? "未接入 · 该引擎暂不可用" : "未安装 · 需先安装 " + label + " CLI"); // 件C/H：开发术语（枚举占位/适配器/preflight reason）不进 UI
+                  : (e.state === "unsupported" ? "未接入" : "未安装"); // W-ENGINESLIM（1106 用户令）：二字短标——与新建会话下拉 engineStateText 同口径；安装指引退役（面板过度信息）
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";

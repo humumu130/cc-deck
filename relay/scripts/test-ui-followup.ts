@@ -43,7 +43,7 @@ ok(st.includes("__ccDeck005RenderHiddenRemote") && st.includes("data-hidden-rest
 console.log("件C 引擎下拉 engineBadge 品牌体系：");
 ok(ssd.includes("function engineBadgeInner(cls, label)") && ssd.includes("ENGINE_BRAND_SVG[iconKey]") && ssd.includes('<span class="badge-brand">') && ssd.includes('class="so-copy">'), "C1 下拉行徽章带品牌图标（ENGINE_BRAND_SVG 同表；rebase 裁决：并入 dev engineBadgeInner 单口+件C 两行式 so-copy）");
 ok(ssd.includes(">跟随源默认</strong>") && !ssd.includes("自动 · 跟随源默认"), "C2 「自动」徽章与标题词冗余去重");
-ok(ssd.includes("未安装 · 需先安装 ") && !ssd.includes('return "枚举占位') && !ssd.includes("不支持 · \"+(("), "C3 不可用文案产品化（给动作不给谜语；rebase：HEAD 分层文案版保留，注释引用 preflight 原文不计）");
+ok(ssd.includes('return "未接入"') && ssd.includes('return "未安装"') && st.includes('e.state === "unsupported" ? "未接入" : "未安装"') && !ssd.includes("需先安装") && !st.includes("需先安装") && !ssd.includes('return "枚举占位') && !ssd.includes("不支持 · \"+(("), "C3 不可用文案产品化（W-ENGINESLIM 1106 用户令：二字短标双面同口径——session engineStateText 两 return+settings 三元；「需先安装」两文件绝迹；开发术语退役锚不变）");
 ok(css.includes("#b2-engine-menu .source-option .so-copy") && css.includes("#b2-engine-menu .source-option.active"), "C4 下拉两行式+选中态对比度 CSS");
 
 console.log("件D 消息流 URL 可开：");
