@@ -43,8 +43,8 @@ console.log("== #102 批 A web：needs_auth 状态点 + 指引链 ==");
   ok(fn({ state: "needs_auth", auth_hint: "终端运行 codebuddy-code，输入 /login 完成登录" }) === "未登录 · 终端运行 codebuddy-code，输入 /login 完成登录", "A2 needs_auth → 「未登录 · <hint>」（auth_hint 透传）");
   ok(fn({ state: "needs_auth" }).startsWith("未登录 · "), "A3 needs_auth 无 hint → 兜底文案仍「未登录 ·」前缀");
   ok(fn({ state: "ready", models: ["a", "b"] }) === "2 个模型" && fn({ state: "ready" }).includes("已就绪"), "A4 ready 语义零改动（回归锚）");
-  ok(fn({ state: "unsupported", preflight: { reason: "占位" } }).includes("即将支持") && !fn({ state: "unsupported", preflight: { reason: "占位" } }).includes("不支持"), "A5 unsupported 分层文案版（rebase 合并裁决：HEAD「即将支持 · 当前版本暂不可用」保留——比分支「未接入」多一层可期语义；开发术语「不支持·占位」退役锚不变）");
-  ok(fn({ state: "unavailable", id: "codex", label: "Codex" }).includes("未安装 · 需先安装 Codex CLI"), "A6 unavailable=「未安装 · 需先安装 X CLI」给动作（件C 升级锚）");
+  ok(fn({ state: "unsupported", preflight: { reason: "占位" } }) === "未接入" && !fn({ state: "unsupported", preflight: { reason: "占位" } }).includes("不支持"), "A5 unsupported=「未接入」二字短标（W-ENGINESLIM 1106 用户令：原「即将支持 · 当前版本暂不可用」收敛；开发术语退役锚不变）");
+  ok(fn({ state: "unavailable", id: "codex", label: "Codex" }) === "未安装" && !fn({ state: "unavailable", id: "codex", label: "Codex" }).includes("需先安装"), "A6 unavailable=「未安装」二字短标（W-ENGINESLIM：长指引退役，安装命令移交行 title 的 engineInstallHint）");
 }
 
 // ---- B. 引擎菜单分组（openEngineMenu：needs_auth 单列组+灰置+黄点） ----

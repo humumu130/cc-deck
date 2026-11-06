@@ -4354,15 +4354,22 @@
                   // 原始原因经 engineStateHint 保留在行 title 里（排查不丢信息）
                   const raw = oneLine(String((e.preflight && e.preflight.reason) || "未探测到"));
                   const label = (typeof ENGINES !== "undefined" && ENGINES[e.id] && ENGINES[e.id][0]) || e.label || e.id; // typeof 守卫：blockFrom eval 抽取（engauth A6）无 ENGINES 作用域时走 e.label 回落——真机全局在位零行为差
-                  if (e.state === "unsupported" || /枚举占位/.test(raw)) return "即将支持 · 当前版本暂不可用";
+                  if (e.state === "unsupported" || /枚举占位/.test(raw)) return "未接入"; // W-ENGINESLIM（1106 用户令）：「即将支持 · 当前版本暂不可用」→二字短标（可期语义退 title 的 reason 可查）
                   if (/未配置 CLI 命令/.test(raw)) return "未配置 · 请在源端补全引擎命令";
                   if (/provider|密钥|base ?URL/i.test(raw)) return "配置未完成 · " + raw;
-                  // W-ENGINESOURCE 顺带①：unavailable 补安装指引（有核实命令的给一行命令，
+                  // W-ENGINESOURCE 顺带①：unavailable 安装指引（有核实命令的给一行命令，
                   // 没有的给官网占位——不编造命令）；「该源」口径：目录按创建到源取数后，
-                  // 指引也要落在源端执行（远程源的 CLI 装在远程机器上）
-                  const srcNote = createSourceNow() === "cloud" ? "（在所选源机器上执行）" : "";
+                  // 指引也要落在源端执行（远程源的 CLI 装在远程机器上）。
+                  // W-ENGINESLIM（1106 用户令）：面板文案收敛「未安装」二字（长指引过度），
+                  // 安装命令与源口径移交行 title（engineRowTitle 统一组装，排查信息不丢）
+                  return "未安装";
+                }
+                // W-ENGINESLIM：不可用行的 title 伴随信息（面板短标后唯一查询口）——
+                // 引擎名 + 状态 + 安装命令（INSTALL_HINT，含远程源执行口径）+ preflight 原文
+                function engineInstallHint(e) {
                   const hint = (typeof INSTALL_HINT !== "undefined" && INSTALL_HINT[e.id]) || "";
-                  return "未安装 · 需先安装 " + label + " CLI" + (hint ? " · " + hint + srcNote : "");
+                  const srcNote = createSourceNow() === "cloud" ? "（在所选源机器上执行）" : "";
+                  return hint ? hint + srcNote : "";
                 }
                 // W-ENGINESOURCE 顺带①：安装指引表——只列核实过的官方命令（codex/codebuddy
                 // 命令经 PM 在远程 Mac 实证；trae/qwen 不确定的只给官网占位，绝不编造命令）
@@ -4633,27 +4640,34 @@
                     html += '<div class="source-menu-head">可用 · ' + ready.length + "</div>";
                     for (const e of ready) {
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem"><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + '</span><span class="so-copy"><strong>' + esc(meta[0]) + "</strong><small>" + esc(e.models && e.models.length ? e.models.length + " 个模型" : "默认模型") + "</small></span>" + (e.id === chosen ? check : "") + "</button>"; // 件C 两行式（rebase：徽章走 engineBadgeInner 单口+✓ 角标保留）
+                      // W-ENGINESLIM（1106 用户令「有标签了就不需要名称了」）：徽章（图标+名称文字）
+                      // 即标签，so-copy 不再并排 strong 名称重复——只留状态位（升主字号 .so-solo）；
+                      // 引擎名进 title/aria-label（可访问性不丢）
+                      const stateTxt = e.models && e.models.length ? e.models.length + " 个模型" : "默认模型";
+                      html += '<button type="button" class="source-option' + (e.id === chosen ? " active" : "") + '" data-engine-choice="' + esc(e.id) + '" role="menuitem" title="' + esc(meta[0] + " · " + stateTxt) + '" aria-label="' + esc(meta[0] + " · " + stateTxt) + '"><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + '</span><span class="so-copy so-solo"><small>' + esc(stateTxt) + "</small></span>" + (e.id === chosen ? check : "") + "</button>";
                     }
                   }
                   if (needsAuth.length) {
                     html += '<div class="source-menu-head">未登录 · ' + needsAuth.length + "</div>";
                     for (const e of needsAuth) { // #102 批 B：从灰置升级为可点——点行直接弹登录卡（二维码扫码即登录）
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(oneLine(e.auth_hint || "点此扫码登录")) + '"><span class="ep-dot warn"></span><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + '</span><span class="so-copy"><strong>' + esc(meta[0]) + "</strong><small>点此扫码登录</small></span></button>"; // #102 批 B 可点登录；件C 两行式（rebase：单口徽章+ep-dot warn 保留）
+                      const authHint = oneLine(e.auth_hint || "点此扫码登录");
+                      html += '<button type="button" class="source-option" data-engine-login="' + esc(e.id) + '" title="' + esc(meta[0] + " · 点此扫码登录 · " + authHint) + '" aria-label="' + esc(meta[0] + " · 点此扫码登录") + '"><span class="ep-dot warn"></span><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + '</span><span class="so-copy so-solo"><small>点此扫码登录</small></span></button>'; // W-ENGINESLIM：同 ready 行去名称重复
                     }
                   }
                   if (na.length) {
                     html += '<div class="source-menu-head">不可用 · ' + na.length + "</div>";
-                    for (const e of na) { // 灰置不可点（div 非 button）：产品化原因小字 + 悬停看运维原文；件C 两行式
+                    for (const e of na) { // 灰置不可点（div 非 button）：W-ENGINESLIM 面板只留「未安装/未接入」短标，安装命令+preflight 原文全量进 title（排查口）
                       const meta = ENGINES[e.id] || [e.label || e.id, ""];
-                      const hint = engineStateHint(e);
-                      html += '<div class="source-option" aria-disabled="true"' + (hint ? ' title="' + esc(hint) + '"' : "") + '><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + '</span><span class="so-copy"><strong>' + esc(meta[0]) + "</strong><small>" + esc(oneLine(engineStateText(e))) + "</small></span></div>";
+                      const reason = engineStateHint(e);
+                      const inst = engineInstallHint(e);
+                      const naTitle = [meta[0], oneLine(engineStateText(e)), inst ? "安装：" + inst : "", reason ? "原因：" + reason : ""].filter(Boolean).join(" · ");
+                      html += '<div class="source-option" aria-disabled="true" role="text" title="' + esc(naTitle) + '"><span class="engine-badge ' + meta[1] + '">' + engineBadgeInner(meta[1], meta[0]) + '</span><span class="so-copy so-solo"><small>' + esc(oneLine(engineStateText(e))) + "</small></span></div>";
                     }
                   }
                   menu.innerHTML = html;
-                  // W-ENGDROP：名称/描述单行省略后 title 兜底看全文（悬停渐进增强）；
-                  // UI 反馈批 1029 件C：不可用行的 row title=运维原文优先（产品文案在上、排查细节在悬停）
+                  // W-ENGDROP title 兜底：W-ENGINESLIM 去强名称行后引擎行的 title 已在组装时
+                  // 带全量（名+状态+安装命令+原因），此处只兜 auto 行与远程源占位行的既有链
                   menu.querySelectorAll(".source-option").forEach((o) => {
                     const st = o.querySelector("strong"); if (st) st.title = st.textContent;
                     const sm = o.querySelector("small"); if (sm) sm.title = (o.getAttribute("title") || sm.textContent);
