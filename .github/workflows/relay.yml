@@ -81,7 +81,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - name: 矩阵键必须在 package.json 注册（单向拼写守卫）
+      - name: 矩阵键守卫（双向：拼写向+丢键向）
         run: |
           node -e '
             const fs = require("fs");
@@ -92,7 +92,15 @@ jobs:
             const matrix = m[1].split(",").map(s => s.trim()).filter(Boolean);
             const pkg = JSON.parse(fs.readFileSync("relay/package.json", "utf8"));
             const scripts = new Set(Object.keys(pkg.scripts || {}));
+            // 方向①（拼写向）：矩阵键必须在 package.json 注册
             const bad = matrix.filter(k => !scripts.has(k));
             if (bad.length) { console.error("ERR: 矩阵键未在 package.json 注册（拼写错/漂移）: [" + bad.join(", ") + "]"); process.exit(1); }
-            console.log("OK: 矩阵 " + matrix.length + " 键全部在 package.json 注册（矩阵=自包含白名单精选，反向漏多为设计态排除不拦）");
+            // W-P2BATCH4-R1 方向②（丢键向——A 审备案法）：核心键锚定+键数下限。
+            // 全量反向不可用（pkg 158 个 test:* 大量设计态排除≠精选矩阵）；键丢=CI 静默
+            // 少跑（#46 R4 实锤形态）——锚定集与上行 script: [...] 同源维护（键增改这里）。
+            const anchored = ["test:boardtruth","test:277-team-create-redesign","test:artifacts-dead","test:autorevive","test:bridge","test:bus","test:cardlife","test:subagent","test:cardlifer2","test:cloud","test:codex","test:deliver-session","test:dispatch","test:dispatchbomb","test:dutywire","test:history","test:inboxv1","test:leader","test:linkquality","test:org","test:org-defects","test:pmseat","test:prbackflow","test:prchip","test:projects","test:prreview","test:reviewseat","test:routing","test:settings","test:settings-ws","test:sqlite-resilience","test:teampolish"];
+            const dropped = anchored.filter(k => !matrix.includes(k));
+            if (dropped.length) { console.error("ERR: 矩阵丢键（删整键盲区——键丢=测试静默不跑）: [" + dropped.join(", ") + "]（锚定集随 script 行同源维护）"); process.exit(1); }
+            if (matrix.length < 32) { console.error("ERR: 矩阵键数 " + matrix.length + " < 32 下限（批量丢键形态——键增同步抬锚定值）"); process.exit(1); }
+            console.log("OK: 矩阵 " + matrix.length + " 键双向守卫过（拼写向全注册+丢键向 32 锚定键全在+键数下限 32）");
           '
