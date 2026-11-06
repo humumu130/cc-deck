@@ -3126,6 +3126,14 @@
        只留组点（6 脉冲源违反「唯一脉冲位」纪律；reduced 钳闸随 animation 删除自愈） */
     .awaitu-chip { color: #FBBF24; background: rgba(245, 158, 11, .18); border: 1px solid rgba(245, 158, 11, .38); gap: 5px; }
     .stale-chip { color: var(--faint); background: transparent; border: 1px solid var(--line); } /* W-NOTIFYFIX：过时徽章（版本退役/重复/陈年三因）——弱化灰系（过时≠行动） */
+    /* W-AGGREGATE-V1：未入项目桶卡内联推荐条（主时机静默位）——一行紧凑：主钮+证据行+忽略 */
+    .agg-hint { display: flex; align-items: center; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+    .agg-btn { flex: 0 0 auto; padding: 3px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--text-strong); font-size: var(--fs-D); font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .agg-btn:hover { border-color: var(--border-strong); background: var(--hover); }
+    .agg-evidence { flex: 1 1 auto; min-width: 0; color: var(--faint); font-size: var(--fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 证据行常显（审计美学不藏 hover） */
+    .agg-ignore { flex: 0 0 auto; padding: 2px 7px; border: 0; background: transparent; color: var(--faint); font-size: var(--fs-micro); cursor: pointer; }
+    .agg-ignore:hover { color: var(--dim); text-decoration: underline; }
+    .team-cand-ext .cand-ext-badge { flex: 0 0 auto; padding: 1px 6px; border: 1px solid rgba(245, 158, 11, .38); border-radius: 8px; background: rgba(245, 158, 11, .12); color: #D97706; font-size: var(--fs-micro); white-space: nowrap; } /* 野生会话·观察位徽（#279 纳管不管制语义自明） */
     .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; }
     html[data-theme="light"] .awaitu-chip { color: #B45309; }
     html[data-theme="light"] .awaitu-chip .awaitu-dot { background: #B45309; }
@@ -3168,6 +3176,14 @@
       transition: opacity var(--dur-fast) var(--ease-out);
     }
     .nrow .act:hover, .nrow .act:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+    /* W-INBOX-V1 刀1/刀3：「稍后」「恢复」次级文字链（与主 act 同槽并排但降一档——
+    主行动=brand 强调色，次级行动=faint 前景+hover 提亮；notifypolish 聚合语言同族） */
+    .nrow .act.act-snooze, .nrow .act.act-restore { color: var(--faint); font-weight: 400; }
+    .nrow .act.act-snooze:hover, .nrow .act.act-restore:hover,
+    .nrow .act.act-snooze:focus-visible, .nrow .act.act-restore:focus-visible { color: var(--text-strong); text-decoration: underline; text-underline-offset: 3px; }
+    /* W-INBOX-V1 刀3：已归档组灰点（ndot.a——中性归档语义，r/y/n 三色之外第四点） */
+    .ndot.a { background: var(--faint); opacity: 0.7; }
+    .ngrp.ngrp-arch { opacity: 0.85; }
     .nrow .x {
       grid-column: 3; align-self: center; flex: none; border: 0; background: none; font-size: 13px; line-height: 1;
       color: var(--faint); width: 22px; height: 22px; margin: 0; cursor: pointer; border-radius: 5px;

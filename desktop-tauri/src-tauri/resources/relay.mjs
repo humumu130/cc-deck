@@ -14930,14 +14930,24 @@ var DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "accept
 function isDecisionNotificationKind(value) {
   return typeof value === "string" && DECISION_NOTIFICATION_KINDS.includes(value);
 }
-function transitionNotification(item, action, at) {
+function transitionNotification(item, action, at, snoozeUntil) {
   const next = { ...item };
-  if (action === "source_succeeded" && next.handled_at === void 0) next.handled_at = at;
+  if (action === "source_succeeded") {
+    if (next.handled_at === void 0) next.handled_at = at;
+    if (next.snoozed_until !== void 0) delete next.snoozed_until;
+  }
   if (action === "dismissed") {
     if (next.dismissed_at === void 0) next.dismissed_at = at;
     if (next.handled_at === void 0) next.handled_at = at;
+    if (next.snoozed_until !== void 0) delete next.snoozed_until;
   }
-  if (action === "resolved" && next.resolved_at === void 0) next.resolved_at = at;
+  if (action === "resolved" && next.resolved_at === void 0) {
+    next.resolved_at = at;
+    if (next.snoozed_until !== void 0) delete next.snoozed_until;
+  }
+  if (action === "snoozed") {
+    if (next.resolved_at === void 0 && next.handled_at === void 0 && next.dismissed_at === void 0 && typeof snoozeUntil === "number" && snoozeUntil > at) next.snoozed_until = snoozeUntil;
+  }
   return next;
 }
 function stableKey(kind, entityId, revision) {
@@ -15969,6 +15979,8 @@ var DISPATCH_ENTRY_SCHEMA = {
   priority: { type: "enum", enumTable: BOARD_PRIORITIES },
   /** W-SMIMPL ②：回执契约可见化——done 无结果行标记（读侧宽容忽略，旧行缺省=有回执） */
   receipt_missing: { type: "boolean" },
+  /** [W-CARDLIFE-R3 P1-2] 资格位拦截标：done 收口被回执闸拦（板不动留原态）——converge 据此跳过强翻 */
+  receipt_gate: { type: "boolean" },
   /** S3 世代 CAS（relfix-s）：dispatched 行世代戳=行 ts；收口侧比对防旧引用覆盖新世代 */
   generation: { type: "number" },
   /** S3 IssueSnapshot 基线（relfix-s）：认领既有板卡派单时的关键字段快照（收口对比用） */
@@ -17120,6 +17132,116 @@ function undeliveredCallbacks(maxAgeMs = 24 * 36e5, dir) {
   } catch {
     return [];
   }
+}
+
+// src/board-recon.ts
+function harvestKeyOf(text) {
+  const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
+  if (m) return `w-${m[1].toLowerCase()}`;
+  return String(text || "").replace(/\s+/g, "").slice(0, 10).toLowerCase();
+}
+var STALE_MS_DEFAULT = 4 * 36e5;
+var ORPHAN_GRACE_MS = 45 * 6e4;
+var OWNER_ACTIVE_WINDOW_MS = 20 * 6e4;
+var ORPHAN_DEAD_REASONS = /(success|用户(终断|停止|结束)|completed|cancelled|canceled)/i;
+function reconcileBoardCards(input) {
+  const now = input.now ?? Date.now();
+  const staleMs = input.staleMs ?? (Number(process.env.CCR_BOARDRECON_STALE_MS) || STALE_MS_DEFAULT);
+  const live = /* @__PURE__ */ new Map();
+  for (const s of input.sessions) {
+    if (s.session_id && !s.done_reason) live.set(s.session_id, s);
+  }
+  const running = /* @__PURE__ */ new Set();
+  for (const r of input.dispatchLog) {
+    if (r.id && (r.status === "running" || r.status === "dispatched" || r.status === "queued")) running.add(r.id);
+  }
+  const prevFlagged = input.previouslyFlagged ?? /* @__PURE__ */ new Set();
+  const flagNow = input.flaggedNow ?? /* @__PURE__ */ new Set();
+  const actions = [];
+  let claimedCards = 0;
+  let workingSessions = 0;
+  for (const s of input.sessions) {
+    if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
+  }
+  const fallbackKeyCounts = /* @__PURE__ */ new Map();
+  for (const { board: fb2 } of input.boards) {
+    for (const ent of fb2.entries) {
+      const k3 = harvestKeyOf(String(ent.text || ""));
+      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
+    }
+  }
+  for (const { gid, board } of input.boards) {
+    const submittedByKey = /* @__PURE__ */ new Map();
+    if (input.harvest) {
+      for (const e of board.entries) {
+        if (e.status !== "submitted") continue;
+        const key = harvestKeyOf(String(e.text || ""));
+        (submittedByKey.get(key) ?? submittedByKey.set(key, []).get(key)).push(e.id);
+      }
+      for (const [key, ids] of submittedByKey) {
+        if (ids.length >= 2) {
+          actions.push({ gid, entryId: ids[0], text: key, reason: "duplicate-card", detail: `\u540C\u6587\u672C submitted \u53CC\u5361 \xD7${ids.length}\uFF08${ids.join(",")}\uFF09\u2014\u2014\u7591\u4F3C\u91CD\u590D\u6D3E\u5355\u5EFA\u5361\uFF0C\u786E\u8BA4\u540E\u5408\u5E76/\u5220\u4E00\u5F20`, toBacklog: false, advisory: true });
+        }
+      }
+    }
+    for (const e of board.entries) {
+      if (e.status === "submitted" && input.harvest) {
+        const harvestStaleMs = input.harvestStaleMs ?? (Number(process.env.CCR_BOARDRECON_HARVEST_STALE_MS) || 2 * 36e5);
+        const updated2 = Number(e.updated_at || e.ts || 0);
+        if (now - updated2 > harvestStaleMs) {
+          const key = harvestKeyOf(String(e.text || ""));
+          if (key && !(!key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1)) {
+            const ev2 = input.harvest;
+            const ledgerHit = ev2.doneLedger.get(key);
+            const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
+            const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
+            const receiptOk = ev2.receiptSlugs.has(key);
+            const weakHits = [ledgerOk && "\u53F0\u8D26 done+\u56DE\u6267", receiptOk && "\u56DE\u6267\u5C3E\u884C\u5408\u89C4"].filter(Boolean);
+            const hits2 = [devHit && "dev log \u547D\u4E2D", ...weakHits].filter(Boolean);
+            const dupCount = submittedByKey.get(key)?.length ?? 1;
+            if (devHit && dupCount === 1) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted \u9648\u5316 ${Math.round((now - updated2) / 36e5)}h\uFF0C\u6536\u5272\u8BC1\u636E\uFF1A${hits2.join(" + ")}\uFF08\u542B dev log=\u771F\u6536\u5272\uFF09\u2014\u2014\u5DF2\u6536\u5272\u672A\u7FFB\uFF0C\u7FFB done\uFF08boardrecon auto\uFF09`, toBacklog: false, toDone: true });
+            } else if (devHit && dupCount >= 2) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `dev log \u547D\u4E2D\u4F46\u540C\u952E ${dupCount} \u5361\u5E76\u5B58\u2014\u2014\u591A\u4E49\u4E0D\u81EA\u52A8\u7FFB\uFF0C\u4EBA\u5DE5\u786E\u8BA4\u540E\u5355\u952E\u7FFB\u5361`, toBacklog: false, advisory: true });
+            } else if (!devHit && weakHits.length >= 1 && dupCount === 1) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `\u4EA4\u4ED8/\u6536\u8D27\u8BC1\u636E\u5728\uFF08${weakHits.join(" + ")}\uFF09\u4F46 dev log \u672A\u547D\u4E2D\u2014\u2014\u9648\u5316\u5728\u5BA1\u8BF7\u4EBA\u5DE5\u6838\uFF08\u5728\u5BA1\u8FD4\u4FEE/\u672A squash \u5747\u6B64\u5F62\u6001\uFF0C\u4E0D\u81EA\u52A8\u7FFB\uFF09`, toBacklog: false, advisory: true });
+            }
+          }
+        }
+        continue;
+      }
+      if (e.status !== "claimed") continue;
+      claimedCards++;
+      const updated = Number(e.updated_at || e.ts || 0);
+      const age = now - updated;
+      if (e.owner_session && !live.has(e.owner_session)) {
+        const ownerSes = input.sessions.find((x) => x.session_id === e.owner_session);
+        const deadCert = !!(ownerSes?.done_reason && ORPHAN_DEAD_REASONS.test(ownerSes.done_reason));
+        const ledgerRunning = !!(e.dispatch_id && running.has(e.dispatch_id));
+        const recentActive = !!ownerSes?.last_active_at && now - ownerSes.last_active_at < OWNER_ACTIVE_WINDOW_MS;
+        const inGrace = age < ORPHAN_GRACE_MS;
+        if (!deadCert || ledgerRunning || recentActive || inGrace) {
+          continue;
+        }
+        flagNow.add(e.id);
+        if (!prevFlagged.has(e.id)) {
+          continue;
+        }
+        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "orphan-session", detail: `owner ${String(e.owner_session).slice(0, 8)} \u5224\u6B7B\u7ECF\u65C1\u8BC1\u805A\u5408\uFF08\u767D\u540D\u5355${deadCert ? "\u547D\u4E2D" : "\u5916\u7EC8\u6001/\u4E0D\u5728\u518C"}+\u53F0\u8D26\u65E0 running${ledgerRunning ? "" : "\u2713"}+\u8FD1\u7A97\u65E0\u6D3B\u52A8${recentActive ? "" : "\u2713"}+\u9F84 ${Math.round(age / 6e4)}min \u8FC7\u5BBD\u9650${inGrace ? "" : "\u2713"}\uFF0C\u4E24\u62CD\u786E\u8BA4\uFF09`, toBacklog: true });
+        continue;
+      }
+      if (age > staleMs) {
+        const ownerLive = live.get(e.owner_session || "");
+        const active = !!ownerLive && (ownerLive.status === "WORKING" || ownerLive.status === "WAITING");
+        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "stale-no-progress", detail: `claimed \u6EDE\u7559 ${Math.round(age / 36e5)}h \u65E0\u8FDB\u5C55\uFF08\u9608\u503C ${Math.round(staleMs / 36e5)}h${active ? "\uFF1Bowner \u6D3B\u8DC3\u4E2D\u2014\u2014\u53EA\u63D0\u9192\u4E0D\u5F52\u4F4D" : ""}\uFF09`, toBacklog: !active, advisory: active });
+      }
+    }
+  }
+  let mismatch = null;
+  if (claimedCards - workingSessions > 1) {
+    mismatch = `\u8FDB\u884C\u4E2D\u5361 ${claimedCards} > \u5DE5\u4F5C\u4E2D\u4F1A\u8BDD ${workingSessions}\uFF08\u6B63\u5DEE ${claimedCards - workingSessions}\u2014\u2014\u5B64\u513F\u5019\u9009\u89C1\u5BF9\u8D26\u6E05\u5355\uFF09`;
+  }
+  return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
 }
 
 // src/duty-feed.ts
@@ -18369,14 +18491,21 @@ function moveEntryByDispatch(gid, dispatchId, to2, dir) {
 }
 function convergeBoardsWithDispatchLog(dir, onAudit, opts) {
   const doneAtById = /* @__PURE__ */ new Map();
+  const gatedById = /* @__PURE__ */ new Set();
   for (const row of readDispatchLog(dir, 2e4)) {
     if (row.status !== "done" || !row.id) continue;
     if (String(row.receipt || "").startsWith("relay \u91CD\u542F")) continue;
+    if (row.receipt_gate === true) {
+      gatedById.add(row.id);
+      continue;
+    }
+    gatedById.delete(row.id);
     doneAtById.set(row.id, Number(row.ts) || 0);
   }
-  if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [] };
+  if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [], receiptGated: [] };
   let moved = 0, skipped = 0;
   const wouldClose = [];
+  const receiptGated = [];
   for (const g2 of listGroupsByStatus(dir).active) {
     let board;
     try {
@@ -18387,6 +18516,11 @@ function convergeBoardsWithDispatchLog(dir, onAudit, opts) {
     for (const entry of board.entries) {
       if (entry.status === "done" || !entry.dispatch_id) continue;
       if (entry.status === "submitted" || entry.status === "ready_to_install" || entry.status === "planned") continue;
+      if (gatedById.has(entry.dispatch_id)) {
+        receiptGated.push({ gid: g2.id, entryId: entry.id, dispatchId: entry.dispatch_id });
+        skipped += 1;
+        continue;
+      }
       const doneAt = doneAtById.get(entry.dispatch_id);
       if (doneAt === void 0) continue;
       const staleMs = Date.now() - doneAt;
@@ -18421,7 +18555,7 @@ function convergeBoardsWithDispatchLog(dir, onAudit, opts) {
       if (moveEntryByDispatch(g2.id, entry.dispatch_id, "done", dir)) moved++;
     }
   }
-  return { moved, skipped, wouldClose };
+  return { moved, skipped, wouldClose, receiptGated };
 }
 function computeReady(card, board) {
   const gate_reason = card.gate ? card.gate.reason || "gate \u672A\u8FC7\uFF08\u539F\u56E0\u672A\u6CE8\u660E\uFF09" : null;
@@ -53441,7 +53575,8 @@ function createNotifyCommands(mgr2) {
       if (typeof cmd.payload.notification_key !== "string" || !cmd.payload.notification_key) {
         return { command_id: cmd.command_id, ok: false, error: "notification_key \u5FC5\u586B" };
       }
-      const r = mgr2.notificationAck(cmd.payload.notification_key, cmd.payload.action);
+      const snoozeMs = typeof cmd.payload.snooze_ms === "number" ? cmd.payload.snooze_ms : void 0;
+      const r = mgr2.notificationAck(cmd.payload.notification_key, cmd.payload.action, snoozeMs);
       return { command_id: cmd.command_id, ok: r.ok, ...r.ok ? {} : { error: r.error } };
     }
   };
@@ -58174,12 +58309,28 @@ provider=${opts.provider ?? "default"}` : void 0,
       this.projectNotifications();
     }
   }
-  // COMMAND_NOTIFICATION_ACK 后端（B0 冻结 action 词表 handled|dismissed；resolved
-  // 由来源事件驱动不经此）。已 resolved 的账幂等 ok 不复活；未知 key 拒收
-  notificationAck(key, action) {
+  // COMMAND_NOTIFICATION_ACK 后端（B0 词表 handled|dismissed+snooze；resolved
+  // 由来源事件驱动不经此）。已 resolved 的账幂等 ok 不复活；未知 key 拒收。
+  // W-INBOX-V1 刀1：action="snooze"（「稍后」锚）——snooze_ms 毫秒时长（钳位
+  // 60s..24h，缺省 30 分钟），落 snoozed_until 持久锚（到点回箱由端上 wake timer
+  // 承担，relay 不主动推送——SNAPSHOT/增量帧携带锚即权威）。
+  notificationAck(key, action, snoozeMs) {
+    if (action !== "handled" && action !== "dismissed" && action !== "snooze") {
+      return { ok: false, error: `action \u5FC5\u987B\u662F handled|dismissed|snooze\uFF08\u6536\u5230: ${String(action).slice(0, 24)}\uFF09` };
+    }
     const item = this.notifications.get(key);
     if (!item) return { ok: false, error: `\u901A\u77E5\u4E0D\u5B58\u5728: ${key.slice(0, 48)}` };
     if (item.resolved_at !== void 0) return { ok: true };
+    if (action === "snooze") {
+      const ms = Math.max(6e4, Math.min(24 * 36e5, Number(snoozeMs) > 0 ? Number(snoozeMs) : 30 * 6e4));
+      const until = Date.now() + ms;
+      const before = this.notifications.get(key);
+      const next = transitionNotification(before, "snoozed", Date.now(), until);
+      this.notifications.set(key, next);
+      this.persistNotifications();
+      this.projectNotifications();
+      return { ok: true };
+    }
     this.transitionNotifications((n) => n.key === key, action === "dismissed" ? "dismissed" : "source_succeeded");
     return { ok: true };
   }
@@ -60875,6 +61026,25 @@ provider=${opts.provider ?? "default"}` : void 0,
     q2.push(e);
     this.openDispatches.set(key, q2);
   }
+  /** W-CARDLIFE-R3 P1-1：回执尾行合规判定（行锚单点——资格位/runReceiptCheck 内容核/
+   * 迟写补翻三口同源）。R2 的 slice(-400) 尾字窗截断 27% 真实团队回执（A 审 426 份
+   * 全量实测：w-cardlifer2 自家 412 字回执「结果：」标记被切=假阴性误拦）——改全文
+   * 按行锚：**末个**「以 结果： 开头且含 改动文件：」的行存在即合规。后置补记形态
+   * （军规行后仍有 PR 补记/审查追加节——w-linkquality.md 先例）取最后一个合规行
+   *（后写覆盖前写语义，与台账末行赢同口径）。 */
+  receiptTailLineOk(path6) {
+    if (!path6) return false;
+    try {
+      const lines = readFileSync44(path6, "utf-8").split("\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const t = lines[i].trim();
+        if (t.startsWith("\u7ED3\u679C\uFF1A") && t.includes("\u6539\u52A8\u6587\u4EF6\uFF1A")) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
   // 冲刺 F-02（B1 实测）：worker 纪律模板要求回执末行「结果：…｜改动文件：…」，但
   // 台账 receipt 只存 CLI turn-end reason（"completed"）——项目组详情「回执流」无可读
   // 内容（§3.5 回执语义未落到台账字段）。回合收口时从时间线尾部捞最近一条 assistant
@@ -61012,6 +61182,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const taskRef = taskHit?.id ?? "";
       const titleSeg = taskHit?.text ? ` ${truncate2(taskHit.text, 40)}` : "";
       const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}${boardDriftNote}` : `${receipt}${boardDriftNote}`;
+      const receiptGateBlocked = !boardTo && status === "done" && e.gid && !this.receiptTailLineOk(e.receiptPath);
       appendDispatch({
         ts: Date.now(),
         id: e.id,
@@ -61020,6 +61191,10 @@ provider=${opts.provider ?? "default"}` : void 0,
         status,
         receipt: truncate2(refReceipt, 200),
         session_id: key,
+        // W-CARDLIFE-R3 P1-2：资格位拦截台账标——done 收口因回执未合规被拦（板不动留
+        // 原态），收口行带 receipt_gate:true（converge 跳过+读侧「催收中」可辨——与
+        // receipt_missing 观测标分立：missing=内容观测，gate=资格拦截事实）
+        ...receiptGateBlocked ? { receipt_gate: true } : {},
         // W-SMIMPL ②：回执契约标记透传（done 无「结果：」行=账面闭环内容空，纯观测）
         ...opts?.receiptMissing && status === "done" ? { receipt_missing: true } : {},
         // S1 零产出闸（relfix-s）：显式 failure_reason 优先（org.appendDispatch 咽喉只在
@@ -61060,19 +61235,56 @@ provider=${opts.provider ?? "default"}` : void 0,
       if (status === "done" || status === "failed") this.scheduleReceiptCheck(e.id, e.gid, e.tier, e.receiptPath);
       if (e.gid) {
         if (!boardTo && status === "done") {
+          const receiptCompliant = !receiptGateBlocked;
           let handled = false;
-          try {
-            const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
-            if (card && card.status === "submitted") {
-              upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true });
-              handled = true;
-            } else if (card && card.status !== "done") {
-              const r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true });
-              handled = r.ok;
+          if (receiptCompliant) {
+            try {
+              const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
+              if (card && card.status === "submitted") {
+                upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true });
+                handled = true;
+              } else if (card && card.status !== "done") {
+                let r = { ok: false };
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true });
+                  if (r.ok) break;
+                  if (attempt < 2) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60);
+                }
+                if (!r.ok) {
+                  this.emitChainAudit("board-flip-degraded", `\u6536\u53E3\u7FFB\u5361 degraded\uFF1A\u5355 ${e.id.slice(0, 8)} \u5361 ${card.id} 3 \u6B21\u91CD\u8BD5\u5747\u8D25\uFF08${r.error}\uFF09\u2014\u2014\u56DE\u843D\u88F8\u8BBE\u515C\u5E95\uFF0C\u4EBA\u5DE5\u6838\u677F`);
+                  try {
+                    this.upsertNotification("system", "board-flip-degraded", `${e.id}:${card.id}`, {
+                      title: "\u6536\u53E3\u7FFB\u5361\u5931\u8D25\uFF08degraded\xB7\u5DF2\u91CD\u8BD5 3 \u6B21\uFF09",
+                      body: truncate2(`\u6D3E\u5355 ${e.id.slice(0, 8)} \u6536\u53E3 done \u4F46\u677F\u5199\u5931\u8D25\uFF1A${r.error}\u2014\u2014\u5DF2\u56DE\u843D\u88F8\u8BBE\u8DEF\u5F84\uFF0C\u8BF7\u6838\u5BF9\u677F\u5361 ${card.id} \u72B6\u6001\u3002`, 200),
+                      severity: "waiting",
+                      group: "attention",
+                      actionable: true,
+                      domain: "org",
+                      returnPath: "/"
+                    });
+                  } catch {
+                  }
+                }
+                handled = r.ok;
+              }
+            } catch {
             }
-          } catch {
+            if (!handled) moveEntryByDispatch(e.gid, e.id, "done");
+          } else {
+            this.emitChainAudit("cardlife-receipt-gate", `\u6536\u53E3 done \u4F46\u56DE\u6267\u672A\u5408\u89C4\uFF08${e.receiptPath ? "\u5C3E\u884C\u7F3A\u519B\u89C4\u884C" : "\u65E0\u56DE\u6267\u8DEF\u5F84"}\uFF09\u2014\u2014\u677F\u4E0D\u52A8\uFF08\u8D44\u683C\u4F4D\u628A\u5B88\uFF1A\u4E0D\u8FDB submitted \u4E5F\u4E0D\u88F8\u7FFB done\uFF0C90s \u9EC4\u6846\u50AC\u6536\uFF09`);
+            try {
+              this.upsertNotification("system", `rgate-${e.id}`, this.leaderId ?? "leaderless", {
+                title: "\u56DE\u6267\u672A\u5408\u89C4\xB7\u5361\u5DF2\u62E6",
+                body: truncate2(`\u6D3E\u5355 ${e.id.slice(0, 8)} \u6536\u53E3\u4F46\u56DE\u6267${e.receiptPath ? "\u5C3E\u884C\u7F3A\u300C\u7ED3\u679C\uFF1A\u2026\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A\u2026\u300D\u519B\u89C4\u884C" : "\u8DEF\u5F84\u7F3A\u5931"}\u2014\u2014\u5361\u7559\u539F\u6001\u7B49\u56DE\u6267\u8865\u9F50\uFF0890s \u81EA\u52A8\u590D\u67E5\uFF0C\u8865\u9F50\u5373\u8865\u7FFB submitted\uFF09\uFF1B\u50AC\u6536\u4E2D\u4E0D\u88AB\u5BF9\u8D26\u5668\u6536\u655B`, 200),
+                severity: "waiting",
+                group: "attention",
+                actionable: true,
+                domain: "org",
+                returnPath: "/"
+              });
+            } catch {
+            }
           }
-          if (!handled) moveEntryByDispatch(e.gid, e.id, "done");
         } else {
           moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         }
@@ -62973,6 +63185,63 @@ ${lines.join("\n")}
             });
           }
           this.emitBoard(hit.gid);
+          if (prStateRaw === "merged") {
+            const today = (/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN");
+            if (hit.entry.status === "submitted") {
+              const flip = upsertBoardEntry(hit.gid, { id: hit.entry.id, text: hit.entry.text, status: "done", note: `${hit.entry.note ? hit.entry.note + " " : ""}[cardlife-r2 ${today}] PR merged \u81EA\u52A8\u6536\u53E3\uFF1A${prUrl || "\uFF08\u65E0 URL\uFF09"}`, journal_action: "cardlife-pr-merged" });
+              if (flip.ok) {
+                const CHAIN_WINDOW_MS = 14 * 24 * 36e5;
+                const baseSlug = (t) => t.replace(/-r\d+$/, "");
+                const curKey = harvestKeyOf(hit.entry.text);
+                if (curKey.startsWith("w-")) {
+                  const base = baseSlug(curKey);
+                  const prevs = (loadBoard(hit.gid).entries || []).filter((x) => {
+                    if (x.id === hit.entry.id) return false;
+                    if (x.status !== "submitted" && x.status !== "claimed" && x.status !== "ready_to_install") return false;
+                    const k3 = harvestKeyOf(String(x.text || ""));
+                    if (!k3.startsWith("w-") || baseSlug(k3) !== base) return false;
+                    const xt2 = Number(x.ts || 0);
+                    const ct2 = Number(hit.entry.ts || 0);
+                    return ct2 > 0 && xt2 > 0 && xt2 < ct2 && ct2 - xt2 < CHAIN_WINDOW_MS;
+                  });
+                  for (const pv of prevs) {
+                    upsertBoardEntry(hit.gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}[cardlife-r2 ${today}] \u540C\u94FE\u95ED\u5361\uFF1A\u7EC8\u4EE3 ${hit.entry.id} PR merged\uFF08\u94FE\u57FA ${base}\uFF09`, journal_action: "cardlife-chain-close" });
+                  }
+                  if (prevs.length) this.emitChainAudit("cardlife-chain-close", `\u7EC8\u4EE3 ${hit.entry.id} PR merged\u2192\u540C\u94FE\u95ED\u524D\u4EE3 ${prevs.length} \u5F20\uFF08${prevs.map((x) => x.id).join(",")}\uFF09`);
+                }
+                this.emitChainAudit("cardlife-pr-merged", `\u5361 ${hit.entry.id} submitted\u2192done\uFF08PR merged \u81EA\u52A8\u6536\u53E3\u2014\u2014\u8F6C\u79FB\u5185\u5EFA\u4E8E\u52A8\u4F5C\uFF0C\u673A\u68B0\u624B\u964D\u7EA7\u4E3A\u517C\u5BB9\u8DEF\u5F84\uFF09`);
+                this.emitBoard(hit.gid);
+              } else {
+                this.emitChainAudit("cardlife-flip-degraded", `\u5361 ${hit.entry.id} PR merged \u7FFB done \u5931\u8D25\uFF1A${flip.error}\u2014\u2014\u4EBA\u5DE5\u6536\u53E3`);
+                try {
+                  this.upsertNotification("system", "cardlife-flip-degraded", hit.entry.id, {
+                    title: "PR merged \u4F46\u7FFB\u5361\u5931\u8D25\uFF08degraded\uFF09",
+                    body: truncate2(`\u5361 ${hit.entry.id}\u300C${truncate2(hit.entry.text, 40)}\u300DPR ${prUrl || ""} \u5DF2 merged\uFF0C\u4F46\u677F\u5199\u5931\u8D25\uFF1A${flip.error}\u2014\u2014\u8BF7\u4EBA\u5DE5\u7FFB\u5361\u6536\u53E3\u3002`, 200),
+                    severity: "waiting",
+                    group: "attention",
+                    actionable: true,
+                    domain: "org",
+                    returnPath: "/"
+                  });
+                } catch {
+                }
+              }
+            } else if (hit.entry.status !== "done") {
+              this.emitChainAudit("cardlife-pr-merged-blocked", `\u5361 ${hit.entry.id} \u73B0\u6001 ${hit.entry.status}\uFF08\u975E submitted\uFF09\u6536 PR merged\u2014\u2014\u8D44\u683C\u95F8\u62E6\u4E0B\u4E0D\u81EA\u52A8\u7FFB\uFF0C\u4EBA\u5DE5\u6838\uFF08\u672A\u8FC7\u5BA1\u4EA4\u4ED8\u6D41\u7A0B\u7684 PR \u5408\u5E76=\u77DB\u76FE\u6001\uFF09`);
+              try {
+                this.upsertNotification("system", "cardlife-pr-merged-blocked", hit.entry.id, {
+                  title: "PR merged \u4F46\u5361\u672A\u8FC7\u5BA1\uFF08\u8D44\u683C\u95F8\uFF09",
+                  body: truncate2(`\u5361 ${hit.entry.id}\u300C${truncate2(hit.entry.text, 40)}\u300D\u73B0\u6001 ${hit.entry.status}\uFF0CPR ${prUrl || ""} \u5DF2 merged\u2014\u2014\u4EA4\u4ED8\u6D41\u7A0B\u672A\u8D70\u5B8C\uFF08\u672A\u8FDB submitted\uFF09\u4E0D\u81EA\u52A8\u7FFB done\uFF0C\u8BF7\u4EBA\u5DE5\u6838\u6536\u53E3\u3002`, 200),
+                  severity: "waiting",
+                  group: "attention",
+                  actionable: true,
+                  domain: "org",
+                  returnPath: "/"
+                });
+              } catch {
+              }
+            }
+          }
           this.emitChainAudit("pr-report", `\u5361 ${hit.entry.id}\u300C${truncate2(hit.entry.text, 40)}\u300DPR \u5FBD\u7AE0\uFF1A${prUrl ? `${prUrl} \xB7 ${prStateRaw || "ci_unknown"}` : "\u6E05\u9664"}`);
           if (prStateRaw === "merged") {
             const pend = listPendingConfirms().find((c) => c.kind === "dispatch-closeout" && c.status === "pending" && c.payload?.dispatch_id === dispatchId);
@@ -64884,7 +65153,7 @@ ${msg2}`);
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields, generation: dispatchGeneration, trigger_key: triggerKey });
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
-    const receiptPath = receiptRel ? join54(homedir18(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : void 0;
+    const receiptPath = receiptRel ? join54(artifactsDir(), receiptRel.split("/").pop() ?? "") : void 0;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...receiptPath ? { receiptPath } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {} });
     if (input.gid) {
       let claimEntryId = input.entry_id;
@@ -65536,8 +65805,52 @@ ${out}`;
   }
   runReceiptCheck(entry) {
     try {
-      const artsDir = join54(homedir18(), ".cc-deck", "artifacts");
-      const hit = entry.receiptPath ? existsSync36(entry.receiptPath) : existsSync36(artsDir) && readdirSync16(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+      const artsDir = artifactsDir();
+      const precise = !!entry.receiptPath && existsSync36(entry.receiptPath);
+      if (precise) {
+        if (this.receiptTailLineOk(entry.receiptPath)) {
+          try {
+            const card = loadBoard(entry.gid).entries.find((x) => x.dispatch_id === entry.id);
+            if (card && (card.status === "claimed" || card.status === "backlog")) {
+              const flip = upsertBoardEntry(entry.gid, { id: card.id, text: card.text, status: "submitted", review_required: true, note: `${card.note ? card.note + " " : ""}[cardlife-r3 ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u56DE\u6267\u8FDF\u5199\u8865\u7FFB\uFF1A90s \u590D\u67E5\u519B\u89C4\u884C\u5408\u89C4\uFF08\u6536\u53E3\u65F6\u672A\u5408\u89C4\u88AB\u62E6\uFF0C\u56DE\u6267\u5C31\u4F4D\u81EA\u52A8\u8865\u4F4D\uFF09`, journal_action: "cardlife-receipt-late" });
+              if (flip.ok) {
+                this.emitChainAudit("cardlife-receipt-late", `dispatch ${entry.id.slice(0, 8)} \u56DE\u6267\u8FDF\u5199\u8865\u7FFB\uFF1A\u5361 ${card.id} \u2192submitted\uFF08\u6536\u53E3\u62E6\u219290s \u590D\u67E5\u5408\u89C4\u2192\u8865\u4F4D\uFF09`);
+                this.emitBoard(entry.gid);
+                try {
+                  this.transitionNotifications((n) => n.key === stableKey("system", `rgate-${entry.id}`, this.leaderId ?? "leaderless"), "resolved");
+                } catch {
+                }
+                try {
+                  this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
+                    title: "\u56DE\u6267\u5DF2\u8865\u9F50\xB7\u5361\u8865\u7FFB",
+                    body: truncate2(`\u6D3E\u5355 ${entry.id.slice(0, 8)} \u56DE\u6267\u519B\u89C4\u884C\u5C31\u4F4D\u2014\u2014\u5361\u5DF2\u8865\u7FFB submitted\uFF08rgate \u544A\u8B66\u89E3\u9664\uFF09`, 200),
+                    severity: "waiting",
+                    group: "attention",
+                    actionable: false,
+                    domain: "org",
+                    returnPath: "/"
+                  });
+                } catch {
+                }
+              }
+            }
+          } catch {
+          }
+          return;
+        }
+        this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
+          title: "\u56DE\u6267\u5728\u4F46\u5C3E\u884C\u4E0D\u5408\u89C4",
+          body: `dispatch ${entry.id.slice(0, 8)}\uFF08${entry.title.slice(0, 30)}\uFF09\u56DE\u6267\u6587\u4EF6\u5728\u573A\u4F46\u7F3A\u672B\u884C\u300C\u7ED3\u679C\uFF1A\u2026\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A\u2026\u300D\u519B\u89C4\u884C\u2014\u2014\u8865\u9F50\u540E\u5BF9\u8D26\u5668/\u590D\u5BA1\u81EA\u52A8\u653E\u884C\uFF1B\u5F53\u524D\u5361\u7559\u539F\u6001\u50AC\u6536\u4E2D`,
+          severity: "waiting",
+          group: "attention",
+          actionable: true,
+          domain: "session",
+          returnPath: "/"
+        });
+        this.notifyLeaderSystem(`dispatch ${entry.id.slice(0, 8)} \u56DE\u6267\u5728\u4F46\u5C3E\u884C\u4E0D\u5408\u89C4\uFF08\u7F3A\u519B\u89C4\u884C\uFF09\u2014\u2014\u5DF2\u50AC\u4FEE\uFF0C\u5361\u7559\u539F\u6001`);
+        return;
+      }
+      const hit = !entry.receiptPath ? existsSync36(artsDir) && readdirSync16(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md")) : false;
       if (!hit) {
         this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
           title: "\u6536\u53E3\u65E0\u56DE\u6267",
@@ -72464,7 +72777,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.2";
+  const verRelay = "0.7.1-test.3";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -73719,118 +74032,6 @@ import { join as join63 } from "node:path";
 import { statSync as statSync23 } from "node:fs";
 import { execFileSync as execFileSync7 } from "node:child_process";
 import { homedir as homedir24 } from "node:os";
-
-// src/board-recon.ts
-function harvestKeyOf(text) {
-  const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
-  if (m) return `w-${m[1].toLowerCase()}`;
-  return String(text || "").replace(/\s+/g, "").slice(0, 10).toLowerCase();
-}
-var STALE_MS_DEFAULT = 4 * 36e5;
-var ORPHAN_GRACE_MS = 45 * 6e4;
-var OWNER_ACTIVE_WINDOW_MS = 20 * 6e4;
-var ORPHAN_DEAD_REASONS = /(success|用户(终断|停止|结束)|completed|cancelled|canceled)/i;
-function reconcileBoardCards(input) {
-  const now = input.now ?? Date.now();
-  const staleMs = input.staleMs ?? (Number(process.env.CCR_BOARDRECON_STALE_MS) || STALE_MS_DEFAULT);
-  const live = /* @__PURE__ */ new Map();
-  for (const s of input.sessions) {
-    if (s.session_id && !s.done_reason) live.set(s.session_id, s);
-  }
-  const running = /* @__PURE__ */ new Set();
-  for (const r of input.dispatchLog) {
-    if (r.id && (r.status === "running" || r.status === "dispatched" || r.status === "queued")) running.add(r.id);
-  }
-  const prevFlagged = input.previouslyFlagged ?? /* @__PURE__ */ new Set();
-  const flagNow = input.flaggedNow ?? /* @__PURE__ */ new Set();
-  const actions = [];
-  let claimedCards = 0;
-  let workingSessions = 0;
-  for (const s of input.sessions) {
-    if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
-  }
-  const fallbackKeyCounts = /* @__PURE__ */ new Map();
-  for (const { board: fb2 } of input.boards) {
-    for (const ent of fb2.entries) {
-      const k3 = harvestKeyOf(String(ent.text || ""));
-      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
-    }
-  }
-  for (const { gid, board } of input.boards) {
-    const submittedByKey = /* @__PURE__ */ new Map();
-    if (input.harvest) {
-      for (const e of board.entries) {
-        if (e.status !== "submitted") continue;
-        const key = harvestKeyOf(String(e.text || ""));
-        (submittedByKey.get(key) ?? submittedByKey.set(key, []).get(key)).push(e.id);
-      }
-      for (const [key, ids] of submittedByKey) {
-        if (ids.length >= 2) {
-          actions.push({ gid, entryId: ids[0], text: key, reason: "duplicate-card", detail: `\u540C\u6587\u672C submitted \u53CC\u5361 \xD7${ids.length}\uFF08${ids.join(",")}\uFF09\u2014\u2014\u7591\u4F3C\u91CD\u590D\u6D3E\u5355\u5EFA\u5361\uFF0C\u786E\u8BA4\u540E\u5408\u5E76/\u5220\u4E00\u5F20`, toBacklog: false, advisory: true });
-        }
-      }
-    }
-    for (const e of board.entries) {
-      if (e.status === "submitted" && input.harvest) {
-        const harvestStaleMs = input.harvestStaleMs ?? (Number(process.env.CCR_BOARDRECON_HARVEST_STALE_MS) || 2 * 36e5);
-        const updated2 = Number(e.updated_at || e.ts || 0);
-        if (now - updated2 > harvestStaleMs) {
-          const key = harvestKeyOf(String(e.text || ""));
-          if (key && !(!key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1)) {
-            const ev2 = input.harvest;
-            const ledgerHit = ev2.doneLedger.get(key);
-            const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
-            const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
-            const receiptOk = ev2.receiptSlugs.has(key);
-            const weakHits = [ledgerOk && "\u53F0\u8D26 done+\u56DE\u6267", receiptOk && "\u56DE\u6267\u5C3E\u884C\u5408\u89C4"].filter(Boolean);
-            const hits2 = [devHit && "dev log \u547D\u4E2D", ...weakHits].filter(Boolean);
-            const dupCount = submittedByKey.get(key)?.length ?? 1;
-            if (devHit && dupCount === 1) {
-              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted \u9648\u5316 ${Math.round((now - updated2) / 36e5)}h\uFF0C\u6536\u5272\u8BC1\u636E\uFF1A${hits2.join(" + ")}\uFF08\u542B dev log=\u771F\u6536\u5272\uFF09\u2014\u2014\u5DF2\u6536\u5272\u672A\u7FFB\uFF0C\u7FFB done\uFF08boardrecon auto\uFF09`, toBacklog: false, toDone: true });
-            } else if (devHit && dupCount >= 2) {
-              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `dev log \u547D\u4E2D\u4F46\u540C\u952E ${dupCount} \u5361\u5E76\u5B58\u2014\u2014\u591A\u4E49\u4E0D\u81EA\u52A8\u7FFB\uFF0C\u4EBA\u5DE5\u786E\u8BA4\u540E\u5355\u952E\u7FFB\u5361`, toBacklog: false, advisory: true });
-            } else if (!devHit && weakHits.length >= 1 && dupCount === 1) {
-              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `\u4EA4\u4ED8/\u6536\u8D27\u8BC1\u636E\u5728\uFF08${weakHits.join(" + ")}\uFF09\u4F46 dev log \u672A\u547D\u4E2D\u2014\u2014\u9648\u5316\u5728\u5BA1\u8BF7\u4EBA\u5DE5\u6838\uFF08\u5728\u5BA1\u8FD4\u4FEE/\u672A squash \u5747\u6B64\u5F62\u6001\uFF0C\u4E0D\u81EA\u52A8\u7FFB\uFF09`, toBacklog: false, advisory: true });
-            }
-          }
-        }
-        continue;
-      }
-      if (e.status !== "claimed") continue;
-      claimedCards++;
-      const updated = Number(e.updated_at || e.ts || 0);
-      const age = now - updated;
-      if (e.owner_session && !live.has(e.owner_session)) {
-        const ownerSes = input.sessions.find((x) => x.session_id === e.owner_session);
-        const deadCert = !!(ownerSes?.done_reason && ORPHAN_DEAD_REASONS.test(ownerSes.done_reason));
-        const ledgerRunning = !!(e.dispatch_id && running.has(e.dispatch_id));
-        const recentActive = !!ownerSes?.last_active_at && now - ownerSes.last_active_at < OWNER_ACTIVE_WINDOW_MS;
-        const inGrace = age < ORPHAN_GRACE_MS;
-        if (!deadCert || ledgerRunning || recentActive || inGrace) {
-          continue;
-        }
-        flagNow.add(e.id);
-        if (!prevFlagged.has(e.id)) {
-          continue;
-        }
-        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "orphan-session", detail: `owner ${String(e.owner_session).slice(0, 8)} \u5224\u6B7B\u7ECF\u65C1\u8BC1\u805A\u5408\uFF08\u767D\u540D\u5355${deadCert ? "\u547D\u4E2D" : "\u5916\u7EC8\u6001/\u4E0D\u5728\u518C"}+\u53F0\u8D26\u65E0 running${ledgerRunning ? "" : "\u2713"}+\u8FD1\u7A97\u65E0\u6D3B\u52A8${recentActive ? "" : "\u2713"}+\u9F84 ${Math.round(age / 6e4)}min \u8FC7\u5BBD\u9650${inGrace ? "" : "\u2713"}\uFF0C\u4E24\u62CD\u786E\u8BA4\uFF09`, toBacklog: true });
-        continue;
-      }
-      if (age > staleMs) {
-        const ownerLive = live.get(e.owner_session || "");
-        const active = !!ownerLive && (ownerLive.status === "WORKING" || ownerLive.status === "WAITING");
-        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "stale-no-progress", detail: `claimed \u6EDE\u7559 ${Math.round(age / 36e5)}h \u65E0\u8FDB\u5C55\uFF08\u9608\u503C ${Math.round(staleMs / 36e5)}h${active ? "\uFF1Bowner \u6D3B\u8DC3\u4E2D\u2014\u2014\u53EA\u63D0\u9192\u4E0D\u5F52\u4F4D" : ""}\uFF09`, toBacklog: !active, advisory: active });
-      }
-    }
-  }
-  let mismatch = null;
-  if (claimedCards - workingSessions > 1) {
-    mismatch = `\u8FDB\u884C\u4E2D\u5361 ${claimedCards} > \u5DE5\u4F5C\u4E2D\u4F1A\u8BDD ${workingSessions}\uFF08\u6B63\u5DEE ${claimedCards - workingSessions}\u2014\u2014\u5B64\u513F\u5019\u9009\u89C1\u5BF9\u8D26\u6E05\u5355\uFF09`;
-  }
-  return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
-}
-
-// src/patrol.ts
 var WORKER_STALE_MIN = 40;
 var BOARD_CLAIMED_STALE_H = 48;
 var DISK_FREE_MIN_GB = 5;
@@ -73991,6 +74192,21 @@ var PatrolModule = class {
       const tier = autoTierOf("converge");
       if (tier !== "off") {
         const converged = convergeBoardsWithDispatchLog(void 0, (action, detail) => this.mgr.emitChainAudit(action, detail), { dryRun: tier === "observe" });
+        if (converged.receiptGated.length > 0) {
+          try {
+            this.mgr.upsertNotification("system", "converge-rgate", String(converged.receiptGated.length), {
+              title: `\u8D44\u683C\u4F4D\u62E6\u4E2D ${converged.receiptGated.length} \u5F20\u5361\uFF08\u50AC\u6536\u4E2D\uFF0C\u4E0D\u6536\u655B\uFF09`,
+              body: `\u56DE\u6267\u672A\u5408\u89C4\u88AB\u62E6\u7684\u5361 ${converged.receiptGated.slice(0, 3).map((x) => x.entryId).join("\u3001")}${converged.receiptGated.length > 3 ? " \u7B49" : ""}\u2014\u2014\u7B49\u56DE\u6267\u519B\u89C4\u884C\u8865\u9F50\uFF0890s \u590D\u67E5\u81EA\u52A8\u8865\u7FFB submitted\uFF09\uFF0C\u5BF9\u8D26\u5668\u5DF2\u8DF3\u8FC7`,
+              severity: "waiting",
+              group: "attention",
+              actionable: true,
+              domain: "org",
+              returnPath: "/"
+            });
+          } catch {
+          }
+          this.appendReport(`RGATE \u62E6\u4E2D ${converged.receiptGated.length} \u5F20\uFF08converge \u8DF3\u8FC7\u50AC\u6536\uFF09\uFF1A${converged.receiptGated.slice(0, 3).map((x) => x.entryId).join(",")}`);
+        }
         if (tier === "observe") {
           const would = converged.wouldClose;
           if (would.length > 0 || converged.skipped > 0) {
