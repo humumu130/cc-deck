@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { execSync } from "node:child_process"; // C-MODE-B2 模块7：同锚差异块 git log（超时 3s 静默降级）
+import { execSync, execFile } from "node:child_process"; // C-MODE-B2 模块7：同锚差异块 git log（超时 3s 静默降级）；W-BOARDTRUTH 刀1：execFile 异步 gh（不阻塞 orgAction 命令面）
+import { promisify } from "node:util";
 import { bootMark } from "./boot-time.js"; // W-BOOTFAST：构造器细分打点
 import { notificationsListOf } from "./decision-ledger-projection.js";
 import { pendingUserActionsOf, type PendingUserAction } from "./pending-user-actions.js"; // [W-AWAITUSER] 三源聚合单口（源登记注释锚在该件文件头）
@@ -31,6 +32,7 @@ import {
   appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
 import { harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）
+import { supersededChainPrs, branchBaseOf, type OpenPrSnap } from "./board-truth.js"; // W-BOARDTRUTH 刀1：同链 PR 收割即闭判定（纯函数）
 import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
@@ -4848,6 +4850,47 @@ export class SessionManager {
     this.openDispatches.set(key, q);
   }
 
+  /** W-BOARDTRUTH 刀1：同链 PR 收割即闭（第三现治本——异步 gh 链，绝不阻塞 pr-report 主面）。
+   * 判定=board-truth.supersededChainPrs 纯函数（同链基族+title 基族词双保险——宁可漏关
+   * 不可错关，#29/#6 长挂 PR 防线）；gh 不在/代理死/网络断=降级审计（boardtruth-pr-close-
+   * degraded）人工核销兜底，pr-report 主链先行返回不受影响。 */
+  private async closeSupersededChainPRs(mergedPrUrl: string, dispatchId: string): Promise<void> {
+    const execFileAsync = promisify(execFile);
+    const run = (args: string[]) => execFileAsync("gh", args, { encoding: "utf-8", timeout: 10_000 });
+    try {
+      // R1：view 增 mergedAt（P2 时序门）+list 增 createdAt——gh 同名字段直传
+      const view = JSON.parse(String((await run(["pr", "view", mergedPrUrl, "--json", "number,headRefName,mergedAt"])).stdout)) as { number: number; headRefName: string; mergedAt?: string };
+      const mergedNumber = Number(view.number) || 0;
+      const mergedBranch = String(view.headRefName || "");
+      const mergedAt = view.mergedAt;
+      if (!mergedNumber || !mergedBranch) { this.emitChainAudit("boardtruth-pr-close-degraded", `同链 PR 自动闭降级：后继 PR 元数据提取失败（${mergedPrUrl}）——人工核销`); return; }
+      const openPrs = JSON.parse(String((await run(["pr", "list", "--state", "open", "--json", "number,headRefName,title,url,createdAt", "--limit", "60"])).stdout)) as OpenPrSnap[];
+      const hits = supersededChainPrs(openPrs, mergedBranch, mergedNumber, mergedAt);
+      if (!hits.length) return; // 无同链开 PR——常态静默（每 merged 都全量关才是异常）
+      let closed = 0;
+      for (const pr of hits) {
+        try {
+          await run(["pr", "close", String(pr.number), "--comment", `已被 #${mergedNumber}（${mergedBranch}）返修链 superseded——已收割核销，本 PR 自动关闭（W-BOARDTRUTH 刀1；同链基族 ${branchBaseOf(mergedBranch)}）`]);
+          closed += 1;
+          this.emitChainAudit("boardtruth-pr-superseded", `同链 PR #${pr.number}（${pr.headRefName}）自动闭——被 #${mergedNumber}（${mergedBranch}）superseded（dispatch ${dispatchId.slice(0, 8)} 收割即闭，第三现治本刀1）`);
+        } catch (e) {
+          this.emitChainAudit("boardtruth-pr-close-degraded", `同链 PR #${pr.number}（${pr.headRefName}）关闭失败：${e instanceof Error ? e.message.slice(0, 80) : "?"}——人工核销`);
+        }
+      }
+      if (closed) {
+        try {
+          this.upsertNotification("system", `boardtruth-superseded-${mergedNumber}`, this.leaderId ?? "leaderless", {
+            title: `同链 PR 收割即闭 ×${closed}`,
+            body: truncate(`#${mergedNumber}（${mergedBranch}）收割合并：自动闭同链开 PR ${hits.filter((x) => closed).slice(0, 3).map((x) => `#${x.number}`).join("、")}${hits.length > 3 ? " 等" : ""}（核销评论已留）——审查中泳道不再虚高`, 200),
+            severity: "info", group: "activity", actionable: false, domain: "org", returnPath: "/",
+          });
+        } catch { /* 通知尽力而为 */ }
+      }
+    } catch (e) {
+      this.emitChainAudit("boardtruth-pr-close-degraded", `同链 PR 自动闭降级（gh 不可用/网络/超时）：${e instanceof Error ? e.message.slice(0, 80) : "?"}——merged=${mergedPrUrl} 人工核销兜底`);
+    }
+  }
+
   /** W-CARDLIFE-R3 P1-1：回执尾行合规判定（行锚单点——资格位/runReceiptCheck 内容核/
    * 迟写补翻三口同源）。R2 的 slice(-400) 尾字窗截断 27% 真实团队回执（A 审 426 份
    * 全量实测：w-cardlifer2 自家 412 字回执「结果：」标记被切=假阴性误拦）——改全文
@@ -7354,6 +7397,11 @@ ${lines.join("\n")}
                 }
                 this.emitChainAudit("cardlife-pr-merged", `卡 ${hit.entry.id} submitted→done（PR merged 自动收口——转移内建于动作，机械手降级为兼容路径）`);
                 this.emitBoard(hit.gid);
+                // W-BOARDTRUTH 刀1（t-1e731c9c 第三现治本）：同链 PR 收割即闭——merged 事件
+                // =「后继已 merge」铁证，异步找同链仍开 PR 自动 gh pr close 带核销评论
+                //（第三现成因：返修链收割走新 PR，原分支 PR 无人关闭→审查中泳道虚高）。
+                // fire-and-forget（execFile 异步——gh 探测链不阻塞 orgAction 命令面）。
+                if (prUrl) void this.closeSupersededChainPRs(prUrl, dispatchId);
               } else {
                 // 翻写失败（板冻结等）：不静默——告警卡+审计（任务书件② degraded 面同族）
                 this.emitChainAudit("cardlife-flip-degraded", `卡 ${hit.entry.id} PR merged 翻 done 失败：${flip.error}——人工收口`);
@@ -10369,6 +10417,22 @@ ${lines.join("\n")}
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
   }
 
+  /** W-BOARDTRUTH-R1（P1 撤单驱逐）：按 dispatch_id 从 cap-queue 重放队列移除排队单
+   *（内存+落盘）——撤单（patrol 刀2 TTL/未来任何收口口）只写台账 failed 不清队列的
+   * 旧形态=drain 照样重放已撤单，台账成 queued→failed→running 矛盾链（A 审定罪）。
+   * 返回驱逐数（0=队列本无此单——幂等）。 */
+  evictQueuedDispatch(dispatchId: string): number {
+    if (!dispatchId) return 0;
+    const before = this.dispatchQueueItems.length;
+    this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId);
+    const n = before - this.dispatchQueueItems.length;
+    if (n > 0) {
+      saveDispatchQueue(this.dispatchQueueItems);
+      this.emitChainAudit("boardtruth-queue-evict", `排队单 ${dispatchId.slice(0, 8)} 已随撤单驱逐出重放队列（×${n}——台账/队列不再矛盾）`);
+    }
+    return n;
+  }
+
   // 排队排水：组内出现空闲（回合收口/成员除名释放）时按 FIFO 接续。重入 dispatchWorker
   // （queue_replay 带原单 id，台账同 id 收敛 queued→dispatched/failed）。重入又 queued =
   // 仍触顶全忙（enqueueCapDispatch 已把单挪回队首），break 等下一轮空闲。drainReentrant
@@ -10378,6 +10442,20 @@ ${lines.join("\n")}
     this.drainReentrant = true;
     try {
       for (;;) {
+        // W-BOARDTRUTH-R1（P1 兜底闸）：重放前查终态——队列里挂着台账已终态（failed/
+        // done，撤单/其他收口口写的）的单直接弃（不 dispatchWorker、不再写行）。
+        // evictQueuedDispatch 是主驱逐口（撤单时点即清）；本闸兜住绕过主口的任何
+        // 未来收口路径（一次台账末行读，drain 低频路径成本可忽略）。
+        try {
+          const terminalIds = new Set(readDispatchLog(undefined, 500).filter((r) => r.status === "failed" || r.status === "done").map((r) => r.id));
+          if (terminalIds.size) {
+            const kept = this.dispatchQueueItems.filter((x) => !terminalIds.has(x.dispatch_id));
+            if (kept.length !== this.dispatchQueueItems.length) {
+              this.emitChainAudit("boardtruth-queue-evict", `drain 前查终态弃 ${this.dispatchQueueItems.length - kept.length} 个已终态排队单（台账/队列矛盾链兜底闸）`);
+              this.dispatchQueueItems = kept;
+            }
+          }
+        } catch { /* 台账读失败不阻断排水（保守——照旧重放，主驱逐口兜） */ }
         // R1（A-P0）：双桶排水——先本 gid 项，无则试无 gid 桶（FIFO）。无 gid 排队单
         //（随手办）原六触发点全 string 键控=永不排水+台账 queued 行永悬+目录锁把
         // queued 算活单致锚永久拒收（A/B 双审独立实锤）——任何释放边 drain 顺带排
