@@ -594,6 +594,12 @@ export interface DispatchEntry {
    *  （web 看板卡「无回执」角标/通知账）消费，不改任何状态语义。仅 done 单标（failed
    *  本身即异常信号不双计）。旧行缺省 undefined=有回执口径（宽容惯例）。 */
   receipt_missing?: boolean;
+  /** [W-CARDLIFE-R3 P1-2] 资格位拦截台账标：done 收口因回执尾行不合规被拦（板不动留
+   *  原态、收口行落此标）。消费方=convergeBoardsWithDispatchLog（带标行跳过强翻+
+   * 出催收告警——R2 缺此标时滞留卡被 converge ≤30min 裸翻 done，资格位形同虚设）。
+   * 与 receipt_missing（内容观测）分立：本标是资格拦截事实。迟写补翻（runReceiptCheck
+   * 90s 复查合规→cardlife-receipt-late）后读侧仍可按末行序辨态。 */
+  receipt_gate?: boolean;
   /** #G5 失败分类学：failed 行的失败枚举（network_error/timeout/tool_crash/
    *  model_overload/logic_error/cancelled）——appendDispatch 咽喉自动分类（receipt
    *  错误串→classifyDispatchFailure），调用方零改动单点收口。瞬态三类（network/

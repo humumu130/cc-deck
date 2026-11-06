@@ -29,6 +29,7 @@ import {
   clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
   appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
+import { harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）
 import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
@@ -4803,6 +4804,24 @@ export class SessionManager {
     this.openDispatches.set(key, q);
   }
 
+  /** W-CARDLIFE-R3 P1-1：回执尾行合规判定（行锚单点——资格位/runReceiptCheck 内容核/
+   * 迟写补翻三口同源）。R2 的 slice(-400) 尾字窗截断 27% 真实团队回执（A 审 426 份
+   * 全量实测：w-cardlifer2 自家 412 字回执「结果：」标记被切=假阴性误拦）——改全文
+   * 按行锚：**末个**「以 结果： 开头且含 改动文件：」的行存在即合规。后置补记形态
+   * （军规行后仍有 PR 补记/审查追加节——w-linkquality.md 先例）取最后一个合规行
+   *（后写覆盖前写语义，与台账末行赢同口径）。 */
+  private receiptTailLineOk(path?: string): boolean {
+    if (!path) return false;
+    try {
+      const lines = readFileSync(path, "utf-8").split("\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const t = lines[i].trim();
+        if (t.startsWith("结果：") && t.includes("改动文件：")) return true;
+      }
+      return false;
+    } catch { return false; }
+  }
+
   // 冲刺 F-02（B1 实测）：worker 纪律模板要求回执末行「结果：…｜改动文件：…」，但
   // 台账 receipt 只存 CLI turn-end reason（"completed"）——项目组详情「回执流」无可读
   // 内容（§3.5 回执语义未落到台账字段）。回合收口时从时间线尾部捞最近一条 assistant
@@ -4963,10 +4982,19 @@ export class SessionManager {
       const taskRef = taskHit?.id ?? "";
       const titleSeg = taskHit?.text ? ` ${truncate(taskHit.text, 40)}` : "";
       const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}${boardDriftNote}` : `${receipt}${boardDriftNote}`;
+      // W-CARDLIFE-R3 P1-1/P1-2：资格位判定**前移**至此（收口台账行之前）——拦截事实随
+      // 收口行落 receipt_gate:true 台账标（converge 对账器据此跳过催收卡，不再 ≤30min
+      // 裸翻 done）；判定走 receiptTailLineOk 行锚单点（R2 slice(-400) 字窗截断 27%
+      // 真实回执——A 审 426 份实测 412 字回执军规行被切）。
+      const receiptGateBlocked = !boardTo && status === "done" && e.gid && !this.receiptTailLineOk(e.receiptPath);
       appendDispatch({
         ts: Date.now(), id: e.id, tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
         status, receipt: truncate(refReceipt, 200), session_id: key,
+        // W-CARDLIFE-R3 P1-2：资格位拦截台账标——done 收口因回执未合规被拦（板不动留
+        // 原态），收口行带 receipt_gate:true（converge 跳过+读侧「催收中」可辨——与
+        // receipt_missing 观测标分立：missing=内容观测，gate=资格拦截事实）
+        ...(receiptGateBlocked ? { receipt_gate: true } : {}),
         // W-SMIMPL ②：回执契约标记透传（done 无「结果：」行=账面闭环内容空，纯观测）
         ...(opts?.receiptMissing && status === "done" ? { receipt_missing: true } : {}),
         // S1 零产出闸（relfix-s）：显式 failure_reason 优先（org.appendDispatch 咽喉只在
@@ -5020,18 +5048,63 @@ export class SessionManager {
         // 显式参（中断打回 backlog 等）与 failed 收口维持原裸设语义；卡已 submitted（需修
         // 重派再交付）幂等保位只重设资格位；卡已 done/找不到卡回落裸设兜底（老行为）。
         if (!boardTo && status === "done") {
+          // W-CARDLIFE-R2 件③（交付资格位——B 路差距①「终态≠交付的误翻总根」）：
+          // R2→submitted **仅在回执尾行合规时落**（「结果：…｜改动文件：…」军规行）——
+          // 回执缺失/尾行不合规=交付证据不成立，卡留原态不进 submitted（scheduleReceiptCheck
+          // 90s 黄框已兜底催收；对账器长窗兜底翻漏）。常态时序=worker 先写回执后收工，
+          // 收口时回执在场；迟写/缺失形态本就不该占完成候选位。
+          // W-CARDLIFE-R3 P1-1：判定改 receiptTailLineOk 行锚单点（前移至收口台账行
+          // 前已算 receiptGateBlocked——此处取反即合规；400 字窗截断假阴性根除）。
+          const receiptCompliant = !receiptGateBlocked;
           let handled = false;
-          try {
-            const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
-            if (card && card.status === "submitted") {
-              upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true }); // 幂等保位（无 status 不入 transitions 行）
-              handled = true;
-            } else if (card && card.status !== "done") {
-              const r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true }); // R2 内核：claimed/backlog→submitted
-              handled = r.ok;
-            }
-          } catch { /* 读板异常回落裸设 */ }
-          if (!handled) moveEntryByDispatch(e.gid, e.id, "done"); // 兜底：卡 done/缺失/读板失败（老行为；卡 done 时 no-op）
+          if (receiptCompliant) {
+            try {
+              const card = loadBoard(e.gid).entries.find((x) => x.dispatch_id === e.id);
+              if (card && card.status === "submitted") {
+                upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true }); // 幂等保位（无 status 不入 transitions 行）
+                handled = true;
+              } else if (card && card.status !== "done") {
+                // W-CARDLIFE-R2 件②（收口事务补强——design-cardlife-r1「收口三步无事务
+                // 边界」差距②）：板写失败=短退避重试×3（写侧瞬时态：journal 回放窗/
+                // 文件锁竞态）；仍失败=degraded 留痕（chain-audit journal 面+告警卡，
+                // 不阻断业务但必可见——「不允许静默失败」）+回落裸设兜底（老行为）。
+                let r: { ok: boolean; error?: string } = { ok: false };
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true }); // R2 内核：claimed/backlog→submitted
+                  if (r.ok) break;
+                  if (attempt < 2) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60); // 60ms 短退避（同步上下文无 setTimeout 可等）
+                }
+                if (!r.ok) {
+                  this.emitChainAudit("board-flip-degraded", `收口翻卡 degraded：单 ${e.id.slice(0, 8)} 卡 ${card.id} 3 次重试均败（${r.error}）——回落裸设兜底，人工核板`);
+                  try {
+                    this.upsertNotification("system", "board-flip-degraded", `${e.id}:${card.id}`, {
+                      title: "收口翻卡失败（degraded·已重试 3 次）",
+                      body: truncate(`派单 ${e.id.slice(0, 8)} 收口 done 但板写失败：${r.error}——已回落裸设路径，请核对板卡 ${card.id} 状态。`, 200),
+                      severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/",
+                    });
+                  } catch { /* 通知尽力而为 */ }
+                }
+                handled = r.ok;
+              }
+            } catch { /* 读板异常回落裸设 */ }
+            if (!handled) moveEntryByDispatch(e.gid, e.id, "done"); // 兜底：卡缺失/读板异常/degraded（老行为；卡 done 时 no-op）
+          } else {
+            // 回执不合规：**板完全不动**（留原态，不进 submitted 也不裸翻 done——裸设
+            // 会把「未证实交付」直接送 done，比 submitted 更过）。催收由上方
+            // scheduleReceiptCheck 90s 黄框兜底；对账器长窗兜底翻漏。
+            // W-CARDLIFE-R3 P1-2：拦截事实三面落——①台账 receipt_gate:true（已随收口
+            // 行落，converge 据此跳过本卡不再 ≤30min 裸翻 done）②审计行 ③**告警卡**
+            // （直达人面催修：回执尾行补军规行后 90s 内容核自动补翻——runReceiptCheck
+            // 迟写补翻回调；旧版只审计=PM 无感，滞留卡全靠 converge 裸翻收场）。
+            this.emitChainAudit("cardlife-receipt-gate", `收口 done 但回执未合规（${e.receiptPath ? "尾行缺军规行" : "无回执路径"}）——板不动（资格位把守：不进 submitted 也不裸翻 done，90s 黄框催收）`);
+            try {
+              this.upsertNotification("system", `rgate-${e.id}`, this.leaderId ?? "leaderless", {
+                title: "回执未合规·卡已拦",
+                body: truncate(`派单 ${e.id.slice(0, 8)} 收口但回执${e.receiptPath ? "尾行缺「结果：…｜改动文件：…」军规行" : "路径缺失"}——卡留原态等回执补齐（90s 自动复查，补齐即补翻 submitted）；催收中不被对账器收敛`, 200),
+                severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/",
+              });
+            } catch { /* 通知尽力而为 */ }
+          }
         } else {
           moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "backlog"));
         }
@@ -7151,6 +7224,71 @@ ${lines.join("\n")}
             });
           }
           this.emitBoard(hit.gid); // BOARD_UPDATED 广播：端上 chip 即时上屏（delta.upserts 全条目）
+          // W-CARDLIFE-R2 件①（1105 深夜用户令「不能只依靠规则，要强制性」——状态转移
+          // 内建于动作，design-cardlife-r1.md 竞品铁律「转移内建于动作」：GitHub merge
+          // 原子关 issue / Multica「PR 全 merged→issue 入指定状态」）：**MERGED 事件=
+          // 收割事实**→自动翻当轮卡+同链前代卡 done——不再依赖 PM 机械手手动翻（harvest
+          // --merge 同链翻保留为老 relay 兼容降级路径）。资格闸：仅 submitted（完成候选
+          // =交付已过审）自动翻；其他在途态 merged（板态与收割事实矛盾——未走完审流的
+          // PR 合了）不自动翻，出告警卡请人工核。
+          if (prStateRaw === "merged") {
+            const today = new Date().toLocaleDateString("zh-CN");
+            if (hit.entry.status === "submitted") {
+              // W-CARDLIFE-R3 P2-2：note 拼接保留（当轮卡）——upsertBoardEntry 的 note 是
+              // 全量覆写语义（projects.ts entry.note!==undefined 即 e.note=entry.note），
+              // 直传新串会洗掉前代打回留痕（A 审实锤：R1 打回 note 被闭链覆写）——读前
+              // note 拼接后传（boardfix 续单接卡 :9583 同款口径）。
+              const flip = upsertBoardEntry(hit.gid, { id: hit.entry.id, text: hit.entry.text, status: "done", note: `${hit.entry.note ? hit.entry.note + " " : ""}[cardlife-r2 ${today}] PR merged 自动收口：${prUrl || "（无 URL）"}`, journal_action: "cardlife-pr-merged" });
+              if (flip.ok) {
+                // 同链前代卡（返修链闭链）：同板同 slug 基族（w-foo 与 w-foo-r1…去 -rN
+                // 代尾同基）+ts 早于本卡+仍在途（submitted/claimed/ready_to_install）→
+                // 一并翻 done——终代收割闭整链（cardlife R0 机械手版 cardlife_chain_cards
+                // 移植 relay 侧；ts 窗 14d 防远古卡误闭）
+                const CHAIN_WINDOW_MS = 14 * 24 * 3600_000;
+                const baseSlug = (t: string) => t.replace(/-r\d+$/, "");
+                const curKey = harvestKeyOf(hit.entry.text);
+                if (curKey.startsWith("w-")) {
+                  const base = baseSlug(curKey);
+                  const prevs = (loadBoard(hit.gid).entries || []).filter((x) => {
+                    if (x.id === hit.entry.id) return false;
+                    if (x.status !== "submitted" && x.status !== "claimed" && x.status !== "ready_to_install") return false;
+                    const k = harvestKeyOf(String(x.text || ""));
+                    if (!k.startsWith("w-") || baseSlug(k) !== base) return false;
+                    const xt = Number(x.ts || 0);
+                    const ct = Number(hit.entry.ts || 0);
+                    return ct > 0 && xt > 0 && xt < ct && ct - xt < CHAIN_WINDOW_MS;
+                  });
+                  for (const pv of prevs) {
+                    // W-CARDLIFE-R3 P2-2：同款 note 拼接保留（前代卡的打回留痕不被闭链覆写洗掉）
+                    upsertBoardEntry(hit.gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}[cardlife-r2 ${today}] 同链闭卡：终代 ${hit.entry.id} PR merged（链基 ${base}）`, journal_action: "cardlife-chain-close" });
+                  }
+                  if (prevs.length) this.emitChainAudit("cardlife-chain-close", `终代 ${hit.entry.id} PR merged→同链闭前代 ${prevs.length} 张（${prevs.map((x) => x.id).join(",")}）`);
+                }
+                this.emitChainAudit("cardlife-pr-merged", `卡 ${hit.entry.id} submitted→done（PR merged 自动收口——转移内建于动作，机械手降级为兼容路径）`);
+                this.emitBoard(hit.gid);
+              } else {
+                // 翻写失败（板冻结等）：不静默——告警卡+审计（任务书件② degraded 面同族）
+                this.emitChainAudit("cardlife-flip-degraded", `卡 ${hit.entry.id} PR merged 翻 done 失败：${flip.error}——人工收口`);
+                try {
+                  this.upsertNotification("system", "cardlife-flip-degraded", hit.entry.id, {
+                    title: "PR merged 但翻卡失败（degraded）",
+                    body: truncate(`卡 ${hit.entry.id}「${truncate(hit.entry.text, 40)}」PR ${prUrl || ""} 已 merged，但板写失败：${flip.error}——请人工翻卡收口。`, 200),
+                    severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/",
+                  });
+                } catch { /* 通知尽力而为 */ }
+              }
+            } else if (hit.entry.status !== "done") {
+              // 资格闸拦下：merged 事实与板态矛盾（未过审/未交付流程走完）——不自动翻
+              this.emitChainAudit("cardlife-pr-merged-blocked", `卡 ${hit.entry.id} 现态 ${hit.entry.status}（非 submitted）收 PR merged——资格闸拦下不自动翻，人工核（未过审交付流程的 PR 合并=矛盾态）`);
+              try {
+                this.upsertNotification("system", "cardlife-pr-merged-blocked", hit.entry.id, {
+                  title: "PR merged 但卡未过审（资格闸）",
+                  body: truncate(`卡 ${hit.entry.id}「${truncate(hit.entry.text, 40)}」现态 ${hit.entry.status}，PR ${prUrl || ""} 已 merged——交付流程未走完（未进 submitted）不自动翻 done，请人工核收口。`, 200),
+                  severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/",
+                });
+              } catch { /* 通知尽力而为 */ }
+            }
+          }
           this.emitChainAudit("pr-report", `卡 ${hit.entry.id}「${truncate(hit.entry.text, 40)}」PR 徽章：${prUrl ? `${prUrl} · ${prStateRaw || "ci_unknown"}` : "清除"}`);
           // [W-PMSEAT] 收口联检自动消单：merged 上报=PR 已收口，该 dispatch 的待决
           // dispatch-closeout 卡自动决（✗ 语义=放行，by=auto:pr-merged 留痕归因）——
@@ -9439,7 +9577,9 @@ ${lines.join("\n")}
     // false（有约定路径的核对永远 miss=方向相反的误报 bug；与首战未鸣的 failed 静默
     // 是两个独立缺陷，本批同修）
     const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
-    const receiptPath = receiptRel ? join(homedir(), ".cc-deck", "artifacts", receiptRel.split("/").pop() ?? "") : undefined;
+    // W-CARDLIFE-R2 顺修：回执根改 artifactsDir() 单源（CCR_ARTIFACTS_DIR 可覆盖——
+    // 原硬编码 homedir 与全库口径不一致；生产无 env 时逐字节同值零回归）
+    const receiptPath = receiptRel ? join(artifactsDir(), receiptRel.split("/").pop() ?? "") : undefined;
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...(receiptPath ? { receiptPath } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}) }); /* #G5：重试标记随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板对比的比对源 */
     if (input.gid) {
       // boardfix 刀1（1103 用户实锤「板面说谎」形态 A）：重派接卡——无 entry_id 时按
@@ -10201,12 +10341,54 @@ ${lines.join("\n")}
   }
   private runReceiptCheck(entry: { id: string; gid: string; title: string; receiptPath?: string }): void {
     try {
-      const artsDir = join(homedir(), ".cc-deck", "artifacts");
+      const artsDir = artifactsDir(); // W-CARDLIFE-R3 P3：单源同步（R2 只修 receiptPath 根，此处 join(homedir) 残留——CCR_ARTIFACTS_DIR 覆盖态两口径分裂）
       // 精确优先：任务书提取的约定路径按文件存在性核对（多 worker 并行不假阳）；
       // 无提取值（任务书未写路径）回落前缀扫描（任一新 w-*.md 即过——宽防误报）
-      const hit = entry.receiptPath
-        ? existsSync(entry.receiptPath)
-        : existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"));
+      const precise = !!entry.receiptPath && existsSync(entry.receiptPath);
+      if (precise) {
+        // W-CARDLIFE-R3 P1-2：文件在场但**尾行不合规**核（复用资格位同判定函数单源——
+        // 旧版只查存在性，「空文件/半成品回执」过闸零感知）三分支：
+        //   合规→**迟写补翻**（收口时被资格位拦留原态的卡，回执就位即补翻 submitted——
+        //     回执遗留项「90s 到达回调翻卡未接」本批接上；幂等：卡非在途三态不碰）；
+        //   不合规→催修告警（区别于无回执——文件在但军规行缺，指路明确）；
+        if (this.receiptTailLineOk(entry.receiptPath)) {
+          try {
+            const card = loadBoard(entry.gid).entries.find((x) => x.dispatch_id === entry.id);
+            if (card && (card.status === "claimed" || card.status === "backlog")) {
+              const flip = upsertBoardEntry(entry.gid, { id: card.id, text: card.text, status: "submitted", review_required: true, note: `${card.note ? card.note + " " : ""}[cardlife-r3 ${new Date().toLocaleDateString("zh-CN")}] 回执迟写补翻：90s 复查军规行合规（收口时未合规被拦，回执就位自动补位）`, journal_action: "cardlife-receipt-late" });
+              if (flip.ok) {
+                this.emitChainAudit("cardlife-receipt-late", `dispatch ${entry.id.slice(0, 8)} 回执迟写补翻：卡 ${card.id} →submitted（收口拦→90s 复查合规→补位）`);
+                this.emitBoard(entry.gid);
+                // R4（A 审 P2-A）：补齐通知换独立键（receipt-gate- 前缀）——原 rgate-<id>
+                // 与初拦告警同键，upsertNotification 非 dispatch kind 同键静默 return=
+                // 「已补齐」卡永不出现；同时旧「卡已拦」卡走 resolved 消除（告警解除语义
+                // 双向闭环：新卡出现+旧卡收口）。
+                try {
+                  this.transitionNotifications((n) => n.key === stableKey("system", `rgate-${entry.id}`, this.leaderId ?? "leaderless"), "resolved");
+                } catch { /* 通知尽力而为 */ }
+                try {
+                  this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
+                    title: "回执已补齐·卡补翻",
+                    body: truncate(`派单 ${entry.id.slice(0, 8)} 回执军规行就位——卡已补翻 submitted（rgate 告警解除）`, 200),
+                    severity: "waiting", group: "attention", actionable: false, domain: "org", returnPath: "/",
+                  });
+                } catch { /* 通知尽力而为 */ }
+              }
+            }
+          } catch { /* 读板异常跳过（下一拍对账器兜底） */ }
+          return;
+        }
+        this.upsertNotification("system", `receipt-gate-${entry.id}`, this.leaderId ?? "leaderless", {
+          title: "回执在但尾行不合规",
+          body: `dispatch ${entry.id.slice(0, 8)}（${entry.title.slice(0, 30)}）回执文件在场但缺末行「结果：…｜改动文件：…」军规行——补齐后对账器/复审自动放行；当前卡留原态催收中`,
+          severity: "waiting", group: "attention", actionable: true, domain: "session", returnPath: "/",
+        });
+        this.notifyLeaderSystem(`dispatch ${entry.id.slice(0, 8)} 回执在但尾行不合规（缺军规行）——已催修，卡留原态`);
+        return;
+      }
+      const hit = !entry.receiptPath
+        ? existsSync(artsDir) && readdirSync(artsDir).some((f) => f.startsWith("w-") && f.endsWith(".md"))
+        : false;
       if (!hit) {
         // W-GATEFIX-2：告警 key 带 dispatch 全 id——旧 notifyLeaderSystem 的 stableKeyHint
         // 只取文本前 6 字符（"dispat"），所有派单告警互相覆盖（1020 实锤：e70212f4 与

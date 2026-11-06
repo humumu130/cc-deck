@@ -1585,5 +1585,13 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-appoint-target-pid-changed", // 决议时点候选 pid 已换代（提名→决议间 CLI 重启）：作废不入档
   "pm-appoint-superseded-blocked", // 决议时点席位已有活值守 PM：陈旧卡作废不覆写（R1-B-F1 现任复查）
   "dispatch-no-duty-pm", // no-leader 模式派单时值守位空（时序对账告警档——R1-B-F1 半件）
+  // ---- W-CARDLIFE-R2（1105 深夜用户令「不靠规则靠机制」：状态转移内建于动作） ----
+  "cardlife-pr-merged", // PR merged 自动翻当轮卡 done（转移内建于动作——机械手降级为兼容路径）
+  "cardlife-chain-close", // 终代收割闭同链前代卡（slug 基族+ts 窗 14d）
+  "cardlife-pr-merged-blocked", // 资格闸：非 submitted 态收 PR merged 不自动翻（矛盾态人工核）
+  "cardlife-flip-degraded", // pr-report 翻卡写失败（板冻结等）——degraded 告警
+  "board-flip-degraded", // 收口翻卡 3 次重试失败——degraded 留痕+告警卡（回落裸设兜底）
+  "cardlife-receipt-gate", // 收口 done 但回执尾行不合规——资格位把守板不动（不进 submitted）
+  "cardlife-receipt-late", // W-CARDLIFE-R3 P1-2：回执迟写补翻——90s 复查军规行合规，被拦卡自动补位 submitted
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

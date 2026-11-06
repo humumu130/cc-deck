@@ -1403,7 +1403,7 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
 // 处置）；中断补记行（receipt 带「relay 重启」）不算收割（F-08 退 backlog 有意设计）；
 // 卡 updated_at 严格晚于终态行 ts=收口后被人工/流程搬过，不碾——收敛只清断点残留，不碾压
 // 人工板面操作。只扫 active 组（parked/archived 板冻结由 writableBoard 天然挡）。
-export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "board-force-close", detail: string) => void, opts?: { dryRun?: boolean }): { moved: number; skipped: number; wouldClose: Array<{ gid: string; entryId: string; text: string }> } {
+export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "board-force-close", detail: string) => void, opts?: { dryRun?: boolean }): { moved: number; skipped: number; wouldClose: Array<{ gid: string; entryId: string; text: string }>; receiptGated: Array<{ gid: string; entryId: string; dispatchId: string }> } {
   // observe3（converge 族 observe 档）：dryRun=研判照常（含豁免/去重/读账全链）但**不落
   // 盘**——将翻卡收进 wouldClose 返回（moved 恒 0），供调用方记「本会做什么」干跑证据。
   // 板面零副作用=干跑可反复执行；auto 路径（dryRun 缺省 false）逐字节原行为。
@@ -1415,14 +1415,22 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
   // 有意设计（待人重派），本扫不得把它当收割拽进 done。1023 实测教训：无此排除时
   // test-dispatch「断档补记板条退 todo」用例被本扫反向碾掉。
   const doneAtById = new Map<string, number>();
+  // W-CARDLIFE-R3 P1-2：资格位拦截行（receipt_gate:true——收口被拦的催收中卡）不入
+  // 强翻账——R2 缺此判时拦截卡被本扫 ≤30min 裸翻 done（patrol 一拍+auto 缺省开），
+  // 「板完全不动」倒退为「零审查裸 done」（A 审 P1-2 主锤）。末行赢语义：同 id 后续
+  // 真合规收口行（补翻后再次收口/迟写补翻收口）覆盖旧标=自然解除。
+  const gatedById = new Set<string>();
   for (const row of readDispatchLog(dir, 20_000)) {
     if (row.status !== "done" || !row.id) continue;
     if (String(row.receipt || "").startsWith("relay 重启")) continue;
+    if ((row as { receipt_gate?: boolean }).receipt_gate === true) { gatedById.add(row.id); continue; }
+    gatedById.delete(row.id); // 末行赢：后续无标 done 行覆盖旧标
     doneAtById.set(row.id, Number(row.ts) || 0);
   }
-  if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [] };
+  if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [], receiptGated: [] };
   let moved = 0, skipped = 0;
   const wouldClose: Array<{ gid: string; entryId: string; text: string }> = []; // observe3 dryRun 干跑账（auto 路径恒空）
+  const receiptGated: Array<{ gid: string; entryId: string; dispatchId: string }> = []; // R3：资格位拦中卡清单（调用方出催收告警卡）
   for (const g of listGroupsByStatus(dir).active) {
     let board: ReturnType<typeof loadBoard>;
     try { board = loadBoard(g.id, dir); } catch { continue; }
@@ -1436,6 +1444,12 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       //（planned 卡常态无 dispatch_id，此处防御性兜底：带史卡的规划中态只可能出自
       // 人工迁移，台账收敛不得碾过规划意图）。
       if (entry.status === "submitted" || entry.status === "ready_to_install" || entry.status === "planned") continue;
+      // W-CARDLIFE-R3 P1-2：拦中卡跳过强翻+入催收清单（不静默——调用方 patrol 出告警卡）
+      if (gatedById.has(entry.dispatch_id)) {
+        receiptGated.push({ gid: g.id, entryId: entry.id, dispatchId: entry.dispatch_id });
+        skipped += 1;
+        continue;
+      }
       const doneAt = doneAtById.get(entry.dispatch_id);
       if (doneAt === undefined) continue;
       // boardfix 刀2（1103 板面说谎形态 C）：backlog 陈卡强翻分支——原防碾条件
@@ -1481,7 +1495,7 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       if (moveEntryByDispatch(g.id, entry.dispatch_id, "done", dir)) moved++;
     }
   }
-  return { moved, skipped, wouldClose };
+  return { moved, skipped, wouldClose, receiptGated }; // R3：拦中卡清单随返（patrol 出催收告警）
 }
 
 // ---------- #087 beads 思想采纳（009 §4 M1/M2 + §5 裁决；零外部依赖，不引 bd/Dolt） ----------
