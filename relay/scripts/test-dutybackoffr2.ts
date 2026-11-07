@@ -128,6 +128,69 @@ async function main() {
       ok(bt.includes('ev.event === "Stop"') && bt.includes("noteExternalDutyTurnEnd") && bt.includes("pushAssistantTexts(this.extId(ev), ev.transcript_path)"), "D1 bridge Stop 挂点（增量补读+观测窗起表）");
       const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
       ok(sm.includes("(entry as { full: string }).full") && sm.includes("W-DUTYBACKOFF-R2"), "D2 消费挂点吃全文（full 优先——截断断链根治锚）");
+      // E3（R3 scoped 锚）：managed onLog 体内挂点吃 full（非仅 external 咽喉——A 审 P1
+      // 「一处根治实为一挂点根治」的修复面锚）
+      const hookBody = sm.slice(sm.indexOf("R1（A 审 P1-1）刀3 托管面真接线"), sm.indexOf("R1（A 审 P1-1）刀3 托管面真接线") + 1600);
+      ok(hookBody.includes("(entry as { full: string }).full") && hookBody.includes("dutyManagedText"), "E3 managed onLog 挂点体内 full 优先读（与 external 咽喉同构——两挂点零分叉）");
+    }
+
+    console.log("E managed 长输出双态（R3·A 审 P1——R2 只修 external 挂点的盲区）:");
+    {
+      // E1 生产形态复刻：agent-adapter onLog("assistant_text", truncate(body,400), {full: body})
+      // ——dispatch 真链（factory 回调在手）直发，托管 PM 长输出（>400 字+末行回执）→消费
+      const f = sandbox("e1");
+      writeCollabMode(f.dataDir, "no-leader");
+      type ManagedCb = { onInit: (s: string, m: string) => void; onLog: (k: string, t: string, meta?: { full?: string }) => void; onTurnEnd: (ok: boolean, r: string, d: number) => void };
+      let cbE: ManagedCb | null = null;
+      f.mgr.setAgentFactory(((_c: string, _m: string, cb: ManagedCb) => {
+        cbE = cb;
+        setTimeout(() => { try { cb.onInit("sdk-e1", "m"); setTimeout(() => { try { cb.onTurnEnd(true, "success", 5); } catch {} }, 5); } catch {} }, 0);
+        return { id: "ae1", startedAt: Date.now(), ended: false, sendMessage: () => {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => {}, setPermissionMode: async () => {} };
+      }) as never);
+      const anchorE = mkdtempSync(join(tmpdir(), "dbr2-e1-"));
+      const cgE = f.mgr.orgAction("project-create", { name: "E1 组", anchor: anchorE, tier: "轻立项" }) as { ok: boolean; data?: { group?: { id: string }; confirm?: { id: string }; needsConfirm: boolean } };
+      if (cgE.ok && cgE.data?.needsConfirm) await f.mgr.orgAction("confirm-decide", { confirm_id: cgE.data.confirm?.id ?? "", approve: true, by: "u" });
+      const dpE = f.mgr.orgAction("dispatch", { anchor: anchorE, prompt: "E1 managed onLog 长输出真链夹具", gid: cgE.data?.group?.id ?? "", tier: "轻立项" }) as { ok: boolean; dispatch_id?: string; error?: string };
+      await new Promise((r) => setTimeout(r, 400));
+      ok(cgE.ok === true && dpE.ok === true, "E1前置 组建+派单 spawn（factory 回调链通）" + (dpE.ok ? "" : "｜" + (dpE.error ?? "")));
+      ok(!!cbE, "E1前置 factory 回调在手（managed onLog 通道）");
+      if (cbE) {
+        // 闭包内赋值 TS 流分析不追踪（窄化残留 null→never）——R1 夹具同款 cast
+        (cbE as ManagedCb).onLog("assistant_text", truncate(LONG_PREFIX + RECEIPT_LINE, 400), { full: LONG_PREFIX + RECEIPT_LINE });
+        const rd = readDutyReviewed(f.orgDir);
+        ok(rd.includes(SID_A) && rd.includes(SID_B) && rd.includes(SID_C), `E1 managed 长输出 full 全文→消费（>400 字正文+末行回执——三 sid 落 reviewed，实 ${rd.length}）`);
+        ok(auditText(f.dataDir).includes("duty-receipt-accept"), "E1b 消费审计在（managed 面同链 duty-receipt-accept）");
+        f.cleanup();
+      } else {
+        f.cleanup();
+        throw new Error("E1前置失败：factory 回调未建立");
+      }
+      // E2 对照：text-only（同截断无 full）→不消费（managed 面同病断链形态复刻——
+      // 按 A3 对照逻辑，R3 修复前 managed 挂点即此行为）
+      const f4 = sandbox("e2");
+      writeCollabMode(f4.dataDir, "no-leader");
+      const SID_D = "sid-ddd-4444";
+      const RECEIPT_E2 = `DUTY_RECEIPT {"v":1,"feed_id":"feed-e2ctrl","actions":[{"kind":"accept","ids":["${SID_D}"]}],"blocked":[],"next_trigger":"turn_end"}`;
+      let cbE2: ManagedCb | null = null;
+      f4.mgr.setAgentFactory(((_c: string, _m: string, cb: ManagedCb) => {
+        cbE2 = cb;
+        setTimeout(() => { try { cb.onInit("sdk-e2", "m"); setTimeout(() => { try { cb.onTurnEnd(true, "success", 5); } catch {} }, 5); } catch {} }, 0);
+        return { id: "ae2", startedAt: Date.now(), ended: false, sendMessage: () => {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => {}, setPermissionMode: async () => {} };
+      }) as never);
+      const anchorE2 = mkdtempSync(join(tmpdir(), "dbr2-e2-"));
+      const cgE2 = f4.mgr.orgAction("project-create", { name: "E2 组", anchor: anchorE2, tier: "轻立项" }) as { ok: boolean; data?: { group?: { id: string }; confirm?: { id: string }; needsConfirm: boolean } };
+      if (cgE2.ok && cgE2.data?.needsConfirm) await f4.mgr.orgAction("confirm-decide", { confirm_id: cgE2.data.confirm?.id ?? "", approve: true, by: "u" });
+      const dpE2 = f4.mgr.orgAction("dispatch", { anchor: anchorE2, prompt: "E2 text-only 对照夹具", gid: cgE2.data?.group?.id ?? "", tier: "轻立项" }) as { ok: boolean; dispatch_id?: string; error?: string };
+      await new Promise((r) => setTimeout(r, 400));
+      ok(cgE2.ok === true && dpE2.ok === true, "E2前置 组建+派单 spawn（对照组回调链通）" + (dpE2.ok ? "" : "｜" + (dpE2.error ?? "")));
+      if (cbE2) {
+        (cbE2 as unknown as { onLog: (k: string, t: string, meta?: { full?: string }) => void }).onLog("assistant_text", truncate(LONG_PREFIX + RECEIPT_E2, 400));
+        ok(!readDutyReviewed(f4.orgDir).includes(SID_D), "E2 text-only（截断无 full）→不消费（managed 面同病断链形态复刻——full 是唯一通路）");
+        f4.cleanup();
+      } else {
+        f4.cleanup();
+        throw new Error("E2前置失败：factory 回调未建立");
+      }
     }
 
     console.log(`\ndutybackoffr2: ${pass}/${pass + fail}${fail ? "（有红）" : ""}`);

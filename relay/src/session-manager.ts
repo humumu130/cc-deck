@@ -3881,7 +3881,15 @@ export class SessionManager {
           // 落点（原只挂 pushExternalLog=external 席位，leader 模式 DUTY_RECEIPT 无人
           // 消费——38h 重复投喂根因原样保留）。流式同 id 帧每帧过单点（内部 feed_id
           // 去重+尾帧假阳守卫）。
-          this.maybeConsumeDutyReceipt(managed.state.session_id, typeof entry.text === "string" ? entry.text : "");
+          // R3（A 审 P1）：managed 面同病同修——agent-adapter onLog 三位点（thinking/
+          // 正文 zai 桥/通用路径）text 恒 truncate(400) 而 meta.full 承载全文，与 external
+          // 咽喉（bridge emitTranscriptEntry）同形态：托管 PM 长输出（>400 字正文+末行
+          // DUTY_RECEIPT）行头在窗 JSON 尾出窗=parse 恒败静默丢失（R2 只修 external 挂点
+          // 漏了本挂点）。full 优先读法与 pushExternalLog 咽喉（R2 主刀）同构成对。
+          const dutyManagedText = typeof (entry as { full?: unknown }).full === "string" && (entry as { full: string }).full
+            ? (entry as { full: string }).full
+            : typeof entry.text === "string" ? entry.text : "";
+          this.maybeConsumeDutyReceipt(managed.state.session_id, dutyManagedText);
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
           // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
           // 不入 dock；thinking 归 assistant_text（B0 的 ActivityKind 词表无 thinking）
