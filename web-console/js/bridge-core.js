@@ -605,7 +605,10 @@
 
                 function deriveEntries() {
                   const sessions = [...bridge.sessions.values()].filter((s) => s && typeof s.session_id === "string" && typeof s.cwd === "string");
-                  const entries = bridge.projects.map((group) => ({ key: "g:" + group.id, group, name: String(group.name || group.id), anchor: String(group.anchor_dir || ""), sessions: sessions.filter((s) => underAnchor(s.cwd, group.anchor_dir)) }));
+                  // W-AGGREGATE-V2 刀3：多锚组 some 匹配（anchor_dirs 任一锚下会话归组——
+                  // 单锚组 anchorsOf 兜 [anchor_dir]，V1 行为逐字节不变）
+                  const anchorsOfGroup = (g) => (Array.isArray(g.anchor_dirs) && g.anchor_dirs.length ? g.anchor_dirs : [g.anchor_dir]);
+                  const entries = bridge.projects.map((group) => ({ key: "g:" + group.id, group, name: String(group.name || group.id), anchor: String(group.anchor_dir || ""), sessions: sessions.filter((s) => anchorsOfGroup(group).some((a) => underAnchor(s.cwd, a))) }));
                   const matched = new Set(sessions.filter((s) => entries.some((e) => underAnchor(s.cwd, e.anchor))).map((s) => s.session_id));
                   // W-PROJP1 P1-2：未立项分桶保留首个会话原始 cwd（nativeCwd）。路径三口径（设计 §0.5/1.4/附录 2）：
                   // dir(normDir 产物)=分桶 key 与比较口径；entry.anchor 沿用 dir 供展示/前缀逻辑；
@@ -706,14 +709,15 @@
                     if (working > 0) metaBits.push(working + " 进行中");
                     // W-AGGREGATE-V1：未立项桶卡内联推荐条（主时机静默位——零弹窗零 badge，
                     // 看见了才在）。证据行常显（审计美学不藏 hover）：目录维度+共享词维度。
-                    // W-AGGREGATE-V2 刀2：同源簇桶吃归一卡（不成簇/无信号桶 V1 原样降级）
+                    // W-AGGREGATE-V2 刀2：同源簇桶吃归一卡（不成簇/无信号桶 V1 原样降级）。
+                    // 簇被冷却/静默时**不吃 V1 回落**（用户已对该簇说不——同会话集弱形态顶回=骚扰）
                     const aggClusterHintObj = unfiled ? aggregateClusterHint(entry, aggClusterMap.get(entry.anchor)) : null;
-                    const aggHint = unfiled ? (aggClusterHintObj || aggregateHintOf(entry)) : null;
+                    const aggHint = unfiled ? (aggClusterMap.has(entry.anchor) ? aggClusterHintObj : (aggClusterHintObj || aggregateHintOf(entry))) : null;
                     const aggHtml = aggHint
                       ? '<div class="agg-hint" data-agg-hint="' + escapeHtml(aggHint.dir) + '">'
                         + '<button class="agg-btn" type="button" data-agg-create="' + escapeHtml(aggHint.dir) + '" title="打开预填好的建团弹窗——推荐只预填不代创建">聚合为团队 →</button>'
                         + '<span class="agg-evidence">' + escapeHtml(aggHint.cluster ? aggClusterEvidenceLine(aggHint) : aggEvidenceLine(aggHint)) + "</span>"
-                        + '<button class="agg-ignore" type="button" data-agg-ignore="' + escapeHtml(aggHint.dir) + '" title="本目录 24 小时内不再推荐（累计 3 次永久静默）">忽略</button>'
+                        + '<button class="agg-ignore" type="button" data-agg-ignore="' + escapeHtml(aggHint.cluster ? "o:" + aggHint.origin : aggHint.dir) + '" title="本目录 24 小时内不再推荐（累计 3 次永久静默）">忽略</button>'
                         + "</div>"
                       : "";
                     return '<div class="queue-card pc2 pc3' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'

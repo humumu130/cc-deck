@@ -49,8 +49,12 @@ export interface ProjectRoleDefault {
 export interface ProjectGroup {
   id: string;
   name: string;
-  /** 项目锚点目录（cwd 硬规则的物理地基，绝对路径；worker spawn 与记忆归层都锚它） */
+  /** 项目锚点目录（cwd 硬规则的物理地基，绝对路径；worker spawn 与记忆归层都锚它）——多锚形态下=主锚（恒 anchor_dirs[0]） */
   anchor_dir: string;
+  /** W-AGGREGATE-V2 刀3：多锚（PCS 多 clone 归一建团）——全量锚列表（含主锚，主锚恒
+   *  首位）；存量单锚组无此键（读取面 anchorsOf 统一归一，零迁移兼容）。匹配语义：
+   *  findGroupByAnchor/冲突检查/anchorExists 皆 any-of（some）。 */
+  anchor_dirs?: string[];
   status: ProjectGroupStatus;
   tier: ProjectTier;
   /** 编制快照（M2 形态 = 1 worker + Leader 兼管；升降级只补不重建） */
@@ -429,9 +433,13 @@ export function findGroup(idOrName: string, dir?: string): ProjectGroup | null {
   return g.find((x) => x.id === idOrName || x.name === idOrName) ?? null;
 }
 
+export function anchorsOf(g: ProjectGroup): string[] {
+  return Array.isArray(g.anchor_dirs) && g.anchor_dirs.length ? g.anchor_dirs : [g.anchor_dir]; // W-AGGREGATE-V2 刀3：单锚组零迁移归一（V1 同父目录前缀树聚合为 V2 子集兼容）
+}
+
 export function findGroupByAnchor(anchorDir: string, dir?: string): ProjectGroup | null {
   const norm = (p: string) => p.replace(/\/+$/, "");
-  return listGroups(dir).find((x) => norm(x.anchor_dir) === norm(anchorDir) && x.status !== "archived") ?? null;
+  return listGroups(dir).find((x) => anchorsOf(x).some((a) => norm(a) === norm(anchorDir)) && x.status !== "archived") ?? null; // 刀3：any-of 多锚匹配
 }
 
 export function isLightConfirmTrusted(dir?: string): boolean {
@@ -582,7 +590,7 @@ export type CreateGroupResult =
  */
 /** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
 export function createGroup(
-  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean },
+  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean; /** W-AGGREGATE-V2 刀3：多锚（附锚列表——主锚恒 anchor_dir；单锚建团缺省 undefined 零变化） */ anchor_dirs?: string[] },
   dir?: string,
 ): CreateGroupResult  {
   // #292-B3 A-P1-2/B-P1-1：确认单通知回调外层补发——Inner 直调 addConfirmInner 不发
@@ -597,7 +605,7 @@ export function createGroup(
   return r;
 }
 function createGroupInner(
-  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean },
+  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean; anchor_dirs?: string[] },
   dir?: string,
 ): CreateGroupResult {
   const f = readProjectsFileJson(dir);
@@ -609,7 +617,10 @@ function createGroupInner(
   // 嵌套导入事务+假降级横幅——批2 铁律在本口的复辟，双路审查实锤）——f 已在手边，
   // 内联直读同口径（归一路径+排除 archived）
   const normAnchor = (p: string) => p.replace(/[\\/]+$/, "").toLowerCase();
-  const clash = f.groups.find((x) => normAnchor(x.anchor_dir) === normAnchor(input.anchor_dir) && x.status !== "archived") ?? null;
+  // W-AGGREGATE-V2 刀3：一锚一组不变式改「一锚至多出现在一个非 archived 组的 anchors[]」
+  // ——冲突检查双向 any-of（新组任一锚 vs 既有组任一锚）
+  const inputAnchors = Array.from(new Set([input.anchor_dir, ...(Array.isArray(input.anchor_dirs) ? input.anchor_dirs.filter((d) => typeof d === "string" && d) : [])]));
+  const clash = f.groups.find((x) => (Array.isArray(x.anchor_dirs) && x.anchor_dirs.length ? x.anchor_dirs : [x.anchor_dir]).some((a) => inputAnchors.some((b) => normAnchor(a) === normAnchor(b))) && x.status !== "archived") ?? null;
   if (clash) {
     return { ok: false, error: `锚点目录已被项目组「${clash.name}」占用（${clash.status}），一锚一组` };
   }
@@ -619,6 +630,7 @@ function createGroupInner(
     id: `pg-${randomUUID().slice(0, 8)}`,
     name: input.name,
     anchor_dir: input.anchor_dir,
+    ...(Array.isArray(input.anchor_dirs) && input.anchor_dirs.filter((d) => typeof d === "string" && d && d !== input.anchor_dir).length ? { anchor_dirs: Array.from(new Set([input.anchor_dir, ...input.anchor_dirs])) } : {}), // 刀3：多锚持久化（主锚恒首位；单锚组不落键=存量形状零变化）
     status: needsConfirm ? "pending" : "active",
     tier: input.tier,
     headcount: input.headcount ?? [],
@@ -654,6 +666,9 @@ export interface OrgActionCreatePayload {
   /** FB4 团队创建表单：随团种子编制（可选）。会话在册性/外部会话/Leader 排除在
    * session-manager orgCommand 咽喉校验（有 this.sessions 视野）；此处只做形状校验。 */
   headcount?: { session_id: string; role: string }[];
+  /** W-AGGREGATE-V2 刀3：多锚（可选——附锚列表，主锚恒 anchor_dir；PCS 多 clone 归一
+   *  建团消费；单锚建团缺省零变化）。 */
+  anchor_dirs?: string[];
 }
 
 /** W-TS63FIX ①（review-tsync-relay P2-1 修法 b/c）：PM/Leader 身份行角色词表单源——
@@ -757,7 +772,11 @@ export function handleOrgActionCreate(payload: unknown, dir?: string, gate?: Hea
   if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
   const hc = sanitizeHeadcount(raw.headcount, gate);
   if (!hc.ok) return { ok: false, error: hc.error };
-  return createGroup({ name, anchor_dir: anchor, tier, ...(hc.headcount ? { headcount: hc.headcount } : {}), ...(raw.mixed_engine === true ? { mixed_engine: true } : {}) }, dir);
+  // W-AGGREGATE-V2 刀3：anchor_dirs 洗刷（字符串数组滤空+去重+剥主锚重复；单锚/旧端缺键零变化）
+  const anchorDirs = Array.isArray(raw.anchor_dirs)
+    ? Array.from(new Set(raw.anchor_dirs.filter((d) => typeof d === "string" && d.trim()).map((d) => String(d).trim()))).filter((d) => d !== anchor)
+    : [];
+  return createGroup({ name, anchor_dir: anchor, tier, ...(hc.headcount ? { headcount: hc.headcount } : {}), ...(raw.mixed_engine === true ? { mixed_engine: true } : {}), ...(anchorDirs.length ? { anchor_dirs: anchorDirs } : {}) }, dir);
 }
 
 export const adaptOrgAction = handleOrgActionCreate;

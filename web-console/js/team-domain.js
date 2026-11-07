@@ -1662,6 +1662,10 @@
                   html += '<div class="create-label">锚点目录</div><div class="create-inline"><input class="create-field" data-team-field="anchor" placeholder="项目绝对路径（在 relay 宿主机上）" aria-label="锚点目录" value="' + escape(pf && pf.anchor ? String(pf.anchor) : teamCwdDefault()) + '">'
                     + '<button type="button" class="create-browse" data-team-anchor-browse title="从文件管理器选择目录" hidden>浏览</button></div>';
                   html += '<div class="create-hint" data-team-anchor-hint>路径在 relay 宿主机上，不是当前浏览器电脑</div>';
+                  // W-AGGREGATE-V2 刀3：簇预填附锚列表（V1 五字段扩展——dirs 来自归一推荐卡；
+                  // 主锚=锚字段，附锚只读注呈现+随创建提交 anchor_dirs；人工建团无 dirs 零变化）
+                  const pfDirs = (pf && Array.isArray(pf.dirs) ? pf.dirs : []).filter((d) => typeof d === "string" && d && d !== (pf && pf.anchor));
+                  if (pfDirs.length) html += '<div class="create-hint" data-team-anchor-dirs>附锚（同 origin clone 目录 ×' + pfDirs.length + '，随团多锚归一）：' + escape(pfDirs.join("；")) + "</div>";
                   // #277 ③：成员候选随源切换（relay_source 对位），切源即时重灌本容器
                   // W-TEAMPOPOLISH B4：空态 banner 与添加钮合并一行紧凑空态（非空时底部添加钮照旧）
                   html += '<div class="create-label">成员编制 · 最多 8 席</div><div data-team-cand-wrap>' + teamCandListHtml(defCands) + "</div>";
@@ -1801,7 +1805,10 @@
                   if (state.flights.has(flight)) return;
                   state.flights.add(flight);
                   try {
-                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {}) }, undefined, wsOverride));
+                    // W-AGGREGATE-V2 刀3：附锚随创建提交（主锚=anchor_dir 恒首；簇预填外的手工建团无附锚零变化）
+                    const extraDirsEl = pop.querySelector("[data-team-anchor-dirs]");
+                    const extraDirs = extraDirsEl ? pfDirs.filter((d) => d !== anchor) : [];
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(extraDirs.length ? { anchor_dirs: extraDirs } : {}), ...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {}) }, undefined, wsOverride));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";
