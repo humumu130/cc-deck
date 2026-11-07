@@ -23,6 +23,7 @@ export interface ThemeColors {
   waiting: string;
   error: string;
   done: string;
+  blocked: string;   // W-TEAMTAB B-P0-2：待确认/阻塞灯（桌面 --st-blocked 直译：暗 #E5895B/亮 #C05B33）
   info: string;
   // 实心绿钮文字 / 红系可读文字（005 --done-ink）
   onDone: string;
@@ -88,6 +89,7 @@ export const DARK: ThemeColors = {
   waiting: "#FFD24D",
   error: "#F0524F",
   done: "#35DC97",
+  blocked: "#E5895B",
   info: "#7CB8FF",
   onDone: "#062619",
   dangerFg: "#FF7B78",
@@ -148,6 +150,7 @@ export const LIGHT: ThemeColors = {
   waiting: "#FFB020",
   error: "#D63B3B",
   done: "#22A06B",
+  blocked: "#C05B33",
   info: "#3978B8",
   onDone: "#073C27",
   dangerFg: "#C22F2F",
