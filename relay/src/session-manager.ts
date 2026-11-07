@@ -6174,10 +6174,17 @@ ${lines.join("\n")}
       for (const c of listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending")) {
         const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
         const pid = Number(c.payload.cli_pid) || 0;
-        let alive = !!sid && pid > 0;
-        if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
-        else if (sid) { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：pid=0 卡（外部会话形态）活跃度判——原恒判死=外部 claim 卡被 auto 消卡用户永不可见
-        if (!alive) {
+        // W-PMAPPOINT-GAP（1107 消卡循环第二现治本，t-05329c28）：消卡判据对齐四态判活
+        // 单点 pmOverrideLiveness（**与提名侧 dutyCandidateId 同语义**）——alive/
+        // between-turns 均不消，仅 dead/stale 消。根：值守位认「30min 回合间隙=守位」
+        //（SEATALIVE 刀1），消卡却只认「15min events 帧=活」——两套窗自相矛盾；managed/
+        // 外部 PM 候选等回执/等审查时 20-40min 无 events 帧是常态（1107 11:29 cf-aa1cfbb9
+        // 实锤：回合活跃仍被 auto:pm-dead 消卡 → 11:33 再提名 cf-dc925349——「消卡→再提名」
+        // 循环，用户永远批不到稳定卡）。**零新窗常量**：CCR_SEAT_TURN_GAP_MIN 单点在
+        // pmOverrideLiveness 复用；pid=0 卡（外部席位形态）走其活跃度分支（15min 窗语义
+        // 与 [W-DUTYWIRE] 原口径一致——外部 SDK 常驻无回合退出形态，不在 between-turns 辖区）。
+        const liveness = sid ? this.pmOverrideLiveness({ cli_pid: pid, session_id: sid }) : "dead" as const;
+        if (liveness === "dead" || liveness === "stale") {
           decideConfirm(c.id, false, "auto:pm-dead");
           // R1-A-P1②：auto:pm-dead **不入否决档**——「pid 死」常态=CLI 重启换 pid
           //（claude --resume 同 id 复活），系统进程幂窗≠用户否决，入档=复活后永黑。
