@@ -6,7 +6,7 @@
 //（不是 mock 返回值——design-cardlife「存状态」铁律：断言落盘实态）。三断链形态故障
 // 注入：B2=回执缺失（证据误翻面）、A3=未过审 merged（矛盾态）、A2=同链滞留前代。
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -293,6 +293,70 @@ async function main() {
       ok(sm.includes("cardlife-pr-merged") && sm.includes("cardlife-chain-close") && sm.includes("cardlife-receipt-gate"), "C2 relay 三挂点接线（merged 翻/链闭/资格位）");
       const ty = readFileSync(new URL("../src/types.ts", import.meta.url), "utf-8");
       ok(["cardlife-pr-merged", "cardlife-chain-close", "cardlife-pr-merged-blocked", "cardlife-flip-degraded", "board-flip-degraded", "cardlife-receipt-gate", "cardlife-receipt-late"].every((k) => ty.includes(`"${k}"`)), "C3 审计词表七词在（R3 补 cardlife-receipt-late）");
+    }
+
+    // ================= W-CARDLIFE-R4（1107 第四现 20 卡）：审查单/无 PR 单 submitted 兜底出口 =================
+    console.log("R4 组（无 PR 面 submitted 终态补路——三条件缺一不翻）:");
+    {
+      const { convergeBoardsWithDispatchLog } = await import("../src/projects.js"); // 本组独立 import（上组动态解构是块级作用域）
+      const ORG2 = mkdtempSync(join(tmpdir(), "clr2-r4-org-")); dirs.push(ORG2);
+      mkdirSync(join(ORG2, "boards"), { recursive: true });
+      writeFileSync(join(ORG2, "projects.json"), JSON.stringify({
+        groups: [{ id: "g-r4", name: "R4 组", anchor_dir: "/tmp/r4-anchor", status: "active", tier: "正经立项", headcount: [], single_card: false, created_at: Date.now(), updated_at: Date.now() }],
+        trust_light: false,
+      }));
+      const now = Date.now();
+      const H = 3600_000;
+      const mkEntry = (id: string, dispatchId: string, updatedAt: number, extra: Record<string, unknown> = {}) => ({
+        id, text: `W-R4-${id}`, status: "submitted", ts: updatedAt - 2 * H, updated_at: updatedAt,
+        dispatch_id: dispatchId, owner_session: "s-r4",
+        transitions: [{ status: "claimed", ts: updatedAt - 2 * H }, { status: "submitted", ts: updatedAt }],
+        ...extra,
+      });
+      const entries = [
+        mkEntry("e-ok", "d-r4ok", now - 5 * H),                                     // 全满足：done 5h+无 PR → 翻
+        mkEntry("e-pr", "d-r4pr", now - 5 * H),                                      // 有 PR → 不翻（红线）
+        mkEntry("e-fresh", "d-r4fresh", now - H),                                    // 缓冲未到（done 1h）→ 不翻
+        mkEntry("e-gate", "d-r4gate", now - 5 * H),                                  // receipt_gate 拦中 → 不翻+催收清单
+        mkEntry("e-hold", "d-r4hold", now - 5 * H, { hold: { reason: "等拍板", since: now - 5 * H } }), // hold 锁 → 不翻
+      ];
+      writeFileSync(join(ORG2, "boards", "g-r4.json"), JSON.stringify({ gid: "g-r4", entries, frozen: false, updated_at: now }));
+      const logLine = (id: string, ts: number, extra: Record<string, unknown> = {}) => JSON.stringify({ ts, id, tier: "随手办", target: "w", status: "done", receipt: `结果：${id} 交付｜改动文件：a.ts`, session_id: "s-r4", ...extra });
+      writeFileSync(join(ORG2, "dispatch-log.ndjson"), [
+        JSON.stringify({ ts: now - 6 * H, id: "d-r4ok", tier: "随手办", target: "w", status: "dispatched", session_id: "s-r4" }),
+        logLine("d-r4ok", now - 5 * H),
+        JSON.stringify({ ts: now - 6 * H, id: "d-r4pr", tier: "随手办", target: "w", status: "dispatched", session_id: "s-r4" }),
+        logLine("d-r4pr", now - 5 * H, { pr_url: "https://github.com/x/y/pull/9", pr_state: "merged" }),
+        logLine("d-r4fresh", now - H),
+        logLine("d-r4gate", now - 5 * H, { receipt_gate: true }),
+        logLine("d-r4hold", now - 5 * H),
+      ].join("\n") + "\n");
+      const audits: Array<{ action: string; detail: string }> = [];
+      const convR4 = convergeBoardsWithDispatchLog(ORG2, (action, detail) => { audits.push({ action, detail }); });
+      const boardR4 = JSON.parse(readFileSync(join(ORG2, "boards", "g-r4.json"), "utf8")) as { entries: Array<{ id: string; status: string; transitions?: Array<{ status: string }> }> };
+      const stOf = (id: string) => boardR4.entries.find((e) => e.id === id)?.status;
+      ok(stOf("e-ok") === "done", `R4① 全满足（done 5h+无 PR+无豁免）→ 兜底翻 done（实 ${stOf("e-ok")}）`);
+      ok(stOf("e-pr") === "submitted", `R4② 有 PR 单（pr_url 在账）不翻——复核闸红线（实 ${stOf("e-pr")}）`);
+      ok(stOf("e-fresh") === "submitted", `R4③ 4h 缓冲未到（done 1h）不翻（实 ${stOf("e-fresh")}）`);
+      ok(stOf("e-gate") === "submitted" && convR4.receiptGated.some((x) => x.dispatchId === "d-r4gate"), `R4④ receipt_gate 拦中卡不翻+入催收清单（R3 红线，实 ${stOf("e-gate")}）`);
+      ok(stOf("e-hold") === "submitted", `R4⑤ hold 锁不翻（人工在管豁免，实 ${stOf("e-hold")}）`);
+      const jr4 = readFileSync(join(ORG2, "boards-journal.ndjson"), "utf8");
+      ok(jr4.includes("auto-recon-review"), "R4⑥ journal 留痕 auto-recon-review（自愈翻可分辨）");
+      ok(audits.some((x) => x.detail.includes("e-ok") && x.detail.includes("R4")), `R4⑦ board-force-close 审计带 R4 文案（实 ${audits.length} 条）`);
+      const trOk = boardR4.entries.find((e) => e.id === "e-ok")?.transitions ?? [];
+      ok(trOk.length === 3 && trOk[trOk.length - 1]?.status === "done", `R4⑧ 翻卡 transitions 留痕（claimed→submitted→done，实 ${trOk.map((t) => t.status).join("→")}）`);
+      // dryRun：第二张同形态卡（e-ok2）干跑不落盘
+      const ORG3 = mkdtempSync(join(tmpdir(), "clr2-r4-org3-")); dirs.push(ORG3);
+      mkdirSync(join(ORG3, "boards"), { recursive: true });
+      writeFileSync(join(ORG3, "projects.json"), JSON.stringify({ groups: [{ id: "g-r4", name: "R4 组", anchor_dir: "/tmp/r4-anchor", status: "active", tier: "正经立项", headcount: [], single_card: false, created_at: 1, updated_at: 1 }], trust_light: false }));
+      writeFileSync(join(ORG3, "boards", "g-r4.json"), JSON.stringify({ gid: "g-r4", entries: [mkEntry("e-ok2", "d-r4ok2", now - 5 * H)], frozen: false, updated_at: now }));
+      writeFileSync(join(ORG3, "dispatch-log.ndjson"), [logLine("d-r4ok2", now - 5 * H)].join("\n") + "\n");
+      const convDry = convergeBoardsWithDispatchLog(ORG3, undefined, { dryRun: true });
+      const stDry = (JSON.parse(readFileSync(join(ORG3, "boards", "g-r4.json"), "utf8")) as { entries: Array<{ id: string; status: string }> }).entries[0]?.status;
+      ok(convDry.moved === 0 && convDry.wouldClose.length === 1 && stDry === "submitted", `R4⑨ dryRun：wouldClose 记账+板不动（moved=${convDry.moved}/would=${convDry.wouldClose.length}/态=${stDry}）`);
+      // patrol 挂点（验收1）：converge 由 patrol 周期拍驱动——源码序锚
+      const patrolSrc = readFileSync(new URL("../src/patrol.ts", import.meta.url), "utf8");
+      ok(patrolSrc.includes("convergeBoardsWithDispatchLog"), "R4⑩ patrol 周期拍挂点在（兜底翻随拍生效——验收1 链路）");
     }
 
     console.log(`\ncardlifer2: ${pass}/${pass + fail}${fail ? "（有红）" : ""}`);
