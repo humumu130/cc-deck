@@ -31,6 +31,9 @@ import {
   type EngineCatalogEntry,
 } from "../src/protocol";
 
+// W-ENGICONBRAND G3：真品牌单表（纯数据模块，零 RN 依赖可静态引）
+import { ENGINE_BRAND, ENGINE_BRAND_ALIAS, engineBrandEntryOf } from "../src/engine-brand";
+
 // @ts-expect-error node:fs 未进 expo tsconfig types 字段
 import { readFileSync } from "node:fs";
 
@@ -240,6 +243,40 @@ function main(): void {
   // 病灶⑧高级分组+警示样式
   check(modalSrc.includes("m.advGroup") && modalSrc.includes(">高级</Text>"), "两复选框收「高级」分组卡");
   check(modalSrc.includes("m.bypassWarnBox") && modalSrc.includes("m.bypassWarnT"), "跳过权限确认警示样式（红描边+警示字样）");
+
+  // ================= G3. W-ENGICONBRAND（t-055175e8）：真品牌单表锚 =================
+  // 用户实锤「手机引擎图标还是丑」治本——EngineBrandTile 手绘 Glyph 退役，两消费面
+  // （弹窗瓦片/头像胶囊）全走 engine-brand.ts 单表（桌面 ENGINE_BRAND_SVG 移植）。
+  SECTION("G3. W-ENGICONBRAND 真品牌单表锚");
+  check(iconSrc.includes('from "./engine-brand"'), "engine-icon.tsx 走 engine-brand 单表（engine-icon-xml.ts 退役）");
+  check(!/from "\.\/engine-icon-xml"/.test(iconSrc), "旧表 engine-icon-xml import 绝迹（表已并入单表——历史注释提及不计）");
+  check(!iconSrc.includes("function Glyph"), "手绘 Glyph（W-MSGUI 件二近似形制）退役");
+  check(iconSrc.includes("engineBrandEntryOf(engine)"), "EngineBrandTile 表命中走真品牌标");
+  const tileBody = iconSrc.slice(iconSrc.indexOf("export function EngineBrandTile"), iconSrc.indexOf("export function EngineIcon"));
+  check(tileBody.includes('resizeMode="contain"'), "EngineBrandTile 体内品牌标 contain 保纵横比（crab 191×150 宽图勿拉伸——Tile 专属锚非全文匹配）");
+  check(iconSrc.includes("engineBrandEntryOf(key)"), "EngineIcon（头像/胶囊）同走单表（两消费面单点）");
+  eq(Object.keys(ENGINE_BRAND).sort(), ["claude", "codebuddy", "codex", "glm", "qwen-code", "trae", "zcode"], "单表七引擎键齐（桌面同集）");
+  eq(ENGINE_BRAND_ALIAS, { qwen: "qwen-code" }, "别名 qwen→qwen-code（桌面 ENGINE_BRAND_ALIAS 同款）");
+  eq(engineBrandEntryOf("qwen") ?? null, ENGINE_BRAND["qwen-code"] ?? null, "回退链：别名命中归一（qwen 拿 qwen-code 标）");
+  eq(engineBrandEntryOf("auto") ?? null, null, "auto 不入品牌表（字母瓦片「自」兜底——modal 同构条目）");
+  eq(engineBrandEntryOf("no-such-engine") ?? null, null, "未知引擎回退字母瓦片（勿裸奔）");
+  // 桌面字节 parity 锁：ENGINE_BRAND 与 web-console ENGINE_BRAND_SVG 七条目逐条相等
+  // （桌面=字节权威；codex class 属性/codebuddy 空白折行已按桌面口径统一——两端同源同形）
+  const deskSrc = readFileSync(new URL("../../web-console/js/session-domain.js", import.meta.url), "utf8");
+  const deskBody = deskSrc.slice(deskSrc.indexOf("const ENGINE_BRAND_SVG"), deskSrc.indexOf("const ENGINE_BRAND_ALIAS"));
+  const deskEntries = [...deskBody.matchAll(/"([a-z0-9_-]+)":\s*("(?:[^"\\]|\\.)*")/g)];
+  eq(deskEntries.map((m) => m[1]).sort(), Object.keys(ENGINE_BRAND).sort(), "桌面表键集与单表键集恰等（末尾追加/中插/删除任一漂移都红——非首七截取）");
+  for (const [, k, raw] of deskEntries) {
+    const deskVal: string = JSON.parse(raw);
+    const mob = ENGINE_BRAND[k];
+    check(!!mob, `单表含桌面键 ${k}`);
+    if (deskVal.startsWith("<img")) {
+      const b64 = /base64,([^"]+)"/.exec(deskVal)?.[1] ?? "";
+      check(mob?.kind === "png" && mob.b64 === b64, `${k} PNG b64 与桌面逐字节一致`);
+    } else {
+      check(mob?.kind === "svg" && mob.xml === deskVal, `${k} SVG 全文与桌面逐字节一致`);
+    }
+  }
 
   // ================= H. store 透传锚 + theme 引擎色锚 =================
   SECTION("H. store engine 透传 / theme ENGINE_ACCENT");
