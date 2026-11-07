@@ -6075,19 +6075,34 @@ ${lines.join("\n")}
     return null; // no-leader 无（活）override：席位空——候选提名走确认卡，见 dutyCandidateId
   }
 
-  /** R1-B-F2 复合判活（W-SEATALIVE 刀1 扩三层）："alive"=pid 活且绑定一致（或会话
-   * 不在册的外部冷窗）/"stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）
-   * /"between-turns"=pid 死但回合活跃 TTL 内（external CLI 每回合结束进程退出=正常
-   * 生命周期 #49——回合间隙非死，1106 断档第四现：3h 窗内 worker_done×5 全
-   * no_pm_target、席位被清+第三张任命卡，根因即此判死）/"dead"=pid 死且超 TTL。
+  /** R1-B-F2 复合判活（W-SEATALIVE 刀1 扩三层；W-PMAPPOINT-GAP-R1 pid=0 辖区扩达）：
+   * "alive"=pid 活且绑定一致（或会话不在册的外部冷窗）**或 pid=0 帧在活跃窗内**
+   * /"stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）
+   * /"between-turns"=pid 死**或 pid=0 帧龄超活跃窗**但回合活跃 TTL 内（external CLI
+   * 每回合结束进程退出=正常生命周期 #49；managed SDK 会话 cron 周期回合退出同形态
+   * ——1107 pmappoint-gap A 审实锤：managed cli_pid 恒 0，回合间歇中位 18min 常态超
+   * 15min 活跃窗，「活跃提、间歇消」循环三整轮；回合间隙非死，1106 断档第四现同根）
+   * /"dead"=pid 死且超 TTL（pid=0：帧龄超 TTL 或无帧）。
    * between-turns **守位不清档**；stale/dead 清档。TTL=CCR_SEAT_TURN_GAP_MIN 缺省
-   * 30min（回合间隙常态上界；活跃度凭证与 duty-feed 同源 events.ndjson）。 */
+   * 30min（回合间隙常态上界——cron 23min 周期形态间歇上界 ≈23min<30min，卡在全
+   * 周期内存活；活跃度凭证与 duty-feed 同源 events.ndjson）。 */
   private pmOverrideLiveness(ov: { cli_pid: number; session_id: string }): "alive" | "stale" | "between-turns" | "dead" {
-    // [W-DUTYWIRE]（1105 断档第三现）：外部 SDK 会话席位（cli_pid=0）无进程可探——
-    // 活跃度凭证判定（events.ndjson 最近帧在活跃窗内=活）。窗=CCR_DUTY_ACTIVITY_MIN
-    // 缺省 15min（claim 资格/席位判活/候选提名三口同窗，duty-feed.ts 单点）
+    // [W-DUTYWIRE]+[W-PMAPPOINT-GAP-R1]：pid=0 席位（外部 SDK 会话+managed 会话——
+    // SDK spawn 无 CLI pid，cli-pids.json 无条目恒 0）无进程可探，帧龄三态：活跃窗内
+    // （CCR_DUTY_ACTIVITY_MIN 缺省 15min，claim 资格/席位判活/候选提名三口同窗，
+    // duty-feed.ts 单点）=alive / 超窗但 ≤CCR_SEAT_TURN_GAP_MIN（30min 同单点复用）
+    // =between-turns / 超或无帧=dead。原「pid=0=SDK 常驻形态不在 between-turns 辖区」
+    // 定性错误（A 实锤证伪）：managed 恰有 cron 周期回合退出/唤醒形态——between-turns
+    // 辖区本就该覆盖；真常驻（用户终端 external SDK 5s 心跳）帧龄常态在窗内=alive，
+    // 真死消卡延迟 15→30min（A 审影响面①，用例覆盖：45min 消）无实害；dutyTargetId
+    // 守位面 pid=0 override 真死守位 15→30min（影响面③）——extInput 队列落盘复活即
+    // 消费，无实害；提名侧同单点同放宽（影响面②）=「活跃提、间歇消」时序差消失。
     if (!(ov.cli_pid > 0)) {
-      return sessionActiveByEvents(this.cfg.dataDir, ov.session_id) ? "alive" : "dead";
+      if (sessionActiveByEvents(this.cfg.dataDir, ov.session_id)) return "alive";
+      const at0 = lastFrameAtFromEvents(this.cfg.dataDir, ov.session_id);
+      const gapMin0 = Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30;
+      if (at0 !== null && Date.now() - at0 <= gapMin0 * 60_000) return "between-turns";
+      return "dead";
     }
     try { process.kill(ov.cli_pid, 0); } catch {
       // W-SEATALIVE 刀1：pid 死≠会话死——external CLI 回合结束进程退出后，回合活跃
@@ -6174,10 +6189,19 @@ ${lines.join("\n")}
       for (const c of listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending")) {
         const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
         const pid = Number(c.payload.cli_pid) || 0;
-        let alive = !!sid && pid > 0;
-        if (alive) { try { process.kill(pid, 0); } catch { alive = false; } }
-        else if (sid) { alive = sessionActiveByEvents(this.cfg.dataDir, sid); } // [W-DUTYWIRE]：pid=0 卡（外部会话形态）活跃度判——原恒判死=外部 claim 卡被 auto 消卡用户永不可见
-        if (!alive) {
+        // W-PMAPPOINT-GAP（1107 消卡循环第二现治本，t-05329c28）+R1（A 审裁决返修）：
+        // 消卡判据对齐四态判活单点 pmOverrideLiveness（**与提名侧 dutyCandidateId 同语义**）
+        // ——alive/between-turns 均不消，仅 dead/stale 消。根：值守位认「30min 回合间隙=守位」
+        //（SEATALIVE 刀1），消卡却只认「15min events 帧=活」——两套窗自相矛盾；managed/
+        // 外部 PM 候选等回执/等审查时 20-40min 无 events 帧是常态。实锤（A 审 confirms.json
+        // 亲核，时间线修正：R0 注释 11:29/11:33 有误）：cf-aa1cfbb9（pid=0·managed 5e4f4963）
+        // 1107 **18:29:25** 被 auto:pm-dead 消（帧龄 19.3min>15min 窗）→ **19:37:34** 再提名
+        // cf-dc925349——「间歇消、活跃提」循环三整轮（15:04:57/21:49:33/18:29:25 三次消卡
+        // 帧龄 15.3/15.4/19.3min 全超窗，回合间歇中位 18.0min）。R1 治本刀在 pmOverrideLiveness
+        // 活跃度分支三态化（pid=0 卡 between-turns 可达——本段逻辑零再动）。**零新窗常量**：
+        // CCR_SEAT_TURN_GAP_MIN 单点在 pmOverrideLiveness 复用。
+        const liveness = sid ? this.pmOverrideLiveness({ cli_pid: pid, session_id: sid }) : "dead" as const;
+        if (liveness === "dead" || liveness === "stale") {
           decideConfirm(c.id, false, "auto:pm-dead");
           // R1-A-P1②：auto:pm-dead **不入否决档**——「pid 死」常态=CLI 重启换 pid
           //（claude --resume 同 id 复活），系统进程幂窗≠用户否决，入档=复活后永黑。
