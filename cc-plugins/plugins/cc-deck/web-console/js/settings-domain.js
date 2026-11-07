@@ -1657,6 +1657,12 @@ function connectLan(ctx) {
         // REVIEW_SEAT_UPDATED 增量（subscribe 随桥事件重渲）；操作走 review-seat-set
         // （三键热生效）；旧 relay 无键=能力位缺席渲染轻提示（向前兼容）。
         const rsRender = () => {
+          // W-SECTIONCRASH（P0 热修，用户实锤 ReferenceError :1660）：rsRender 定义在 render
+          // 闭包（const section :1491，:1647 闭合）之外，engineslim 挪动后 section 越界引用
+          // → 设置页布线区运行时崩=「连不上」假象（静态 node --check/probe 均不执行此路径拦
+          // 不住）。自取与 :1491 同款选择器，判空风格与下方 box 一致——不回挪代码位置（最小刀）
+          const section = document.querySelector("#d-settings");
+          if (!section) return;
           const box = section.querySelector("[data-review-seat-live]");
           if (!box) return;
           const rs = bridge.snapshot && bridge.snapshot.review_seat;
