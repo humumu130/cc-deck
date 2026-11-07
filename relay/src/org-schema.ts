@@ -100,6 +100,7 @@ export const PROJECT_GROUP_SCHEMA: Record<string, { type: "string" | "number" | 
   id: { type: "string", required: true },
   name: { type: "string", required: true },
   anchor_dir: { type: "string", required: true },
+  anchor_dirs: { type: "string-array" }, // W-AGGREGATE-V2 刀3：多锚（可选——全量锚列表含主锚；存量单锚组无键零迁移）
   status: { type: "enum", required: true, enumTable: PROJECT_GROUP_STATUSES },
   tier: { type: "enum", required: true, enumTable: PROJECT_TIERS },
   headcount: { type: "object-array", required: true },

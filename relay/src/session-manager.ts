@@ -198,6 +198,7 @@ import type {
 } from "./types.js";
 // #018-R1c 决策通知账（B3a 纯函数层，只消费不改）：stableKey 防重 + 生命周期迁移
 import { stableKey, transitionNotification } from "./decision-notify.js";
+import { dirOriginsMap, enqueueDirOriginProbe, initDirOriginStore } from "./dir-origin.js"; // W-AGGREGATE-V2 刀1：git remote 探测器（PCS 多 clone 归一信号——入编边沿入队，扫描拍排水）
 import { saveRestartLedger, loadRestartLedger, type RestartLedgerEntry } from "./restart-ledger.js";
 import type { NotificationLifecycleAction, NotificationLifecycleItem } from "./decision-notify.js";
 import { CodexAgentSession, CODEX_ACTIVITY_CAPABILITIES } from "./agent-codex.js";
@@ -1019,6 +1020,7 @@ export class SessionManager {
     r.unref();
     this.startDutyLostWatch(); // [W-DUTYWIRE]：值守失联观测拍（60s）+pending 补投顺拍（重启窗收口）
     this.flushDutyFeedPending(); // [W-DUTYWIRE]：重启补投——席位经活跃度凭证判活存活时，空窗期积压事件即达
+    initDirOriginStore(this.cfg.dataDir); // W-AGGREGATE-V2 刀1：dir-origins.json 缓存装载（探测延迟到扫描拍）
     this.sweepOrphanSubagents(); // W-PMRESOURCE-V1（#106 件3）：重启 flush 边扫孤儿子代理任务——父会话随重启消亡，running 残行即断档候选，新 PM 上位即见处置卡
   }
 
@@ -2188,7 +2190,19 @@ export class SessionManager {
       ...(state.engine ? { engine: state.engine } : {}),
       ...(state.engine_provider ? { provider: state.engine_provider } : {}),
     });
+    enqueueDirOriginProbe(cwd); // W-AGGREGATE-V2 刀1：入编边沿只入队零子进程（探测延迟到 patrol 扫描拍）
     return state;
+  }
+
+  /** W-AGGREGATE-V2 刀1：快照面 dir_origins——顺带入队本拍在册未探测 cwd（Set 加法零子进程，
+   *  排水仍在扫描拍）；探测结果随 SNAPSHOT/增量下发（端上桶元数据消费）。 */
+  dirOriginsList(): Record<string, string> {
+    try {
+      for (const s of this.sessions.values()) {
+        if (s.state.cwd) enqueueDirOriginProbe(s.state.cwd);
+      }
+    } catch { /* 尽力而为 */ }
+    return dirOriginsMap();
   }
 
   updateExternalProfile(id: string, profile: { cwd?: string; prompt?: string; title?: string; model?: string; engine?: SessionEngine; provider?: string }): void {
@@ -7365,7 +7379,22 @@ ${lines.join("\n")}
               };
             }
           }
-          const r = createGroup({ name, anchor_dir: anchor, tier, ...(Object.keys(roleDefaults).length > 0 ? { role_defaults: roleDefaults } : {}) });
+          // W-AGGREGATE-V2-R1（A 审 P1 最后一跳）：anchor_dirs 漏斗透传——原调用只取
+          // name/anchor_dir/tier/role_defaults 四参，端上簇预填提交的附锚在漏斗被丢弃
+          //（A 审实证：create ok:true 而落盘 anchor_dirs=undefined/附锚不命中组——
+          // PCS 多 clone 点簇卡建团后 clone 会话仍归不进组）。校验：数组+每项合法路径
+          //（anchorPathError 单点）+主锚去重（内核 Set 已有——此处前置滤）+上限 8 防滥用。
+          const anchorDirsRaw = (p as { anchor_dirs?: unknown }).anchor_dirs;
+          const anchorDirs = Array.isArray(anchorDirsRaw)
+            ? anchorDirsRaw.filter((d): d is string => typeof d === "string" && d.trim() !== "").map((d) => d.trim()).filter((d) => d !== anchor).slice(0, 8)
+            : undefined;
+          if (anchorDirs) {
+            for (const d of anchorDirs) {
+              const dErr = anchorPathError(d);
+              if (dErr) return { ok: false, error: `附锚 ${d}：${dErr}` };
+            }
+          }
+          const r = createGroup({ name, anchor_dir: anchor, tier, ...(Object.keys(roleDefaults).length > 0 ? { role_defaults: roleDefaults } : {}), ...(anchorDirs && anchorDirs.length ? { anchor_dirs: anchorDirs } : {}) });
           if (!r.ok) return r;
           ensureProjectClaudeMd(anchor, name); // §3.4 防漂移种子（幂等：存在即认不覆盖）
           this.emitOrgState();

@@ -242,7 +242,7 @@ function normAnchor(p: string): string {
 function anchorExists(anchor: string, dir?: string): boolean {
   const a = normAnchor(anchor);
   if (!a.startsWith("/")) return false;
-  for (const g of listGroups(dir)) if (normAnchor(g.anchor_dir) === a) return true;
+  for (const g of listGroups(dir)) if (normAnchor(g.anchor_dir) === a || (Array.isArray(g.anchor_dirs) && g.anchor_dirs.some((d) => normAnchor(d) === a))) return true; // W-AGGREGATE-V2 刀3：多锚 some 匹配
   return false;
 }
 
