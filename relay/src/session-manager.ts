@@ -813,6 +813,10 @@ export class SessionManager {
   private dutyLastTopKey: string | null = null;
   private dutyNoProgressStreak = 0;
   private dutyReceiptFeedIds = new Set<string>(); // R1 P2-2：DUTY_RECEIPT feed_id 去重账（流式重复帧幂等）
+  // W-DUTYBACKOFF-R2 件③：external 值守回合回执观测窗——duty PM（external）Stop 边沿起表，
+  // 窗内无有效消费→审计 duty-receipt-missing（断链可见不惩罚）。单 slot（duty 目标唯一）。
+  private dutyReceiptExpecting: { sid: string; turnEndAt: number; timer: ReturnType<typeof setTimeout> } | null = null;
+  private lastDutyReceiptConsumedAt = 0;
   private dutyUserActiveTimer: ReturnType<typeof setTimeout> | null = null; // R1 P1-2：活跃窗到期一次性补发 timer（窗内新事件重置）
   private dutyNextFeedAllowedAt = 0;
   // W-PMWAKE：worker 回合 DONE 且未被 Leader 处理的计数（Leader turn_end 归零）——
@@ -3061,7 +3065,15 @@ export class SessionManager {
       s.logs.push(entry);
       if (s.logs.length > 1500) s.logs.splice(0, s.logs.length - 1500); // W-INJECT④：500→1500 对齐重放/文件窗
     }
-    this.maybeConsumeDutyReceipt(id, typeof (entry as { text?: unknown }).text === "string" ? (entry as { text: string }).text : "");
+    // W-DUTYBACKOFF-R2（t-059c971a test.4 实锤）：消费单点吃**全文**——external 链
+    // pushExternalLog 的 text 恒 truncate 400（emitTranscriptEntry），DUTY_RECEIPT 行头
+    // 在窗内而 JSON 尾出窗=parse 恒败→尾帧守卫（!endsWith("}")）跳过等下一帧→external
+    // 终帧永不来=**静默丢失**（任务书「assistant 不回传」定性不准：链路在、截断断）。
+    // full（pushExternalLog options.full）承载全文（F-02 receiptWithResultLine 同源先例）。
+    const dutyText = typeof (entry as { full?: unknown }).full === "string" && (entry as { full: string }).full
+      ? (entry as { full: string }).full
+      : typeof (entry as { text?: unknown }).text === "string" ? (entry as { text: string }).text : "";
+    this.maybeConsumeDutyReceipt(id, dutyText);
     this.bus.emit(id, "SESSION_LOG", entry);
   }
 
@@ -3074,6 +3086,33 @@ export class SessionManager {
    * 标记但 parse 失败→receipt_missing 审计（不惩罚——R1 P2-2：仅完整行判 missing，
    * 流式尾帧（无闭合 }）跳过等下一帧，假阳审计根除）。幂等：feed_id 已消费静默
    * （R1 P2-2：Set 去重账——原注释宣称但无实现，流式重复帧会重复副作用+审计灌水）。 */
+  /** W-DUTYBACKOFF-R2 件③：external 值守回合结束边沿（bridge Stop 事件挂点）——起回执
+   * 观测窗：窗内无有效 DUTY_RECEIPT 消费→审计 duty-receipt-missing（external 断链可见；
+   * 不惩罚不通知——链条状态审计面可查）。窗长 CCR_DUTY_RECEIPT_GRACE_MS 缺省 10min
+   *（PM 值守回合后写总结+回执行需要时间；过短=正常回合误报）。仅 duty 目标会话起表
+   * （其他 external 会话 Stop 不观测——非值守面无回执预期）。 */
+  noteExternalDutyTurnEnd(sessionId: string, opts?: { force?: boolean }): void {
+    // force=测试/诊断显式触发（绕席位判定——dutyTargetId 的 pid/活跃度/模式链是
+    // seatlive/dutywire 已测面，窗机制本体独立分层）；生产 bridge 不传。
+    if (!opts?.force && this.dutyTargetId() !== sessionId) return; // 只观测 duty 目标（值守 PM）
+    if (this.dutyReceiptExpecting) clearTimeout(this.dutyReceiptExpecting.timer); // 上一窗未闭合：覆盖重起（旧窗的 missing 由新窗收口）
+    const graceMs = Number(process.env.CCR_DUTY_RECEIPT_GRACE_MS) > 0 ? Number(process.env.CCR_DUTY_RECEIPT_GRACE_MS) : 10 * 60_000;
+    const turnEndAt = Date.now();
+    // 判据=「最后有效消费早于回合结束前 30s」——而非「窗内无消费」：正常形态消费可
+    // 发生在 Stop 边沿前（事件驱动增量先读）或后（5s 轮询/Stop 补读），30s 容忍带
+    // 覆盖两者；只把「整回合无产出」的断链形态漏出来（防正常回合误报）。
+    const timer = setTimeout(() => {
+      if (this.dutyReceiptExpecting && this.dutyReceiptExpecting.turnEndAt === turnEndAt) {
+        this.dutyReceiptExpecting = null;
+        if (this.lastDutyReceiptConsumedAt < turnEndAt - 30_000) {
+          this.emitChainAudit("duty-receipt-missing", `${sessionId.slice(0, 12)} external 值守回合结束 ${Math.round(graceMs / 60_000)}min 后仍无有效 DUTY_RECEIPT 消费——断链观测（不惩罚；检查 PM 回执输出/上行链）`);
+        }
+      }
+    }, graceMs);
+    timer.unref?.();
+    this.dutyReceiptExpecting = { sid: sessionId, turnEndAt, timer };
+  }
+
   private maybeConsumeDutyReceipt(sessionId: string, text: string): void {
     if (!text || typeof text !== "string") return;
     const idx = text.lastIndexOf("DUTY_RECEIPT ");
@@ -3086,6 +3125,12 @@ export class SessionManager {
       if (line.length > 0 && !line.endsWith("}")) return;
       this.emitChainAudit("duty-receipt-missing", `${sessionId.slice(0, 12)} 值守回合含 DUTY_RECEIPT 标记但解析失败（截 80：${line.slice(0, 80)}）——不惩罚，协议锚在`);
       return;
+    }
+    // R2 件③：有效消费记账（观测窗解除判据）
+    this.lastDutyReceiptConsumedAt = Date.now();
+    if (this.dutyReceiptExpecting && Date.now() >= this.dutyReceiptExpecting.turnEndAt - 1000) {
+      clearTimeout(this.dutyReceiptExpecting.timer);
+      this.dutyReceiptExpecting = null;
     }
     // R1（A 审 P2-2）feed_id 去重账：原注释宣称幂等但无实现——流式重复帧会重复
     // markDutyReviewed+审计灌水。内存 Set（重启丢=副作用幂等（markDutyReviewed 同
