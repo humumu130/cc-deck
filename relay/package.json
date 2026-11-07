@@ -170,7 +170,8 @@
     "test:boardrecon": "tsx scripts/test-boardrecon.ts",
     "test:reviewseat": "tsx scripts/test-reviewseat.ts",
     "test:inboxv1": "tsx scripts/test-inboxv1.ts",
-    "test:boardtruth": "tsx scripts/test-boardtruth.ts"
+    "test:boardtruth": "tsx scripts/test-boardtruth.ts",
+    "test:dutybackoffr2": "tsx scripts/test-dutybackoffr2.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

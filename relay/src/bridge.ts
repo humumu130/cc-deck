@@ -1318,6 +1318,16 @@ export class Bridge {
         this.pushAssistantTexts(this.extId(ev), ev.transcript_path);
       }
     }
+    // W-DUTYBACKOFF-R2 件③：external 值守回合结束边沿——①立即读转录增量（回合尾
+    // assistant 行（含 DUTY_RECEIPT）此刻在盘，不等 5s 轮询——消费及时性+观测窗
+    // 起算前先追平）②起 DUTY_RECEIPT 观测窗（duty PM 的 Stop；窗尽仍无有效消费→
+    // duty-receipt-missing 审计——断链可见不惩罚）。
+    if (ev.event === "Stop") {
+      try {
+        if (ev.transcript_path) this.pushAssistantTexts(this.extId(ev), ev.transcript_path);
+        this.mgr.noteExternalDutyTurnEnd(this.extId(ev));
+      } catch { /* 观测尽力而为 */ }
+    }
     this.correctEscMark(this.extId(ev), ev);
     // #363 任何新事件都意味着压缩已结束（压缩后继续回合 → 新 prompt/工具事件）；
     // PreCompact 自身是置位事件不清
