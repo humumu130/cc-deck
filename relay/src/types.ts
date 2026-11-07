@@ -513,6 +513,8 @@ export interface SnapshotPayload {
   // [W-AWAITUSER] 待拍板三源聚合清单（pending-user-actions.ts 单口构建；空数组也
   // 下发=能力位——端上以字段存在性判断能力，缺席=旧 relay 降级隐藏聚合面）
   pending_user_actions?: PendingUserAction[];
+  /** W-AGGREGATE-V2 刀1：目录（normDir）→归一 git remote origin——PCS 多 clone 簇归一信号（旧端忽略零影响） */
+  dir_origins?: Record<string, string>;
   source_capabilities?: SourceCapabilities;
   // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；随快照而非
   // HTTP API 下发——云桥手机无 HTTP 直连通道，WS 快照三端通吃）

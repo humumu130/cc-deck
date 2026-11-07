@@ -203,6 +203,9 @@ export class PatrolModule {
 
   // ---------- 全巡（30min）：worker 帧 / 看板漂移 ----------
   runFull(): void {
+    // W-AGGREGATE-V2 刀1：扫描拍排水（入编边沿只入队——子进程全部延迟到此处；并发帽 4
+    // 在模块内；observe 档探测照跑（只读探测非自主动作面——结果进缓存/快照供人判））
+    void import("./dir-origin.js").then((m2) => m2.drainDirOriginProbes()).catch(() => { /* 尽力而为 */ });
     // W-DUTYBACKOFF 刀1（巡检口径）：PM-用户对话活跃窗内跳过本轮巡检（用户实锤
     // 「一直在对话中还巡什么检」——活跃期巡检=纯噪音）。判据同 feedPM 单点：最近真实
     // user_message <10min（排除值守注入回显）。dutyUserActiveSkip 单点读（patrol 无

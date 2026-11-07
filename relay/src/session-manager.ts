@@ -198,6 +198,7 @@ import type {
 } from "./types.js";
 // #018-R1c 决策通知账（B3a 纯函数层，只消费不改）：stableKey 防重 + 生命周期迁移
 import { stableKey, transitionNotification } from "./decision-notify.js";
+import { dirOriginsMap, enqueueDirOriginProbe, initDirOriginStore } from "./dir-origin.js"; // W-AGGREGATE-V2 刀1：git remote 探测器（PCS 多 clone 归一信号——入编边沿入队，扫描拍排水）
 import { saveRestartLedger, loadRestartLedger, type RestartLedgerEntry } from "./restart-ledger.js";
 import type { NotificationLifecycleAction, NotificationLifecycleItem } from "./decision-notify.js";
 import { CodexAgentSession, CODEX_ACTIVITY_CAPABILITIES } from "./agent-codex.js";
@@ -1019,6 +1020,7 @@ export class SessionManager {
     r.unref();
     this.startDutyLostWatch(); // [W-DUTYWIRE]：值守失联观测拍（60s）+pending 补投顺拍（重启窗收口）
     this.flushDutyFeedPending(); // [W-DUTYWIRE]：重启补投——席位经活跃度凭证判活存活时，空窗期积压事件即达
+    initDirOriginStore(this.cfg.dataDir); // W-AGGREGATE-V2 刀1：dir-origins.json 缓存装载（探测延迟到扫描拍）
     this.sweepOrphanSubagents(); // W-PMRESOURCE-V1（#106 件3）：重启 flush 边扫孤儿子代理任务——父会话随重启消亡，running 残行即断档候选，新 PM 上位即见处置卡
   }
 
@@ -2188,7 +2190,19 @@ export class SessionManager {
       ...(state.engine ? { engine: state.engine } : {}),
       ...(state.engine_provider ? { provider: state.engine_provider } : {}),
     });
+    enqueueDirOriginProbe(cwd); // W-AGGREGATE-V2 刀1：入编边沿只入队零子进程（探测延迟到 patrol 扫描拍）
     return state;
+  }
+
+  /** W-AGGREGATE-V2 刀1：快照面 dir_origins——顺带入队本拍在册未探测 cwd（Set 加法零子进程，
+   *  排水仍在扫描拍）；探测结果随 SNAPSHOT/增量下发（端上桶元数据消费）。 */
+  dirOriginsList(): Record<string, string> {
+    try {
+      for (const s of this.sessions.values()) {
+        if (s.state.cwd) enqueueDirOriginProbe(s.state.cwd);
+      }
+    } catch { /* 尽力而为 */ }
+    return dirOriginsMap();
   }
 
   updateExternalProfile(id: string, profile: { cwd?: string; prompt?: string; title?: string; model?: string; engine?: SessionEngine; provider?: string }): void {

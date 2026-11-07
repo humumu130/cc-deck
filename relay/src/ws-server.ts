@@ -1513,6 +1513,9 @@ export function startServer(
           // [W-AWAITUSER] 待拍板三源聚合清单（mgr.pendingUserActionsList() 单口构建
           // ——cloud-client 云通道快照同键同步，#117 教训；空数组也下发=能力位）
           pending_user_actions: mgr.pendingUserActionsList(),
+          // W-AGGREGATE-V2 刀1：目录→归一 origin 映射（PCS 多 clone 簇归一信号——端上桶
+          // 元数据消费；空对象也下发=能力位，旧端忽略未知键零影响）
+          dir_origins: mgr.dirOriginsList(),
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr.employeeHomeState(),

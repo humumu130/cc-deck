@@ -650,6 +650,8 @@ export class CloudClient {
         // [W-AWAITUSER] 待拍板三源聚合清单（与 ws-server 直连快照同源同步，#117
         // 教训；mgr.pendingUserActionsList() 单口构建，空数组也下发=能力位）
         pending_user_actions: this.mgr.pendingUserActionsList(),
+        // W-AGGREGATE-V2 刀1：目录→归一 origin（云通道快照同步携带，#117 教训；空对象=能力位）
+        dir_origins: this.mgr.dirOriginsList(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,

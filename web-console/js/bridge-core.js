@@ -113,6 +113,7 @@
                   //（通知顶格 chip/团队待办入口）降级隐藏，会话列表等输入浮顶不受影响
                   //（那走会话帧自身状态）。单源权威：端上消费此键，不从三源各自拼）
                   pendingUserActions: null,
+                  dirOrigins: {}, // W-AGGREGATE-V2 刀1：normDir→归一 origin（SNAPSHOT 下发——PCS 多 clone 簇归一信号）
                   // W-SRCMENU2 ⑥：设计图纸目录（SNAPSHOT.design_docs——W-DESIGNHUB 契约；
                   // 缺键/空数组=旧 relay 或无 docs 部署，图纸 tab 自动隐藏）
                   designDocs: [],
@@ -204,6 +205,7 @@
                   bridge.pendingConfirms = Array.isArray(p.org_confirms) ? p.org_confirms.filter((c) => c && typeof c.id === "string") : [];
                   bridge.accepts = Array.isArray(p.acceptances) ? p.acceptances.filter((a) => a && typeof a.id === "string") : [];
                   // [W-AWAITUSER] 聚合清单（缺键=旧 relay→null 维持能力缺席态）
+                  bridge.dirOrigins = (p.dir_origins && typeof p.dir_origins === "object") ? p.dir_origins : {}; // W-AGGREGATE-V2 刀1：目录→origin（旧 relay 缺键=空对象零影响）
                   bridge.pendingUserActions = Array.isArray(p.pending_user_actions)
                     ? p.pending_user_actions.filter((x) => x && typeof x.key === "string" && typeof x.kind === "string" && typeof x.entity_id === "string")
                     : null;
@@ -535,6 +537,45 @@
                   return { dir: hint.dir, name: hint.name, n: hint.n, evidence: aggEvidenceLine(hint), ts: pref.firstSeenAt };
                 }
 
+                // ── W-AGGREGATE-V2 刀2（t-1c86f110，PCS 多 clone 簇归一）：未立项桶按归一
+                // origin 跨目录聚簇——同源 ≥2 目录且总会话 ≥AGG_MIN_SESSIONS 出**归一推荐卡**
+                //（挂最大桶：主桶同目录证据+簇同 origin 证据+共享词加分沿用）；V1 同目录推荐
+                // 保留（无 origin/不成簇桶降级路径原样）；拒绝冷却/静默语义沿用 V1（簇指纹
+                // =「o:」+origin，目录指纹=V1 原键——互不串扰）。闸沿用：簇内任一 WORKING
+                // 专注期不推；最旧龄 ≥30min。
+                function aggregateClusters(unfiledEntries) {
+                  const byOrigin = new Map();
+                  for (const e of unfiledEntries) {
+                    const o = bridge.dirOrigins && bridge.dirOrigins[e.anchor];
+                    if (!o) continue; // 无信号（非 git/未探测）=V1 同目录路径
+                    if (!byOrigin.has(o)) byOrigin.set(o, []);
+                    byOrigin.get(o).push(e);
+                  }
+                  const hostOf = new Map(); // 主桶锚(normDir) -> cluster
+                  for (const [origin, entries] of byOrigin) {
+                    if (entries.length < 2) continue; // 单目录簇=V1 已覆盖，不出归一卡
+                    const sessions = entries.flatMap((e) => e.sessions);
+                    if (sessions.length < AGG_MIN_SESSIONS) continue;
+                    entries.sort((a, b) => b.sessions.length - a.sessions.length);
+                    hostOf.set(entries[0].anchor, { origin, entries, sessions, totalN: sessions.length });
+                  }
+                  return hostOf;
+                }
+                function aggregateClusterHint(entry, cluster, now = Date.now()) {
+                  if (!entry || !cluster) return null;
+                  if (cluster.sessions.some((s) => s.status === "WORKING")) return null;
+                  const oldest = Math.min(...cluster.sessions.map((s) => Number(s.updated_at) || 0));
+                  if (!oldest || now - oldest < AGG_MIN_AGE_MS) return null;
+                  const fp = "o:" + cluster.origin; // 簇指纹=origin（目录指纹 V1 原键不串）
+                  const pref = aggPrefs[fp];
+                  if (pref && pref.rejects >= AGG_MAX_REJECTS) return null;
+                  if (pref && pref.ignoredAt && now - pref.ignoredAt < AGG_COOLDOWN_MS) return null;
+                  if (!pref || !pref.firstSeenAt) { aggPrefs[fp] = { ...(pref || {}), firstSeenAt: now }; aggPrefsSave(); }
+                  const shared = aggSharedWord(cluster.sessions);
+                  return { dir: entry.anchor, name: basename(entry.anchor), n: cluster.totalN, hostN: entry.sessions.length, dirs: cluster.entries.map((e) => e.anchor), origin: cluster.origin, word: shared && shared.word, wordN: shared ? shared.n : 0, cluster: true, firstSeenAt: aggPrefs[fp].firstSeenAt };
+                }
+                const aggClusterEvidenceLine = (h) => "同目录 ×" + h.hostN + " · 同 origin ×" + h.n + (h.word ? " · 提及「" + h.word + "」×" + h.wordN : "") + " · 未建项目（" + h.dirs.length + " 个 clone 目录）";
+
                 // #158-批4a：目录归一比较兼容 \ 分隔（Windows 数据 \ 与拼 / 不匹配会让项目前缀
                 // 归组/子目录匹配失效）；展示输出统一 displayPath（桌面 Windows 形态反斜杠）
                 const displayPath = window.__ccDeck005PathUi.displayPath;
@@ -665,11 +706,13 @@
                     if (working > 0) metaBits.push(working + " 进行中");
                     // W-AGGREGATE-V1：未立项桶卡内联推荐条（主时机静默位——零弹窗零 badge，
                     // 看见了才在）。证据行常显（审计美学不藏 hover）：目录维度+共享词维度。
-                    const aggHint = unfiled ? aggregateHintOf(entry) : null;
+                    // W-AGGREGATE-V2 刀2：同源簇桶吃归一卡（不成簇/无信号桶 V1 原样降级）
+                    const aggClusterHintObj = unfiled ? aggregateClusterHint(entry, aggClusterMap.get(entry.anchor)) : null;
+                    const aggHint = unfiled ? (aggClusterHintObj || aggregateHintOf(entry)) : null;
                     const aggHtml = aggHint
                       ? '<div class="agg-hint" data-agg-hint="' + escapeHtml(aggHint.dir) + '">'
                         + '<button class="agg-btn" type="button" data-agg-create="' + escapeHtml(aggHint.dir) + '" title="打开预填好的建团弹窗——推荐只预填不代创建">聚合为团队 →</button>'
-                        + '<span class="agg-evidence">' + escapeHtml(aggEvidenceLine(aggHint)) + "</span>"
+                        + '<span class="agg-evidence">' + escapeHtml(aggHint.cluster ? aggClusterEvidenceLine(aggHint) : aggEvidenceLine(aggHint)) + "</span>"
                         + '<button class="agg-ignore" type="button" data-agg-ignore="' + escapeHtml(aggHint.dir) + '" title="本目录 24 小时内不再推荐（累计 3 次永久静默）">忽略</button>'
                         + "</div>"
                       : "";
@@ -684,6 +727,8 @@
                   // 未立项组头：折叠箭头 + 「未立项 · N」（贴卡副行既有徽标词汇，D2-2）+ hot 点——
                   // 折叠态下组内有 WAITING/ERROR 时亮「抽屉里有要处理的」，不强行展开（卡状态点同词汇）
                   const unfiledHot = unfiledList.some((entry) => entry.sessions.some((s) => s.status === "WAITING" || s.status === "ERROR"));
+                  // W-AGGREGATE-V2 刀2：簇图一次算好（card 闭包消费；deriveEntries 只读现算）
+                  const aggClusterMap = aggregateClusters(unfiledList.filter((e) => e.key.indexOf("c:") === 0));
                   const unfiledMarkup = unfiledList.length
                     ? '<button class="queue-group project-unfiled-toggle" type="button" data-project-unfiled-toggle data-count="' + unfiledList.length + '" aria-expanded="' + (!unfiledCollapsed) + '"><span class="unfiled-chev">▸</span>未入项目' + (unfiledCollapsed && unfiledHot ? '<i class="status-dot waiting"></i>' : "") + "</button>" /* W-UIV3 A7：计数改 ::after 右对齐（与三组组头同款，探针目测不一致收口） */
                       + (unfiledCollapsed ? "" : unfiledList.map(card).join(""))
@@ -997,7 +1042,9 @@
                     if (aggCreate) {
                       const dir = String(aggCreate.dataset.aggCreate || "");
                       const entry = deriveEntries().find((e) => e.key === "c:" + dir);
-                      const hint = entry ? aggregateHintOf(entry) : null;
+                      // W-AGGREGATE-V2 刀2：簇卡点击=簇形态预填（锚列表 dirs+全簇成员）
+                      const clusterHint = entry ? aggregateClusterHint(entry, aggregateClusters(deriveEntries().filter((e) => e.key.indexOf("c:") === 0)).get(dir)) : null;
+                      const hint = clusterHint || (entry ? aggregateHintOf(entry) : null);
                       if (entry && hint) {
                         const open = window.ccDeckTeam && typeof window.ccDeckTeam.openTeamCreate === "function" ? window.ccDeckTeam.openTeamCreate : null;
                         if (!open) { toast("团队域未就绪，稍后再试"); return; }
@@ -1007,9 +1054,13 @@
                         open({
                           name: hint.name,
                           anchor: dir,
+                          ...(hint.cluster && hint.dirs ? { dirs: hint.dirs } : {}), // V2：簇预填锚列表（建团弹窗 anchor_dirs 消费）
                           tier: "轻立项",
-                          members: [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0)).map((s) => s.session_id),
-                          origin: aggEvidenceLine(hint),
+                          members: (hint.cluster
+                            ? deriveEntries().filter((e) => e.key.indexOf("c:") === 0 && hint.dirs.indexOf(e.anchor) >= 0).flatMap((e) => [...e.sessions])
+                            : [...entry.sessions]
+                          ).sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0)).map((s) => s.session_id),
+                          origin: hint.cluster ? aggClusterEvidenceLine(hint) : aggEvidenceLine(hint),
                         });
                         aggPrefs[dir] = { ...(aggPrefs[dir] || {}), actedAt: Date.now() }; aggPrefsSave(); // 已交互记账（升级时机不再打扰）
                       }
