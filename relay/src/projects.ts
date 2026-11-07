@@ -1436,7 +1436,13 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
   // 有意设计（待人重派），本扫不得把它当收割拽进 done。1023 实测教训：无此排除时
   // test-dispatch「断档补记板条退 todo」用例被本扫反向碾掉。
   const doneAtById = new Map<string, number>();
-  const prById = new Map<string, boolean>(); // W-CARDLIFE-R4：无 PR 面判定账（末行赢——同 id 后行 pr_url 有无覆盖前行）
+  // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·1107 PM 裁决）：无 PR 面白名单账——读 dispatched
+  // 行的显式 no_pr:true（派单受理时落，源头真值）。**换掉 R4 原判据 prById（读台账 pr_url）**：
+  // pr_url 是有 schema 无写入通路的死面（orgAction pr-report handler 全仓不存在、生产
+  // 3653 行零数据），判据恒 false=「有 PR 单不翻」红线生产不设防（PR 单审查期被 4h 兜底
+  // 静默碾过）。no_pr 白名单=安全侧反转：仅显式 no_pr:true 翻（缺省/false/未标=不翻——
+  // 未标只剩打标上线前的历史行，不翻正确）；重派新 dispatched 行覆盖旧标（末行赢同款）。
+  const noPrById = new Map<string, boolean>();
   // W-CARDLIFE-R3 P1-2：资格位拦截行（receipt_gate:true——收口被拦的催收中卡）不入
   // 强翻账——R2 缺此判时拦截卡被本扫 ≤30min 裸翻 done（patrol 一拍+auto 缺省开），
   // 「板完全不动」倒退为「零审查裸 done」（A 审 P1-2 主锤）。末行赢语义：同 id 后续
@@ -1448,10 +1454,9 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
     if ((row as { receipt_gate?: boolean }).receipt_gate === true) { gatedById.add(row.id); continue; }
     gatedById.delete(row.id); // 末行赢：后续无标 done 行覆盖旧标
     doneAtById.set(row.id, Number(row.ts) || 0);
-    // W-CARDLIFE-R4（1107 第四现 20 卡）：PR 面账（末行赢）——pr_url 在场=PR 互审链单
-    //（done 出口=收割面翻卡，复核闸红线不碾）；无键=无 PR 面（审查单 --no-pr/调研单/
-    // 1105-06 批无 pr-report 实施单——台账口径「旧行缺省 undefined=无 PR」，org.ts pr_url 注释锚）
-    prById.set(row.id, !!row.pr_url);
+    // R4-R1：no_pr 白名单账——done 行自带标（appendDispatch 咽喉从 dispatched 行段链
+    // 复制，见 org.ts；converge 读收敛投影，直读 dispatched 历史行不可得）
+    noPrById.set(row.id, (row as { no_pr?: boolean }).no_pr === true);
   }
   if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [], receiptGated: [] };
   let moved = 0, skipped = 0;
@@ -1471,13 +1476,15 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       // 人工迁移，台账收敛不得碾过规划意图）。
       // W-CARDLIFE-R4（1107 第四现：20 卡滞留 submitted 新形态——审查单/无 PR 单无收割面）：
       // submitted 兜底出口（三条件缺一不翻，全满足才自动翻 done+journal auto-recon-review）：
-      //   ①dispatch 尾态 done（doneAtById 在账）②无 PR 面（prById 末行无 pr_url——有 PR 单
-      //     仍只走收割面翻卡=复核闸红线零变）③4h 缓冲（now - max(doneAt, updated_at)——防碾
-      //     正常复核节奏（实施单 review 通常 <2h）；dispatch done 后板卡再动（人工重开复核等）
-      //     从其动时刻重新起算）。豁免同 backlog 强翻族：hold 锁/人工打回（transitions 有
-      //     done|submitted 后随 backlog=否决铁证）不翻；receipt_gate 拦中卡不翻（R3 红线）且
-      //     入催收清单（submitted+gated=收口被拦+复核态滞留本就该催——原静默 skip 升可观测）。
-      //     dryRun 记 wouldClose（干跑证据统一）。条件不齐=留 submitted 原态零打扰。
+      //   ①dispatch 尾态 done（doneAtById 在账）②无 PR 面白名单（R4-R1：dispatched 行显式
+      //     no_pr:true——PM --no-pr 派单面打标；缺省/未标=不翻安全侧，有 PR 单仍只走收割面
+      //     翻卡=复核闸红线由「白名单」结构性保证，不再依赖空面数据）③4h 缓冲（now -
+      //     max(doneAt, updated_at)——防碾正常复核节奏（实施单 review 通常 <2h）；dispatch
+      //     done 后板卡再动（人工重开复核等）从其动时刻重新起算）。豁免同 backlog 强翻族：
+      //     hold 锁/人工打回（transitions 有 done|submitted 后随 backlog=否决铁证）不翻；
+      //     receipt_gate 拦中卡不翻（R3 红线）且入催收清单（submitted+gated=收口被拦+复核态
+      //     滞留本就该催——原静默 skip 升可观测）。dryRun 记 wouldClose（干跑证据统一）。
+      //     条件不齐=留 submitted 原态零打扰。
       if (entry.status === "submitted") {
         if (gatedById.has(entry.dispatch_id)) {
           receiptGated.push({ gid: g.id, entryId: entry.id, dispatchId: entry.dispatch_id });
@@ -1485,7 +1492,7 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
           continue;
         }
         const doneAt = doneAtById.get(entry.dispatch_id);
-        if (doneAt !== undefined && prById.get(entry.dispatch_id) !== true
+        if (doneAt !== undefined && noPrById.get(entry.dispatch_id) === true
           && !entry.hold && Date.now() - Math.max(doneAt, Number(entry.updated_at || 0)) > 4 * 3600_000) {
           const trSeq = entry.transitions || [];
           let lastSettled = -1;

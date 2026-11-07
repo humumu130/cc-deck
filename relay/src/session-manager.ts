@@ -7144,6 +7144,7 @@ ${lines.join("\n")}
           ...(typeof payload.redispatch_of === "string" && payload.redispatch_of.trim() ? { redispatch_of: payload.redispatch_of.trim() } : {}),
           ...(typeof payload.worktree === "string" && payload.worktree.trim() ? { worktree: payload.worktree.trim() } : {}), // P1-1：编排链同透传（认领边写锁）
           ...(typeof payload.slug === "string" && payload.slug.trim() ? { slug: payload.slug.trim() } : {}),
+          ...(payload.no_pr === true ? { no_pr: true } : {}), // W-CARDLIFE-R4-R1：编排面同透传（与直连 dispatch 口同字段）
         });
         // orgAction("dispatch") 转调 dispatchWorker，返回裸形 {ok,dispatch_id,session_id}
         const dr = r.ok ? (r as unknown as { dispatch_id?: string; session_id?: string; queued?: boolean }) : undefined;
@@ -7944,6 +7945,7 @@ ${lines.join("\n")}
             target_sid: str("target_sid") || undefined, // W-PRREVIEW：显式定席（review-route 路由结果落席）
             exclude_sessions: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x): x is string => typeof x === "string" && !!x) : undefined, // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话）
             review_only: p.review_only === true ? true : undefined, // W-REVIEWSEAT：审查单标记（评审席只读守卫+纪律注入）
+            no_pr: p.no_pr === true ? true : undefined, // W-CARDLIFE-R4-R1：--no-pr 派单面打标（PM leader-dispatch 透传；dispatched 行落值→converge 兜底白名单）
           });
         }
         // W-PRREVIEW（期一④ PR 互审，1104 拍板）：互审员路由查询——只路由零派发零
@@ -9373,7 +9375,7 @@ ${lines.join("\n")}
     });
   }
 
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string; /** W-REVIEWSEAT：审查单标记——目标席为评审席（本组 reviewer/全局池成员）时必须 true（只读守卫）；true 时注入评审席纪律段 */ review_only?: boolean }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; worktree?: string; slug?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string; /** M12-3 重投锚：原单 dispatch_id——沿用其 root id 写新行（段链由导入侧行序终态切分推导，运行时零段号） */ redispatch_of?: string; /** P0 编制排队内部参：drain 重入时携带原单 id（台账同 id 收敛 queued→dispatched/failed）；外部调用不传 */ queue_replay?: string; /** #G3 板卡富模型透传：优先级（P0/P1/P2）随台账全行+建卡 */ priority?: "P0" | "P1" | "P2"; /** #G3 父子链：建卡挂靠父卡 */ parent_id?: string; /** #G5 瞬态自动重试内部参：本单由重试产生（行带 retry_of；失败不再自动重试——链深恒 1） */ retry_of?: string; /** W-PRREVIEW（期一④ PR 互审）：选席排除集——互审派单避交付者本人与同单关联会话（PM 工具 leader-harvest 组装传入；选席全路径——熟手轮/触顶复用轮——同享） */ exclude_sessions?: string[]; /** W-PRREVIEW：PM 主权显式定席（review-route 路由结果的确定性落席）——跳过选席/复拉/装配探测序，保留安全闸（在册/非外部/非 Leader/不忙/编制内）；定席不可用即响亮拒（回落 PM 子代理由调用方处置，不静默换席） */ target_sid?: string; /** W-REVIEWSEAT：审查单标记——目标席为评审席（本组 reviewer/全局池成员）时必须 true（只读守卫）；true 时注入评审席纪律段 */ review_only?: boolean; /** W-CARDLIFE-R4-R1：--no-pr 派单面打标——dispatched 行落 no_pr:true（converge submitted 兜底白名单的源头真值） */ no_pr?: boolean }):
     { ok: true; dispatch_id: string; session_id: string; queued?: boolean; permission?: { normalized: string; effective: string; native_mode: string | null; reason: string } } | { ok: false; error: string; dispatch_id?: string; /** domstep1：幂等命中时的在途单 id（回执对账键） */ duplicate_of?: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // W-RATELIMIT429：全局并发闸——在编活 worker（managed 且 agent 在）≥帽
@@ -9856,7 +9858,7 @@ ${lines.join("\n")}
       const clash = withStorageTx(undefined, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey });
+          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey });
           return null;
         }
         return c;
@@ -9867,7 +9869,7 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId }; /* dispatch_id 随拒收返回：调用方/审计按 id 关联 failed 记因行（编制闸同族但本行含活单语义，对账需要） */
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等 */
+      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等；R4-R1 no_pr=派单面打标 */
     }
 
     // M1 run 留档①任务书快照（multica 借①，m-observ 织合补）：实际派发注入后全文
