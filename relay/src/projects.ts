@@ -1379,7 +1379,7 @@ export function removeBoardEntry(gid: string, entryId: string, dir?: string): { 
  * 30min 周期化（刀3）后写窗频放大；返回 boolean（A 审 2.3）：**实翻落盘才 true**——
  * 卡缺席/已在目标态/writableBoard 拒/applyOrgChange 拒写全 false，converge 计数只认
  * true（对齐 session-manager :1356「搬后回读核实」先例——静默 no-op 不再虚报 moved）。 */
-export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEntryStatus, dir?: string): boolean {
+export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEntryStatus, dir?: string, journalAction?: string): boolean {
   return withOrgWriteTx(dir, () => {
     const w = writableBoard(gid, dir);
     if (!w.ok) return false;
@@ -1408,7 +1408,9 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
       console.error(`[projects] dispatch-move 拒写：${chk.error}（gid=${gid} dispatch=${dispatchId}）`);
       return false;
     }
-    return saveBoardFile(w.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
+    // W-CARDLIFE-R4：journalAction 可选覆盖（缺省 dispatch-move 行为零变）——R4 审查单/
+    // 无 PR 单兜底翻传 "auto-recon-review"，journal 侧可分辨自愈翻与收割联动翻
+    return saveBoardFile(w.board, dir, { action: journalAction ?? "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
   });
 }
 
@@ -1434,6 +1436,13 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
   // 有意设计（待人重派），本扫不得把它当收割拽进 done。1023 实测教训：无此排除时
   // test-dispatch「断档补记板条退 todo」用例被本扫反向碾掉。
   const doneAtById = new Map<string, number>();
+  // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·1107 PM 裁决）：无 PR 面白名单账——读 dispatched
+  // 行的显式 no_pr:true（派单受理时落，源头真值）。**换掉 R4 原判据 prById（读台账 pr_url）**：
+  // pr_url 是有 schema 无写入通路的死面（orgAction pr-report handler 全仓不存在、生产
+  // 3653 行零数据），判据恒 false=「有 PR 单不翻」红线生产不设防（PR 单审查期被 4h 兜底
+  // 静默碾过）。no_pr 白名单=安全侧反转：仅显式 no_pr:true 翻（缺省/false/未标=不翻——
+  // 未标只剩打标上线前的历史行，不翻正确）；重派新 dispatched 行覆盖旧标（末行赢同款）。
+  const noPrById = new Map<string, boolean>();
   // W-CARDLIFE-R3 P1-2：资格位拦截行（receipt_gate:true——收口被拦的催收中卡）不入
   // 强翻账——R2 缺此判时拦截卡被本扫 ≤30min 裸翻 done（patrol 一拍+auto 缺省开），
   // 「板完全不动」倒退为「零审查裸 done」（A 审 P1-2 主锤）。末行赢语义：同 id 后续
@@ -1445,6 +1454,9 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
     if ((row as { receipt_gate?: boolean }).receipt_gate === true) { gatedById.add(row.id); continue; }
     gatedById.delete(row.id); // 末行赢：后续无标 done 行覆盖旧标
     doneAtById.set(row.id, Number(row.ts) || 0);
+    // R4-R1：no_pr 白名单账——done 行自带标（appendDispatch 咽喉从 dispatched 行段链
+    // 复制，见 org.ts；converge 读收敛投影，直读 dispatched 历史行不可得）
+    noPrById.set(row.id, (row as { no_pr?: boolean }).no_pr === true);
   }
   if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [], receiptGated: [] };
   let moved = 0, skipped = 0;
@@ -1462,7 +1474,41 @@ export function convergeBoardsWithDispatchLog(dir?: string, onAudit?: (action: "
       // planlane 批：planned（规划中）同款保护——规划面非派单对账面，自愈不碰
       //（planned 卡常态无 dispatch_id，此处防御性兜底：带史卡的规划中态只可能出自
       // 人工迁移，台账收敛不得碾过规划意图）。
-      if (entry.status === "submitted" || entry.status === "ready_to_install" || entry.status === "planned") continue;
+      // W-CARDLIFE-R4（1107 第四现：20 卡滞留 submitted 新形态——审查单/无 PR 单无收割面）：
+      // submitted 兜底出口（三条件缺一不翻，全满足才自动翻 done+journal auto-recon-review）：
+      //   ①dispatch 尾态 done（doneAtById 在账）②无 PR 面白名单（R4-R1：dispatched 行显式
+      //     no_pr:true——PM --no-pr 派单面打标；缺省/未标=不翻安全侧，有 PR 单仍只走收割面
+      //     翻卡=复核闸红线由「白名单」结构性保证，不再依赖空面数据）③4h 缓冲（now -
+      //     max(doneAt, updated_at)——防碾正常复核节奏（实施单 review 通常 <2h）；dispatch
+      //     done 后板卡再动（人工重开复核等）从其动时刻重新起算）。豁免同 backlog 强翻族：
+      //     hold 锁/人工打回（transitions 有 done|submitted 后随 backlog=否决铁证）不翻；
+      //     receipt_gate 拦中卡不翻（R3 红线）且入催收清单（submitted+gated=收口被拦+复核态
+      //     滞留本就该催——原静默 skip 升可观测）。dryRun 记 wouldClose（干跑证据统一）。
+      //     条件不齐=留 submitted 原态零打扰。
+      if (entry.status === "submitted") {
+        if (gatedById.has(entry.dispatch_id)) {
+          receiptGated.push({ gid: g.id, entryId: entry.id, dispatchId: entry.dispatch_id });
+          skipped += 1;
+          continue;
+        }
+        const doneAt = doneAtById.get(entry.dispatch_id);
+        if (doneAt !== undefined && noPrById.get(entry.dispatch_id) === true
+          && !entry.hold && Date.now() - Math.max(doneAt, Number(entry.updated_at || 0)) > 4 * 3600_000) {
+          const trSeq = entry.transitions || [];
+          let lastSettled = -1;
+          for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && (trSeq[i].status === "done" || trSeq[i].status === "submitted")) lastSettled = i;
+          const reopened = lastSettled >= 0 && trSeq.slice(lastSettled + 1).some((t) => t && t.status === "backlog");
+          if (!reopened) {
+            if (opts?.dryRun) { wouldClose.push({ gid: g.id, entryId: entry.id, text: String(entry.text || entry.id).slice(0, 40) }); }
+            else if (moveEntryByDispatch(g.id, entry.dispatch_id as string, "done", dir, "auto-recon-review")) {
+              moved++;
+              onAudit?.("board-force-close", `submitted 兜底翻（无 PR 面+dispatch done 超 4h）：${entry.id}（dispatch ${String(entry.dispatch_id).slice(0, 8)}——审查单/无 PR 单终态补路，R4）`);
+            }
+          }
+        }
+        continue; // submitted 不落入 backlog 强翻路径（复核态保护维持）
+      }
+      if (entry.status === "ready_to_install" || entry.status === "planned") continue;
       // W-CARDLIFE-R3 P1-2：拦中卡跳过强翻+入催收清单（不静默——调用方 patrol 出告警卡）
       if (gatedById.has(entry.dispatch_id)) {
         receiptGated.push({ gid: g.id, entryId: entry.id, dispatchId: entry.dispatch_id });

@@ -651,6 +651,9 @@ export interface DispatchEntry {
    *  chip）。板卡同名字段经 orgAction 联动落值，本字段为审计面对账锚。 */
   pr_url?: string;
   pr_state?: string;
+  /** W-CARDLIFE-R4-R1（双审 P0-1 修法 a）：--no-pr 派单受理时落 dispatched 行（源头
+   *  真值）；converge submitted 兜底仅翻显式 no_pr:true。schema 镜像 org-schema.ts。 */
+  no_pr?: boolean;
 }
 
 // S3-P4 组锚豁免谓词（relfix-s 续作）：org 底座 import projects 会环（projects →
@@ -689,6 +692,25 @@ export function setDispatchClosedHook(hook: DispatchClosedHook | null): void {
 }
 
 export function appendDispatch(e: DispatchEntry, dir?: string): boolean {
+  // W-CARDLIFE-R4-R1：no_pr 段链传递——终态行（done/failed）落盘前从同 id **原始行流**
+  // 倒序找最近 dispatched 行复制其标。直读文件而非 readDispatchLog：后者是同 id 末行
+  // 收敛投影（dispatched 历史行到不了读侧——R4① 夹具首跑实锤丢标）；倒序扫遇
+  // dispatched 即真值（重派新 dispatched 行覆盖旧标=末行赢同款）。converge 白名单读
+  // done 行 no_pr，不复制则标断链（打标链三段：CLI payload → dispatched 行 → 终态行）。
+  if ((e.status === "done" || e.status === "failed") && e.no_pr === undefined) {
+    try {
+      const raw = readFileSync(dispatchLogPath(dir ?? orgDir()), "utf-8").split("\n");
+      for (let i = raw.length - 1; i >= 0; i--) {
+        const t = raw[i].trim();
+        if (!t) continue;
+        try {
+          const r = JSON.parse(t) as { id?: string; status?: string; no_pr?: boolean };
+          if (r.id !== e.id) continue;
+          if (r.status === "dispatched") { if (r.no_pr === true) e.no_pr = true; break; }
+        } catch { /* 损坏行跳过 */ }
+      }
+    } catch { /* 台账未建=无标可继承 */ }
+  }
   // #G5 失败分类学写侧单点：failed 行自动 failure_reason（receipt 错误串→分类器），
   // 调用方（spawn 失败/回合收口/看门狗等全部出口）零改动——全台账 failed 行带枚举
   if (e.status === "failed" && !e.failure_reason) e.failure_reason = classifyDispatchFailure(e.receipt ?? "");
