@@ -140,11 +140,20 @@ async function main(): Promise<void> {
     setPmOverride({ session_id: PM_EXT, cli_pid: 0, cwd: `/Users/u/dev/${PM_EXT}`, claimed_at: now });
     const st1 = mgr.pmDutyStatus();
     assert(st1.session_id === PM_EXT && st1.alive === true, "C① 外部席位（pid=0）活跃度判活：pmDutyStatus 确认态在位（session_id 非空+alive）", JSON.stringify({ s: st1.session_id, a: st1.alive }));
-    // 帧龄出窗 → 读路径自动清档（席位不锁死）
+    // 帧龄 16min（出 15min 活跃窗、≤30min 回合 TTL）→ [W-PMAPPOINT-GAP-R1 三态化]
+    // between-turns 守位不清档（managed cron 回合间歇中位 18min 常态落此区间——1107 消卡
+    // 循环「间歇消」半边即断于此；R0 此处 16min 即清=循环根）
     writeFileSync(join(sb.dataDir, "events.ndjson"), "");
     seedFrame(sb.dataDir, PM_EXT, now - 16 * 60_000);
+    const st2b = mgr.pmDutyStatus();
+    assert(st2b.session_id === PM_EXT && st2b.alive === true, "C②b(R1) 帧龄 16min（出活跃窗、TTL 内）→between-turns 守位不清档（消卡循环「间歇消」半边根治面）", JSON.stringify({ s: st2b.session_id }));
+    assert(readPmOverride()?.session_id === PM_EXT, "C②c(R1) override 档保持（回合间隙非死）");
+    // 帧龄 31min（超 30min TTL）→ 真死自动清档（席位不锁死——claim/提名恢复可达；
+    // 影响面①：外部 SDK 真死清档延迟 15→30min，31min 必清）
+    writeFileSync(join(sb.dataDir, "events.ndjson"), "");
+    seedFrame(sb.dataDir, PM_EXT, now - 31 * 60_000);
     const st2 = mgr.pmDutyStatus();
-    assert(st2.session_id === "" && st2.alive === false, "C② 帧龄出窗→席位自动清档（外部席位不锁死——claim/提名恢复可达）", JSON.stringify({ s: st2.session_id }));
+    assert(st2.session_id === "" && st2.alive === false, "C② 帧龄超 TTL→席位自动清档（外部席位不锁死——claim/提名恢复可达；R1 校准 16min→31min）", JSON.stringify({ s: st2.session_id }));
     assert(readPmOverride() === null || readPmOverride()?.session_id !== PM_EXT, "C③ override 档已清（死席不占位）");
 
     console.log("D pending 队列+补投:");
