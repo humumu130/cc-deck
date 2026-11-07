@@ -7379,7 +7379,22 @@ ${lines.join("\n")}
               };
             }
           }
-          const r = createGroup({ name, anchor_dir: anchor, tier, ...(Object.keys(roleDefaults).length > 0 ? { role_defaults: roleDefaults } : {}) });
+          // W-AGGREGATE-V2-R1（A 审 P1 最后一跳）：anchor_dirs 漏斗透传——原调用只取
+          // name/anchor_dir/tier/role_defaults 四参，端上簇预填提交的附锚在漏斗被丢弃
+          //（A 审实证：create ok:true 而落盘 anchor_dirs=undefined/附锚不命中组——
+          // PCS 多 clone 点簇卡建团后 clone 会话仍归不进组）。校验：数组+每项合法路径
+          //（anchorPathError 单点）+主锚去重（内核 Set 已有——此处前置滤）+上限 8 防滥用。
+          const anchorDirsRaw = (p as { anchor_dirs?: unknown }).anchor_dirs;
+          const anchorDirs = Array.isArray(anchorDirsRaw)
+            ? anchorDirsRaw.filter((d): d is string => typeof d === "string" && d.trim() !== "").map((d) => d.trim()).filter((d) => d !== anchor).slice(0, 8)
+            : undefined;
+          if (anchorDirs) {
+            for (const d of anchorDirs) {
+              const dErr = anchorPathError(d);
+              if (dErr) return { ok: false, error: `附锚 ${d}：${dErr}` };
+            }
+          }
+          const r = createGroup({ name, anchor_dir: anchor, tier, ...(Object.keys(roleDefaults).length > 0 ? { role_defaults: roleDefaults } : {}), ...(anchorDirs && anchorDirs.length ? { anchor_dirs: anchorDirs } : {}) });
           if (!r.ok) return r;
           ensureProjectClaudeMd(anchor, name); // §3.4 防漂移种子（幂等：存在即认不覆盖）
           this.emitOrgState();

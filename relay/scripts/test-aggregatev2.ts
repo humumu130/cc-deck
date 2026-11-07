@@ -8,6 +8,7 @@
 //     payload anchor_dirs/多锚 some 分桶/external 纳管（V1 已落锚锁定）
 // 环境隔离：mkdtemp ORG/DATA + 真 git 子进程（init+remote add——tech-B 探测面的真实夹具）。
 import { mkdtempSync, mkdirSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -71,7 +72,37 @@ async function main() {
   mkdirSync(join(ORG, "work-clone"), { recursive: true });
   const r1 = createGroup({ name: "PCS 工单", anchor_dir: join(ORG, "main-clone"), tier: "轻立项", anchor_dirs: [join(ORG, "work-clone"), join(ORG, "main-clone")] }, ORG);
   const g1 = r1.ok && r1.group ? r1.group : null;
-  ok(!!g1, "B1 anchor_dirs 建组 ok");
+  ok(!!g1, "B1 anchor_dirs 建组 ok（内核直调——对照档，非主证）");
+  // W-AGGREGATE-V2-R1（A 审 P1）：生产路径主证——orgAction project-create 漏斗透传
+  //（A 审实证修前断链：create ok:true 而落盘 anchor_dirs=undefined/附锚不命中组；
+  //  夹具盲区=测试跑生产不走的路径。本段走端上簇预填提交的真实链路形态）
+  {
+    const { SessionManager } = await import("../src/session-manager.js");
+    const { EventBus } = await import("../src/event-bus.js");
+    const { setLightConfirmTrusted: trust, findGroupByAnchor: fga } = await import("../src/projects.js");
+    const DATA2 = mkdtempSync(join(tmpdir(), "agg2-prod-data-"));
+    const prev2 = { CCR_ORG_DIR: process.env.CCR_ORG_DIR, CCR_DATA_DIR: process.env.CCR_DATA_DIR, CCR_CONFIG_FILE: process.env.CCR_CONFIG_FILE };
+    process.env.CCR_ORG_DIR = ORG; process.env.CCR_DATA_DIR = DATA2; process.env.CCR_CONFIG_FILE = join(ORG, "c2.json");
+    const cfg2 = { port: 8978, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA2, cloudUrls: [] as string[], cloudUrl: "", cloudToken: "", employeeConfigDir: null } as never;
+    const mgr2 = new SessionManager(new EventBus({ persistPath: join(DATA2, "e.ndjson") }), cfg2);
+    mgr2.setAgentFactory(() => ({ id: randomUUID(), startedAt: Date.now(), ended: true, sendMessage: () => {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => {}, setPermissionMode: async () => {} }) as never);
+    trust(true);
+    mkdirSync(join(ORG, "p-main"), { recursive: true }); mkdirSync(join(ORG, "p-att1"), { recursive: true }); mkdirSync(join(ORG, "p-att2"), { recursive: true });
+    const rp = mgr2.orgAction("project-create", { name: "簇生产链", anchor: join(ORG, "p-main"), tier: "轻立项", anchor_dirs: [join(ORG, "p-att1"), join(ORG, "p-att2"), join(ORG, "p-main")] } as never) as { ok: boolean; data?: { group?: { anchor_dirs?: string[] } }; error?: string };
+    ok(rp.ok === true, `B1p-a 生产路径 create ok（${rp.error ?? "ok"}——漏斗透传后）`);
+    ok(Array.isArray(rp.data?.group?.anchor_dirs) && rp.data!.group!.anchor_dirs!.length === 3 && rp.data!.group!.anchor_dirs![0] === join(ORG, "p-main"), `B1p-b 落盘 anchor_dirs 三锚+主锚恒首（实 ${JSON.stringify(rp.data?.group?.anchor_dirs)}）`);
+    const projJson = JSON.parse(readFileSync(join(ORG, "projects.json"), "utf-8")) as { groups: Array<{ name: string; anchor_dirs?: string[] }> };
+    const g2 = projJson.groups.find((x) => x.name === "簇生产链");
+    ok(Array.isArray(g2?.anchor_dirs) && g2!.anchor_dirs!.length === 3, `B1p-c 落盘 projects.json 三锚（实 ${JSON.stringify(g2?.anchor_dirs?.length)}——A 审修前此处 undefined）`);
+    ok(fga(join(ORG, "p-att1"), ORG)?.name === "簇生产链" && fga(join(ORG, "p-att2"), ORG)?.name === "簇生产链", "B1p-d 附锚命中组（findGroupByAnchor any-of——clone 会话归组证）");
+    // 校验面：坏附锚拒收（非绝对路径）+上限 8
+    const rBad = mgr2.orgAction("project-create", { name: "坏附锚", anchor: join(ORG, "p-ok"), tier: "轻立项", anchor_dirs: ["relative/path"] } as never) as { ok: boolean; error?: string };
+    ok(rBad.ok === false && (rBad.error ?? "").includes("附锚"), `B1p-e 坏附锚拒收（${(rBad.error ?? "").slice(0, 40)}）`);
+    const many = Array.from({ length: 12 }, (_, i) => join(ORG, `p-x${i}`));
+    const rMany = mgr2.orgAction("project-create", { name: "超限锚", anchor: join(ORG, "p-ok2"), tier: "轻立项", anchor_dirs: many } as never) as { ok: boolean; data?: { group?: { anchor_dirs?: string[] } } };
+    ok(rMany.ok === true && (rMany.data?.group?.anchor_dirs?.length ?? 0) <= 9, `B1p-f 上限 8 截断（实 ${rMany.data?.group?.anchor_dirs?.length ?? 0} 含主锚）`);
+    for (const [k, v] of Object.entries(prev2)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
   ok(Array.isArray(g1?.anchor_dirs) && g1!.anchor_dirs![0] === join(ORG, "main-clone") && g1!.anchor_dirs!.length === 2, "B2 持久化主锚恒首位+去重");
   ok(findGroupByAnchor(join(ORG, "work-clone"), ORG)?.id === g1?.id, "B3 findGroupByAnchor any-of（附锚命中）");
   ok(findGroupByAnchor(join(ORG, "main-clone"), ORG)?.id === g1?.id, "B4 主锚命中（兼容原口径）");
