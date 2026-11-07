@@ -252,7 +252,8 @@ function main(): void {
   check(!/from "\.\/engine-icon-xml"/.test(iconSrc), "旧表 engine-icon-xml import 绝迹（表已并入单表——历史注释提及不计）");
   check(!iconSrc.includes("function Glyph"), "手绘 Glyph（W-MSGUI 件二近似形制）退役");
   check(iconSrc.includes("engineBrandEntryOf(engine)"), "EngineBrandTile 表命中走真品牌标");
-  check(iconSrc.includes("resizeMode=\"contain\""), "品牌标 contain 保纵横比（crab 191×150 宽图勿拉伸）");
+  const tileBody = iconSrc.slice(iconSrc.indexOf("export function EngineBrandTile"), iconSrc.indexOf("export function EngineIcon"));
+  check(tileBody.includes('resizeMode="contain"'), "EngineBrandTile 体内品牌标 contain 保纵横比（crab 191×150 宽图勿拉伸——Tile 专属锚非全文匹配）");
   check(iconSrc.includes("engineBrandEntryOf(key)"), "EngineIcon（头像/胶囊）同走单表（两消费面单点）");
   eq(Object.keys(ENGINE_BRAND).sort(), ["claude", "codebuddy", "codex", "glm", "qwen-code", "trae", "zcode"], "单表七引擎键齐（桌面同集）");
   eq(ENGINE_BRAND_ALIAS, { qwen: "qwen-code" }, "别名 qwen→qwen-code（桌面 ENGINE_BRAND_ALIAS 同款）");
@@ -262,9 +263,9 @@ function main(): void {
   // 桌面字节 parity 锁：ENGINE_BRAND 与 web-console ENGINE_BRAND_SVG 七条目逐条相等
   // （桌面=字节权威；codex class 属性/codebuddy 空白折行已按桌面口径统一——两端同源同形）
   const deskSrc = readFileSync(new URL("../../web-console/js/session-domain.js", import.meta.url), "utf8");
-  const deskBody = deskSrc.slice(deskSrc.indexOf("const ENGINE_BRAND_SVG"));
-  const deskEntries = [...deskBody.matchAll(/"([a-z0-9_-]+)":\s*("(?:[^"\\]|\\.)*")/g)].slice(0, 7);
-  eq(deskEntries.length, 7, "桌面表七条目锚定（正则抽取面稳定）");
+  const deskBody = deskSrc.slice(deskSrc.indexOf("const ENGINE_BRAND_SVG"), deskSrc.indexOf("const ENGINE_BRAND_ALIAS"));
+  const deskEntries = [...deskBody.matchAll(/"([a-z0-9_-]+)":\s*("(?:[^"\\]|\\.)*")/g)];
+  eq(deskEntries.map((m) => m[1]).sort(), Object.keys(ENGINE_BRAND).sort(), "桌面表键集与单表键集恰等（末尾追加/中插/删除任一漂移都红——非首七截取）");
   for (const [, k, raw] of deskEntries) {
     const deskVal: string = JSON.parse(raw);
     const mob = ENGINE_BRAND[k];
