@@ -59,14 +59,16 @@ const TEAM_LANES: { k: string; label: string }[] = [
 const TEAM_LANE_LEGACY: Record<string, string> = { todo: "backlog", doing: "claimed" };
 const PM_STATUS_ZH: Record<string, string> = { WORKING: "在跑", WAITING: "待确认", ERROR: "异常", DONE: "空闲" };
 
-function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
+export function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
   team: ProjectGroup;
   sessions: SessionState[];
   boards?: Record<string, { entries?: { status?: string }[] }>;
   onOpenSession?: (sid: string) => void;
   onOpenTeam?: () => void;
 }) {
-  const { c } = useTheme();
+  const { c, mode } = useTheme();
+  const dark = mode === "dark"; // B-P1-1 亮档状态词用浅底深变体（ctx*Fill），暗档直用灯色
+  const snap = useRelay(); // A8+C1：任务完成浮钮让位（口径同 :2945 对话视图/ListScreen 1829——queue>0 时 +52）
   const board = team.id ? boards?.[team.id] : undefined;
   const entries = Array.isArray(board?.entries) ? board!.entries : null;
   const laneOf = (st?: string) => (st ? TEAM_LANE_LEGACY[st] ?? st : "");
@@ -81,49 +83,115 @@ function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: {
     const arts = s && Array.isArray(s.artifacts) ? s.artifacts.filter((a) => a && a.path).length : 0;
     return { sid: m.session_id, role, nick: String(m.nick || ""), pm: SLIM_KEEP_ROLE_RE.test(role), s, pct, arts };
   });
+  // A2+A6（W-TEAMTAB 三路裁决）：roster 排序继承桌面 teamDrawerRosterSort 同源语义
+  // （pm 前置→真在跑前置→原序）+未同步沉底（空闲后聚堆成「待同步」组——中部节奏完整）。
+  // 纯展示层 slice 防就地变异；Array#sort 稳定（V8），原序保持。
+  const isRunning = (r: (typeof roster)[number]) => r.s?.status === "WORKING" && isRealWorking(r.s);
+  const rosterSorted = roster.slice().sort((a, b) =>
+    Number(b.pm) - Number(a.pm)
+    || Number(isRunning(b)) - Number(isRunning(a))
+    || Number(!a.s) - Number(!b.s));
   const running = roster.filter((r) => r.s?.status === "WORKING" && isRealWorking(r.s)).length; /* #291：待命不占在跑计数 */
   const artsTotal = roster.reduce((n, r) => n + r.arts, 0);
   const artsPeople = roster.filter((r) => r.arts > 0).length;
-  const roleBadge = (role: string, pm: boolean) => (pm ? "✦" : /^(qa|reviewer|验收)$/i.test(role) ? "QA" : "W");
+  // B-P1-2：W 字母徽章退役（14/17 行常量=纯视觉税，桌面 roster 本无字母徽章）；QA 档
+  // 低频高价值保留。PM ✦ 随 B-P2-4 移名称前缀（与黄灯暖标分离，桌面 rr-name 同语言）。
+  const roleBadge = (role: string, pm: boolean) => (pm ? "" : /^(qa|reviewer|验收)$/i.test(role) ? "QA" : "");
+  // A4（W-TEAMTAB）：胶囊滤零+done 剥离——桌面 sidebarbar 批（1105 用户实锤）同款定案：
+  // done 量级碾压活跃态（644 vs 0~15）致分布不可辨；0 值胶囊占坑无信息量且致 4+2 折行。
+  const doneN = lanes ? (lanes.find((l) => l.k === "done")?.n ?? 0) : 0;
+  const hotLanes = lanes ? lanes.filter((l) => l.k !== "done" && l.n > 0) : null;
+  // B-P2-1 泳道语义色：桌面 lane token 直译（tokens.css:38-43 族），零新增 theme 键
+  // （除 blocked 外不动 theme——裁决零新增 token 原则）；冷泳道（规划/待认领）灰蓝。
+  const laneInk = (k: string): string =>
+    k === "claimed" ? c.working
+    : k === "submitted" ? (dark ? "#E08A63" : "#C05B33")
+    : k === "ready_to_install" ? (dark ? "#F0B183" : "#C96F42")
+    : k === "done" ? c.done
+    : (dark ? "#55677F" : "#74879E");
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-      {/* ① 在办概览（板五泳道） */}
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + (snap.taskDoneQueue.length > 0 ? 52 : 0) }} showsVerticalScrollIndicator={false}>
+      {/* ① 在办概览（板五泳道——A4：活跃泳道滤零渲染+done 移区头 ✓N 弱段） */}
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>在办概览{activeN != null ? ` · ${activeN} 在办` : ""}</Text>
+        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>
+          在办概览{activeN != null ? ` · ${activeN} 在办` : ""}{doneN > 0 ? <Text style={{ opacity: 0.85 }}> · ✓{doneN}</Text> : null}
+        </Text>
         {lanes ? (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {lanes.map((l) => (
-              <View key={l.k} style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: withA(c.line, 0.9), backgroundColor: c.panel }}>
-                <Text style={{ color: c.dim, fontSize: 10.5 }}>{l.label} <Text style={{ color: l.k === "done" ? c.faint : c.textStrong, fontWeight: "700" }}>{l.n}</Text></Text>
-              </View>
-            ))}
-          </View>
+          hotLanes!.length > 0 ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {hotLanes!.map((l) => {
+                const ink = laneInk(l.k);
+                return (
+                  <View key={l.k} style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: withA(ink, 0.35), backgroundColor: withA(ink, 0.10) }}>
+                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: ink }} />
+                    <Text style={{ color: c.dim, fontSize: 10.5 }}>{l.label} <Text style={{ color: c.textStrong, fontWeight: "700" }}>{l.n}</Text></Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={{ color: c.faint, fontSize: 11.5 }}>活跃全空{doneN > 0 ? ` · 累计完成 ${doneN}` : ""}</Text>
+          )
         ) : (
-          <Text style={{ color: c.faint, fontSize: 11.5 }}>板未同步 · 深度实时去团队域</Text>
+          /* C10（W-TEAMTAB）：降级态死文案退役——可点跳团队域（复用 onOpenTeam），胶囊形态保布局 */
+          <Pressable onPress={() => onOpenTeam?.()} android_ripple={{ color: c.tintSoft, borderless: false }} style={{ alignSelf: "flex-start", paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: withA(c.line, 0.6) }}>
+            <Text style={{ color: c.dim, fontSize: 11 }}>板未同步 · 点按去团队域 ›</Text>
+          </Pressable>
         )}
       </View>
       {/* ② 成员 roster（行点按直开成员会话） */}
       <View style={{ marginBottom: 16 }}>
         <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>成员编制 · {roster.length} 席 · {running} 在跑</Text>
-        {roster.map((r) => {
+        {rosterSorted.map((r, idx) => {
           const st = r.s?.status;
           const standby = st === "WORKING" && !isRealWorking(r.s); /* #291 待命：灰灯+「待开工」 */
-          const lamp = standby ? c.faint : st === "WORKING" ? c.working : st === "ERROR" ? c.error : st === "WAITING" ? c.working : c.faint;
-          const name = r.nick || r.s?.title || r.sid.slice(0, 8);
+          /* B-P0-1/B-P0-2（W-TEAMTAB 状态灯语义，1019 拍板口径）：
+           * DONE=绿 c.done+opacity 0.75（绿=空闲三源基准：theme.ts 注释/ListScreen/tokens.css；
+           *   17 席大半空闲，降压防喧宾——黄/红/空心环保持唯一强标记）
+           * WAITING=c.blocked 空心环 1.5px（桌面 --st-blocked+base.css 形制——色+形双通道，
+           *   与 WORKING 黄实心分家，原与 WORKING 逐像素同色=状态轴坍缩） */
+          const hollow = st === "WAITING";
+          const lamp = standby ? c.faint : st === "WORKING" ? c.working : st === "ERROR" ? c.error : st === "WAITING" ? c.blocked : st === "DONE" ? c.done : c.faint;
+          const lampOp = st === "DONE" ? 0.75 : st === "WORKING" ? 1 : 0.55;
+          /* C11：未同步行裸 8 位 hex sid→「未同步会话」短标（对用户无意义；可点性差异由
+           * chevron 缺席+整行 0.55 自解释） */
+          const name = r.nick || r.s?.title || (r.s ? r.sid.slice(0, 8) : "未同步会话");
+          /* A5：名称两段着色——代号段（可辨识主键）c.text / 描述段 c.dim（截断缘参差在
+           * A1 定宽后自愈大半；分割符全角「：」） */
+          const sep = name.indexOf("：");
+          /* A3+B-P1-1 状态词降噪：默认留白（灰/绿灯已表达空闲），仅异常态出词+染语义
+           * ink（暗档=灯色，亮档=浅底深变体 ctx*Fill 零新增 token）；DONE 不出词 */
+          const stWord = standby ? "待开工" : st === "WORKING" ? "在跑" : st === "WAITING" ? "待确认" : st === "ERROR" ? "异常" : r.s ? "" : "未同步";
+          const stInk = standby || !st ? c.faint
+            : st === "ERROR" ? (dark ? c.error : c.ctxCriticalFill)
+            : st === "WAITING" ? (dark ? c.blocked : c.ctxAttentionFill)
+            : st === "WORKING" ? (dark ? c.working : c.ctxAttentionFill)
+            : c.faint;
           return (
             <Pressable
               key={r.sid}
               onPress={r.s ? () => onOpenSession?.(r.sid) : undefined}
               disabled={!r.s}
               android_ripple={{ color: c.tintSoft, borderless: false }}
-              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, opacity: r.s ? 1 : 0.55 }}
+              /* A7 hairline 分隔（桌面同语言无斑马）+行距 7→9（C 触达面积 30→~34dp 折中） */
+              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, opacity: r.s ? 1 : 0.55, borderBottomWidth: idx < rosterSorted.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: withA(c.line, 0.5) }}
             >
-              <Text style={{ color: r.pm ? c.brandA : c.faint, fontSize: 10, fontWeight: "700", width: 16 }}>{roleBadge(r.role, r.pm)}</Text>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: lamp, opacity: st === "WORKING" ? 1 : 0.55 }} />
-              <Text style={{ flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 }} numberOfLines={1}>{name}</Text>
-              {r.pct != null ? <Text style={{ color: c.faint, fontSize: 10.5, fontVariant: ["tabular-nums"] }}>{r.pct}%</Text> : null}
-              {r.arts > 0 ? <Text style={{ color: c.faint, fontSize: 10.5 }}>◈{r.arts}</Text> : null}
-              <Text style={{ color: c.faint, fontSize: 10, width: 34, textAlign: "right" }}>{standby ? "待开工" : st ? PM_STATUS_ZH[st] ?? st : "未同步"}</Text>
+              <Text style={{ color: c.faint, fontSize: 10, fontWeight: "700", width: 16 }}>{roleBadge(r.role, r.pm)}</Text>
+              {hollow ? (
+                <View style={{ width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: lamp, backgroundColor: "transparent" }} />
+              ) : (
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: lamp, opacity: lampOp }} />
+              )}
+              <Text style={{ flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 }} numberOfLines={1}>
+                {r.pm ? <Text style={{ color: c.brandA, fontWeight: "700" }}>✦ </Text> : null}
+                <Text>{sep > 0 ? name.slice(0, sep) : name}</Text>
+                {sep > 0 ? <Text style={{ color: c.dim }}>：{name.slice(sep + 1)}</Text> : null}
+              </Text>
+              {/* A1：pct/◈N 定宽右对齐+tabular-nums——右端数字列锯齿根治（名称列 flex:1 是
+                  让位方非病因勿动；pct 升 dim+600 做水位语义档） */}
+              {r.pct != null ? <Text style={{ width: 32, textAlign: "right", color: c.dim, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] }}>{r.pct}%</Text> : null}
+              {r.arts > 0 ? <Text style={{ width: 30, textAlign: "right", color: c.faint, fontSize: 10.5, fontVariant: ["tabular-nums"] }}>◈{r.arts}</Text> : null}
+              <Text style={{ color: stInk, fontSize: 10, fontWeight: "600", width: 34, textAlign: "right" }}>{stWord}</Text>
             </Pressable>
           );
         })}
@@ -2397,7 +2465,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                   {srcMeta}
                   {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
                   {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
-                  {s.cwd && ctxUsed > 0 ? " · " : ""}
+                  {/* C4（W-TEAMTAB）：本行尾部 " · " 已删——分隔职责归尾段头部拼接，双点根除 */}
                 </Text>
                 <Text style={[d.sub, { flexShrink: 0 }]}>{" · "}{fmtLastActive(s.updated_at || s.started_at)}</Text>
               </>
@@ -2438,7 +2506,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                 hitSlop={6}
                 accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
               >
-                <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
+                <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考过程</Text>
               </Pressable>
             </View>
           </View>
