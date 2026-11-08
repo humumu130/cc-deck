@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { FAB_BAND } from "../fab-band"; // p2batch5 件②：浮钮让位带常量（原 52 魔法数）
 import { Animated, Dimensions, Image, InteractionManager, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native"
 import { HEAD_BASE } from "../head-unify";
 import { EngineIcon } from "../engine-icon"; // #239 W-DETAILAVATAR：详情 head 头像=列表卡同款品牌图标
@@ -110,12 +111,12 @@ export function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: 
     : k === "submitted" ? (dark ? "#E08A63" : "#C05B33")
     : k === "ready_to_install" ? (dark ? "#F0B183" : "#C96F42")
     : k === "done" ? c.done
-    : (dark ? "#55677F" : "#74879E");
+    : (dark ? "#61748E" : "#74879E");
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + (snap.taskDoneQueue.length > 0 ? 52 : 0) }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + (snap.taskDoneQueue.length > 0 ? FAB_BAND : 0) }} showsVerticalScrollIndicator={false}>
       {/* ① 在办概览（板五泳道——A4：活跃泳道滤零渲染+done 移区头 ✓N 弱段） */}
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>
+        <Text style={{ color: c.dim, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>
           在办概览{activeN != null ? ` · ${activeN} 在办` : ""}{doneN > 0 ? <Text style={{ opacity: 0.85 }}> · ✓{doneN}</Text> : null}
         </Text>
         {lanes ? (
@@ -143,7 +144,7 @@ export function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: 
       </View>
       {/* ② 成员 roster（行点按直开成员会话） */}
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>成员编制 · {roster.length} 席 · {running} 在跑</Text>
+        <Text style={{ color: c.dim, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>成员编制 · {roster.length} 席 · {running} 在跑</Text>
         {rosterSorted.map((r, idx) => {
           const st = r.s?.status;
           const standby = st === "WORKING" && !isRealWorking(r.s); /* #291 待命：灰灯+「待开工」 */
@@ -176,11 +177,11 @@ export function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: 
               disabled={!r.s}
               android_ripple={{ color: c.tintSoft, borderless: false }}
               /* A7 hairline 分隔（桌面同语言无斑马）+行距 7→9（C 触达面积 30→~34dp 折中） */
-              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, opacity: r.s ? 1 : 0.55, borderBottomWidth: idx < rosterSorted.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: withA(c.line, 0.5) }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, opacity: r.s ? 1 : 0.7, borderBottomWidth: idx < rosterSorted.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: withA(c.line, 0.5) }}
             >
               <Text style={{ color: c.faint, fontSize: 10, fontWeight: "700", width: 16 }}>{roleBadge(r.role, r.pm)}</Text>
               {hollow ? (
-                <View style={{ width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: lamp, backgroundColor: "transparent" }} />
+                <View style={{ width: 8, height: 8, borderRadius: 4.5, borderWidth: 1.5, borderColor: lamp, backgroundColor: "transparent" }} />
               ) : (
                 <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: lamp, opacity: lampOp }} />
               )}
@@ -191,16 +192,16 @@ export function TeamPane({ team, sessions, boards, onOpenSession, onOpenTeam }: 
               </Text>
               {/* A1：pct/◈N 定宽右对齐+tabular-nums——右端数字列锯齿根治（名称列 flex:1 是
                   让位方非病因勿动；pct 升 dim+600 做水位语义档） */}
-              {r.pct != null ? <Text style={{ width: 32, textAlign: "right", color: c.dim, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] }}>{r.pct}%</Text> : null}
-              {r.arts > 0 ? <Text style={{ width: 30, textAlign: "right", color: c.faint, fontSize: 10.5, fontVariant: ["tabular-nums"] }}>◈{r.arts}</Text> : null}
-              <Text style={{ color: stInk, fontSize: 10, fontWeight: "600", width: 34, textAlign: "right" }}>{stWord}</Text>
+              {r.pct != null ? <Text allowFontScaling={false} style={{ width: 32, textAlign: "right", color: c.dim, fontSize: 10.5, fontWeight: "600", fontVariant: ["tabular-nums"] }}>{r.pct}%</Text> : null}
+              {r.arts > 0 ? <Text allowFontScaling={false} style={{ width: 30, textAlign: "right", color: c.faint, fontSize: 10.5, fontVariant: ["tabular-nums"] }}>◈{r.arts}</Text> : null}
+              <Text allowFontScaling={false} style={{ color: stInk, fontSize: 10, fontWeight: "600", width: 34, textAlign: "right" }}>{stWord}</Text>
             </Pressable>
           );
         })}
       </View>
       {/* ③ 输出物计数汇总 */}
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ color: c.faint, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>输出物</Text>
+        <Text style={{ color: c.dim, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6 }}>输出物</Text>
         <Text style={{ color: c.dim, fontSize: 12 }}>{artsTotal > 0 ? `共 ${artsTotal} 件 · ${artsPeople} 人有产出` : "暂无产出"}</Text>
       </View>
       {/* ④ 跳团队域 */}
@@ -2961,7 +2962,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         // G5（冲刺审查）：任务完成汇报悬浮钮（App.tsx TaskDoneFloat，详情页贴命令栏
         // 上方 right:12）非空时末条正文右下角被遮——滚动内容条件让位 +52（浮钮形态
         // 用户已拍板 #17 勿改，只让内容让路；空态居中提示不受浮钮影响不补）
-        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom + (snap.taskDoneQueue.length > 0 ? 52 : 0), ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
+        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom + (snap.taskDoneQueue.length > 0 ? FAB_BAND : 0), ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
         onTouchStart={() => { touching.current = true; }}
         onTouchEnd={() => { touching.current = false; }}
         onTouchCancel={() => { touching.current = false; }}

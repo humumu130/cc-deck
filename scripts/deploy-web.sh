@@ -240,6 +240,14 @@ if [ "$SKIP_CF" != "1" ]; then
   # FlClash 死窗口必 fetch failed；bin 固定/回落逻辑封装内已管
   ( cd cloudflare && ../scripts/wrangler-remote.sh deploy ) \
     || { echo "❌ wrangler deploy 失败（wrangler-remote.sh 双路均败：查 FlClash 7890/CF 登录态）"; exit 1; }
+  # p2batch5 件③（1108 发版实锤·S4「绿但死」拦截）：workerd 缺二进制形态=wrangler 退出
+  # 码 0 但部署未真成（✅ 照打靠 V1-d 后置锚才拦住）——退出码链拦不住「绿但死」，追加
+  # 活体校验：deploy 后 wrangler --version 版本号回显（CLI 本体+依赖链完整方可产出），
+  # 空/无版本形态即 fail。
+  S4_VER="$( cd cloudflare && ../scripts/wrangler-remote.sh --version 2>/dev/null | tail -1 )"
+  echo "$S4_VER" | grep -qE "wrangler [0-9]" \
+    || { echo "❌ S4 活体校验失败（wrangler --version 回显「$S4_VER」非版本形态——CLI/依赖链残缺，部署真实性存疑）"; exit 1; }
+  echo "   S4 活体: $S4_VER"
   ok "面④ CF 部署完成"
 else
   echo "⏭️  S4 跳过（--skip-cf）"

@@ -166,7 +166,7 @@ function TaskDoneFloat({
   // C2（W-TEAMTAB 三路裁决）：详情页落位 74→114（键盘支 80→120 同步 +40）——恒抬高
   // 让出 dockWork「■ 停止」制动钮 26dp 带（WORKING 期唯一控制路径不再被浮钮遮挡；非
   // WORKING 时 FAB 略高无副作用——止血案，槽位化根治另立）
-  const bottom = kbH > 0 ? kbH + (isDetail ? 120 : 10) : insets.bottom + (isDetail ? 114 : 124);
+  const bottom = kbH > 0 ? kbH + (isDetail ? DETAIL_BOTTOM_KB : 10) : insets.bottom + (isDetail ? DETAIL_BOTTOM_BASE : 124);
   return (
     <View style={st.tdWrap} pointerEvents="box-none">
       {expanded ? (
