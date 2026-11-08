@@ -16128,8 +16128,10 @@ var DISPATCH_ENTRY_SCHEMA = {
   // domstep1（域图 I2 入口幂等）：Trigger 键（trigger-key.ts 单点生成；旧行缺省宽容）
   pr_url: { type: "string" },
   // prchip：PR 互审链交付上报（orgAction pr-report 写入，快照值）
-  pr_state: { type: "enum", enumTable: PR_STATES }
+  pr_state: { type: "enum", enumTable: PR_STATES },
   // prchip：PR 状态快照（词表 PR_STATES）
+  no_pr: { type: "boolean" }
+  // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
 };
 function applyOrgChange(kind, payload) {
   if (!isObj(payload)) return { ok: false, error: "\u8F7D\u8377\u5FC5\u987B\u662F\u5BF9\u8C61" };
@@ -16548,6 +16550,25 @@ function setDispatchClosedHook(hook) {
   dispatchClosedHook = hook;
 }
 function appendDispatch(e, dir) {
+  if ((e.status === "done" || e.status === "failed") && e.no_pr === void 0) {
+    try {
+      const raw = readFileSync14(dispatchLogPath(dir ?? orgDir()), "utf-8").split("\n");
+      for (let i = raw.length - 1; i >= 0; i--) {
+        const t = raw[i].trim();
+        if (!t) continue;
+        try {
+          const r = JSON.parse(t);
+          if (r.id !== e.id) continue;
+          if (r.status === "dispatched") {
+            if (r.no_pr === true) e.no_pr = true;
+            break;
+          }
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
   if (e.status === "failed" && !e.failure_reason) e.failure_reason = classifyDispatchFailure(e.receipt ?? "");
   if ((e.status === "done" || e.status === "failed") && !e.run_ref && e.drill !== true) {
     const ref = archiveDispatchTerminal(e, dir ?? orgDir());
@@ -18792,7 +18813,7 @@ function removeBoardEntry(gid, entryId, dir) {
   if (!saveBoardFile(w2.board, dir, { action: "remove", entry_id: entryId, ...jPrevEntry ? { prev: sideOf(jPrevEntry) } : {} })) return { ok: false, error: "\u677F\u5199\u5165\u5931\u8D25" };
   return { ok: true };
 }
-function moveEntryByDispatch(gid, dispatchId, to2, dir) {
+function moveEntryByDispatch(gid, dispatchId, to2, dir, journalAction) {
   return withOrgWriteTx(dir, () => {
     const w2 = writableBoard(gid, dir);
     if (!w2.ok) return false;
@@ -18810,11 +18831,12 @@ function moveEntryByDispatch(gid, dispatchId, to2, dir) {
       console.error(`[projects] dispatch-move \u62D2\u5199\uFF1A${chk.error}\uFF08gid=${gid} dispatch=${dispatchId}\uFF09`);
       return false;
     }
-    return saveBoardFile(w2.board, dir, { action: "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
+    return saveBoardFile(w2.board, dir, { action: journalAction ?? "dispatch-move", entry_id: e.id, prev: jPrev, next: sideOf(e) });
   });
 }
 function convergeBoardsWithDispatchLog(dir, onAudit, opts) {
   const doneAtById = /* @__PURE__ */ new Map();
+  const noPrById = /* @__PURE__ */ new Map();
   const gatedById = /* @__PURE__ */ new Set();
   for (const row of readDispatchLog(dir, 2e4)) {
     if (row.status !== "done" || !row.id) continue;
@@ -18825,6 +18847,7 @@ function convergeBoardsWithDispatchLog(dir, onAudit, opts) {
     }
     gatedById.delete(row.id);
     doneAtById.set(row.id, Number(row.ts) || 0);
+    noPrById.set(row.id, row.no_pr === true);
   }
   if (!doneAtById.size) return { moved: 0, skipped: 0, wouldClose: [], receiptGated: [] };
   let moved = 0, skipped = 0;
@@ -18839,7 +18862,30 @@ function convergeBoardsWithDispatchLog(dir, onAudit, opts) {
     }
     for (const entry of board.entries) {
       if (entry.status === "done" || !entry.dispatch_id) continue;
-      if (entry.status === "submitted" || entry.status === "ready_to_install" || entry.status === "planned") continue;
+      if (entry.status === "submitted") {
+        if (gatedById.has(entry.dispatch_id)) {
+          receiptGated.push({ gid: g2.id, entryId: entry.id, dispatchId: entry.dispatch_id });
+          skipped += 1;
+          continue;
+        }
+        const doneAt2 = doneAtById.get(entry.dispatch_id);
+        if (doneAt2 !== void 0 && noPrById.get(entry.dispatch_id) === true && !entry.hold && Date.now() - Math.max(doneAt2, Number(entry.updated_at || 0)) > 4 * 36e5) {
+          const trSeq = entry.transitions || [];
+          let lastSettled = -1;
+          for (let i = 0; i < trSeq.length; i++) if (trSeq[i] && (trSeq[i].status === "done" || trSeq[i].status === "submitted")) lastSettled = i;
+          const reopened = lastSettled >= 0 && trSeq.slice(lastSettled + 1).some((t) => t && t.status === "backlog");
+          if (!reopened) {
+            if (opts?.dryRun) {
+              wouldClose.push({ gid: g2.id, entryId: entry.id, text: String(entry.text || entry.id).slice(0, 40) });
+            } else if (moveEntryByDispatch(g2.id, entry.dispatch_id, "done", dir, "auto-recon-review")) {
+              moved++;
+              onAudit?.("board-force-close", `submitted \u515C\u5E95\u7FFB\uFF08\u65E0 PR \u9762+dispatch done \u8D85 4h\uFF09\uFF1A${entry.id}\uFF08dispatch ${String(entry.dispatch_id).slice(0, 8)}\u2014\u2014\u5BA1\u67E5\u5355/\u65E0 PR \u5355\u7EC8\u6001\u8865\u8DEF\uFF0CR4\uFF09`);
+            }
+          }
+        }
+        continue;
+      }
+      if (entry.status === "ready_to_install" || entry.status === "planned") continue;
       if (gatedById.has(entry.dispatch_id)) {
         receiptGated.push({ gid: g2.id, entryId: entry.id, dispatchId: entry.dispatch_id });
         skipped += 1;
@@ -62494,16 +62540,24 @@ ${lines.join("\n")}
     if (readCollabMode(this.cfg.dataDir) !== "no-leader") return this.leaderId;
     return null;
   }
-  /** R1-B-F2 复合判活（W-SEATALIVE 刀1 扩三层）："alive"=pid 活且绑定一致（或会话
-   * 不在册的外部冷窗）/"stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）
-   * /"between-turns"=pid 死但回合活跃 TTL 内（external CLI 每回合结束进程退出=正常
-   * 生命周期 #49——回合间隙非死，1106 断档第四现：3h 窗内 worker_done×5 全
-   * no_pm_target、席位被清+第三张任命卡，根因即此判死）/"dead"=pid 死且超 TTL。
+  /** R1-B-F2 复合判活（W-SEATALIVE 刀1 扩三层；W-PMAPPOINT-GAP-R1 pid=0 辖区扩达）：
+   * "alive"=pid 活且绑定一致（或会话不在册的外部冷窗）**或 pid=0 帧在活跃窗内**
+   * /"stale"=pid 活但在册会话的 cli_pid 已换代（pid 回收占位假阳）
+   * /"between-turns"=pid 死**或 pid=0 帧龄超活跃窗**但回合活跃 TTL 内（external CLI
+   * 每回合结束进程退出=正常生命周期 #49；managed SDK 会话 cron 周期回合退出同形态
+   * ——1107 pmappoint-gap A 审实锤：managed cli_pid 恒 0，回合间歇中位 18min 常态超
+   * 15min 活跃窗，「活跃提、间歇消」循环三整轮；回合间隙非死，1106 断档第四现同根）
+   * /"dead"=pid 死且超 TTL（pid=0：帧龄超 TTL 或无帧）。
    * between-turns **守位不清档**；stale/dead 清档。TTL=CCR_SEAT_TURN_GAP_MIN 缺省
-   * 30min（回合间隙常态上界；活跃度凭证与 duty-feed 同源 events.ndjson）。 */
+   * 30min（回合间隙常态上界——cron 23min 周期形态间歇上界 ≈23min<30min，卡在全
+   * 周期内存活；活跃度凭证与 duty-feed 同源 events.ndjson）。 */
   pmOverrideLiveness(ov2) {
     if (!(ov2.cli_pid > 0)) {
-      return sessionActiveByEvents(this.cfg.dataDir, ov2.session_id) ? "alive" : "dead";
+      if (sessionActiveByEvents(this.cfg.dataDir, ov2.session_id)) return "alive";
+      const at0 = lastFrameAtFromEvents(this.cfg.dataDir, ov2.session_id);
+      const gapMin0 = Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30;
+      if (at0 !== null && Date.now() - at0 <= gapMin0 * 6e4) return "between-turns";
+      return "dead";
     }
     try {
       process.kill(ov2.cli_pid, 0);
@@ -62582,17 +62636,8 @@ ${lines.join("\n")}
       for (const c of listPendingConfirms().filter((x) => x.kind === "pm-appoint" && x.status === "pending")) {
         const sid = typeof c.payload.sid === "string" ? c.payload.sid : "";
         const pid = Number(c.payload.cli_pid) || 0;
-        let alive2 = !!sid && pid > 0;
-        if (alive2) {
-          try {
-            process.kill(pid, 0);
-          } catch {
-            alive2 = false;
-          }
-        } else if (sid) {
-          alive2 = sessionActiveByEvents(this.cfg.dataDir, sid);
-        }
-        if (!alive2) {
+        const liveness = sid ? this.pmOverrideLiveness({ cli_pid: pid, session_id: sid }) : "dead";
+        if (liveness === "dead" || liveness === "stale") {
           decideConfirm(c.id, false, "auto:pm-dead");
           clearDutyAppoint(sid);
           this.emitChainAudit("pm-appoint-auto-dead", `session=${sid.slice(0, 8)} pid=${pid} \u5F85\u51B3\u671F\u95F4\u9000\u51FA\u2014\u2014auto \u6D88\u5361\uFF08\u4E0D\u5165\u5426\u51B3\u6863\uFF0C\u590D\u6D3B\u53EF\u518D\u63D0\u540D\uFF09`);
@@ -63485,7 +63530,9 @@ ${lines.join("\n")}
           ...typeof payload.redispatch_of === "string" && payload.redispatch_of.trim() ? { redispatch_of: payload.redispatch_of.trim() } : {},
           ...typeof payload.worktree === "string" && payload.worktree.trim() ? { worktree: payload.worktree.trim() } : {},
           // P1-1：编排链同透传（认领边写锁）
-          ...typeof payload.slug === "string" && payload.slug.trim() ? { slug: payload.slug.trim() } : {}
+          ...typeof payload.slug === "string" && payload.slug.trim() ? { slug: payload.slug.trim() } : {},
+          ...payload.no_pr === true ? { no_pr: true } : {}
+          // W-CARDLIFE-R4-R1：编排面同透传（与直连 dispatch 口同字段）
         });
         const dr3 = r2.ok ? r2 : void 0;
         this.auditOrgCommand(
@@ -64173,8 +64220,10 @@ ${lines.join("\n")}
             // W-PRREVIEW：显式定席（review-route 路由结果落席）
             exclude_sessions: Array.isArray(p.exclude_sessions) ? p.exclude_sessions.filter((x) => typeof x === "string" && !!x) : void 0,
             // W-PRREVIEW：选席排除集（互审避交付者/同单关联会话）
-            review_only: p.review_only === true ? true : void 0
+            review_only: p.review_only === true ? true : void 0,
             // W-REVIEWSEAT：审查单标记（评审席只读守卫+纪律注入）
+            no_pr: p.no_pr === true ? true : void 0
+            // W-CARDLIFE-R4-R1：--no-pr 派单面打标（PM leader-dispatch 透传；dispatched 行落值→converge 兜底白名单）
           });
         }
         // W-PRREVIEW（期一④ PR 互审，1104 拍板）：互审员路由查询——只路由零派发零
@@ -65780,7 +65829,7 @@ ${lines.join("\n")}
       const clash = withStorageTx(void 0, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
           return null;
         }
         return c;
@@ -65791,7 +65840,7 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId };
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
     }
     archiveDispatchPrompt(dispatchId, dispatchPrompt, { tier, ...input.title ? { title: input.title } : {}, ...veteran ? { target: veteran } : {} });
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
@@ -73564,7 +73613,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.5";
+  const verRelay = "0.7.1-test.6";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
