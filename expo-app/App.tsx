@@ -5,6 +5,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { store, useRelay, type ServerEntry } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
+import { DETAIL_BOTTOM_BASE, DETAIL_BOTTOM_KB } from "./src/fab-band"; // p2batch5 件②（R1 补）：详情页浮钮落位常量——原批换 :169 引用时漏本 import（tsc 2 错根治）
 import type { DetailBackHandle } from "./src/screens/DetailScreen";
 import { projectNotifications, type SessionState } from "./src/protocol";
 import { ensureNotifPermission, fgStatsKey, fgStatsTitle, fgSupported, markPermHintShown, notifPermissionState, notifyAlert, openNotifSettings, permHintActive, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
