@@ -179,6 +179,7 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   trigger_key: { type: "string" }, // domstep1（域图 I2 入口幂等）：Trigger 键（trigger-key.ts 单点生成；旧行缺省宽容）
   pr_url: { type: "string" }, // prchip：PR 互审链交付上报（orgAction pr-report 写入，快照值）
   pr_state: { type: "enum", enumTable: PR_STATES }, // prchip：PR 状态快照（词表 PR_STATES）
+  exclude_sessions: { type: "string-array" }, // W-REVEXCL（1109 二现治本）：选席排除集（审查单防派回实施者本人）——派单受理时落 dispatched 行（CLI --exclude/--review-of → payload → dispatchWorker；可审计：审后可查该单排除了谁）
   no_pr: { type: "boolean" }, // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
 };
 
