@@ -95,6 +95,12 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 状态词·走秒·token·当前操作），行高恒定 15，动作文本 flex 收缩单行截断——
   // 原头部两行制（dock/dockRow/dockStateT/dockElapsed/dockTok/dockTask/dockAct）退役
   dockWork: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 12, marginBottom: 6, paddingLeft: 0, paddingVertical: 4 }, /* W-DETAIL2 件一：WORKING 主状态行（LiveStatusLine 自带转轮+计时） */
+  // W-SUBDOCK（1109 用户实锤）：子 Agent 盒吸附底部栈形态——迁出消息流后脱离
+  // liveRow 描边盒（底部栈自带 overlay 底），对齐 dockWork 节奏（marginHorizontal 12/
+  // marginTop 负 4 贴主状态行 marginBottom 6=净 2dp 分层）；折叠态单行 ≤40dp（agHead
+  // 自带 ~22dp ✓）；展开态条目区 maxHeight 200 内滚（dockAgScroll）。
+  dockAg: { marginHorizontal: 12, marginTop: -4, marginBottom: 4 },
+  dockAgScroll: { maxHeight: 200 },
   dockLine: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginBottom: 6, borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 5 },
   dockLineState: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
   dockLineMeta: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
@@ -117,11 +123,7 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // marginBottom 10 承接原 agBox 的底部间距（与 pendWrap marginTop 8 叠加 18）。含子
   // Agent 的路径间距与旧版一致；「WORKING 无子 Agent + 排队消息」组合由旧 8 变 18——
   // 各路径底部节奏统一为 18，有意为之（审查确认非功能问题）
-  liveRow: {
-    flexDirection: "column",
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginTop: 10, marginBottom: 10,
-  },
+
   liveMain: { flexDirection: "row", alignItems: "center", gap: 8 },
   pendWrap: { flexDirection: "column", gap: 6, marginTop: 8, alignItems: "flex-end" },
   pendRow: {

@@ -3021,71 +3021,6 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             异质分离。渲染条件放宽为 WORKING 或有子 Agent 条目：非 WORKING 但后台仍在跑/
             刚收尾定格时，盒形态保持、仅渲染子 Agent 部分（回合结束后仍可展开查看 ✓ 定格）。
             排队注入消息在盒下方，CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
-        {/* W-DETAIL2 件一：WORKING 主状态行（你在做什么…+计时）迁输入栏上方固定吸附
-            （原在对话流内随内容滚动——用户 1018 实锤）；本盒只留并行子 Agent 展开块 */}
-        {(s?.subagents?.length ?? 0) > 0 ? (
-          <View style={d.liveRow}>
-            {/* 并行子 Agent 状态（#142 三轮 + #186 并入/紧凑化）：标题行即折叠开关
-                （「subAgent + 总数」+ 尾部箭头，总数保留、无「运行中」字样，走帧星只属于
-                具体条目）；条目行相对标题行缩进形成层级；agCollapsed 模块级记忆；条目行首
-                走帧星（SPIN_FRAMES 随 agTick 1s 重渲换帧，#148 铁律低频步进不用 Animated）、
-                完成态换 ✓ 定格；ended_at>0 才算结束（防 ended_at:0 假运行冻结读秒）。
-                #13 巡检：超 4 条溢出提示；#186 字号 12/11/11→11/10.5/10、行距收紧 */}
-            {(s?.subagents?.length ?? 0) > 0 ? (
-              <View style={d.agBox}>
-                {(() => {
-                  const all = s!.subagents!;
-                  const shown = all.slice(-4);
-                  const more = all.length - shown.length;
-                  const frame = SPIN_FRAMES[Math.floor(Date.now() / 1000) % SPIN_FRAMES.length];
-                  return (
-                    <>
-                      <Pressable
-                        style={d.agHead}
-                        hitSlop={{ top: 6, bottom: 4, left: 0, right: 0 }}
-                        android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                        onPress={() => { agCollapsed = !agCollapsed; setAgOpen(!agCollapsed); }}
-                        accessibilityLabel={`subAgent ${all.length} 个，点按${agOpen ? "折叠" : "展开"}`}
-                      >
-                        <Text style={d.agHeadT}>
-                          subAgent {all.length} {agOpen ? "▾" : "▸"}
-                        </Text>
-                      </Pressable>
-                      {agOpen ? (
-                        <>
-                          {shown.map((a) => {
-                            const run = !((a.ended_at ?? 0) > 0);
-                            const ms = a.started_at > 0 ? Math.max(0, ((a.ended_at ?? 0) > 0 ? a.ended_at! : Date.now()) - a.started_at) : 0;
-                            const dur = !(a.started_at > 0) ? "" : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
-                            return (
-                              <View key={a.id} style={d.agRow}>
-                                {run ? (
-                                  <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
-                                ) : (
-                                  <Text style={d.agDone}>✓</Text>
-                                )}
-                                <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
-                                  {a.desc}
-                                </Text>
-                                {a.act ? (
-                                  <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
-                                    {a.act}
-                                  </Text>
-                                ) : null}
-                                <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
-                              </View>
-                            );
-                          })}
-                          {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
-                        </>
-                      ) : null}
-                    </>
-                  );
-                })()}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
         {(s.pending_inputs?.length ?? 0) > 0 ? (
           <View style={d.pendWrap}>
             {s.pending_inputs!.map((p, i) => (
@@ -3151,6 +3086,78 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             >
               <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
             </Pressable>
+          </View>
+        ) : null}
+        {/* W-SUBDOCK（1109 用户实锤「子 Agent 窗口不应随消息上下移动，应吸附状态栏
+            上下且紧凑」——1018 主状态行迁位的同构第二现）：子 Agent 盒整块迁出
+            ScrollView 消息流，吸附底部栈=dockWork 主状态行正下方/dockLine 与审批
+            横幅之上（PM 定案状态栏下方案——总括主行与分支细节贴邻，桌面
+            #dockActivityRow 单行制同构）。键盘让位随底部栈整体（root paddingBottom
+            kb 收缩式——W-DETAIL2 同款机制，不自造让位）。渲染条件原样：有
+            subagents 即渲（WORKING 或非 WORKING 收尾定格均可展开 ✓；非 WORKING
+            无 dockWork 行时盒单独吸附输入区上沿不悬空）。紧凑化：折叠态单行
+            ≤40dp；展开态条目区 maxHeight 200 内滚（超 4 条溢出行原样）。 */}
+        {(s?.subagents?.length ?? 0) > 0 ? (
+          <View style={d.dockAg}>
+            {/* 并行子 Agent 状态（#142 三轮 + #186 并入/紧凑化）：标题行即折叠开关
+                （「subAgent + 总数」+ 尾部箭头，总数保留、无「运行中」字样，走帧星只属于
+                具体条目）；条目行相对标题行缩进形成层级；agCollapsed 模块级记忆；条目行首
+                走帧星（SPIN_FRAMES 随 agTick 1s 重渲换帧，#148 铁律低频步进不用 Animated）、
+                完成态换 ✓ 定格；ended_at>0 才算结束（防 ended_at:0 假运行冻结读秒）。
+                #13 巡检：超 4 条溢出提示；#186 字号 12/11/11→11/10.5/10、行距收紧 */}
+            {(s?.subagents?.length ?? 0) > 0 ? (
+              <View style={d.agBox}>
+                {(() => {
+                  const all = s!.subagents!;
+                  const shown = all.slice(-4);
+                  const more = all.length - shown.length;
+                  const frame = SPIN_FRAMES[Math.floor(Date.now() / 1000) % SPIN_FRAMES.length];
+                  return (
+                    <>
+                      <Pressable
+                        style={d.agHead}
+                        hitSlop={{ top: 6, bottom: 4, left: 0, right: 0 }}
+                        android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                        onPress={() => { agCollapsed = !agCollapsed; setAgOpen(!agCollapsed); }}
+                        accessibilityLabel={`subAgent ${all.length} 个，点按${agOpen ? "折叠" : "展开"}`}
+                      >
+                        <Text style={d.agHeadT}>
+                          subAgent {all.length} {agOpen ? "▾" : "▸"}
+                        </Text>
+                      </Pressable>
+                      {agOpen ? (
+                        <ScrollView style={d.dockAgScroll} nestedScrollEnabled>
+                          {shown.map((a) => {
+                            const run = !((a.ended_at ?? 0) > 0);
+                            const ms = a.started_at > 0 ? Math.max(0, ((a.ended_at ?? 0) > 0 ? a.ended_at! : Date.now()) - a.started_at) : 0;
+                            const dur = !(a.started_at > 0) ? "" : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+                            return (
+                              <View key={a.id} style={d.agRow}>
+                                {run ? (
+                                  <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
+                                ) : (
+                                  <Text style={d.agDone}>✓</Text>
+                                )}
+                                <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
+                                  {a.desc}
+                                </Text>
+                                {a.act ? (
+                                  <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
+                                    {a.act}
+                                  </Text>
+                                ) : null}
+                                <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
+                              </View>
+                            );
+                          })}
+                          {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
+                        </ScrollView>
+                      ) : null}
+                    </>
+                  );
+                })()}
+              </View>
+            ) : null}
           </View>
         ) : null}
         {/* #218 件三：WORKING 态 dockLine 不再渲染——与 dockWork 黄行（执行摘要+走秒+停止钮）
