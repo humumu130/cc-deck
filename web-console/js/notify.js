@@ -67,7 +67,7 @@
                 // v?X.Y.Z 通道号、b3xxxx 短 id 模式包 <code class="nid">（mono+浅底），标题与摘要共用
                 const monoWrap = (s) => String(s ?? "")
                   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-                  .replace(/(\b[0-9a-f]{6,64}\b|\bv?\d+\.\d+\.\d+(?:-[\w.]+)?\b|\bw-[a-z0-9-]{2,24}\b)/g, '<code class="nid">$1</code>');
+                  .replace(/(\b[0-9a-f]{6,64}\b|\bv?\d+\.\d+\.\d+(?:[-\w.]+)?\b|\bw-[a-z0-9-]{2,24}\b)/g, '<code class="nid">$1</code>'); // W-PATROLFIX P1-2：通道段 [-\w.]+（含连字符）——原 [\w.]+ 停在第二连字符，`v0.7.0-test.97-nova` 被拆成 nid(`v0.7.0-test.97`)+裸文本(`-nova`)，断行恰落在裸连字符处=版本号拦腰断形态根因；整串入 nid 后 nowrap+ellipsis 承载（.nid 三连已有）
                 // 1101 A2 时间单轨：统一 11px 相对时间（≤60min 分钟 / <24h 小时 / 更早 M月D日）
                 // ——正文内联时间退役（旧 sub 拼 relTime 双轨）
                 const notifyRelTime = window.__ccDeck005NotifyRelTime = (ts) => {
