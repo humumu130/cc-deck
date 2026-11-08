@@ -38,7 +38,8 @@
     "deploy": "npx expo export -p web && wrangler deploy",
     "preview": "npx expo export -p web && wrangler dev",
     "test:mobnotifylag": "node --import tsx scripts/test-mobnotifylag.ts",
-    "test:wave1": "node --import tsx scripts/test-wave1.ts"
+    "test:wave1": "node --import tsx scripts/test-wave1.ts",
+    "test:dockidle": "node --import tsx scripts/test-dockidle.ts"
   },
   "private": true
 }

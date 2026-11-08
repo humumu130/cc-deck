@@ -29,8 +29,10 @@ import { store, useRelay } from "../store";
 import { artPoolGate } from "../artpool";
 import { markEchoState, pushPending, reconcilePending, type PendingEcho } from "../pending-echo";
 import { fromB64, toB64 } from "../e2e";
-// E3a：hasActivityCapability 为值导入（E1 落库面，只消费不修改）；其余仍纯类型
-import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type ProjectGroup, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
+// E3a：hasActivityCapability（值导入）随 dockModelOf 迁驻 status-dock（W-DOCKIDLE，
+// 此文件不再直用）；protocol 其余仍纯类型
+import type { ArtifactItem, CronTask, LogEntry, ProjectGroup, SessionState, SessionStatus, TodoItem, WaitingPayload } from "../protocol";
+import { closingBarOf, DONE_TAIL_MS, dockLineVisible, dockModelOf } from "../status-dock";
 import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
@@ -489,62 +491,11 @@ export function dedupeWaitingBars(payloads: (WaitingPayload | null | undefined)[
   return out;
 }
 
-/** done/error \u6536\u53E3\u6761\uFF1AERROR \u26A0 \u5E38\u9A7B\uFF08\u5BF9\u9F50\u65E2\u6709\u72B6\u6001\u6761\u8BED\u4E49\uFF09\uFF1BDONE \u2713 \u53EA\u5728\u56DE\u5408\u6536\u5C3E
- * \u5C3E\u7A97\u5185\u663E\u793A\uFF08activity.state=DONE \u843D\u5B9A\u540E DONE_TAIL_MS \u5185\uFF09\u2014\u2014DONE \u662F\u4F1A\u8BDD\u9759\u606F\u6001\uFF0C
- * \u5E38\u9A7B\u6536\u53E3\u6761\u4F1A\u7ED9\u6BCF\u4E2A\u5386\u53F2\u4F1A\u8BDD\u90FD\u7CCA\u4E00\u6761\uFF1B\u5C3E\u7A97\u5373\u300C\u672C\u8F6E\u521A\u6536\u53E3\u300D\u8BED\u4E49\uFF0C\u8FC7\u7A97\u81EA\u9690 */
-export const DONE_TAIL_MS = 8000;
-export type ClosingBar = { kind: "done" | "error"; text: string };
-export function closingBarOf(s: SessionState | null | undefined, now: number): ClosingBar | null {
-  if (!s) return null;
-  if (s.status === "ERROR") return { kind: "error", text: s.last_error || "\u51FA\u9519\u4E86" };
-  if (s.status === "DONE" && s.activity?.state === "DONE" && typeof s.activity.updated_at === "number") {
-    const age = now - s.activity.updated_at;
-    if (age >= 0 && age <= DONE_TAIL_MS) return { kind: "done", text: "\u672C\u8F6E\u5DF2\u5B8C\u6210" };
-  }
-  return null;
-}
-
-// \u56DB\u6001\u56FE\u6807\uFF1A\u4E0E\u8272\u53CC\u901A\u9053\u533A\u5206\uFF08\u2736\u25C9\u2713\u26A0 + working/waiting/done/error \u56DB\u4E3B\u9898\u8272\uFF09\uFF0C\u4E0D\u5F15\u65B0\u4F9D\u8D56
-const DOCK_ICONS: Record<string, string> = { WORKING: "\u2736", WAITING: "\u25C9", DONE: "\u2713", ERROR: "\u26A0" };
-
-export interface DockModel {
-  state: SessionStatus;
-  icon: string;
-  summary?: string;   // \u4EFB\u52A1\u6458\u8981\uFF08task_summary.text\uFF09
-  actKind?: string;   // \u5F53\u524D\u6D3B\u52A8 kind
-  actText?: string;
-  actTool?: string;
-  elapsedMs?: number;
-}
-
-/**
- * \u5934\u90E8\u6D3B\u52A8\u8231\u6295\u5F71\uFF08B0 StatusDockState \u53EA\u8BFB\u6D88\u8D39\uFF09\uFF1A
- * - activity \u7F3A\u5931 \u2192 null\uFF08\u6574\u8231\u4E0D\u6E32\u67D3\uFF0C\u65E0\u5047\u300C\u7A7A\u95F2\u300D\uFF09
- * - native_status \u80FD\u529B\u5173 \u2192 null\uFF08\u6838\u5FC3\u80FD\u529B\u4E0D\u5728\u6574\u8231\u4E0D\u6E32\u67D3\uFF1Blegacy \u5F52\u4E00\u5316\u80FD\u529B\u5168\u5173\u540C\u6B64\uFF09
- * - \u4EFB\u52A1\u6458\u8981/\u5F53\u524D\u6D3B\u52A8\u6309 operation_summary\u3001\u8017\u65F6\u6309 native_elapsed \u5404\u81EA\u95E8\u63A7\uFF0C\u5B57\u6BB5
- *   \u7F3A\u7701\u4E0D\u51FA\u884C\uFF08\u4E0D\u51FA\u5047 0 / \u5047\u7A7A\u4E32\uFF09
- * - approval \u4E0D\u5165\u8231\uFF1A\u5BA1\u6279\u7531\u6A2A\u5E45/\u72B6\u6001\u6761\u627F\u8F7D\uFF0C\u8231\u5185\u4E0D\u51FA\u7B2C\u56DB\u884C\u5047\u5360\u4F4D
- */
-export function dockModelOf(s: SessionState | null | undefined): DockModel | null {
-  const act = s?.activity;
-  if (!act || !s) return null;
-  if (!hasActivityCapability(s, "native_status")) return null;
-  if (act.state !== "WORKING" && act.state !== "WAITING" && act.state !== "DONE" && act.state !== "ERROR") return null;
-  const m: DockModel = { state: act.state, icon: DOCK_ICONS[act.state] ?? "\u00B7" };
-  if (hasActivityCapability(s, "operation_summary")) {
-    const ts = act.task_summary;
-    const text = typeof ts?.text === "string" ? ts.text.trim() : "";
-    if (text) m.summary = text;
-    const a = act.activity;
-    if (a && typeof a.text === "string" && a.text.trim()) {
-      m.actText = a.text.trim();
-      if (typeof a.kind === "string" && a.kind) m.actKind = a.kind;
-      if (typeof a.tool === "string" && a.tool) m.actTool = a.tool;
-    }
-  }
-  if (hasActivityCapability(s, "native_elapsed") && typeof act.elapsed_ms === "number") m.elapsedMs = act.elapsed_ms;
-  return m;
-}
+// W-DOCKIDLE：活动舱纯投影族迁驻 ../status-dock.ts（零 RN 依赖，node 直跑测试可
+// import——notify-jump 先例；「显隐走纯函数」架构口径的模块落位）。此处 re-export
+// 保持既有对外面不变（closingBarOf/dockModelOf/DONE_TAIL_MS 原本位导出）。
+export { closingBarOf, dockModelOf, dockLineVisible, DONE_TAIL_MS } from "../status-dock";
+export type { ClosingBar, DockModel } from "../status-dock";
 
 /** E3b 决议定向守卫（纯）：晚到 ACK 失败是否仍应提示——仅当同一 request 仍挂起
  * （已翻态/换请求=帧已收敛，不误报「决议未生效」）。决议 payload 本就带 request_id
@@ -2200,11 +2151,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
   const bannerVisible = !!wr && s.status === "WAITING" && (wr.decidable !== false || !wr.questions?.length);
   // E3a 头部活动舱投影：activity 缺失 / native_status 能力关 → null 整舱不渲染
   const dock = dockModelOf(s);
-  // 舱态配色：四态各占主题色（图标+文字同色双通道）；其余态投影已滤不为 null
-  // W-EXPO 005 化（session-state-dock 口径）：running=done 绿（呼吸点）、waiting=
-  // working 黄；终态（closing/suspended）由 StatusStrip 承载（ERROR 常驻 / DONE ✓
-  // 尾窗收口 8s），舱内只渲染 WORKING/WAITING 两活态
-  const dockColor = !dock ? "" : dock.state === "WORKING" ? c.done : dock.state === "WAITING" ? c.working : dock.state === "DONE" ? c.brandHover : c.error;
+  // 舱态配色（图标+文字同色双通道）：W-EXPO 005 化（session-state-dock 口径）——
+  // running=done 绿（呼吸点）、waiting=working 黄。W-DOCKIDLE：终态（DONE/ERROR）
+  // 投影已滤（dockModelOf 只放行两活态）+渲染闸锚 s.status——空闲会话不再把冻结
+  // 残影当活态配色（终态收口由 StatusStrip 承载：ERROR 常驻 / DONE ✓ 尾窗 8s）
+  const dockColor = !dock ? "" : dock.state === "WORKING" ? c.done : c.working;
 
   const send = (override?: string) => {
     const text = (override ?? input).trim();
@@ -3205,7 +3156,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
         {/* #218 件三：WORKING 态 dockLine 不再渲染——与 dockWork 黄行（执行摘要+走秒+停止钮）
             同屏双显（用户 1022 实拍实锤）；WORKING 只留信息更全的黄行，WAITING 等非工作态
             独立状态行保留 */}
-        {dock && s.status !== "WORKING" ? (
+        {dock && dockLineVisible(dock, s.status) ? ( // dock && 前置：TS 窄化（函数调用不窄化）+闸判定
           <View style={[d.dockLine, { borderLeftColor: dockColor }]}>
             <DockDot color={dockColor} breathe={dock.state === "WORKING"} />
             <Text style={[d.dockLineState, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
