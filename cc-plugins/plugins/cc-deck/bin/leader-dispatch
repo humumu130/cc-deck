@@ -23,6 +23,10 @@
 #   --anchor <dir>     项目锚（缺省 $PWD；gid 派单 relay 取组锚，本参只用于定位主仓）
 #   --repo <dir>       主仓（缺省 anchor 的 git toplevel）
 #   --engine <e>       引擎覆盖（透传 dispatch）
+#   --exclude <sid[,sid…>] 选席排除集（透传 dispatch.exclude_sessions——审查单防派回
+#                       实施者本人；W-REVEXCL 1109 二现治本）
+#   --review-of <id>    审查单：排除前单 <dispatch_id> 的实施者（查 dispatch-log 取
+#                       session_id 自动填 exclude；查不到=响亮报错不静默裸派）
 #   --wait <sec>       派后活性核验等待秒（缺省 30；0=跳过）
 #   --no-worktree      跳过 worktree 预建（随手办/纯文档调研类）
 #   --skip-gate        跳过模板铁律闸（PM 主权显式绕行，台账 gate=skipped；仅用户明示可用）
@@ -48,7 +52,7 @@ need_value() { [ -n "${2:-}" ] || die 2 "选项 $1 缺值"; }
 # ---------- 参数解析 ----------
 gid=""; title=""; skills=""; slug_arg=""; dtype="feat"; base_arg=""; recall_ids=""
 anchor="${CCR_LD_ANCHOR:-$PWD}"; repo_arg=""; engine=""
-brief_file=""; wait_s="${CCR_LD_WAIT:-30}"; no_wt=0; skip_gate=0; dry=0
+exclude_arg=""; review_of=""; brief_file=""; wait_s="${CCR_LD_WAIT:-30}"; no_wt=0; skip_gate=0; dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --brief) need_value "$1" "${2:-}"; brief_file="$2"; shift 2 ;;
@@ -60,6 +64,8 @@ while [ $# -gt 0 ]; do
     --anchor) need_value "$1" "${2:-}"; anchor="$2"; shift 2 ;;
     --repo) need_value "$1" "${2:-}"; repo_arg="$2"; shift 2 ;;
     --engine) need_value "$1" "${2:-}"; engine="$2"; shift 2 ;;
+    --exclude) need_value "$1" "${2:-}"; exclude_arg="$2"; shift 2 ;;
+    --review-of) need_value "$1" "${2:-}"; review_of="$2"; shift 2 ;;
     --wait) need_value "$1" "${2:-}"; wait_s="$2"; shift 2 ;;
     --no-worktree) no_wt=1; shift ;;
     --skip-gate) skip_gate=1; shift ;;
@@ -277,10 +283,37 @@ if [ "$no_wt" = 0 ]; then
   fi
 fi
 
+# ---------- W-REVEXCL（1109 二现治本）：--review-of 解析→exclude 并集 ----------
+# 查 org 派单台账 dispatch-log.ndjson 取前单实施者 session_id（与 relay readDispatchLog
+# 同源：CCR_ORG_DIR 覆盖/CCR_DATA_DIR 隔离随行/org 兄弟缺省 ~/.cc-deck/org）。查不到
+# =响亮报错（exit 2）——不静默裸派（裸派=审查单可能落回实施者本人，今日实锤形态）。
+if [ -n "$review_of" ]; then
+  _org_dir="${CCR_ORG_DIR:-${CCR_DATA_DIR:+$CCR_DATA_DIR/org}}"
+  [ -z "$_org_dir" ] && _org_dir="$HOME/.cc-deck/org"
+  _dl="$_org_dir/dispatch-log.ndjson"
+  [ -f "$_dl" ] || die 2 "--review-of: 派单台账不存在（$_dl）——确认 CCR_ORG_DIR/CCR_DATA_DIR 指向"
+  _impl_sid="$(python3 -c '
+import json,sys
+want, path = sys.argv[1], sys.argv[2]
+last = None
+for line in open(path, encoding="utf-8"):
+    line = line.strip()
+    if not line: continue
+    try: e = json.loads(line)
+    except Exception: continue
+    if e.get("id") == want and e.get("session_id"):
+        last = e["session_id"]  # 同 id 多行取末行（终态行 session 权威）
+print(last if last else "")
+' "$review_of" "$_dl")"
+  [ -n "$_impl_sid" ] || die 2 "--review-of: 台账中未找到 dispatch_id=$review_of 的实施者 session_id（id 笔误或行无 session_id）——不静默裸派"
+  echo "leader-dispatch：审查单排除前单 $review_of 实施者 ${_impl_sid%%-*}…（--review-of 解析）" >&2
+  if [ -n "$exclude_arg" ]; then exclude_arg="$_impl_sid,$exclude_arg"; else exclude_arg="$_impl_sid"; fi
+fi
+
 # ---------- org dispatch 请求体（gid 派单锚取组 F-03；板卡联动 relay 内建） ----------
-python3 - "$tmp_final" "$tmp_body" "$anchor" "$gid" "$title" "$skills" "$engine" "$wt" "$slug" "$no_wt" <<'PY'
+python3 - "$tmp_final" "$tmp_body" "$anchor" "$gid" "$title" "$skills" "$engine" "$wt" "$slug" "$no_wt" "$exclude_arg" <<'PY'
 import json, sys
-brief_path, out_path, anchor, gid, title, skills, engine, wt, slug, no_wt = sys.argv[1:11]
+brief_path, out_path, anchor, gid, title, skills, engine, wt, slug, no_wt, exclude_arg = sys.argv[1:12]
 d = {"action": "dispatch", "anchor": anchor,
      "prompt": open(brief_path, encoding="utf-8").read(),
      "gid": gid, "title": title}
@@ -288,6 +321,10 @@ if skills.strip():
     d["skills"] = [t.strip() for t in skills.split(",") if t.strip()]
 if engine.strip():
     d["engine"] = engine.strip()
+# W-REVEXCL：选席排除集透传（dispatch.exclude_sessions——relay dispatchWorker
+# 选席全路径同享：熟手轮/触顶复用轮；全命中=回落新会话不回派排除者）
+if exclude_arg.strip():
+    d["exclude_sessions"] = [t.strip() for t in exclude_arg.split(",") if t.strip()]
 # P1-1（审查A档返工）：worktree/slug 透传——relay dispatchWorker 认领边补写锁归属
 # （dispatch_id+session_id）；--no-worktree 不传=旧调用零影响（向后兼容）
 if no_wt == "0" and wt:
