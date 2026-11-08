@@ -27,7 +27,7 @@
 # 的等价双路（含 md5 回读校验），上传链继续走它；本脚本管其余日常远端操作。
 set -uo pipefail   # 不用 -e：第一路失败要走回落分支而非直接退出
 
-WRANGLER_BIN="$HOME/.npm/_npx/32026684e21afda6/node_modules/.bin/wrangler"
+WRANGLER_BIN="$HOME/.npm/_npx/d594112e4612f59c/node_modules/.bin/wrangler"
 CC_CF_PROXY="${CC_CF_PROXY:-http://127.0.0.1:7890}"   # 与 kv-put-verified.sh 同名变量
 
 if [ -x "$WRANGLER_BIN" ]; then
