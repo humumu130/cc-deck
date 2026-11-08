@@ -102,11 +102,11 @@ const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " +
 {
   // C1 持久化往返
   ok(readDutyReviewed(ORG).length === 0 || readDutyReviewed(ORG).includes("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"), "C1 读集兼容（空或含 B 组标记）");
-  markDutyReviewed(["acc-a", "acc-b"], ORG);
+  markDutyReviewed(["aa00000000000000000000000000000a", "aa00000000000000000000000000000b"], ORG);
   const rd = readDutyReviewed(ORG);
-  ok(rd.includes("acc-a") && rd.includes("acc-b"), "C2 标记往返持久化（org/duty-reviewed.json）");
+  ok(rd.includes("aa00000000000000000000000000000a") && rd.includes("aa00000000000000000000000000000b"), "C2 标记往返持久化（org/duty-reviewed.json）");
   // C3 parseDutyReceipt 合法/非法
-  const good = parseDutyReceipt('{"v":1,"feed_id":"f1","actions":[{"kind":"accept","ids":["acc-a"]}],"blocked":[],"next_trigger":"user"}');
+  const good = parseDutyReceipt('{"v":1,"feed_id":"f1","actions":[{"kind":"accept","ids":["aa00000000000000000000000000000a"]}],"blocked":[],"next_trigger":"user"}');
   ok(good !== null && good.actions[0].kind === "accept", "C3 合法回执解析");
   ok(parseDutyReceipt("not-json") === null && parseDutyReceipt('{"v":9}') === null, "C4 非法行 null（不炸）");
   // C5 maybeConsumeDutyReceipt 副作用（经 pushExternalLog 口——external PM 流面真链）
@@ -116,9 +116,9 @@ const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " +
   const bus2 = new EventBus();
   const mgr2 = new SessionManager(bus2, cfg2);
   mgr2.ensureExternal("ext-pm-dbo", "/tmp", "值守 PM", "", 0);
-  mgr2.pushExternalLog("ext-pm-dbo", "assistant_text", `处理完毕。\nDUTY_RECEIPT {"v":1,"feed_id":"f9","actions":[{"kind":"accept","ids":["acc-c","acc-d"]},{"kind":"board","ids":["e1"]}],"blocked":[],"next_trigger":"user"}`);
+  mgr2.pushExternalLog("ext-pm-dbo", "assistant_text", `处理完毕。\nDUTY_RECEIPT {"v":1,"feed_id":"f9","actions":[{"kind":"accept","ids":["aa00000000000000000000000000000c","aa00000000000000000000000000000d"]},{"kind":"board","ids":["e1"]}],"blocked":[],"next_trigger":"user"}`);
   const rd2 = readDutyReviewed(ORG);
-  ok(rd2.includes("acc-c") && rd2.includes("acc-d"), `C5 accept 副作用落 reviewed（${rd2.filter((x) => x.startsWith("acc-")).join(",")}）`);
+  ok(rd2.includes("aa00000000000000000000000000000c") && rd2.includes("aa00000000000000000000000000000d"), `C5 accept 副作用落 reviewed（${rd2.filter((x) => x.startsWith("aa")).join(",")}）`);
   // C6 坏行 receipt_missing 不惩罚（不写 reviewed 不炸）——R1 P2-2 尾帧守卫后夹具
   // 需完整闭合（无 } 流式尾帧跳过审计等下一帧，完整畸形行才走 missing 分支）
   const before = readDutyReviewed(ORG).length;
@@ -130,7 +130,7 @@ const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " +
   const pend = (mgr3 as unknown as { pendingAcceptanceReceipts: () => { sid: string; reviewed: boolean }[] }).pendingAcceptanceReceipts();
   // reviewed 过滤的权威消费面=receiptCandidates（filter r.reviewed!==true）——此处断言
   // pendingAcceptanceReceipts 带真 reviewed:true（喂给候选层的过滤依据在，跨实例持久化）
-  const marked = pend.filter((x) => ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "acc-c", "acc-d"].includes(x.sid));
+  const marked = pend.filter((x) => ["a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "aa00000000000000000000000000000c", "aa00000000000000000000000000000d"].includes(x.sid));
   ok(Array.isArray(pend) && marked.every((x) => x.reviewed === true), `C7 新实例（重启模拟）reviewed 标记持久化在（${marked.length} 张带 true——receiptCandidates 据此过滤，38h 重复投喂根治）`);
   const ld = await import("../src/leader-duty.js"); const receiptCandidates = (ld as unknown as { receiptCandidates?: unknown }).receiptCandidates;
   if (typeof receiptCandidates === "function") {
@@ -166,9 +166,9 @@ const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " +
     ok(cgR.ok === true && dpR.ok === true, "R1前置 组建+派单 spawn（factory 回调链通）" + (dpR.ok ? "" : "｜" + (dpR.error ?? "")));
     ok(!!cbR, "R1前置 factory 回调在手（托管会话 onLog 通道）");
     if (cbR) {
-      (cbR as unknown as { onLog: (k: string, t: string) => void }).onLog("assistant_text", '值守盘点完毕。\nDUTY_RECEIPT {"v":1,"feed_id":"fr1","actions":[{"kind":"accept","ids":["acc-managed-1"]}],"blocked":[],"next_trigger":"user"}');
+      (cbR as unknown as { onLog: (k: string, t: string) => void }).onLog("assistant_text", '值守盘点完毕。\nDUTY_RECEIPT {"v":1,"feed_id":"fr1","actions":[{"kind":"accept","ids":["aa0000000000000000000000000000e1"]}],"blocked":[],"next_trigger":"user"}');
       const rdR = readDutyReviewed(ORG);
-      ok(rdR.includes("acc-managed-1"), "R1 managed onLog 消费 DUTY_RECEIPT（托管席位双模式证——acc-managed-1 落 reviewed）");
+      ok(rdR.includes("aa0000000000000000000000000000e1"), "R1 managed onLog 消费 DUTY_RECEIPT（托管席位双模式证——aa0000000000000000000000000000e1 落 reviewed）");
     }
     // R1b 源码锚：挂点在 managed onLog 体内（真挂点）+create-cwd 死代码已撤
     const smSrc = readFileSync(join(process.cwd(), "src", "session-manager.ts"), "utf-8");
@@ -271,10 +271,10 @@ const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " +
     const a1 = audit5();
     ok(a1.slice(a0).includes("duty-receipt-missing"), "R5a 完整畸形行 missing 审计在（假阳守卫不吞真畸形）");
     ok((a1.slice(a0).match(/duty-receipt-missing/g) ?? []).length === 1, `R5b 无 } 尾帧零 missing（完整行恰 1 条——流式尾帧跳过实证，实 ${(a1.slice(a0).match(/duty-receipt-missing/g) ?? []).length}）`);
-    const before5 = readDutyReviewed(ORG).filter((x) => x.startsWith("acc-r5")).length;
-    mgr5.pushExternalLog("ext-r5", "assistant_text", `DUTY_RECEIPT {\"v\":1,\"feed_id\":\"fr5b\",\"actions\":[{\"kind\":\"accept\",\"ids\":[\"acc-r5-x\"]}],\"blocked\":[],\"next_trigger\":\"user\"}`);
-    mgr5.pushExternalLog("ext-r5", "assistant_text", `DUTY_RECEIPT {\"v\":1,\"feed_id\":\"fr5b\",\"actions\":[{\"kind\":\"accept\",\"ids\":[\"acc-r5-x\"]}],\"blocked\":[],\"next_trigger\":\"user\"}`); // 同 feed_id 重发（流式重复帧形态）
-    const after5 = readDutyReviewed(ORG).filter((x) => x.startsWith("acc-r5")).length;
+    const before5 = readDutyReviewed(ORG).filter((x) => x.startsWith("aa00000000000000000000000000005f")).length;
+    mgr5.pushExternalLog("ext-r5", "assistant_text", `DUTY_RECEIPT {\"v\":1,\"feed_id\":\"fr5b\",\"actions\":[{\"kind\":\"accept\",\"ids\":[\"aa00000000000000000000000000005f\"]}],\"blocked\":[],\"next_trigger\":\"user\"}`);
+    mgr5.pushExternalLog("ext-r5", "assistant_text", `DUTY_RECEIPT {\"v\":1,\"feed_id\":\"fr5b\",\"actions\":[{\"kind\":\"accept\",\"ids\":[\"aa00000000000000000000000000005f\"]}],\"blocked\":[],\"next_trigger\":\"user\"}`); // 同 feed_id 重发（流式重复帧形态）
+    const after5 = readDutyReviewed(ORG).filter((x) => x.startsWith("aa00000000000000000000000000005f")).length;
     const a2 = audit5();
     ok(after5 === before5 + 1 && (a2.slice(a0).match(/duty-receipt-accept/g) ?? []).length === 1, `R5c 同 feed_id 重发幂等（accept 审计恰 1 条、reviewed 恰 1 次——去重账实证）`);
   }

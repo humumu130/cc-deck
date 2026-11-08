@@ -48,7 +48,7 @@ function seedFrame(dataDir: string, sid: string, ts: number): void {
 const auditText = (dataDir: string) => { try { return readFileSync(join(dataDir, "chain-audit.jsonl"), "utf-8"); } catch { return ""; } };
 
 // 真身回执行（test.4 形态：feed_id+accept 三 sid——PM 已手动止血的三张即此类）
-const SID_A = "sid-aaa-1111", SID_B = "sid-bbb-2222", SID_C = "sid-ccc-3333";
+const SID_A = "bb000000000000000000000000000111", SID_B = "bb000000000000000000000000000222", SID_C = "bb000000000000000000000000000333";
 const RECEIPT_LINE = `DUTY_RECEIPT {"v":1,"feed_id":"feed-bc83ae95","actions":[{"kind":"accept","ids":["${SID_A}","${SID_B}","${SID_C}"]}],"blocked":[],"next_trigger":"turn_end"}`;
 // 长前置（值守回合的分析正文——把 DUTY_RECEIPT 行挤出 text 的 400 字窗）
 const LONG_PREFIX = "值守回执审查：".repeat(90) + "\n\n逐张核对（bc83ae95 三张陈回执证据充分，均予验收）。\n\n";
