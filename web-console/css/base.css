@@ -1803,7 +1803,7 @@
        在岗可跳/reviewer-none 灰牌无 PM）——交互语义同 member-msg-btn 先例（:1390） */
     #d-team .task-owner .tchip.owner-jump { cursor: pointer; }
     #d-team .task-owner .tchip.owner-jump:hover, #d-team .task-owner .tchip.owner-jump:focus-visible { border: 1px solid var(--border-strong); color: var(--brand); }
-    #d-team .task-owner .tchip.reviewer { cursor: pointer; background: color-mix(in srgb, var(--st-blocked, #8b7ac6) 14%, transparent); color: var(--st-blocked, #8b7ac6); font-weight: 600; }
+    #d-team .task-owner .tchip.reviewer { cursor: pointer; background: color-mix(in srgb, var(--p-submitted, #E08A63) 14%, transparent); color: var(--p-submitted, #E08A63); font-weight: 600; } /* W-PATROLFIX F1：审查中处理者徽章向泳道列点靠（--p-submitted 单轴）——原 --st-blocked 紫蓝与列点琥珀同屏双映射（B 路实锤）；reviewer-none 灰虚线牌保持中性 */
     #d-team .task-owner .tchip.reviewer:hover, #d-team .task-owner .tchip.reviewer:focus-visible { border: 1px solid var(--border-strong); }
     #d-team .task-owner .tchip.reviewer-none { background: transparent; border: 1px dashed var(--border-strong); color: var(--faint); }
     /* #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀——P2=默认档不显）+卡左缘色条；
@@ -1844,6 +1844,10 @@
     #d-team .task-owner.unassigned .tchip b { color: var(--working); }
     #d-team .task-cline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; color: var(--dim); font-size: var(--fs-C); line-height: 1.45; }
     #d-team .task-cline .cline-sep { flex: none; color: var(--faint); font-style: normal; }
+    /* W-PATROLFIX P2-4：cline 分隔符前置化——分隔符由「元素间显式 <i>」改「每元素 ::before 前缀」
+       （:first-child 无前缀）：flex-wrap 换行/容器截断时分隔符随后随元素走，行末永不悬空
+       （原「排队 #1 ·」尾留 sep=截断吞文本留分隔符形态根除；JS 侧 join 的 sep 元素已退役） */
+    #d-team .task-cline > * + *::before { content: "·\2009"; color: var(--faint); }
     #d-team .task-cline .cline-run { color: var(--working); }
     #d-team .task-cline .cline-miss { color: var(--error); } /* W-SMIMPL ②：done 卡「无回执」角标（回执缺失警示色，与 task-flag 同族） */
     #d-team .task-card.task-done { opacity: .45; }
@@ -3206,9 +3210,10 @@
        W-NOTIFYPOLISH ②A6：L3 两端分离——act-slot 推右+左竖线断口（8px 贴身读成一句根修） */
     .nrow .t .s .act-slot {
       margin-left: auto; white-space: nowrap; flex: none; padding-left: 12px;
+      display: inline-flex; align-items: baseline; gap: 12px; /* W-PATROLFIX P1-1：主/次钮间距 4→12px——扫视连读「打开验收单稍后」歧义根除 */
       border-left: 1px solid color-mix(in srgb, var(--text-strong) 10%, transparent);
     }
-    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: 12px; }
+    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: 12px; font-weight: 600; } /* P1-1：主行动 600 字重一档突出（次级 snooze/restore 400 faint 已分档） */
     /* W-NOTIFYPOLISH ⑦A4：.nid nowrap 三连——版本号芯片（v0.7.0-test.97-nova 类长 token）
        在窄列劈行破损根修；inline-block 让 overflow 生效，超宽走 ellipsis（title 全文有 tooltip） */
     .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
