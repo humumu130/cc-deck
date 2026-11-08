@@ -386,9 +386,18 @@ export function readDutyReviewed(dir?: string): string[] {
 }
 
 export function markDutyReviewed(sids: string[], dir?: string): void {
-  if (!sids.length) return;
+  // W-DUTYREVIEWED（t-8712b7b1 第二现·写侧断言）：入参必须 32 位 hex（acceptance id
+  // 唯一合法形态——listAcceptances 的 s.id/验收单文件名）。1109 实锤：PM 手工止血按
+  // feed 显示的 12 位截断形态抄录进文件 → 与 32 位真 id 全等比对恒不中 → 复投永动
+  // （三陈回执连投两轮）。断言拒写非 32 位（短截断/超长/非 hex）——防再犯单点。
+  const okForm = /^[0-9a-f]{32}$/;
+  const valid = sids.filter((s) => okForm.test(s));
+  if (valid.length < sids.length) {
+    console.warn(`[duty-reviewed] 拒写 ${sids.length - valid.length} 个非法形态键（须 32 位 hex acceptance id——短截断形态恒不匹配=复投永动根源；非法原样：${sids.filter((s) => !okForm.test(s)).slice(0, 3).join(",")}）`);
+  }
+  if (!valid.length) return;
   const cur = new Set(readDutyReviewed(dir));
-  for (const s of sids) cur.add(s);
+  for (const s of valid) cur.add(s);
   try {
     writeFileSync(join(dir ?? orgDir(), "duty-reviewed.json"), JSON.stringify([...cur], null, 2) + "\n", "utf-8");
   } catch { /* 尽力而为：写失败下轮候选照旧（幂等重试面） */ }

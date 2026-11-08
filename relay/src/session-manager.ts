@@ -6797,21 +6797,43 @@ ${lines.join("\n")}
   // receipt 候选源（dutySnapshot 消费）：待填验收单=submitted:false（#195 生命周期
   // 语义——提交过即已处理不再催）。reviewed:false 进候选，receiptCandidates filter
   // reviewed!==true 天然跳过已处理单。目录缺失/读炸=空档（值守判定不因验收面故障挂）。
+  // W-DUTYREVIEWED：陈回执防御日志去重表（id→上次告警时刻，60s 去重——复投永动可发现面）
+  private dutyReceiptStaleNotedAt = new Map<string, number>();
+
   private pendingAcceptanceReceipts(): { sid: string; receipt_path: string; mtime: number; reviewed: boolean }[] {
     // W-DUTYBACKOFF 刀3（38h 重复投喂根治）：reviewed 从 org/duty-reviewed.json 持久化集
     // 读出（原硬编码 false——receiptCandidates 的 filter(r=>r.reviewed!==true) 永远全过，
     // test.97 三张陈回执重复投喂 38h+）。DUTY_RECEIPT accept 副作用写集（maybeConsumeDutyReceipt）。
     try {
       const dir = acceptanceDir();
-      const reviewedSet = new Set(readDutyReviewed());
-      return listAcceptances(50)
+      const reviewedRaw = readDutyReviewed();
+      const reviewedSet = new Set(reviewedRaw);
+      // W-DUTYREVIEWED（t-8712b7b1 第二现·读侧兼容层）：1109 实锤文件存在 12 位短截断
+      // 键（PM 止血按 feed 显示形态抄录——真 acceptance id 恒 32 位 hex）→ 全等比对恒
+      // 不中 → 复投永动。兼容=短键（非 32 位 hex）建前缀索引，真 id 前缀命中即视为已
+      // 核销（数据修正落生产文件后本层纯兜底——防未来再写短形态时仍能匹配）。
+      const FULL_FORM = /^[0-9a-f]{32}$/;
+      const shortPrefixes = new Set(reviewedRaw.filter((k) => !FULL_FORM.test(k) && /^[0-9a-f]{6,31}$/.test(k)));
+      const out = listAcceptances(50)
         .filter((s) => !s.submitted)
         .map((s) => {
           const p = join(dir, `${s.id}.json`);
           let mtime = 0;
           try { mtime = statSync(p).mtimeMs; } catch { /* 缺文件 mtime 0——age 面退化不影响候选 */ }
-          return { sid: s.id, receipt_path: p, mtime, reviewed: reviewedSet.has(s.id) };
+          const reviewed = reviewedSet.has(s.id) || (shortPrefixes.size > 0 && [...shortPrefixes].some((k) => s.id.startsWith(k)));
+          // W-DUTYREVIEWED 防御日志（复投永动可发现）：候选龄 >24h 且未核销——正常链
+          // 核销即消（DUTY_RECEIPT accept 写集）；长期挂=过滤断链（本批形态病或未来
+          // 新形态），patrol 拍可观测。60s 去重（reportImportFailureOnce 同款）。
+          if (!reviewed && mtime > 0 && Date.now() - mtime > 24 * 3600_000) {
+            const now = Date.now();
+            if (now - (this.dutyReceiptStaleNotedAt.get(s.id) ?? 0) > 60_000) {
+              this.dutyReceiptStaleNotedAt.set(s.id, now);
+              console.warn(`[duty-receipt] 陈回执候选未核销 >24h（id=${s.id}——若已人工核销仍复投=reviewed 键形态病，duty-reviewed.json 须 32 位 acceptance id 原文）`);
+            }
+          }
+          return { sid: s.id, receipt_path: p, mtime, reviewed };
         });
+      return out;
     } catch {
       return []; // 验收目录不可读（权限/并发删）——receipt 档空，其余三类候选照算
     }
