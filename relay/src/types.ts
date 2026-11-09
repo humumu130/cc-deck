@@ -1593,6 +1593,7 @@ export const CHAIN_AUDIT_ACTIONS = [
   // ---- W-CARDLIFE-R2（1105 深夜用户令「不靠规则靠机制」：状态转移内建于动作） ----
   "cardlife-pr-merged", // PR merged 自动翻当轮卡 done（转移内建于动作——机械手降级为兼容路径）
   "cardlife-chain-close", // 终代收割闭同链前代卡（slug 基族+ts 窗 14d）
+  "cardlife-chain-skip-live", // W-ORPHANCARD-R1 P1-1：链闭遇 claimed 且 owner 会话活跃（双审并行在跑）跳过不误翻——告警留其自然收口
   "cardlife-pr-merged-blocked", // 资格闸：非 submitted 态收 PR merged 不自动翻（矛盾态人工核）
   "cardlife-flip-degraded", // pr-report 翻卡写失败（板冻结等）——degraded 告警
   "board-flip-degraded", // 收口翻卡 3 次重试失败——degraded 留痕+告警卡（回落裸设兜底）
