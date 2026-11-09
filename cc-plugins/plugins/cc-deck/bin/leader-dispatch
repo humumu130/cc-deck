@@ -323,10 +323,24 @@ fi
 
 # ---------- W-REVEXCL（1109 二现治本）：--review-of 解析→exclude 并集 ----------
 # 查 org 派单台账 dispatch-log.ndjson 取前单实施者 session_id（与 relay readDispatchLog
-# 同源：CCR_ORG_DIR 覆盖/CCR_DATA_DIR 隔离随行/org 兄弟缺省 ~/.cc-deck/org）。查不到
-# =响亮报错（exit 2）——不静默裸派（裸派=审查单可能落回实施者本人，今日实锤形态）。
+# 同源三段解析，W-REVEXCL-R1 谓词补齐——org.ts orgDir()/config.ts isDataDirIsolated）：
+# ① CCR_ORG_DIR 显式最高优先；② CCR_DATA_DIR **仅隔离态**（已设且归一值≠生产缺省
+# ~/.cc-deck/data——生产内嵌 relay 显式 set 的缺省值不算隔离，防 org 目录被联动搬走）
+# 才随 data 走 <CCR_DATA_DIR>/org；③ 其余（未设/生产缺省值）恒 ~/.cc-deck/org。
+# 旧形态 ${CCR_DATA_DIR:+$CCR_DATA_DIR/org} 对任何非空值无条件拼 /org——PM 会话恒设
+# CCR_DATA_DIR=生产缺省 → 解析到不存在的 ~/.cc-deck/data/org → --review-of 恒 die 2
+#（R1 P1，w-revexcl-review.md 实证）。归一比较用 python os.path.abspath——node
+# path.resolve 同语义（绝对化归一不解析 symlink，与 relay 逐字同源；realpath 会解
+# symlink 反而漂移）。查不到=响亮报错（exit 2）——不静默裸派（裸派=审查单可能落回
+# 实施者本人，今日实锤形态）。
 if [ -n "$review_of" ]; then
-  _org_dir="${CCR_ORG_DIR:-${CCR_DATA_DIR:+$CCR_DATA_DIR/org}}"
+  _org_dir=""
+  if [ -n "${CCR_ORG_DIR:-}" ]; then
+    _org_dir="$CCR_ORG_DIR"
+  elif [ -n "${CCR_DATA_DIR:-}" ]; then
+    _cc_isolated="$(python3 -c 'import os,sys; print("1" if os.path.abspath(sys.argv[1]) != os.path.abspath(os.path.join(os.path.expanduser("~"), ".cc-deck", "data")) else "0")' "$CCR_DATA_DIR")"
+    [ "$_cc_isolated" = "1" ] && _org_dir="$CCR_DATA_DIR/org"
+  fi
   [ -z "$_org_dir" ] && _org_dir="$HOME/.cc-deck/org"
   _dl="$_org_dir/dispatch-log.ndjson"
   [ -f "$_dl" ] || die 2 "--review-of: 派单台账不存在（$_dl）——确认 CCR_ORG_DIR/CCR_DATA_DIR 指向"
