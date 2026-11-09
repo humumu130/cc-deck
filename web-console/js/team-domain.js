@@ -1914,6 +1914,9 @@
                   if (!state.online || !state.command) html += banner("命令通道未接入，无法提交创建。");
                   html += '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
                   if (defCands.length) html += '<button type="button" class="team-add-btn" data-team-add-member>＋ 添加成员</button>';
+                  // W-AGGRED-R1（P3-2 审查返修）：挂靠态高级区整段消隐，PM 人选行随之丢失——
+                  // 页脚上方补一行（L1 补漏同款形态，teamPmRowHtml 复用+模板切换 change 联动照常）
+                  if (isGid) html += '<div class="team-pm-row" data-team-pm-row>' + teamPmRowHtml("pm-led") + "</div>";
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit><span data-team-submit-label>创建团队</span></button></div>';
                   pop.innerHTML = html;
                   pop.dataset.aggDirs = JSON.stringify(pfDirs); // W-AGGFIX：附锚全量 stash（submit 读——原 pfDirs 越域引用根治）
@@ -2050,7 +2053,7 @@
                   // P2BATCH6 件8（C-P2-2）：短路 → 双跑合并判——旧版 || 短路致锚点目录空值被
                   // 团队名首错掩盖，用户两次试错才见全貌；两校验各自独立执行（各自标红+行级
                   // 文案一次全出），提交仍任一不过即拦。
-                  { const okName = teamNameValidate(pop); const okAnchor = teamAnchorValidate(pop, { submit: true }); if (!okAnchor) { const adv = pop.querySelector("details.team-adv"); if (adv) adv.open = true; } if (!okName || !okAnchor) return; } // W-AGGRED：提交全验（裁决 8）+失败展开折叠区就近示错
+                  { const okName = teamNameValidate(pop); const okAnchor = pop.dataset.teamGid ? true : teamAnchorValidate(pop, { submit: true }); if (!okAnchor) { const adv = pop.querySelector("details.team-adv"); if (adv) adv.open = true; } if (!okName || !okAnchor) return; } // W-AGGRED：提交全验（裁决 8）+失败展开折叠区就近示错；W-AGGRED-R1（P0-1 审查返修）：挂靠态（teamGid）跳过锚点校验——高级区整段消隐后 anchor input 不在 DOM，校验恒 false→提交静默 return=挂靠创建链断裂（审查三证）；挂靠分支 payload.anchor_dir 零消费（relay formTeamOnGroup 用既有项目锚），跳过安全
                   if (teamSeatCount(pop) > 8) { toast("编制最多 8 席——请先减员"); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：本地硬闸兜底（勾选闸漏网路径防整单被 relay 拒）
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
