@@ -94,6 +94,47 @@ async function main(): Promise<void> {
     console.log("  ○ 场景链：A 实施者刚交单（idle+最熟）→ REVIEW 单 --review-of <A 前单> → CLI 解析 A 入 exclude（B 组实证）→ dispatchWorker excludeSet 过滤熟手轮（A 组 :9612 锚）→ A 不被选（既有测试面承载）→ 全命中回落新会话");
   }
 
+  console.log("E. org 目录三段解析谓词（W-REVEXCL-R1 P1 返修——isDataDirIsolated 复刻，hermetic HOME 走真 CLI）");
+  {
+    const IMPL_A = "aa0000000000000000000000000000000a"; // B 组同款 32 位形态（块作用域独立声明）
+    const rootE = mkdtempSync(join(tmpdir(), "revexcl-pred-"));
+    try {
+      const mkLog = (dir: string) => {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "dispatch-log.ndjson"), [
+          JSON.stringify({ ts: 1, id: "d-prev", tier: "正经立项", status: "dispatched", session_id: IMPL_A, title: "前单" }),
+          "",
+        ].join("\n"), "utf-8");
+      };
+      const briefE = join(rootE, "brief.txt");
+      writeFileSync(briefE, "## 根因\n谓词夹具。\n\n## 改动清单\n谓词夹具。\n\n## 验收点\n1. 谓词夹具。\n\n结果：夹具｜改动文件：无", "utf-8");
+      const run = (env: NodeJS.ProcessEnv) => execFileSync("bash", [BIN, "pg-x", "谓词审查单", "--review-of", "d-prev", "--no-worktree", "--brief", briefE, "--dry-run"], { encoding: "utf-8", env: { ...process.env, ...env } }).toString();
+
+      // E1 生产缺省形态（PM 会话实锤面）：CCR_DATA_DIR=<HOME>/.cc-deck/data（值等缺省）
+      // 不设 CCR_ORG_DIR → 谓词判非隔离 → 落 <HOME>/.cc-deck/org（夹具 log 在此）→ 找到 A。
+      // 旧形态（无谓词）会去 <HOME>/.cc-deck/data/org 找 log → die 2——本用例成功即谓词生效正锁。
+      const homeProd = join(rootE, "home-prod");
+      mkdirSync(join(homeProd, ".cc-deck", "data"), { recursive: true });
+      mkLog(join(homeProd, ".cc-deck", "org"));
+      const outE1 = run({ HOME: homeProd, CCR_ORG_DIR: "", CCR_DATA_DIR: join(homeProd, ".cc-deck", "data"), CCR_TOKEN: "dummy-dry-run", CCR_PORT: "8899" });
+      assert(outE1.includes(IMPL_A), "E1 生产缺省值形态：非隔离→落 HOME org 找到实施者 A（旧代码此形态恒 die 2——R1 P1 正锁）");
+
+      // E2 沙盒隔离形态：CCR_DATA_DIR=异路径 → 隔离谓词中 → 随 data 走 <data>/org（夹具在）→ 找到 A。
+      const homeSb = join(rootE, "home-sb");
+      mkdirSync(homeSb, { recursive: true });
+      const sbData = join(rootE, "sb-data");
+      mkLog(join(sbData, "org"));
+      const outE2 = run({ HOME: homeSb, CCR_ORG_DIR: "", CCR_DATA_DIR: sbData, CCR_TOKEN: "dummy-dry-run", CCR_PORT: "8899" });
+      assert(outE2.includes(IMPL_A), "E2 沙盒隔离形态：谓词中→org 随 data 走（<CCR_DATA_DIR>/org 找到 A——三段②分支）");
+
+      // E3 未设 CCR_DATA_DIR：elif 非空门不进 → 落 HOME org（缺省③分支）。
+      const homeBare = join(rootE, "home-bare");
+      mkLog(join(homeBare, ".cc-deck", "org"));
+      const outE3 = run({ HOME: homeBare, CCR_ORG_DIR: "", CCR_DATA_DIR: "", CCR_TOKEN: "dummy-dry-run", CCR_PORT: "8899" });
+      assert(outE3.includes(IMPL_A), "E3 未设形态：落 HOME org（缺省③分支——非空门实证）");
+    } finally { rmSync(rootE, { recursive: true, force: true }); }
+  }
+
   console.log(`\n========== revexcl 套件：${pass} 通过 / ${fail} 失败 ==========`);
   process.exit(fail > 0 ? 1 : 0);
 }
