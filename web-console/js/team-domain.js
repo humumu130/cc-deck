@@ -1527,14 +1527,47 @@
                     .sort((a, b) => (Number(a.external === true) - Number(b.external === true)) || (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0))
                     .slice(0, 12);
                 }
-                // 候选行 v2（#277 美化）：去引擎徽标（引擎身份归成员卡头像，行内省空间防截断）
-                function teamCandListHtml(cands) {
+                // W-AGGRED（1109 三路裁决·C 路 §4）：候选行短名化三级降级——title_locked 原文
+                // （用户起的名，短且权威）→ cwd basename（目录名=项目域身份，同 basename 去重
+                // 「#序号」按出现序）→ title 前 12 字+…；工单全文 42-59 字直倒（0 截断实测）退役；
+                // tooltip=title 全文+sid 前 8+cwd 全路径（一跳可达不占常显面）；状态点复用全局
+                // .status-dot 词汇表（st-* token——C 路零新色约定）。L2：预填命中行排序优先。
+                function teamCandShortNames(cands) {
+                  const byBase = new Map();
+                  const list = cands.map((x) => {
+                    let n = "";
+                    if (x.title_locked === true && x.title) n = String(x.title);
+                    else if (x.cwd) n = String(x.cwd).replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || "";
+                    if (n) byBase.set(n, (byBase.get(n) || 0) + 1);
+                    return { x, n };
+                  });
+                  const seen = new Map();
+                  const out = new Map();
+                  for (const { x, n } of list) {
+                    let name = n;
+                    if (n && (byBase.get(n) || 0) > 1) { const i = (seen.get(n) || 0) + 1; seen.set(n, i); if (i > 1) name = n + " #" + i; }
+                    if (!name) { const t = String(x.title || ""); name = t.length > 12 ? t.slice(0, 12) + "…" : (t || String(x.session_id).slice(0, 12)); }
+                    out.set(x.session_id, name);
+                  }
+                  return out;
+                }
+                function teamStDotClass(st) { return st === "WORKING" ? "working" : st === "WAITING" ? "waiting" : st === "ERROR" ? "error" : st === "DONE" ? "done" : ""; }
+                // 候选行 v3（W-AGGRED）：短名+状态点+ellipsis+title 全文（数据源 SessionState
+                // title_locked/cwd 实勘支撑——B/C 路共同裁决）
+                function teamCandListHtml(cands, hitSet) {
                   if (!cands.length) return '<div class="team-empty-row"><span>该源暂无可入编会话，可先建团稍后补员</span><button type="button" class="team-add-btn" data-team-add-member>＋ 添加</button></div>'; // W-TEAMPOPOLISH B4：空态一行紧凑（banner+添加钮合并）
-                  return '<div class="team-cand-list" data-team-cands>' + cands.map((x) =>
-                    '<label class="create-check team-cand' + (x.external ? " team-cand-ext" : "") + '" title="' + escape(x.external ? "野生会话 · 观察位入编（不接派单不被打断；转正接活须换 deck 托管会话补员）" : "") + '"><input type="checkbox" data-team-member="' + escape(x.session_id) + '"' + (x.external ? ' data-team-member-ext="1"' : "") + '>'
-                    + '<span class="team-cand-name">' + escape(x.title || x.session_id.slice(0, 12)) + '</span>'
+                  const names = teamCandShortNames(cands);
+                  const ordered = hitSet && hitSet.size ? [...cands].sort((a, b) => (Number(!!hitSet.has(b.session_id)) - Number(!!hitSet.has(a.session_id)))) : cands; // L2：预填命中行优先（稳定排序保托管优先+updated_at 序）
+                  return '<div class="team-cand-list" data-team-cands>' + ordered.map((x) => {
+                    const name = names.get(x.session_id) || String(x.title || x.session_id.slice(0, 12));
+                    const dot = teamStDotClass(x.status);
+                    const tip = [String(x.title || ""), String(x.session_id).slice(0, 8), x.cwd ? String(x.cwd) : "", x.external ? "野生会话 · 观察位入编（不接派单不被打断；转正接活须换 deck 托管会话补员）" : ""].filter(Boolean).join("\n");
+                    return '<label class="create-check team-cand' + (x.external ? " team-cand-ext" : "") + (dot ? '" data-dot="' + dot : "") + '" data-short="' + escape(name) + '" title="' + escape(tip) + '"><input type="checkbox" data-team-member="' + escape(x.session_id) + '"' + (x.external ? ' data-team-member-ext="1"' : "") + '>'
+                    + '<span class="status-dot ' + dot + '" aria-hidden="true"></span>'
+                    + '<span class="team-cand-name">' + escape(name) + '</span>'
                     + (x.external ? '<span class="cand-ext-badge">野生·观察</span>' : "")
-                    + '<input class="create-field team-cand-role" data-team-role="' + escape(x.session_id) + '" list="team-role-list" placeholder="worker" aria-label="成员角色" hidden></label>').join("") + "</div>";
+                    + '<input class="create-field team-cand-role" data-team-role="' + escape(x.session_id) + '" list="team-role-list" placeholder="worker" aria-label="成员角色" hidden></label>';
+                  }).join("") + "</div>";
                 }
                 // ④ 本机目录选择器闸（#158-批3 createCwdBrowseable 同款：dialog 插件在场 + 本机 loopback 源）
                 function teamAnchorBrowseable(which) {
@@ -1618,9 +1651,59 @@
                 function syncTeamSeatCount(pop) {
                   const n = teamSeatCount(pop);
                   const cnt = pop.querySelector("[data-team-seat-count]");
-                  if (cnt) { cnt.textContent = "已选 " + n + "/8"; cnt.classList.toggle("full", n >= 8); }
+                  if (cnt) { cnt.textContent = n + "/8"; cnt.classList.toggle("full", n >= 8); } // W-AGGRED：计数并入段头「成员 N/8」（「最多 8 席」语义自明，title 承载）
                   const lab = pop.querySelector("[data-team-submit-label]");
                   if (lab) lab.textContent = n > 0 ? "创建团队 · " + n + " 席" : "创建团队";
+                  syncTeamChips(pop); // W-AGGRED：chips=勾选池 checked 态投影（任何勾/去勾/清空后重渲）
+                }
+                // W-AGGRED（裁决 1·C 路 §5）：chips 视图层——同一批 [data-team-member] checkbox 的
+                // checked 渲染投影，不另建数据结构；×点击写回 checkbox.checked=false+dispatch
+                // change（走既有 pop 级 change 委托=席位闸/计数/批量操作全链路零改动继承）。
+                // 行短名/状态点/野生标从行 label 的 data-short/data-dot/class 直读（单一事实源）
+                function syncTeamChips(pop) {
+                  if (pop.dataset.teamMode !== "chips") return;
+                  const zone = pop.querySelector("[data-team-chips]");
+                  if (!zone) return;
+                  const checked = [...pop.querySelectorAll("[data-team-member]")].filter((b) => b.checked);
+                  zone.innerHTML = checked.map((b) => {
+                    const row = b.closest(".team-cand");
+                    const short = (row && row.dataset.short) || "";
+                    const dot = (row && row.dataset.dot) || "";
+                    const ext = !!(row && row.classList.contains("team-cand-ext"));
+                    return '<span class="team-chip" data-chip="' + escape(b.dataset.teamMember) + '"><span class="status-dot ' + dot + '" aria-hidden="true"></span>' + escape(short)
+                      + (ext ? '<span class="chip-ext">野生</span>' : "")
+                      + '<button type="button" data-chip-x aria-label="移除 ' + escape(short) + '" title="移除">✕</button></span>';
+                  }).join("");
+                  zone.hidden = checked.length === 0;
+                }
+                // W-AGGRED（C 路状态机）：预填态(chips 形态) --清空全部--> 手动态(列表形态)；
+                // 手动态 --勾选≥1--> 列表形态保持（chips 仅预填确认流专属，避免两态渲染抖动）。
+                // 折叠组行归位+切换行撤除+chips 区隐藏；勾选态天然保留（同一批 checkbox）
+                // W-AGGRED（C 路 L1 补漏·裁决 5）：PM 人选可见性——pm-led 模板的 PM=会话域当前选中
+                // 会话（隐式默认此前 UI 不可见，AGGBUG 修了数据链 UI 面没修）；无选中=降级文案
+                function teamPmRowHtml(template) {
+                  if (template !== "pm-led") return 'PM 行仅「PM 带队」模板有——本档成员各自行担当';
+                  const sid = String(window.__ccDeck005SlimUi?.selectedSid?.() || "");
+                  const s = sid ? state.sessions.get(sid) : null;
+                  if (s) {
+                    const nm = teamCandShortNames([s]).get(sid) || String(s.title || sid.slice(0, 8));
+                    return 'PM：' + escape(nm) + '（' + escape(sid.slice(0, 8)) + '）· 当前选中会话';
+                  }
+                  return '本团无 PM 行（编制面板可补任；或先在会话域选中目标会话再开弹窗）';
+                }
+                function teamToListMode(pop) {
+                  pop.dataset.teamMode = "list";
+                  const list = pop.querySelector("[data-team-cands]");
+                  const tog = pop.querySelector("[data-team-cand-fold]");
+                  const fold = tog ? tog.nextElementSibling : null;
+                  if (fold) [...fold.querySelectorAll(".team-cand")].forEach((l) => list && list.append(l));
+                  if (tog) tog.remove();
+                  if (fold) fold.remove();
+                  const zone = pop.querySelector("[data-team-chips]");
+                  if (zone) zone.hidden = true;
+                  const addBtn = pop.querySelector("[data-team-add-member]");
+                  const listEl = pop.querySelector("[data-team-cands]");
+                  if (addBtn && addBtn.closest(".cand-fold-line") && listEl) listEl.after(addBtn); // L3：＋钮从折叠行尾归位列表下方
                 }
                 function addTeamManualRow(pop) {
                   if (teamSeatCount(pop) >= 8) { toast("编制最多 8 席"); return; }
@@ -1638,8 +1721,6 @@
                 }
                 // W-TEAMPOPOLISH B2/P3（1105 三路审查）：立项档后果文案——决策点可见（动态 hint
                 // 随选项切换），选项标签自身砍短去实现术语（「单卡简化态」→后果语言）
-                const TEAM_TIER_HINTS = { "轻立项": "创建即生效", "正经立项": "提交后在确认卡上等你决议" }; // W-AGGFIX A5：与选项文案去重（「日常免确认」两现——后果语言留选项侧）
-                function teamTierHint(v) { return TEAM_TIER_HINTS[v] || ""; }
                 // W-TEAMPOPOLISH B3：blur 内联校验——错误就近落字段（.create-err 描边+尾随一行
                 // .create-err-note），提交前看得见；toast 只留传输层失败（submitTeamCreate 的
                 // command/网络错误），前置格式/重名检查全走此处
@@ -1668,11 +1749,27 @@
                   teamFieldErr(pop, "name", "");
                   return true;
                 }
-                function teamAnchorValidate(pop) {
-                  const anchor = String(pop.querySelector("[data-team-field='anchor']")?.value ?? "").trim();
-                  if (!anchorFormatOk(anchor)) { teamFieldErr(pop, "anchor", "需绝对路径：Mac/Linux 形如 /Users/…，Windows 形如 C:\\…"); return false; }
+                function teamAnchorValidate(pop, opts) {
+                  const input = pop.querySelector("[data-team-field='anchor']");
+                  const anchor = String(input?.value ?? "").trim();
+                  if (!anchorFormatOk(anchor)) {
+                    // W-AGGRED（裁决 8，W-AGGUI2-B 遗留 1）：未修改过的初始值（含空 last-cwd）blur
+                    // 不即时标红——开弹窗点别处就见红是误报（探针实证）；提交（submit:true）仍全验
+                    const untouched = !!input && input.dataset.init != null && anchor === input.dataset.init;
+                    if (untouched && !(opts && opts.submit)) { teamFieldErr(pop, "anchor", ""); return true; }
+                    teamFieldErr(pop, "anchor", "需绝对路径：Mac/Linux 形如 /Users/…，Windows 形如 C:\\…");
+                    return false;
+                  }
                   teamFieldErr(pop, "anchor", "");
                   return true;
+                }
+                // W-AGGRED（C 路 §3-2 改造）：锚点说明默认收 ⓘ（title 全文），空值/校验失败才展开
+                // 行内文案——说明性内容降级，防错性内容按需显形
+                function syncAnchorHint(pop) {
+                  const input = pop.querySelector("[data-team-field='anchor']");
+                  const hint = pop.querySelector("[data-team-anchor-hint]");
+                  if (!input || !hint) return;
+                  hint.hidden = !(!input.value.trim() || input.classList.contains("create-err"));
                 }
                 // W-TEAMPOPOLISH ⑭（1105）：预填入参位——openTeamCreate(prefill)（name/anchor/
                 // members/tier/origin）。本单只留参数位与「来自聚合推荐」溯源小注位（origin 一
@@ -1691,79 +1788,95 @@
                   pop.setAttribute("aria-label", "新建团队");
                   const st = teamSourceInfo(); // #277 ②：聚合/云在线透出「创建到」（NewSessionModal 同语义）
                   // W-AGGBUG（1109）：prefill.source 优先——聚合预填 8 会话全同源时弹窗源随成员源
-                  // （消灭「云视角下 defSrc=cloud 而 8 成员全在本机」的错位面）；无 prefill/值非法时
-                  // 维持视角判定（旧行为不变）
                   const pfSrc = pf && (pf.source === "local" || pf.source === "cloud") ? pf.source : null;
                   const defSrc = pfSrc || ((window.__ccDeck005SourceState && window.__ccDeck005SourceState())?.view === "cloud" ? "cloud" : "local");
                   const defCands = teamCandsForSource(defSrc, st);
-                  // #277 ① 弹窗重设计 + W-TEAMPOPOLISH（1105 三路审查落地）：
-                  // B2 头部副标题退役（答案在决策点：tier 动态 hint）；B4 团队名+立项档并排两列行；
-                  // A4/C4 文案砍短+术语后果化（「一锚一团」「单卡简化态」退役）
-                  let html = '<div class="create-head"><h3>新建团队</h3><button type="button" class="create-x" data-team-close aria-label="关闭" title="关闭">✕</button></div>';
-                  // W-AGGFIX A2：聚合证据行单行化（title 全文）——原 60+ 字断两行日志感+挤压表单
-                  if (pf && pf.origin) html += '<div class="create-hint" data-team-origin-note title="' + escape("来自聚合推荐：" + String(pf.origin)) + '">来自聚合推荐：' + escape(String(pf.origin)) + "</div>";
-                  if (st) {
-                    html += '<div class="create-label">创建到</div><select class="create-field" data-team-field="source" aria-label="目标源">'
-                      + '<option value="local"' + (defSrc === "local" ? " selected" : "") + '>本机 · ' + escape(String(st.lanRelayName || "本机")) + '</option>'
-                      + '<option value="cloud"' + (defSrc === "cloud" ? " selected" : "") + '>远程 · ' + escape(String(st.cloudRelayName || st.cloudWsUrl || "远程源")) + '</option></select>';
-                  }
-                  const pfTier = pf && (pf.tier === "轻立项" || pf.tier === "正经立项") ? pf.tier : "轻立项";
-                  html += '<div class="create-two"><div class="create-two-col"><div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名" value="' + escape(pf && pf.name ? String(pf.name) : "") + '"></div>'
-                    + '<div class="create-two-col"><div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档">'
-                    + '<option value="轻立项"' + (pfTier === "轻立项" ? " selected" : "") + '>轻量项目（日常免确认）</option>'
-                    + '<option value="正经立项"' + (pfTier === "正经立项" ? " selected" : "") + '>正式项目（需你确认）</option></select></div></div>';
-                  html += '<div class="create-hint" data-team-tier-hint>' + escape(teamTierHint(pfTier)) + "</div>";
-                  html += '<div class="create-label">锚点目录</div><div class="create-inline"><input class="create-field" data-team-field="anchor" placeholder="项目绝对路径（在 relay 宿主机上）" aria-label="锚点目录" value="' + escape(pf && pf.anchor ? String(pf.anchor) : teamCwdDefault()) + '">'
-                    + '<button type="button" class="create-browse" data-team-anchor-browse title="从文件管理器选择目录" hidden>浏览</button></div>';
-                  html += '<div class="create-hint" data-team-anchor-hint>路径在 relay 宿主机上，不是当前浏览器电脑</div>';
-                  // W-AGGREGATE-V2 刀3：簇预填附锚列表（V1 五字段扩展——dirs 来自归一推荐卡；
-                  // 主锚=锚字段，附锚只读注呈现+随创建提交 anchor_dirs；人工建团无 dirs 零变化）
-                  // W-AGGFIX A3/B3：附锚 chip 化+提级——basename 入 chip（title 全路径），长路径
-                  // 「…/pcs-」+「order-b」破碎断行退役；科普文案（同 origin clone/多锚归一）降级进
-                  // 行 title，有效数据（值色）不再与教程灰同档。dirs 全量 stash 到 dataset 供提交
-                  // 读（原 submit 读 pfDirs=越域引用 ReferenceError——预填带附锚时创建钮无反应，
-                  // 本单顺手根治；chip 化后 DOM 文本也不再承载全路径）。
+                  // W-AGGRED（1109 三路汇总裁决）：内容减法+段落结构+token 收敛三合一。
+                  // 区块序（PM 裁决 5）：head「创建团队」→ 团队名（A 路首屏常显）→ 摘要行（C 路
+                  // 转译一句人话）→ line-soft 分隔 → 成员区（「成员 N/8」计数并入段头+全选/清空
+                  // dim 降级 → chips（预填态）→ 折叠组 → 角色模板段尾紧凑行）→ line-soft →
+                  // details.add-adv「立项档与锚点」（档位 hint 行删——裁决 4；锚点说明收 ⓘ；附锚
+                  // chips；PM 人选行——C 路 L1）→ line-soft → 页脚（裁决 9）
+                  const isGid = !!(pf && typeof pf.gid === "string" && pf.gid);
+                  const gidProj = isGid ? (state.projects || []).find((pr) => pr && (pr.id === pf.gid || pr.gid === pf.gid)) : null; // 团域 projects 以 id 承 gid（PROJTEAM1 挂靠链口径）
+                  const pfN = pf && Array.isArray(pf.members) ? pf.members.length : 0;
+                  const pfBase = pf && pf.anchor ? String(pf.anchor).replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() : "";
+                  const hitSet = pf && Array.isArray(pf.members) ? new Set(pf.members.filter((m) => typeof m === "string")) : null;
                   const pfDirs = (pf && Array.isArray(pf.dirs) ? pf.dirs : []).filter((d) => typeof d === "string" && d && d !== (pf && pf.anchor));
-                  if (pfDirs.length) html += '<div class="anchor-dirs-row" data-team-anchor-dirs title="' + escape("同 origin clone 目录 · 随创建提交多锚（主锚=锚点目录恒首）") + '"><span class="anchor-dirs-label">附锚</span>' + pfDirs.map((d) => {
-                    const base = String(d).split(/[\\/]/).filter(Boolean).pop() || String(d);
-                    return '<span class="anchor-chip" title="' + escape(String(d)) + '">' + escape(base) + "</span>";
-                  }).join("") + "</div>";
-                  // #277 ③：成员候选随源切换（relay_source 对位），切源即时重灌本容器
-                  // W-TEAMPOPOLISH B4：空态 banner 与添加钮合并一行紧凑空态（非空时底部添加钮照旧）
-                  // W-AGGFIX C1/C3：label 右侧动态计数「已选 N/8」+全选/清空微操作（满员逐点
-                  // 10 行是现实路径；预填折叠态下全选先展开折叠组再逐勾受闸）
-                  html += '<div class="create-label team-seats-label">成员编制 · 最多 8 席<span class="seat-count" data-team-seat-count title="勾选 + 手动行 + PM 行，上限 8 席">已选 0/8</span>' + (defCands.length ? '<span class="team-micro-ops"><button type="button" class="team-micro-btn" data-team-cand-all title="勾选本源全部候选（受 8 席上限）">全选</button><button type="button" class="team-micro-btn" data-team-cand-clear title="清空全部勾选">清空</button></span>' : "") + '</div><div data-team-cand-wrap>' + teamCandListHtml(defCands) + "</div>";
+                  let html = '<div class="create-head"><h3>' + (isGid ? '组建团队 · 挂靠 ' + escape((gidProj && gidProj.name) || "项目") : "创建团队") + '</h3><button type="button" class="create-x" data-team-close aria-label="关闭" title="关闭">✕</button></div>';
+                  // 摘要行（AGGFIX A2 吸收升级——四计数直倒转译；title 全文证据一跳可达）
+                  if (pf && pf.origin) html += '<div class="create-origin" data-team-origin-note title="' + escape("来自聚合推荐：" + String(pf.origin)) + '">推荐 ' + pfN + " 席 · 来自 " + escape(pfBase || "聚合推荐") + (pfBase ? " 目录" : "") + "</div>";
+                  // 段A 身份：团队名（唯一必填输入不藏——首焦点）
+                  html += '<div class="create-label">团队名</div><input class="create-field" data-team-field="name" placeholder="如：redbook 推广" aria-label="团队名" value="' + escape(pf && pf.name ? String(pf.name) : "") + '">';
+                  // 段B 成员区（浏览型与输入型分流——A 路三段结构）
+                  html += '<div class="create-sec"></div>';
+                  html += '<div class="create-label team-seats-label"><span class="seats-t">成员 <span class="seat-count" data-team-seat-count title="勾选 + 手动行 + PM 行，上限 8 席">0/8</span></span>' + (defCands.length ? '<span class="team-micro-ops"><button type="button" class="team-micro-btn" data-team-cand-all title="勾选本源全部候选（受 8 席上限）">全选</button><button type="button" class="team-micro-btn" data-team-cand-clear title="清空全部勾选">清空</button></span>' : "") + '</div>'
+                    + '<div data-team-cand-wrap><div class="team-chips" data-team-chips hidden></div>' + teamCandListHtml(defCands, hitSet) + "</div>";
+                  // 角色模板段尾紧凑行（裁决 5：模板语义归成员段内，去 label 由 aria 承载）
+                  if (defCands.length) html += '<div class="team-tpl-row"><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="pm-led">PM 带队（当前选中会话任 PM，勾选成员为 worker）</option><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select></div>';
+                  // 段C 高级折叠区（手动态默认展开=现行表单流——裁决 6；挂靠模式整段隐藏——裁决 11）
+                  if (!isGid) {
+                    html += '<div class="create-sec"></div>';
+                    html += '<details class="add-adv team-adv"' + (pf ? "" : " open") + '><summary>立项档与锚点 · 通常无需改（轻立项）</summary><div class="team-adv-body">';
+                    if (st) {
+                      html += '<div class="create-label">创建到</div><select class="create-field" data-team-field="source" aria-label="目标源">'
+                        + '<option value="local"' + (defSrc === "local" ? " selected" : "") + '>本机 · ' + escape(String(st.lanRelayName || "本机")) + '</option>'
+                        + '<option value="cloud"' + (defSrc === "cloud" ? " selected" : "") + '>远程 · ' + escape(String(st.cloudRelayName || st.cloudWsUrl || "远程源")) + '</option></select>';
+                    }
+                    const pfTier = pf && (pf.tier === "轻立项" || pf.tier === "正经立项") ? pf.tier : "轻立项";
+                    html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档">'
+                      + '<option value="轻立项"' + (pfTier === "轻立项" ? " selected" : "") + '>轻量项目（日常免确认）</option>'
+                      + '<option value="正经立项"' + (pfTier === "正经立项" ? " selected" : "") + '>正式项目（需你确认）</option></select>';
+                    html += '<div class="create-label">锚点目录<button type="button" class="anchor-info" data-team-anchor-info aria-label="锚点说明">ⓘ</button></div><div class="create-inline"><input class="create-field" data-team-field="anchor" placeholder="项目绝对路径（在 relay 宿主机上）" aria-label="锚点目录" value="' + escape(pf && pf.anchor ? String(pf.anchor) : teamCwdDefault()) + '">'
+                      + '<button type="button" class="create-browse" data-team-anchor-browse title="从文件管理器选择目录" hidden>浏览</button></div>'
+                      + '<div class="create-hint" data-team-anchor-hint hidden></div>';
+                    if (pfDirs.length) html += '<div class="anchor-dirs-row" data-team-anchor-dirs title="' + escape("同 origin clone 目录 · 随创建提交多锚（主锚=锚点目录恒首）") + '"><span class="anchor-dirs-label">附锚</span>' + pfDirs.map((d) => {
+                      const base = String(d).split(/[\\/]/).filter(Boolean).pop() || String(d);
+                      return '<span class="anchor-chip" title="' + escape(String(d)) + '">' + escape(base) + "</span>";
+                    }).join("") + "</div>";
+                    html += '<div class="team-pm-row" data-team-pm-row>' + teamPmRowHtml("pm-led") + "</div>";
+                    html += "</div></details>";
+                  }
                   if (!state.online || !state.command) html += banner("命令通道未接入，无法提交创建。");
                   html += '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
                   if (defCands.length) html += '<button type="button" class="team-add-btn" data-team-add-member>＋ 添加成员</button>';
-                  if (defCands.length) html += '<div class="create-label">角色模板</div><select class="create-field" data-team-field="template" aria-label="角色模板"><option value="pm-led">PM 带队（当前选中会话任 PM，勾选成员为 worker）</option><option value="worker">统一 worker（默认执行者）</option><option value="PM">统一 PM（项目管理）</option><option value="free">自由编制（逐人指定）</option></select>';
-                  // W-AGGFIX C2：主钮带规模（决策点见「创建团队 · N 席」——8 会话聚合是重操作；
-                  // N=0 回落不带计数，无成员建团合法）
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit><span data-team-submit-label>创建团队</span></button></div>';
                   pop.innerHTML = html;
                   pop.dataset.aggDirs = JSON.stringify(pfDirs); // W-AGGFIX：附锚全量 stash（submit 读——原 pfDirs 越域引用根治）
+                  const anchorInput = pop.querySelector("[data-team-field='anchor']");
+                  if (anchorInput) anchorInput.dataset.init = String(anchorInput.value || ""); // 裁决 8：blur 校验跳过「未修改过的初始值」基准
                   // W-AGGFIX C4：阻断态主钮 disabled（banner 已示因，可点外观不再误导）
                   const submitGate = pop.querySelector("[data-team-submit]");
                   if ((!state.online || !state.command) && submitGate) { submitGate.disabled = true; submitGate.title = "命令通道未接入，无法提交"; }
-                  // W-PROJTEAM1 件②/③（1109 拍板「项目⊇团队」）：挂靠模式 gid 预填——
-                  // 项目页「组建团队」入口携带（提交走 create+gid 分支=formTeamOnGroup
-                  // 挂靠既有项目，不经 createGroup=零一锚一组冲突）。桶入口两步主钮
-                  //（并组队）不带 gid=新建项目+团队（原链路不变）。
-                  if (pf && typeof pf.gid === "string" && pf.gid) pop.dataset.teamGid = pf.gid;
+                  // W-PROJTEAM1 挂靠模式（裁决 11）：gid 走 create+gid 分支（formTeamOnGroup），
+                  // 高级折叠区已整段不渲染（四字段编辑无效问题随区消隐——PROJTEAM1-REVIEW P2-1）
+                  if (isGid) pop.dataset.teamGid = pf.gid;
+                  // W-AGGRED 模式机（C 路 §5/§7）：预填命中>0=chips 形态（勾选池 checked 投影+
+                  // 未勾行入「其他候选 ▾」折叠组——AGGFIX B1 吸收）；否则 list=现行表单流
+                  pop.dataset.teamMode = "list";
                   if (pf && Array.isArray(pf.members)) {
-                    // ⑭ 参数位：预勾选成员（sid 命中候选行；命中数留 console 审计面，消费方接入后可验）
                     let hit = 0;
                     for (const sid of pf.members) {
                       const box = pop.querySelector('[data-team-member="' + cssEscape(String(sid)) + '"]');
                       if (box && !box.checked) { box.checked = true; hit++; }
                     }
                     if (hit) console.log("[team-create] prefill members 命中 " + hit + "/" + pf.members.length);
-                    // W-AGGFIX B1：预填态默认折叠未勾旁观行——已勾 N 行是预填主体、「其他候选 M ▾」
-                    // 收纳其余（列表高度砍半+预填语义分层：预勾=推荐，折叠=可选项）；切源重灌回到
-                    // 全列（预填语义随源切换失效）。挪 DOM 保勾选态与委托监听（change 挂 pop）。
-                    if (hit > 0) foldUncheckedCands(pop);
+                    if (hit > 0) { pop.dataset.teamMode = "chips"; foldUncheckedCands(pop); }
                   }
-                  syncTeamSeatCount(pop);
+                  // L3（裁决 12）：chips 模式「＋ 添加成员」并入「其他候选 ▾」行尾（同一「调整成员」
+                  // 心智减一个按钮位）；list 模式保持列表下方原位
+                  if (pop.dataset.teamMode === "chips") {
+                    const tog = pop.querySelector("[data-team-cand-fold]");
+                    const addBtnEl = pop.querySelector("[data-team-add-member]");
+                    if (tog && addBtnEl) {
+                      const line = document.createElement("div");
+                      line.className = "cand-fold-line";
+                      tog.before(line);
+                      line.append(tog, addBtnEl);
+                    }
+                  }
+                  syncTeamSeatCount(pop); // 计数+chips 投影初渲
+                  syncAnchorHint(pop);
                   back.addEventListener("click", closeTeamCreate);
                   pop.addEventListener("click", (ev) => {
                     if (ev.target.closest("[data-team-cancel]") || ev.target.closest("[data-team-close]")) { closeTeamCreate(); return; }
@@ -1771,6 +1884,15 @@
                     if (ev.target.closest("[data-team-add-member]")) { addTeamManualRow(pop); return; }
                     if (ev.target.closest("[data-manual-remove]")) { ev.target.closest(".team-manual-row")?.remove(); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：移行计数联动
                     if (ev.target.closest("[data-team-anchor-browse]")) { void pickTeamAnchor(); return; }
+                    // W-AGGRED（裁决 1）：chip × =取消勾选（写回 checkbox 池+dispatch change——
+                    // 席位闸/计数走既有委托链零改动继承）
+                    const chipX = ev.target.closest("[data-chip-x]");
+                    if (chipX) {
+                      const chip = chipX.closest("[data-chip]");
+                      const box = chip ? pop.querySelector('[data-team-member="' + cssEscape(String(chip.dataset.chip || "")) + '"]') : null;
+                      if (box && box.checked) { box.checked = false; box.dispatchEvent(new Event("change", { bubbles: true })); }
+                      return;
+                    }
                     // W-AGGFIX B1：折叠组展开/收起（▾/▴ 随态）
                     const foldTog = ev.target.closest("[data-team-cand-fold]");
                     if (foldTog) {
@@ -1792,6 +1914,7 @@
                     }
                     if (ev.target.closest("[data-team-cand-clear]")) {
                       pop.querySelectorAll("[data-team-member]:checked").forEach((b) => { b.checked = false; });
+                      if (pop.dataset.teamMode === "chips") teamToListMode(pop); // W-AGGRED：清空全部=手动态列表形态（C 路状态机）
                       syncTeamSeatCount(pop);
                       return;
                     }
@@ -1810,13 +1933,9 @@
                     if (tpl) {
                       const free = tpl.value === "free";
                       pop.querySelectorAll(".team-cand-role").forEach((el) => { el.hidden = !free; });
+                      const pmRow = pop.querySelector("[data-team-pm-row]"); // W-AGGRED：PM 人选行随模板联动（L1）
+                      if (pmRow) pmRow.textContent = teamPmRowHtml(tpl.value);
                       syncTeamSeatCount(pop); // W-AGGFIX C1：pm-led 占 1 席——模板切换计数联动
-                      return;
-                    }
-                    const tierSel = ev.target.closest("[data-team-field='tier']"); // W-TEAMPOPOLISH B2：档位后果 hint 随选项切换
-                    if (tierSel) {
-                      const th = pop.querySelector("[data-team-tier-hint]");
-                      if (th) th.textContent = teamTierHint(tierSel.value);
                       return;
                     }
                     const srcSel = ev.target.closest("[data-team-field='source']"); // #277 ③ 切源：候选重灌+浏览钮/hint 联动
@@ -1831,7 +1950,10 @@
                   });
                   pop.addEventListener("focusout", (ev) => { // W-TEAMPOPOLISH B3：blur 内联校验（blur 不冒泡，focusout 对偶面）
                     if (ev.target.closest?.("[data-team-field='name']")) { teamNameValidate(pop); return; }
-                    if (ev.target.closest?.("[data-team-field='anchor']")) teamAnchorValidate(pop);
+                    if (ev.target.closest?.("[data-team-field='anchor']")) { teamAnchorValidate(pop); syncAnchorHint(pop); }
+                  });
+                  pop.addEventListener("input", (ev) => { // W-AGGRED：锚点值变化即时联动态（ⓘ 展开/收起随空值与错误态）
+                    if (ev.target.closest?.("[data-team-field='anchor']")) syncAnchorHint(pop);
                   });
                   pop.addEventListener("keydown", (ev) => {
                     if (ev.key === "Escape") { ev.stopPropagation(); closeTeamCreate(); return; }
@@ -1854,7 +1976,7 @@
                   // P2BATCH6 件8（C-P2-2）：短路 → 双跑合并判——旧版 || 短路致锚点目录空值被
                   // 团队名首错掩盖，用户两次试错才见全貌；两校验各自独立执行（各自标红+行级
                   // 文案一次全出），提交仍任一不过即拦。
-                  { const okName = teamNameValidate(pop); const okAnchor = teamAnchorValidate(pop); if (!okName || !okAnchor) return; }
+                  { const okName = teamNameValidate(pop); const okAnchor = teamAnchorValidate(pop, { submit: true }); if (!okAnchor) { const adv = pop.querySelector("details.team-adv"); if (adv) adv.open = true; } if (!okName || !okAnchor) return; } // W-AGGRED：提交全验（裁决 8）+失败展开折叠区就近示错
                   if (teamSeatCount(pop) > 8) { toast("编制最多 8 席——请先减员"); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：本地硬闸兜底（勾选闸漏网路径防整单被 relay 拒）
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
