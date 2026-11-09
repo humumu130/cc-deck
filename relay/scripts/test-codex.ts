@@ -73,7 +73,7 @@ function recorder() {
     onStatusChange: (...a) => calls.push({ k: "onStatusChange", a }),
     onWaiting: () => calls.push({ k: "onWaiting", a: [] }),
     onWaitingResolved: () => calls.push({ k: "onWaitingResolved", a: [] }),
-    onStats: () => calls.push({ k: "onStats", a: [] }),
+    onStats: (...a) => calls.push({ k: "onStats", a }),
     onUsage: (...a) => calls.push({ k: "onUsage", a }),
     onTodos: () => calls.push({ k: "onTodos", a: [] }),
     onLog: (...a) => calls.push({ k: "onLog", a }),
@@ -137,7 +137,33 @@ function recorder() {
   m2.handle({ type: "future_event", whatever: 1 }, r2.cb, T0 + 301);
   m2.handle(null, r2.cb, T0 + 302);
   m2.handle("not-an-object", r2.cb, T0 + 303);
-  assert(r2.calls.length === before, "未映射事件/未知类型/非对象全部静默吞（向前兼容）");
+  assert(r2.calls.length === before, "未映射事件/未知类型/非对象全部静默吞（向前兼容；空 changes file_change 仍零回调）");
+
+  // [W-ENGCODEX-FIX P1-2/P1-3]（1110 深测差距收口）：file_change→stats 映射
+  // （S1 零产出闸连坐根除）+reasoning→thinking 映射（思考进活动舱）——fixture 取
+  // 0.154.0 一手实测形状（/tmp/ecf/cwd 真跑捕获，见 w-engcodexfix 回执）
+  {
+    const m4 = new CodexEventMapper();
+    const r4 = recorder();
+    m4.handle({ type: "turn.started" }, r4.cb, T0);
+    // reasoning（真实形状 {type:"reasoning", text:"**Preparing…"}）
+    m4.handle({ type: "item.completed", item: { id: "item_5", type: "reasoning", text: "**Preparing the code update**" } }, r4.cb, T0 + 100);
+    const think = r4.of("onLog").find((c) => c.a[0] === "thinking");
+    assert(!!think && String(think.a[1]).includes("Preparing"), "P1-3 reasoning→kind=thinking 映射（活动舱既有渲染面直吃）");
+    assert(r4.of("onStatusChange").some((c) => c.a[1] === "思考中"), "P1-3b reasoning→状态摘要「思考中」");
+    // file_change（真实形状 changes:[{path,kind}]，status:"completed"）
+    m4.handle({ type: "item.completed", item: { id: "item_6", type: "file_change", status: "completed", changes: [{ path: "/tmp/w/f.txt", kind: "update" }] } }, r4.cb, T0 + 200);
+    let stats = r4.of("onStats").at(-1);
+    assert(!!stats && (stats.a[0] as { files_changed: number }).files_changed === 1, "P1-2 file_change→onStats files_changed=1（S1 零产出闸判据恢复）");
+    m4.handle({ type: "item.completed", item: { id: "item_7", type: "file_change", status: "completed", changes: [{ path: "/tmp/w/f.txt", kind: "update" }, { path: "/tmp/w/g.ts", kind: "add" }] } }, r4.cb, T0 + 300);
+    stats = r4.of("onStats").at(-1);
+    assert(!!stats && (stats.a[0] as { files_changed: number }).files_changed === 2, "P1-2b 同文件多回合去重累计（f.txt 复改=仍 2 处不同文件）");
+    m4.handle({ type: "item.completed", item: { id: "item_8", type: "file_change", status: "failed", changes: [{ path: "/tmp/w/h.md", kind: "add" }] } }, r4.cb, T0 + 400);
+    stats = r4.of("onStats").at(-1);
+    assert(!!stats && (stats.a[0] as { files_changed: number }).files_changed === 2, "P1-2c status=failed 的变更不计（半途变更不进账）");
+    const fcLog = r4.of("onLog").filter((c) => c.a[0] === "tool_result").map((c) => String(c.a[1])).join("|");
+    assert(fcLog.includes("文件变更") && fcLog.includes("f.txt"), "P1-2d file_change→活动行（文件变更 N 处：文件名）");
+  }
 
   // duration 防负：turn.completed 先于 turn.started（乱序防御）
   const m3 = new CodexEventMapper();
