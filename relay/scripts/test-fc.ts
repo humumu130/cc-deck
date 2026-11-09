@@ -186,7 +186,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(/entry\.kind === "tool_use" \|\| entry\.kind === "tool_result"\)\) s\.last_tool_use_at = entry\.occurred_at \|\| entry\.ts/.test(web), "A8 web onLog 工具帧本地刷新·occurred_at 优先（与 relay 咽喉同口径）");
   ok(/x\.status === "WORKING" && isRealWorking\(x\) && !\/\^\(pm\|leader/.test(web), "A9 web 团队 chip 在跑计数过真判定（任务书断言③：计数只算干活中）");
   ok(/roster\.filter\(\(r\) => r\.status === "WORKING" && \(\(\) => \{ const rs = S\.sessions\.get\(r\.sid\); return rs \? isRealWorking\(rs\) : true; \}\)\(\)\)/.test(web), "A9b 抽屉 roster 计数过真判定（审查 B-P1-2：同屏灯灰计数+1 自相矛盾根除；rs 未同步保守按干活）");
-  ok(web.includes('item.status === "working" && item.standby ? "working-standby" : item.status') && web.includes('">待开工</span>') && web.includes('item.status === "working" && !item.standby ?'), "A10 web 卡待命渲染三件（灰呼吸点+待开工标+秒数隐藏）");
+  ok(web.includes('item.status === "working" && item.standby ? "working-standby" : item.status') && web.includes('title="已接单未开工或挂起——无近期工具活动，不占在跑计数（#291 待命）"') && !web.includes('">待开工</span>') && web.includes('item.status === "working" && !item.standby ?'), "A10 web 卡待命渲染三件（灰呼吸点+dot title 承载语义+秒数隐藏；W-STATUSCHIP 1109：『待开工』tag 退役负断言——灯表意不占词）");
   ok(css.includes(".status-dot.working-standby") && css.includes("st-standby-breathe"), "A11 CSS 待命灰呼吸（2.4s 慢频——与工作中黄闪 1.5s 双编码区分）");
   ok(css.includes(".lamp-dot.standby") && css.includes(".lamp-dot.working"), "A12 roster lamp-dot 补全套状态色（原仅 flex 无色=灯不可见，随批修复）");
   ok(mobile.includes("const isRealW = (s) => (window.__ccDeck005IsRealWorking") && (mobile.match(/WORKING" && isRealW\(s\)/g) ?? []).length >= 3 && mobile.includes('? "待开工" :'), "A13 mobile.js 第四面（组头计数×2+看板泳道+状态标签——审查 A-P2②/B-P2-3）");
@@ -195,7 +195,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   // expo
   ok(store.includes('msg.payload.kind === "tool_use" || msg.payload.kind === "tool_result"') && store.includes("conn.sessions.set(sid, { ...s, last_tool_use_at:"), "A15 expo store 工具帧刷新+对象替换（审查 B-P2-2：memo 卡翻转不再等 SESSION_UPDATED）");
   ok(/x && x\.status === "WORKING" && isRealWorking\(x\) \? 1 : 0\); \/\* #291：待命不占在跑计数/.test(list), "A16 expo 团队入口卡在跑计数过真判定");
-  ok(list.includes("const standby = s.status === \"WORKING\" && !isRealWorking(s);") && list.includes("待开工 · "), "A17 expo 会话卡待命态（灰呼吸点+待开工文案）");
+  ok(list.includes("const standby = s.status === \"WORKING\" && !isRealWorking(s);") && list.includes('accessibilityLabel={"待开工，"') && !list.includes("待开工 · "), "A17 expo 会话卡待命态（灰呼吸点#a11y 承载词；W-STATUSCHIP 1109：行内词冠退役负断言——摘要回 srowSum 原生档）");
   ok(detail.includes("isRealWorking(r.s)).length") && detail.includes('standby ? "待开工"'), "A18 expo 详情 roster 计数+行词（待命不占在跑）");
   ok(web.includes("已接单未开工或挂起（无近期工具活动）") && web.includes('"⏸ 待开工 "') && mobile.includes("待开工</b><span>已接单未开工或挂起") && detail.includes('"⏸ 待开工 · "'), "A19 详情/dock/mobile 同屏一致（审查 B-P2-2：卡待开工而详情运行中走秒的矛盾根除——四面同一判定）");
   ok(detail.includes("isRealWorking(s) && s.turn_started_at ? fmtElapsed"), "A19b expo 详情 turnRun 待命不走秒");

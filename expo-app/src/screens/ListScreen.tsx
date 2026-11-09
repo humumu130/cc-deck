@@ -1104,7 +1104,11 @@ const SessionCard = memo(function SessionCard({
               </View>
               <View style={styles.srowR2}>
                 {standby ? (
-                  <Text style={[styles.srowSum, { color: c.faint }]} numberOfLines={1}>待开工 · {s.action_summary || "已接单未开工"}</Text>
+                  /* W-STATUSCHIP（1109 用户实锤「待开工标签太大」）：词冠退役——standby 状态
+                     已由头像角标灰灯承载（:1007 dotColor=c.faint，#291 灯表意不占词），行内
+                     词冠是第二重表意=纯冗余；摘要回 srowSum 原生档（faint→dim 归位），「待开工」
+                     仅存 a11y（读屏用户仍可得状态语义）；无摘要兜底「已接单未开工」保留（行非空） */
+                  <Text style={styles.srowSum} numberOfLines={1} accessibilityLabel={"待开工，" + (s.action_summary || "已接单未开工")}>{s.action_summary || "已接单未开工"}</Text>
                 ) : s.status === "WORKING" ? (
                   <LiveStat s={s} />
                 ) : s.status === "WAITING" && s.waiting_request ? (
