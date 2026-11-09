@@ -49,7 +49,7 @@ async function main(): Promise<void> {
     const bodyMatch = dry.match(/\{[^{]*"action": "dispatch"[^]*\}/);
     const bodyStr = execFileSync("bash", [BIN, "pg-x", "测试审查单", "--review-of", "d-prev", "--no-worktree", "--brief", briefF, "--dry-run"], { encoding: "utf8", env: cliEnv }).toString();
     assert(dry.includes(IMPL_A) || bodyStr.includes(IMPL_A), "--review-of 解析出实施者 A（dry-run 输出含真 sid）");
-    assert(dry.includes("exclude_sessions") || bodyMatch?.[0]?.includes("exclude_sessions"), "payload 带 exclude_sessions（排除意图到达 dispatch 面dry-run JSON 证）");
+    assert(dry.includes("exclude_sessions") || (bodyMatch?.[0]?.includes("exclude_sessions") ?? false), "payload 带 exclude_sessions（排除意图到达 dispatch 面dry-run JSON 证）");
     // 查不到 id：响亮报错 exit 2（不静默裸派）
     let badExit = 0;
     try {
