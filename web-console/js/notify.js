@@ -388,11 +388,18 @@
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
+                  // W-DELIVERQUIET（1109 用户实锤「右下角老是弹」）：dispatch 交付类到达静默——
+                  // 分类键=行 kind 稳定字段（relay upsertNotification("dispatch",…) 桶——勿标题脆
+                  // 匹配）；缺省静默（deliver-pop 开关缺省关，settings 通知卡可开）；信息不丢：
+                  // 通知面板照常累积+未读标+铃铛摆动。其他类（waiting/org-confirm/acceptance/
+                  // system）弹窗行为零触碰。dispatch 与非 dispatch 混批到达时弹首个非 dispatch 行。
                   if (notifySeenInit && window.__ccDeck005NotifyFx) {
                     const fresh = rows.filter((r) => r.isNew && r.active);
-                    if (fresh.length) {
+                    const deliverPop = window.__ccDeck005NotifyFx.deliverPop ? window.__ccDeck005NotifyFx.deliverPop() : false;
+                    const freshLoud = fresh.filter((r) => r.kind !== "dispatch" || deliverPop);
+                    if (freshLoud.length) {
                       if (window.__ccDeck005NotifyFx.soundOn()) window.__ccDeck005NotifyFx.ding();
-                      window.__ccDeck005NotifyFx.desktop(fresh[0].title, fresh[0].body);
+                      window.__ccDeck005NotifyFx.desktop(freshLoud[0].title, freshLoud[0].body);
                     }
                     // B5 铃铛摆动（一次性 420ms；仅面板关时——开着时由 stagger/pop 承担）
                     if (fresh.length && !isOpen()) {
