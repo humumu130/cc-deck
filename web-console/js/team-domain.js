@@ -1117,7 +1117,15 @@
                     if (project) {
                       const boardTotal = state.boards.get(project.id)?.entries?.length;
                       const createdDay = Number(project.created_at) > 0 ? (() => { const d = new Date(Number(project.created_at)); const pad = (n) => String(n).padStart(2, "0"); return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); })() : "";
-                      meta.innerHTML = [
+                      // W-PROJTEAM1 件④（1109 拍板）：所属项目胶囊——同实体两面投影的
+                      // 挂靠心智显式化（项目=基座 · 团队=协作层；纯展示无动作，期二 IA
+                      // 合并时此胶囊退役为面包屑）。独立前置（segments map 会 escape 包裹，
+                      // 胶囊是自渲染 HTML 不走该通道）。
+                      const projPill = (() => {
+                        const tail = String(project.anchor_dir || "").replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() || "";
+                        return '<span class="head-proj-pill" title="所属项目（基座）· ' + escape(String(project.anchor_dir || "")) + '">项目：' + escape(String(project.name || project.id)) + (tail ? " · " + escape(tail) : "") + "</span>";
+                      })();
+                      meta.innerHTML = projPill + '<span class="meta-sep">·</span>' + [
                         // #236 C（编制对账·分档明示）：席数与成员卡数同源（members()=headcount
                         // 带 session_id 过滤，渲染两侧无二次过滤——19 vs 12-1 3 为网格滚动可见数
                         // 的误读面）；分档把「查无会话数据」的离线席显性化，对账不再靠数卡
@@ -1731,6 +1739,11 @@
                   // W-AGGFIX C4：阻断态主钮 disabled（banner 已示因，可点外观不再误导）
                   const submitGate = pop.querySelector("[data-team-submit]");
                   if ((!state.online || !state.command) && submitGate) { submitGate.disabled = true; submitGate.title = "命令通道未接入，无法提交"; }
+                  // W-PROJTEAM1 件②/③（1109 拍板「项目⊇团队」）：挂靠模式 gid 预填——
+                  // 项目页「组建团队」入口携带（提交走 create+gid 分支=formTeamOnGroup
+                  // 挂靠既有项目，不经 createGroup=零一锚一组冲突）。桶入口两步主钮
+                  //（并组队）不带 gid=新建项目+团队（原链路不变）。
+                  if (pf && typeof pf.gid === "string" && pf.gid) pop.dataset.teamGid = pf.gid;
                   if (pf && Array.isArray(pf.members)) {
                     // ⑭ 参数位：预勾选成员（sid 命中候选行；命中数留 console 审计面，消费方接入后可验）
                     let hit = 0;
@@ -1913,8 +1926,9 @@
                     //（const 声明在 openTeamCreate 内，此处 ReferenceError→async 静默拒绝→
                     // 预填带附锚时创建钮无反应）；chip 化后 DOM 文本不再承载全路径，stash 为唯一正源
                     const extraDirsEl = pop.querySelector("[data-team-anchor-dirs]");
-                    const extraDirs = extraDirsEl ? JSON.parse(pop.dataset.aggDirs || "[]").filter((d) => d !== anchor) : [];
-                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(extraDirs.length ? { anchor_dirs: extraDirs } : {}), ...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {}) }, undefined, wsOverride));
+                    const extraDirs = extraDirsEl ? JSON.parse(pop.dataset.aggDirs || "[]").filter((d) => d !== anchor) : []; // W-AGGFIX：读 stash（pfDirs 越域引用根治）
+                    // W-PROJTEAM1：gid 在场走挂靠分支（create+gid=formTeamOnGroup 挂靠既有项目）；缺席=原新建链路
+                    const result = verdict(await state.command("COMMAND_ORG_ACTION", { action: "create", ...(pop.dataset.teamGid ? { gid: pop.dataset.teamGid } : {}), name, anchor_dir: anchor, tier, ...(headcount.length ? { headcount } : {}), ...(extraDirs.length ? { anchor_dirs: extraDirs } : {}), ...(pmSidOut.v ? { pm_session_id: pmSidOut.v } : {}) }, undefined, wsOverride));
                     if (!result.ok) { rememberUnsupported("COMMAND_ORG_ACTION", result.error); feedback("创建失败：" + result.error); toast("创建团队失败：" + result.error); return; }
                     closeTeamCreate();
                     const manualNote = manualSeats.length ? "；" + manualSeats.length + " 个手动席位待后续版本入编" : "";

@@ -90,7 +90,9 @@ await ev(`document.querySelector('[data-agg-hint="${PCS_A}"] [data-agg-create]')
 await wait(600);
 ok(await ev(`!!document.getElementById("team-create-pop")`) === true, "C1 建团弹窗开");
 const dirNote = await ev(`(document.querySelector("[data-team-anchor-dirs]")||{textContent:""}).textContent`);
-ok(dirNote.includes("附锚") && dirNote.includes(PCS_B), `C2 附锚注含附锚目录（实「${dirNote.slice(0, 60)}」）`);
+// W-AGGFIX（#77）A3/B3 chip 化：basename 入 chip 文本、全路径挪 chip title——正源随迁
+const chipTitles = await ev(`[...document.querySelectorAll("[data-team-anchor-dirs] .anchor-chip")].map((c)=>c.title).join("|")`);
+ok(dirNote.includes("附锚") && chipTitles.includes(PCS_B), `C2 附锚在场+chip title 含附锚全路径（AGGFIX 契约；实「${chipTitles.slice(0, 60)}」）`);
 const checked = await ev(`document.querySelectorAll("#team-create-pop [data-team-member]:checked").length`);
 ok(checked === 6, `C3 全簇成员预勾（主桶 4+附桶 2=${checked}）`);
 ok(await ev(`(document.querySelector('#team-create-pop [data-team-field="anchor"]')||{value:""}).value === "${PCS_A}"`) === true, "C4 主锚=锚字段（主锚恒首）");

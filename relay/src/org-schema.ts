@@ -115,6 +115,7 @@ export const PROJECT_GROUP_SCHEMA: Record<string, { type: "string" | "number" | 
   duty_policy: { type: "object" },
   mixed_engine: { type: "boolean" },
   headcount_cap: { type: "number" },
+  team: { type: "object" }, // W-PROJTEAM1 期一：团队层可选挂靠 {formed_at, dissolved_at?}——formed_at=0 哨兵=未组队（仅立项目）；键缺席=存量组派生有团队（读侧 teamStateOf 单点）
 };
 
 /** BoardEntry（projects.ts:97；transitions 行内对象数组细化在 board-entry 校验器） */
