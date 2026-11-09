@@ -45,8 +45,8 @@ import {
   adaptOrgAction, addConfirm, addLesson, addMember, appendRetiredEvent, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
   convergeBoardsWithDispatchLog,
   findGroup, findGroupByAnchor, findStaleGroups, formTeamOnGroup, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
-  listPendingConfirms, listRetiredEvents, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
-  moveBoardEntry, moveEntryByDispatch, planHeadcountTrim, DEFAULT_TRIM_KEEP_IDLE_MS,
+  listPendingConfirms, listRetiredEvents, loadBoard, loadBoardFile, markHoldSuggested, markTeamDissolved, maxActiveGroups,
+  moveBoardEntry, moveEntryByDispatch, planHeadcountTrim, DEFAULT_TRIM_KEEP_IDLE_MS, teamStateOf,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd, BOARD_ENTRY_STATUSES,
   PM_ROLE_RE, seatGate, anchorPathError,
@@ -7333,6 +7333,13 @@ ${lines.join("\n")}
       const r = this.orgAction(action, payload);
       return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
     }
+    // [W-TEAMDISSOLVE]（1109 用户令）团队解散咽喉放行——case 在 orgAction switch（#212
+    // 坑第 N+1 犯预防：不放行则面板解散按钮恒 unsupported）。非决议类（确认门槛在 UI
+    // 输组名弹窗=用户主权面；三闸在 case 内），信任级同 project-status 写面
+    if (action === "dissolve") {
+      const r = this.orgAction(action, payload);
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
     return { ok: false, error: `unsupported org action: ${action}` };
   }
 
@@ -7549,6 +7556,43 @@ ${lines.join("\n")}
           this.emitOrgState();
           this.emitBoard(r.group.id); // 冻结态翻转随板广播
           return { ok: true, data: { group: r.group } };
+        }
+        case "dissolve": {
+          // [W-TEAMDISSOLVE]（1109 用户令「观察者团队不想要了不知道怎么搞」）：团队解散——
+          // 分层语义（W-PROJTEAM §2.4）「解散团队≠结项项目」：team.dissolved_at 落值+成员
+          // 脱组（retireMembers 全链：在途单中断收口+停流+退休档案），**组状态不动**（项目
+          // 保留在项目域，板=项目层任务面随项目留存可溯）。三闸：
+          //   ①防自毁——值守 Leader/PM 会话在编制内=本组是 PM 席位组，拒绝（先挪 PM 再解散）；
+          //   ②在途单——buildArchiveChecklist 的 openDispatches 非空=拒绝并回待处置清单
+          //（统一闸不按 status 分档：parked 组挂起时已收口、清单恒空自然放行=「简化解散」
+          //  同效而更严——择严执行，防 parked 途中复活派单的窗口漏网）；
+          //   ③形态——无团队层（仅立项目）拒收；已解散幂等 ok。
+          const id = str("id");
+          if (!id) return { ok: false, error: "id 必填" };
+          const g = findGroup(id);
+          if (!g) return { ok: false, error: `项目组不存在: ${id}` };
+          const st = teamStateOf(g);
+          if (st.dissolvedAt) return { ok: true, data: { group: g, noop: true, dissolved: true } }; // 幂等
+          if (!st.has) return { ok: false, error: `「${g.name}」无团队层（仅立项目形态），无需解散` };
+          if (g.status === "pending") return { ok: false, error: `「${g.name}」待立项确认（pending）——去留由立项卡 ✓/✗ 决议（✗ 即归档留痕）` };
+          if (this.leaderId && g.headcount.some((h) => h.session_id === this.leaderId)) {
+            return { ok: false, error: `值守 PM 会话在「${g.name}」编制内——解散会自毁值守席位；先把 PM 挪到其他组（org member-add 目标组）再解散` };
+          }
+          const chk = buildArchiveChecklist(id);
+          if (chk && chk.openDispatches.length > 0) {
+            return {
+              ok: false,
+              error: `「${g.name}」有 ${chk.openDispatches.length} 个在途派单未收口，先收割/撤单再解散：${chk.openDispatches.slice(0, 5).map((d) => `${d.id?.slice(0, 8) ?? "?"}(${d.status})`).join("、")}${chk.openDispatches.length > 5 ? "…" : ""}`,
+            };
+          }
+          const before = g.headcount.length;
+          this.disbandGroupMembers(id); // 成员脱组全链（在途中断收口+停流+退休档案+retired 事件）
+          const r = markTeamDissolved(id);
+          if (!r.ok) return r;
+          this.emitChainAudit("group-dissolve", `团队解散：「${g.name}」(${id.slice(0, 8)}) ${before} 席脱组；项目保留（状态 ${g.status} 不动，team.dissolved_at 落值）`);
+          this.emitOrgState();
+          this.emitBoard(id);
+          return { ok: true, data: { group: r.group, dissolved: true, retired: before } };
         }
         case "project-tier": {
           const id = str("id");

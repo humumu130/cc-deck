@@ -1530,6 +1530,23 @@
     /* UIPOLISH3 件四②：刷新从底部常驻栏改 head 圆圈箭头小钮 */
     #d-team .head-refresh { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: none; color: var(--dim); cursor: pointer; }
     #d-team .head-refresh:hover { color: var(--text-strong); background: var(--hover); }
+    /* [W-TEAMDISSOLVE] 解散入口（head 弱危险态——常驻不出红，hover 才热）+已解散区开合 */
+    #d-team .head-dissolve { margin-left: auto; min-height: 24px; padding: 0 9px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--faint); font-size: var(--fs-C); cursor: pointer; }
+    #d-team .head-dissolve:hover { color: var(--danger, #e5484d); border-color: color-mix(in srgb, var(--danger, #e5484d) 36%, transparent); background: color-mix(in srgb, var(--danger, #e5484d) 8%, transparent); }
+    #d-team .team-grp-toggle { width: 100%; text-align: left; background: none; border: 0; cursor: pointer; font: inherit; color: var(--dim); }
+    #d-team .team-grp-toggle:hover { color: var(--text); }
+    #d-team .team-grp-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+    /* [W-TEAMDISSOLVE] 确认弹窗（遮罩+对话卡；danger 钮延后亮=输组名门） */
+    .dissolve-mask { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, #000 52%, transparent); }
+    .dissolve-dialog { width: min(420px, calc(100vw - 48px)); padding: 18px 20px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 18px 48px color-mix(in srgb, #000 42%, transparent); }
+    .dissolve-dialog h3 { margin: 0 0 10px; font-size: var(--fs-B2, 15px); color: var(--text-strong); }
+    .dissolve-fx { margin: 0 0 10px; padding-left: 18px; color: var(--dim); font-size: var(--fs-C); line-height: 1.7; }
+    .dissolve-warn { margin: 0 0 8px; color: var(--text); font-size: var(--fs-C); }
+    .dissolve-warn code { padding: 1px 5px; border-radius: 4px; background: var(--hover); color: var(--text-strong); font-family: var(--mono); }
+    .dissolve-input { width: 100%; margin: 0 0 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg, transparent); color: var(--text); font: inherit; font-size: var(--fs-C); }
+    .dissolve-input:focus { outline: none; border-color: var(--danger, #e5484d); }
+    .dissolve-err { margin: 0 0 8px; color: var(--danger, #e5484d); font-size: var(--fs-C); }
+    .dissolve-actions { display: flex; justify-content: flex-end; gap: 8px; }
     #d-team .head-refresh:disabled { opacity: .45; cursor: not-allowed; }
     #d-team .head-refresh .icon-inline { width: 13px; height: 13px; }
     /* UIPOLISH3 件四⑥：成员 tab 矩形卡片网格（每行 2+，参照旧原型）——只改 pane 内成员列表，

@@ -32,6 +32,12 @@
                 const laneLastCounts = new Map();
                 const legacyStatuses = new Map([["todo", "backlog"], ["doing", "claimed"]]);
                 const groupStatuses = new Map([["pending", "待确认"], ["active", "运行中"], ["parked", "已挂起"], ["archived", "已归档"]]); // W-V8 批2b：状态词表对齐 v8（在办/已结项→运行中/已归档，对照图 P3 词表统一项）
+                // [W-TEAMDISSOLVE]（1109 用户令）：团队层三态判定——relay teamStateOf 的
+                // 端上镜像（键缺席=存量组有团队；formed_at=0=仅立项目；dissolved_at=已解散）
+                const teamDissolvedOf = (g) => !!(g && g.team && g.team.formed_at && g.team.dissolved_at);
+                const teamHasOf = (g) => !g || !g.team || (!!g.team.formed_at && !g.team.dissolved_at);
+                // 已解散区折叠态（会话内记忆——离席成员同款口径，不持久化）
+                let dissolvedOpen = false;
                 const confirmKinds = new Map([["project-create", "正式项目"], ["tier-change", "升降级"], ["suggest-hold", "暂缓"], ["archive", "结项"], ["revive", "复活"], ["headcount-trim-first", "编制清理"], ["pm-appoint", "值守 PM 任命"], ["dispatch-closeout", "收口待办"]]); // [W-SEAT-SEMANTICS] 首裁确认卡标签（缺席时卡面裸显 kind 串）；[W-PMSEAT] 任命/收口两卡标签（1104 串台根治批）
                 // 件十（2026-10-11 用户实锤）：tier 措辞口语化——显示层映射「正经立项→正式项目 /
                 // 轻立项→轻量项目」；存储值保持旧词（创建载荷 option value/relay 校验/org CLI 参数
@@ -1086,14 +1092,18 @@
                         + '<p class="team-meta" title="编制 ' + members(item).length + ' 席 · 待确认 ' + pending + ' 项"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> ' + members(item).length + ' 席 · 待确认 ' + pending + (item.status === "archived" ? "" : ' · <span class="team-ago">' + activeAgo + '</span>') + '</p>'
                         + '<div class="identity-cluster">' + teamSrcCaps(item) + "</div></div>";
                     };
-                    const live = state.projects.filter((p) => p.status !== "archived");
-                    const archived = state.projects.filter((p) => p.status === "archived");
+                    const live = state.projects.filter((p) => p.status !== "archived" && !teamDissolvedOf(p));
+                    const archived = state.projects.filter((p) => p.status === "archived" && !teamDissolvedOf(p));
+                    // [W-TEAMDISSOLVE] 已解散团队置底折叠组（软删可溯——主列表出列、板/档案
+                    // 仍可点入；项目本体保留在项目域，分层语义「解散团队≠结项项目」）
+                    const dissolvedList = state.projects.filter((p) => teamDissolvedOf(p));
                     const grp = (label, n) => '<div class="team-grp"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>' + label + ' <span class="team-grp-n">' + n + "</span></div>";
                     let html = "";
                     // #236 C（口径纠偏）：原「进行中 N」被用户读成「N 个成员在跑」（1023 实锤
                     // ——组卡统计误解源头）；N 实为非归档团队数，措辞点明
                     if (live.length) html += grp("进行中团队", live.length) + live.map(card).join("");
                     if (archived.length) html += grp("已收团", archived.length) + archived.map(card).join("");
+                    if (dissolvedList.length) html += '<button class="team-grp team-grp-toggle" type="button" data-team-dissolved-toggle aria-expanded="' + dissolvedOpen + '" title="展开/收起已解散团队（项目保留在项目域）"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chev-dn"></use></svg>已解散团队 <span class="team-grp-n">' + dissolvedList.length + "</span></button>" + (dissolvedOpen ? dissolvedList.map(card).join("") : "");
                     return html;
                   })() : banner(projectsEmpty());
                   const rkTeam = window.__ccDeck005Reconcile;
@@ -1246,7 +1256,71 @@
                   tSigWrite(panes[1], "p1:" + tSigOf(boardFinal), boardFinal);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
                   if (headRefresh) headRefresh.disabled = !canDetail || Boolean(project && state.loads.get(project.id) === "loading");
+                  // [W-TEAMDISSOLVE] 解散入口显隐：选中组 + 有团队层（未解散）+ 非 pending
+                  //（确认前态去留由立项卡决议）+ 命令通道在。已收团组也可解散（ archived
+                  // 同为团队层在场形态——收团≠解散，两层独立）
+                  {
+                    const btn = query("[data-team-dissolve]");
+                    if (btn) btn.hidden = !(project && teamHasOf(project) && project.status !== "pending" && state.command && state.online);
+                  }
                   root.dataset.teamState = state.projects === null ? "unavailable" : "snapshot";
+                }
+
+                // ---------- [W-TEAMDISSOLVE] 解散确认弹窗（输组名确认——GitHub 删仓形态） ----------
+                // 动态挂 #d-team 下遮罩弹窗：后果清单（成员脱组/板留档/项目保留）+输入组名
+                // 严格相等才亮 danger 钮；提交走 COMMAND_ORG_ACTION {action:"dissolve"}——
+                // 在途/防自毁闸在 relay case 内，失败面回显在弹窗内（不静默关）。
+                let dissolveFlight = false;
+                function openDissolveModal(g) {
+                  closeDissolveModal();
+                  const mask = document.createElement("div");
+                  mask.className = "dissolve-mask";
+                  mask.setAttribute("data-dissolve-mask", "");
+                  const seats = Array.isArray(g.headcount) ? g.headcount.length : 0;
+                  mask.innerHTML = '<div class="dissolve-dialog" role="dialog" aria-modal="true" aria-labelledby="dissolve-title">'
+                    + '<h3 id="dissolve-title">解散团队「' + escape(String(g.name || g.id)) + '」</h3>'
+                    + '<ul class="dissolve-fx">'
+                    + '<li>' + seats + ' 个成员会话脱组（回无团队态，退休档案留痕）</li>'
+                    + '<li>任务板与派单台账留档可溯（已解散区仍可点入查看）</li>'
+                    + '<li><b>项目保留</b>——项目本体与产物仍在项目域（解散团队 ≠ 结项项目）</li>'
+                    + '<li>值守/派单等团队层能力随之停用</li>'
+                    + '</ul>'
+                    + '<p class="dissolve-warn">此操作不可一键撤销（重组团队需重新入编）。输入团队名 <code>' + escape(String(g.name || g.id)) + '</code> 确认：</p>'
+                    + '<input type="text" class="dissolve-input" data-dissolve-input placeholder="输入团队名" aria-label="输入团队名确认解散" autocomplete="off">'
+                    + '<div class="dissolve-err" data-dissolve-err hidden></div>'
+                    + '<div class="dissolve-actions"><button type="button" class="secondary-btn" data-dissolve-cancel>取消</button>'
+                    + '<button type="button" class="danger-btn" data-dissolve-go disabled>解散团队</button></div></div>';
+                  root.appendChild(mask);
+                  const input = mask.querySelector("[data-dissolve-input]");
+                  const go = mask.querySelector("[data-dissolve-go]");
+                  input.focus();
+                  input.addEventListener("input", () => { go.disabled = String(input.value || "").trim() !== String(g.name || g.id).trim(); });
+                  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !go.disabled) go.click(); });
+                  mask.querySelector("[data-dissolve-cancel]").addEventListener("click", closeDissolveModal);
+                  mask.addEventListener("click", (ev) => { if (ev.target === mask) closeDissolveModal(); });
+                  go.addEventListener("click", async () => {
+                    if (dissolveFlight) return;
+                    dissolveFlight = true;
+                    go.disabled = true;
+                    go.textContent = "解散中…";
+                    const ack = await state.command("COMMAND_ORG_ACTION", { action: "dissolve", id: g.id });
+                    dissolveFlight = false;
+                    if (ack && ack.ok === true) {
+                      closeDissolveModal();
+                      const d = ack.data && typeof ack.data === "object" ? ack.data : {};
+                      toast("已解散「" + (g.name || g.id) + "」" + (typeof d.retired === "number" ? " · " + d.retired + " 席脱组" : "") + " · 项目保留在项目域");
+                    } else {
+                      const err = mask.querySelector("[data-dissolve-err]");
+                      if (err && ack && /unknown.?command|unsupported/i.test(String(ack.error || ""))) { state.unsupported.add("COMMAND_ORG_ACTION"); toast("当前 relay 不支持解散命令（旧版本）· 请升级 relay"); closeDissolveModal(); return; }
+                      if (err) { err.hidden = false; err.textContent = "解散失败：" + String((ack && ack.error) || "（未连接或超时）"); }
+                      go.disabled = false; go.textContent = "解散团队";
+                    }
+                  });
+                }
+                function closeDissolveModal() {
+                  const m = root.querySelector("[data-dissolve-mask]");
+                  if (m) m.remove();
+                  dissolveFlight = false;
                 }
                 function updateConfirms(items) {
                   state.confirms = entities(items).filter((confirm) => confirm.status === "pending");
@@ -2206,6 +2280,15 @@
                     const confirm = event.target.closest("[data-team-pick-confirm]");
                     if (confirm) { state.confirmSelected = confirm.dataset.teamPickConfirm; render(); return; }
                     if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true);
+                    // [W-TEAMDISSOLVE]：解散入口（选中组开确认弹窗）+已解散区开合
+                    if (event.target.closest("[data-team-dissolve]")) {
+                      const g = state.projects?.find((x) => x.id === state.selected);
+                      if (g && teamHasOf(g)) openDissolveModal(g);
+                      else toast("该团队无团队层或已解散");
+                      return;
+                    }
+                    const dToggle = event.target.closest("[data-team-dissolved-toggle]");
+                    if (dToggle) { dissolvedOpen = !dissolvedOpen; render(); return; }
                     // W-EXPP2 经验库操作（两步武装 + 行内改归组表单）
                     const expRetire = event.target.closest("[data-exp-retire]");
                     if (expRetire) { expOp("exp-retire", expRetire.dataset.expRetire); return; }

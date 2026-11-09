@@ -107,6 +107,27 @@ export function teamStateOf(g: Pick<ProjectGroup, "team" | "created_at">): { has
   return g.team.dissolved_at ? { has: false, formedAt: g.team.formed_at, dissolvedAt: g.team.dissolved_at } : { has: true, formedAt: g.team.formed_at };
 }
 
+/** [W-TEAMDISSOLVE]（1109 用户令「观察者团队不想要了不知道怎么搞」）：团队解散写侧单点。
+ * 语义=分层模型（W-PROJTEAM 方案 §2.4）「解散团队≠结项项目」——只落 team.dissolved_at，
+ * **组状态不动**（项目保留：active 仍 active / parked 仍 parked，软删可溯）。幂等：已解散
+ * 返回现组；未组队（显式仅立项目）无团队可解散拒收。成员脱组/在途收口/审计在调用方
+ * （session-manager dissolve case：retireMembers 链 + chain-audit）。 */
+export function markTeamDissolved(id: string, dir?: string): TransitionResult {
+  return withOrgWriteTx(dir, () => {
+    const f = readProjectsFileJson(dir);
+    const g = f.groups.find((x) => x.id === id || x.name === id);
+    if (!g) return { ok: false, error: `项目组不存在: ${id}` };
+    const st = teamStateOf(g);
+    if (st.dissolvedAt) return { ok: true, group: g }; // 幂等（重复解散=无操作）
+    if (!st.has) return { ok: false, error: `「${g.name}」无团队层（仅立项目形态），无需解散` };
+    const now = Date.now();
+    g.team = { formed_at: st.formedAt ?? g.created_at, dissolved_at: now };
+    g.updated_at = now;
+    if (!writeProjectsFile(f, dir)) return { ok: false, error: "解散落盘失败（projects.json 写入被拒）" };
+    return { ok: true, group: g };
+  });
+}
+
 // 板状态六态词表（D18 五态 + planlane 批 planned 规划中，1104 用户想法）：planned
 // 规划中（泳道最前·不可认领）/ backlog 待认领 / claimed 进行中 / submitted 完成候选
 // 待复核 / ready_to_install 待装机 / done 完成收口。D18 迁移口径不变：todo→backlog、
