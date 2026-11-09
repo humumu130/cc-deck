@@ -340,6 +340,35 @@
     .team-cand:hover { background: var(--hover); }
     .team-cand-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
     .team-cand .team-cand-role { flex: 0 0 96px; height: 28px; padding: 0 7px; font-size: var(--fs-E); } /* W-TEAMPOPOLISH A3：成员行档 28 归一 */
+    /* ── W-AGGFIX（1109 用户实锤「乱七八糟」·三路审查 w-aggui.md 落地）── */
+    /* A1：矮视口 CTA 沉底根修——actions sticky 吸底：内容短于弹窗时零位移（非溢出弹窗零观感
+       变化）；溢出时钉在滚动视口底沿+surface2 渐隐垫底盖住滚过内容（bottom:-14px 补弹窗底
+       padding，弹窗域一处改全线 create 弹窗受益）。原 700px 档创建钮沉折叠线下无滚动暗示。 */
+    .create-pop > .create-actions { position: sticky; bottom: -14px; z-index: 2; margin-top: 10px; padding: 10px 0 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 55%, transparent), var(--surface2) 42%); }
+    /* A2：聚合证据行单行化（title 全文）——原 60+ 字断两行日志感+挤压表单 */
+    .create-pop .create-hint[data-team-origin-note] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* A3/B3：附锚 chip 化+提级——basename 入 chip（title 全路径）长路径破碎断行退役；科普
+       文案降级进行 title；值色走 --text（有效数据不再与教程灰同档） */
+    .anchor-dirs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: -3px 2px 2px; }
+    .anchor-dirs-label { color: var(--dim); font-size: var(--fs-B); }
+    .anchor-chip { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--text); font-size: var(--fs-E); }
+    /* B1：预填折叠组——未勾旁观行收纳+「其他候选 M ▾」切换行（列表高度砍半+预填语义分层）；
+       display:grid 会压过 hidden UA 样式，[hidden] 显式覆盖必留 */
+    .cand-fold { display: grid; gap: 2px; }
+    .cand-fold[hidden] { display: none; }
+    .cand-fold-toggle { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding: 4px 6px; border: 0; border-top: 1px dashed color-mix(in srgb, var(--line-soft) 85%, transparent); border-radius: 0 0 7px 7px; background: transparent; color: var(--faint); font-size: var(--fs-B); cursor: pointer; } /* 虚线分隔+微缩进语义=展开控件非第 N 行候选（视觉审查复核建议） */
+    .cand-fold-toggle:hover { background: var(--hover); color: var(--text); }
+    /* C1/C2/C3：席位计数徽章（满员标红）+主钮规模决策点+列表头微操作 */
+    .team-seats-label { display: flex; align-items: center; gap: 8px; }
+    .seat-count { margin-left: auto; color: var(--faint); font-weight: 500; }
+    .seat-count.full { color: var(--working); } /* 满员=边界提示（琥珀）非错误——预填 8/8 是合法常态 */
+    .team-micro-ops { display: inline-flex; gap: 2px; }
+    .team-micro-btn { padding: 1px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--faint); font-size: var(--fs-E); cursor: pointer; }
+    .team-micro-btn:hover { background: var(--hover); color: var(--text); }
+    /* B2：弹窗域单 accent 归一——勾选框选中色锚到 CTA 同 token（--brand-strong，渐变端点），
+       消灭「浅桃勾选 vs 锈橙主钮」双橙并存（弹窗=单 accent 场既有原则，上文 C5 注释同源）；
+       #201 的 --brand 浅桃选中 token 仍归列表选中态（rail 等），本覆盖限建团弹窗域 */
+    #team-create-pop .create-check input { accent-color: var(--brand-strong); }
     /* #277 ① 建团弹窗 v2（PM 美化基调）：头行 h3+✕（标题不截断）、锚点行内浏览钮、
        分段卡片流（灰盒 create-group 退役）、滚动条弱化、select 自绘箭头（原生朴素） */
     .create-pop .create-head { display: flex; align-items: flex-start; gap: 8px; }
