@@ -291,7 +291,7 @@ ok(bc.includes('els.body.dataset.b2lSig = ""; // #282 三批审查 P2') || (bc.i
   "N2-P2 空聚合分支清签（双路审查独立同发现：非空→空→同形非空陈旧横幅窄窗封口）");
 // ==================== #282 四批（S4 对话流 timeline keyed 深度化） ====================
 console.log("#282 四批——S4 桌面对话流 keyed + MOB 同构");
-ok(ssd.includes('host.setAttribute("data-conv-body", "")') && ssd.includes("rk4(host, desired)") && ssd.includes('["pg:" + procKey,') && ssd.includes('"echo:" + eq.key') && ssd.includes("const eh = entryHtml(e, s);"),
+ok(ssd.includes('host.setAttribute("data-conv-body", "")') && ssd.includes("rk4(host, desired)") && ssd.includes('["pg:" + procKey,') && ssd.includes('"echo:" + eq.key') && ssd.includes("const eh = entryHtml(e, s, hideTs);"), // P2BATCH6 件2 锚跟改：分钟聚合第三参（hideTs）——字符串直出循环形态不变
   "S4D 桌面对话流 keyed：宿主 [data-conv-body] + 条目 eKey + 过程组 pg:<key> + 回显 echo:<key>——entryHtml 字符串直出，未变帧零解析零触碰");
 ok(ssd.includes('if (!c.classList.contains("wait-card")) c.remove();'),
   "S4D wait-card 体系外受管防线（宿主外兄弟节点，单口非键清场扫不到——S3 resizer 同型）");
