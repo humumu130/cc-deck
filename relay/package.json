@@ -139,6 +139,7 @@
     "test:permission-compat": "tsx scripts/test-permission-compat.ts",
     "test:approve-card": "tsx scripts/test-approve-card.ts",
     "test:engine-auth-watch": "tsx scripts/test-engine-auth-watch.ts",
+    "test:engdista": "tsx scripts/test-engdista.ts",
     "test:t10-login-loop": "tsx scripts/test-t10-login-loop.ts",
     "test:session-title": "tsx scripts/test-session-title.ts",
     "test:bootts": "tsx scripts/test-bootts.ts",
