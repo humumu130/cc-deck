@@ -105,19 +105,17 @@ async function main(): Promise<void> {
   // ---------- C codex effort ----------
   console.log("C codex effort 透传：");
   {
-    const mkCodex = (effort?: string) => {
-      const cb = { onLog: () => {}, onStatusChange: () => {}, onTurnEnd: () => {}, onUsage: () => {}, onSessionEnd: () => {}, onInit: () => {} } as never;
-      return new codex.CodexAgentSession("/tmp", "m", cb, undefined, { effort }) as unknown as { effort?: string };
-    };
-    assert(mkCodex("high").effort === "high", "C1 直传六档值归一恒等");
-    assert(mkCodex("快速").effort === "low" && mkCodex("均衡").effort === "high" && mkCodex("极致").effort === "xhigh", "C2 中文别名归一（快速low/均衡high/极致xhigh——codebuddy 同源词表）");
+    // CI 无 codex 二进制（构造器 resolveCodexCliPath throw「codex CLI 未找到」）——归一
+    // 语义走纯函数 normalizeCodexEffort（构造器消费同一单点，语义锁等价、零二进制依赖）
+    assert(codex.normalizeCodexEffort("high") === "high", "C1 直传六档值归一恒等");
+    assert(codex.normalizeCodexEffort("快速") === "low" && codex.normalizeCodexEffort("均衡") === "high" && codex.normalizeCodexEffort("极致") === "xhigh", "C2 中文别名归一（快速low/均衡high/极致xhigh——codebuddy 同源词表）");
     let threw = "";
-    try { mkCodex("turbo"); } catch (e) { threw = String((e as Error).message); }
+    try { codex.normalizeCodexEffort("turbo"); } catch (e) { threw = String((e as Error).message); }
     assert(threw.includes("未知 effort") && threw.includes("turbo"), "C3 白名单外 fail-fast throw（错配置响亮暴露非静默跑偏）");
-    assert(mkCodex().effort === undefined, "C4 缺省 undefined（~/.codex/config.toml 用户级值生效零变化）");
     // buildArgs 注入静态锚（execTurn 私有——源码锚定）
     const src = readFileSync(new URL("../src/agent-codex.ts", import.meta.url), "utf-8");
     assert(src.includes('args.push("-c", `model_reasoning_effort=${this.effort}`)'), "C5 execTurn 注入 -c model_reasoning_effort（threadId resume 之后图参之前）");
+    assert(src.includes("this.effort = normalizeCodexEffort(opts.effort)"), "C4 构造器经归一单点消费（缺省 undefined 不传——config.toml 用户级值生效零变化）");
     const smSrc = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
     assert(smSrc.includes('profiles.find((e) => e.engine === "codex")') && smSrc.includes("codexEffort"), "C6 engine profile effort 透传在（codex profile 读+spawn 传入——codebuddy 同源读法）");
   }

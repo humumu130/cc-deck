@@ -358,6 +358,14 @@ export interface CodexSessionOpts {
 export const CODEX_EFFORTS: readonly string[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 export const CODEX_EFFORT_ALIASES: Record<string, string> = { 快速: "low", 均衡: "high", 极致: "xhigh" };
 
+/** [W-ENGDIST-B 件三] effort 归一纯函数（CI 无 codex 二进制——构造器消费本口，
+ * 词表/别名/fail-fast 语义单点在此）：别名→六档；白名单外 throw（错配置响亮暴露）。 */
+export function normalizeCodexEffort(effort: string): string {
+  const eff = CODEX_EFFORT_ALIASES[effort] ?? effort;
+  if (!CODEX_EFFORTS.includes(eff)) throw new Error(`codex 未知 effort 档位: ${effort}（六档 minimal/low/medium/high/xhigh/max 或 快速/均衡/极致 别名）`);
+  return eff;
+}
+
 export class CodexAgentSession implements AgentLike {
   readonly id = randomUUID();
   readonly startedAt = Date.now();
@@ -398,12 +406,7 @@ export class CodexAgentSession implements AgentLike {
     this.cwd = cwd;
     this.cb = cb;
     this.threadId = opts?.resume;
-    // [W-ENGDIST-B 件三] effort 归一（别名表→六档；白名单外 throw=错配置响亮暴露）
-    if (opts?.effort) {
-      const eff = CODEX_EFFORT_ALIASES[opts.effort] ?? opts.effort;
-      if (!CODEX_EFFORTS.includes(eff)) throw new Error(`codex 未知 effort 档位: ${opts.effort}（六档 minimal/low/medium/high/xhigh/max 或 快速/均衡/极致 别名）`);
-      this.effort = eff;
-    }
+    if (opts?.effort) this.effort = normalizeCodexEffort(opts.effort); // [W-ENGDIST-B 件三] 归一单点（纯函数——CI 无 codex 二进制可测）
     const bin = resolveCodexCliPath();
     if (!bin) {
       // 同步抛 → execCommand 顶层 catch 兜成 COMMAND_ACK ok:false（Leader 首建口
