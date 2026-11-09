@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentCallbacks } from "./agent-adapter.js";
 import { JsonProcessAgentSession, mapJsonlActivity, preflightEngine, type EngineConfig, type EngineSpawnOptions, type JsonlActivityOptions, type MappedStatusDock, type PreflightResult } from "./agent-jsonl.js";
@@ -9,7 +9,13 @@ export const TRAE_CAPABILITIES = {
   reinjection: true,
   approval: false,
   images: false,
-  usage: false,
+  // [W-ENGDIST-B 件二]（1110 上游源码实勘）：usage=true——上游非流式（anthropic_client
+  // messages.create 无 stream），stdout 是 rich console 人读文本零 usage；但**轨迹文件**
+  // 每步 interaction.response.usage 完整四键（input/output/cache_creation/cache_read，
+  // trajectory_recorder.py:103-117 源码实证）。收割面=CLI `-t <file>` 指定轨迹路径
+  // （每回合新进程=同路径覆写=本回合全量）+回合收口读文件聚合 → onUsage（回合聚合
+  // 量，session-manager 累计语义同源）+onContext（末次调用 input 面=水位）。
+  usage: true,
   todos: false,
   artifacts: false,
   streaming: false,
@@ -26,7 +32,7 @@ export const TRAE_PENDING_SMOKE = [
   "--help/版本确认 JSON 或 JSONL 输出开关",
   "非交互/自动批准、provider/model 参数与退出码",
   "原生 session/resume 能力（第一期固定不启用）",
-] as const;
+] as const; /* [W-ENGDIST-B 件二] usage 冒烟项已清（上游源码实勘+轨迹收割接线；resume 项维持——确未启用） */
 
 export function mapTraeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities" | "profileId"> = {}): MappedStatusDock {
   // #42 收口：档位钉死 trae（structured=false），批量/流式两面同源，调用方不可覆盖
@@ -95,18 +101,74 @@ export interface TraeSessionOptions extends Omit<EngineSpawnOptions, "label" | "
 }
 
 export class TraeAgentSession extends JsonProcessAgentSession {
+  /** [W-ENGDIST-B 件二] 本会话轨迹文件（每回合经 -t 覆写——回合收口读取聚合 usage） */
+  private readonly trajPath: string;
+
   constructor(opts: TraeSessionOptions) {
     // profileId 钉死 trae 档（structured=false）：纯文本 stdout 行一律正文（#42）
-    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
+    // [W-ENGDIST-B 件二] usage 收割：包装 cb.onTurnEnd——收口时读轨迹文件（CLI 进程
+    // 已退出=文件落盘完成），把本回合各 interaction 的 usage 聚合成回合量发
+    // onUsage（session-manager 累计语义），末次调用的 input+cache 面发 onContext
+    //（水位 per-call 口径）。失败/文件缺席=静默跳过（usage 尽力而为不阻断收口）。
+    const trajPath = join(tmpdir(), `trae-traj-${randomTraeId()}.json`);
+    super({
+      ...opts,
+      label: "trae",
+      command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli",
+      profileId: "trae",
+      cb: {
+        ...opts.cb,
+        onTurnEnd: (ok, detail, ms) => {
+          try { harvestTraeUsage(trajPath, opts.cb); } catch { /* 轨迹缺席/坏档：usage 尽力而为 */ }
+          opts.cb.onTurnEnd(ok, detail, ms);
+        },
+      },
+    });
+    this.trajPath = trajPath;
   }
 
   protected buildArgs(prompt: string): string[] {
     // 官方仓库 README 已确认：trae-cli run "<task>"；工作目录由 spawn cwd 提供。
     // W-ENGREST-FIX（1109 深测 P1）：恒带 --config-file 权威位（缺省 cwd 相对=生产不可用，
     // 见 traeConfigPath 头注）；缺省位无文件时先生成模板引导。
+    // [W-ENGDIST-B 件二]：-t 指定本会话轨迹路径（缺省 cwd 相对 trajectories/ 会散落
+    // 用户项目目录且路径不可预测——tmpdir 会话级路径双收：不污染项目+收口可读）。
     ensureTraeConfigTemplate();
-    return ["run", prompt, "--config-file", traeConfigPath()];
+    return ["run", prompt, "--config-file", traeConfigPath(), "-t", this.trajPath];
   }
+}
+
+/** 会话级轨迹文件名随机段（防同机并行会话同路径互覆）。 */
+function randomTraeId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** [W-ENGDIST-B 件二] 轨迹 usage 收割纯函数（可单测）：读轨迹 JSON，聚合本回合
+ * interactions[].response.usage 四键为回合量发 cb.onUsage；末次 interaction 的
+ * input+cache 面发 cb.onContext（水位）。文件缺席/坏档/零 interaction=零回调。 */
+export function harvestTraeUsage(trajPath: string, cb: AgentCallbacks): { input: number; output: number } | null {
+  let raw: string;
+  try { raw = readFileSync(trajPath, "utf-8"); } catch { return null; }
+  let doc: { interactions?: Array<{ response?: { usage?: Record<string, unknown> } }> };
+  try { doc = JSON.parse(raw) as typeof doc; } catch { return null; }
+  const inters = Array.isArray(doc?.interactions) ? doc.interactions : [];
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  let input = 0, output = 0, cacheRead = 0, cacheCreate = 0, lastCtx = 0;
+  let seen = false;
+  for (const it of inters) {
+    const u = it?.response?.usage;
+    if (!u || typeof u !== "object") continue;
+    seen = true;
+    input += num(u.input_tokens);
+    output += num(u.output_tokens);
+    cacheRead += num(u.cache_read_input_tokens);
+    cacheCreate += num(u.cache_creation_input_tokens);
+    lastCtx = num(u.input_tokens) + cacheRead + cacheCreate; // 末次调用窗口占用（水位口径）
+  }
+  if (!seen) return null;
+  cb.onUsage({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheCreate });
+  if (lastCtx > 0) cb.onContext?.(lastCtx);
+  return { input, output };
 }
 
 export function preflightTrae(config?: Partial<EngineConfig>): PreflightResult {

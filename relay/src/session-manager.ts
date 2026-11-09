@@ -907,9 +907,17 @@ export class SessionManager {
       throw new Error(`未注册引擎: ${opts.engine}`);
     }
     if (opts?.engine === "codex") {
+      // [W-ENGDIST-B 件三]（1110）：engine profile effort 键透传（codebuddy 同源读法——
+      // profile 缺席/无键=undefined 不传，~/.codex/config.toml 用户级值生效零变化）
+      let codexEffort: string | undefined;
+      try {
+        const profiles = readEngineProfiles(this.cfg.dataDir) || [];
+        const prof = profiles.find((e) => e.engine === "codex");
+        if (prof?.effort) codexEffort = prof.effort;
+      } catch { /* profile 读失败：零配置 spawn（行为=旧版） */ }
       return this.agentFactory
         ? this.agentFactory(cwd, model, cb, initialPrompt, { engine: "codex", resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images })
-        : new CodexAgentSession(cwd, model, cb, initialPrompt, { resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images });
+        : new CodexAgentSession(cwd, model, cb, initialPrompt, { resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images, ...(codexEffort ? { effort: codexEffort } : {}) });
     }
     // W-KWP2 件一（B 路 B1）：雇员会话插件通路。只有 state.employee=true 的 spawn
     // 点带 employee 标记进来（5 个 spawn 点统一守卫，本分支是唯一计算口）——非雇员

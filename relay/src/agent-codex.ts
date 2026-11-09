@@ -346,7 +346,17 @@ export interface CodexSessionOpts {
   rules?: unknown;
   /** 兼容工厂统一签名：雇员独立家是 CLAUDE_CONFIG_DIR 概念；CODEX_HOME 隔离后置 */
   configHome?: string;
+  /** [W-ENGDIST-B 件三]（1110，ENGCODEX-FIX 审查 P3 备案收口）：思考档位透传——
+   * engine profile `effort` 键（codebuddy 同源词表：minimal/low/medium/high/xhigh/max
+   * 或 快速/均衡/极致 别名），spawn 经 `-c model_reasoning_effort=<v>` 注入
+   *（codex-cli 0.154.0 实测 -c 通道接受该键，turn.completed.usage.reasoning_output_tokens
+   * 字段在场=档位消费可观察面）。缺省 undefined=不传（~/.codex/config.toml 用户级值生效）。 */
+  effort?: string;
 }
+
+/** [W-ENGDIST-B 件三] effort 词表+别名（codebuddy 六档同源——engine profile 单键跨引擎同词表，防两套词漂移） */
+export const CODEX_EFFORTS: readonly string[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+export const CODEX_EFFORT_ALIASES: Record<string, string> = { 快速: "low", 均衡: "high", 极致: "xhigh" };
 
 export class CodexAgentSession implements AgentLike {
   readonly id = randomUUID();
@@ -368,6 +378,9 @@ export class CodexAgentSession implements AgentLike {
   private turnImageDirs = new Set<string>();
   private stopping = false;
   private stderrTail = "";
+  /** [W-ENGDIST-B 件三] 思考档位（构造期归一：别名→六档词表；非法值 fail-fast throw——
+   *  与 codebuddy buildArgs 校验同款防线，防 spawn 带错档静默跑偏） */
+  private readonly effort?: string;
 
   get childPid(): number | undefined {
     return this.pid;
@@ -385,6 +398,12 @@ export class CodexAgentSession implements AgentLike {
     this.cwd = cwd;
     this.cb = cb;
     this.threadId = opts?.resume;
+    // [W-ENGDIST-B 件三] effort 归一（别名表→六档；白名单外 throw=错配置响亮暴露）
+    if (opts?.effort) {
+      const eff = CODEX_EFFORT_ALIASES[opts.effort] ?? opts.effort;
+      if (!CODEX_EFFORTS.includes(eff)) throw new Error(`codex 未知 effort 档位: ${opts.effort}（六档 minimal/low/medium/high/xhigh/max 或 快速/均衡/极致 别名）`);
+      this.effort = eff;
+    }
     const bin = resolveCodexCliPath();
     if (!bin) {
       // 同步抛 → execCommand 顶层 catch 兜成 COMMAND_ACK ok:false（Leader 首建口
@@ -482,6 +501,9 @@ export class CodexAgentSession implements AgentLike {
   private execTurn(prompt: string, images: string[] = []): void {
     const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
     if (this.threadId) args.push("resume", this.threadId);
+    // [W-ENGDIST-B 件三] 思考档位透传：-c 配置覆盖通道（0.154.0 实测接受；
+    // turn.completed.usage.reasoning_output_tokens 在场=消费可观察面）
+    if (this.effort) args.push("-c", `model_reasoning_effort=${this.effort}`);
     // #63 附图：已落盘的文件路径。codex-cli 0.154.0 两子命令的 --image 定义不同：
     // exec 是变长 <FILE>...，exec resume 是单值 <FILE>——统一按「重复 flag」拼
     // （--image p1 --image p2），两种形态都合法，避免 resume 多图时游离参数报退出码 2。

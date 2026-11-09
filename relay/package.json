@@ -91,6 +91,7 @@
     "test:codex-adoption": "tsx scripts/test-codex-adoption.ts",
     "test:engine-rollouts": "tsx scripts/test-engine-rollouts.ts",
     "test:engine-adapters": "tsx scripts/test-engine-adapters.ts",
+    "test:engdistb": "tsx scripts/test-engdistb.ts",
     "test:artifacts-dead": "tsx scripts/test-artifacts-dead.ts",
     "test:artifact-groups": "tsx scripts/test-artifact-groups.ts",
     "test:activity-mapper": "tsx scripts/test-activity-mapper.ts",

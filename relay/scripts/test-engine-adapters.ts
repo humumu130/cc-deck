@@ -200,8 +200,17 @@ try {
     ["codebuddy", CODEBUDDY_CAPABILITIES],
   ] as const;
   for (const [name, caps] of capsTable) {
-    assert(caps.approval === false && caps.resume === false && caps.streaming === false, `${name} 能力位快照：approval/resume/streaming=false（006 保守口径）`);
+    // [W-ENGDIST-B 1110] resume 语义已翻页：codebuddy（ENGCB-FIX G3，dev 既有）/qwen（本批）
+    // 皆 resume=true（CLI --resume 实勘+engineSessionId 捕获接线）——快照冻结面收窄为
+    // approval/streaming 两键（006 保守口径中仍有效的部分）。resume 真值由各自引擎断言
+    // 承载（qwen 见下方 H 组；codebuddy=test-285 面）。
+    assert(caps.approval === false, `${name} 能力位快照：approval=false（006 保守口径存续面——无审批通道引擎不伪造，恒真项）`);
+    if (name === "trae") assert(caps.resume === false && caps.streaming === false, "trae resume/streaming=false（确未启用——PENDING_SMOKE 在册）");
+    if (name === "qwen-code") assert(caps.streaming === false, "qwen streaming=false（json 单对象基线未翻页）");
+    if (name === "codebuddy") assert(caps.streaming === true, "codebuddy streaming=true（ENGCB-FIX G6 dev 既有真值——stream-json 实时帧）");
   }
+  assert(QWEN_CODE_CAPABILITIES.resume === true, "qwen resume=true（W-ENGDIST-B 件一：0.27.1 help 实勘+result 帧 session_id 捕获+失锚自愈）");
+  assert(CODEBUDDY_CAPABILITIES.resume === true, "codebuddy resume=true（W-ENGCB-FIX G3，dev 既有真值——本批补锚收编预存红）");
   assert(QWEN_CODE_CAPABILITIES.usage === true, "qwen usage=true 为 JSON 基线声明（真机冒烟欠账，差异备案）");
   assert(isReinjectionEngine("trae") && isReinjectionEngine("qwen-code") && isReinjectionEngine("codebuddy") && !isReinjectionEngine("zcode"), "reinjection 白名单=三新引擎，zcode 不入");
 
@@ -214,7 +223,7 @@ try {
   // ============ G. W-ENGREST-FIX args 锚（trae config 注入 + qwen yolo 工具装载）============
   // 真链行为证据在真机复测帧（本套件为源码锚防回退——test-277 真源码抽取范式）
   const traeSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "agent-trae.ts"), "utf-8");
-  assert(traeSrc.includes('["run", prompt, "--config-file", traeConfigPath()]'), "G1 trae buildArgs 恒带 --config-file 权威位（cwd 相对缺省=生产不可用，深测 P1）");
+  assert(traeSrc.includes('["run", prompt, "--config-file", traeConfigPath(), "-t", this.trajPath]'), "G1 trae buildArgs 恒带 --config-file 权威位+[-t 轨迹路径]（W-ENGDIST-B 件二 usage 收割面）");
   assert(traeSrc.includes("CCR_TRAE_CONFIG") && traeSrc.includes('.trae-agent", "trae_config.yaml"'), "G2 trae config 位=CCR_TRAE_CONFIG || ~/.trae-agent/（探测位同源）");
   assert(traeSrc.includes("ensureTraeConfigTemplate") && traeSrc.includes("CCR_STUB_MODE"), "G3 trae 缺省位首启模板引导（桩环境护栏，不写真实 home）");
   const qwenSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "agent-qwen.ts"), "utf-8");
