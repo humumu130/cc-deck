@@ -35,6 +35,7 @@
     "test:280-conn-page": "tsx scripts/test-280-conn-page.ts",
     "test:282-targeted-render": "tsx scripts/test-282-targeted-render.ts",
     "test:teampolish": "tsx scripts/test-teampolish.ts",
+    "test:teamdissolve": "tsx scripts/test-teamdissolve.ts",
     "test:287-pm-keepalive": "tsx scripts/test-287-pm-keepalive.ts",
     "test:ui-followup": "tsx scripts/test-ui-followup.ts",
     "test:289-detail-keepalive": "tsx scripts/test-289-detail-keepalive.ts",

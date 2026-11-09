@@ -1148,6 +1148,7 @@ export function startServer(
             "dispatch", "board", "project-detail", "rate", "tag",
             "chain", // #92 W-NOTIFY2 D：派发回执链时间线只读查询（非决议类）
             "member-retire", "member-add", // #26 补章：编制面执行动作（可逆：复拉走 member-add），非决议类
+            "dissolve", // [W-TEAMDISSOLVE]：团队解散（非决议类——确认门槛在 UI 输组名弹窗=用户主权面；在途/防自毁闸在 case 内；项目保留仅团队层解除，非结项）
             // W-EXPP1 经验库动作（非决议类：写入面走经验库自身硬校验+软上限+漏斗审计
             // 行，无用户决策卡语义；exp-list/exp-export 只读——org exp 子命令的 HTTP 面）
             "exp-append", "exp-bump", "exp-retire", "exp-restore", "exp-list",
