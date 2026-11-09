@@ -62,6 +62,33 @@ export interface HarvestEvidence {
 /** R3 归一键：卡/台账/回执/git log 统一用 W-SLUG 锚（`w-xxx` 前缀，大小写不敏感）；
  * 无 slug 前缀的卡（如「巡查员上岗：…」）回落前 10 字归一。标题措辞差（派单书 vs 台账
  * 微调词）在 slug 锚下零影响——三源键同一套。 */
+/** W-ORPHANCARD 刀二（1109 用户质问治本）：收割闭链基族键——去代尾/审查尾/复审尾
+ * （多重尾循环剥，w-xxx-r1-review → w-xxx）。原 cardlife 内联 baseSlug 只剥 -rN——
+ * 审查单卡（w-xxx-review）不归主单基族=终代收割不闭审查卡（1109 实锤 9 张滞留）。
+ * 提取为导出纯函数：cardlife 段与对账器同源单点，测试直测。 */
+export function chainBaseSlug(key: string): string {
+  let s = String(key || "");
+  for (let i = 0; i < 3; i++) s = s.replace(/-(r\d+|review|audit)$/, "");
+  return s;
+}
+
+/** W-ORPHANCARD 刀一：续跑唤醒复用查找——title 以「续跑 w-xxx」起时在板找同基族卡
+ * （任意状态——终态卡续跑=复活原卡不建新卡）。返回卡 id 或 null（null=首次形态照旧建新卡）。 */
+export function findContCard(entries: Array<{ id: string; text?: string }>, title: string): string | null {
+  const m = /^续跑\s+(w-[a-z0-9][a-z0-9-]{1,40})/i.exec(String(title || "").trim());
+  if (!m) return null;
+  const raw = m[1].toLowerCase();
+  const base = chainBaseSlug(raw);
+  let baseHit: string | null = null;
+  for (const e of entries) {
+    const k = harvestKeyOf(String(e.text || ""));
+    if (!k.startsWith("w-")) continue;
+    if (k === raw) return e.id; // 精确代次优先（续跑 w-x-r1 命中 r1 卡本体）
+    if (baseHit === null && chainBaseSlug(k) === base) baseHit = e.id; // 基族回退（终代卡/主卡）
+  }
+  return baseHit;
+}
+
 export function harvestKeyOf(text: string): string {
   const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
   if (m) return `w-${m[1].toLowerCase()}`;
