@@ -852,7 +852,7 @@
                 function sessionsRows(entry) {
                   const sessions = [...entry.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
                   return sessions.map((s) => {
-                    const ctx = Number(s.context_limit) > 0 ? " · 上下文 " + Math.max(1, Math.min(999, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100))) + "%" : "";
+                    const ctx = Number(s.context_limit) > 0 ? " · 上下文 " + Math.max(1, Math.min(100, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100))) + "%" : ""; // W-CTXCLAMP：999→100 与全仓口径对齐（越窗帧 129% 违直觉=显示层缺陷；其余 pct 点均已 min(100)）
                     const k = VROW_K[s.status] || ["完成", ""];
                     const bareId = !s.title && !s.initial_prompt; // C3 裸 UUID 标题降级（前 8 位等宽+hover 全量）
                     return vrow('data-domain-jump="session" data-jump-session="' + escapeHtml(s.session_id) + '"', s.title || s.initial_prompt || s.session_id, relTime(s.updated_at) + ctx, k[0], k[1], { idTitle: bareId, titleHint: "在会话域打开", absTs: s.updated_at });
