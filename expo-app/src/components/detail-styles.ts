@@ -28,19 +28,12 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
     ...HEAD_BASE, /* W-HEADUNI：#148 旧对齐源退役——统一会话列表页基准 */
     borderBottomWidth: 1.5, borderBottomColor: c.lineStrong, /* W-HEADFIX2：分割线统一基准页口径 */
   },
-  // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
   // W-UIFIX 件七：纯 chevron 背钮（去 tintSoft 方块底）——40px 触区、图标 24px 微信式
   backPlain: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -6 },
-  back: {
-    width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden",
-    alignItems: "center", justifyContent: "center",
-  },
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600", lineHeight: 20 },
-  // R2 元信息行：源·ctx 一句话左聚（#159 缝合，原 ctx 标签/水位条/独立字号样式已废），
-  // 设置簇 marginLeft:auto 右锚
-  headMeta: { flexDirection: "row", alignItems: "center", marginTop: 6 },
-  // 副信息行（头部专用）：次级信息统一档 10px dim（#159：源与 ctx 同档同色，报警档才异色）
+  // 副信息档 10px dim（#159「一行一档」承继；W-HEADFIX A′ 后仅 srcMeta 开关位回显用；
+  // headMeta/permCluster 两键随 Row2 退役删除）
   sub: { color: c.dim, fontSize: 10, lineHeight: 13 },
   // 统计视图卡片（原 StatsModal 内容平铺）
   // W-EXPO 005「更多」键值行（kv-row）：行级无常驻分隔线（军规②），值左标签右
@@ -50,6 +43,8 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 「更多」小节（more-section）：分组只靠间距+小节标题（军规③）
   moreSec: { marginTop: 18 },
   moreSecT: { marginBottom: 4, color: c.faint, fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
+  // W-HEADFIX（1109 A′）：会话设置节控件行——模型 chip+思考开关自 head Row2 迁入
+  moreCtrlRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   // 水位计（context-meter 005 形制）
   meterWrap: { paddingVertical: 4 },
   // W-LIST2 件二②：headMeta 行内颗粒水位组（颗粒带+%文本，行高 ~14 内贴合）
@@ -67,9 +62,9 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   meterUsed: { color: c.textStrong, fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"] },
   meterLimit: { color: c.dim, fontSize: 10, fontVariant: ["tabular-nums"] },
   meterPct: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  // 思考/审批开关（R2 设置簇）：#159 方案A 去迷你滑块，改与权限胶囊同形文字胶囊——
-  // h14/r7/tintSoft 素底（off）+ 品牌蓝描边亮底（on），一行只剩一种胶囊形态；
-  // 触达靠 hitSlop 补偿，圆角 8 语感与返回钮同
+  // 思考开关（W-HEADFIX A′ 迁「更多」tab 会话设置节；历史：#159 方案A 定文字胶囊形、
+  // #36 h14/r7/tintSoft 素底（off）+品牌蓝描边亮底（on））：填充式范式=胶囊族基准形
+  //（B 刀1 裁决：modelChip 向本键对齐，非反向）
   thinkToggle: {
     height: 14, borderRadius: 7, paddingHorizontal: 6, backgroundColor: c.tintSoft,
     borderWidth: 1, borderColor: "transparent", alignItems: "center", justifyContent: "center",
@@ -137,22 +132,11 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 2, borderBottomWidth: 2, borderBottomColor: "transparent" }, /* W-DETAIL2 件二：降高 */
   // 005 mobile-detail-tabs：激活 text-strong 加粗 + brand 底杠（指示条动画保留）
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2, borderRadius: 1, backgroundColor: c.brandA },
-  tabT: { fontSize: 11.5, color: c.dim }, /* W-DETAIL2 件三裁决=A 纯汉字收紧（理由见回执） */
-  tabTOn: { color: c.textStrong, fontWeight: "700" },
-  // #36 权限胶囊（R2 设置簇左位，思考开关右侧成组）：h14/r7 与思考开关同形态语言
-  permCluster: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
-  permPill: {
-    height: 14, borderRadius: 7, borderWidth: 1,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
-  },
-  // 幽灵态（标准）：盾标 + ⇄ 切换符（#117 起两图标，定宽 20 放不下改自适应，
-  // 描边色按明暗在 JSX 注入——深色 line 太弱需提亮）
-  permPillGhost: { paddingHorizontal: 6, backgroundColor: c.tintSoft },
-  permPillLit: { paddingHorizontal: 6, backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
-  // 警示态（跳过）：红只到 tint+描边+文字，不用实底——14px 实底会变整行最重元素压过标题
-  permPillWarn: { paddingHorizontal: 6, backgroundColor: withA(c.waiting, 0.1), borderColor: withA(c.waiting, 0.45) },
+  tabT: { fontSize: 11.5, lineHeight: 16, color: c.dim }, /* W-DETAIL2 件三裁决=A 纯汉字收紧（理由见回执）；W-HEADFIX：固定 lineHeight 双态等高防切换跳动 */
+  tabTOn: { color: c.textStrong, fontWeight: "700", fontSize: 12.5 }, /* W-HEADFIX A′ 采 B 一角：选中态强化=字重+升档字号（底色/胶囊形被 C 路裁决否——胶囊撞设置族语言且无法表达翻页进度） */
+  // W-HEADFIX：#36 权限胶囊族键（permCluster/permPill{,Ghost,Lit,Warn}/permTWarn）随
+  // Row2 退役+历史 #218 退役清死键——permT 保留（ScanScreen 共享样式表在用）
   permT: { fontSize: 9, lineHeight: 10, color: c.brandA, fontWeight: "600" },
-  permTWarn: { color: c.waiting },
   // #36 四选一底部面板
   permScrim: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(8,12,18,0.38)" },
   permSheet: {
@@ -181,16 +165,16 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permBadgeT: { color: c.waiting, fontSize: 9, lineHeight: 11, fontWeight: "600" },
   permDesc: { color: c.dim, fontSize: 10, lineHeight: 13, marginTop: 1 },
   permCheck: { color: c.brandA, fontSize: 13, fontWeight: "700" },
-  // W-PORT-B P0-1：模型 chip（R2 右锚幽灵胶囊）与 ModelSheet 内部件
-  // W-FB66REST ④（用户 1026 test.66「太高了有点突兀」）：22→18 降高——与 r3 chip
-  // 18px 同族视觉档（桌面 FB66C ⑫ 定档；手机 r3 teamChip 同 ~17-18 撑高），横内距
-  // 收 8→7、lineHeight 12→11 同步收；hitSlop 8 保留触达面积不缩
+  // W-PORT-B P0-1 引入；W-HEADFIX（1109 B 刀1）：迁「更多」tab 时形态统一——描边式
+  // 18px 旧形态不搬家（B 路定谳「胶囊语言分裂」：同排两颗范式相反），对齐 thinkToggle
+  // 填充式 14px 族（h14/r7/padH6/tintSoft 底+transparent 描边）；maxWidth 120 保长模型名
+  // 截断（迁入位行宽充裕仍保留防溢出）；marginRight 3 退役（行 gap 8 接管）
   modelChip: {
-    height: 18, paddingHorizontal: 7, borderRadius: 9, justifyContent: "center",
-    borderWidth: 1, borderColor: c.line,
-    maxWidth: 120, marginRight: 3,
+    height: 14, paddingHorizontal: 6, borderRadius: 7, justifyContent: "center",
+    borderWidth: 1, borderColor: "transparent", backgroundColor: c.tintSoft,
+    maxWidth: 120,
   },
-  modelChipT: { color: c.dim, fontSize: 10, lineHeight: 11, fontWeight: "600" },
+  modelChipT: { color: c.dim, fontSize: 9, lineHeight: 10, fontWeight: "600" },
   modelRowT: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5, lineHeight: 16 },
   modelEmpty: { color: c.faint, fontSize: 10.5, lineHeight: 14, paddingVertical: 8 },
   modelCustomRow: {
