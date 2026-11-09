@@ -11823,6 +11823,9 @@ ${lines.join("\n")}
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
       ...(s.state.model ? { model: s.state.model } : {}),
       ...(s.state.engine ? { engine: s.state.engine } : {}),
+      // [W-ENGCODEX-FIX P1-1]：能力位随增量帧携带（SNAPSHOT cloneState 全量天然带；
+      // codex approval:false 声明=端上权限胶囊置灰判据，缺键=旧 relay 宽容放行）
+      ...(s.state.activity_capabilities ? { activity_capabilities: { ...s.state.activity_capabilities } } : {}),
       ...(s.state.engine_provider ? { provider: s.state.engine_provider } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
       ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),

@@ -151,6 +151,11 @@ export class CodexEventMapper {
   turnTerminal = true;
   /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
   lastThreadId: string | undefined;
+  /** [W-ENGCODEX-FIX P1-2] 会话级文件变更累计（file_change 事件累计，跨回合单调
+   *  递增——与 agent-adapter claude 路径 this.stats 同语义；每事件即发 onStats） */
+  stats: FileChangeStats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  /** 变更 path 去重集（同文件多回合改=1 个 files_changed，claude 侧同口径） */
+  changedPaths = new Set<string>();
 
   handle(raw: unknown, cb: AgentCallbacks, now: number = Date.now()): void {
     if (!raw || typeof raw !== "object") return;
@@ -193,8 +198,37 @@ export class CodexEventMapper {
             id: it.id,
             full: capDetail(it.aggregated_output ?? ""),
           });
+        } else if (it.type === "reasoning") {
+          // [W-ENGCODEX-FIX P1-3]（1110 深测：reasoning 事件每轮在场而 mapper 零映射=
+          // 思考不进活动舱+UI 思考开关无效）：映射 kind="thinking"——与 claude SDK 路径
+          // 同词（agent-adapter.ts:621 / agent-jsonl.ts:413 G5 先例，web 活动舱既有渲染
+          // 面直接吃）。0.154 实测形状 {type:"reasoning", text:"**Preparing…"}（摘要级，
+          // 非全量思维链——引擎不给全量，映射的是引擎给的全部）。
+          const th = typeof it.text === "string" ? it.text : "";
+          if (th) {
+            cb.onLog("thinking", th.slice(0, 400), { full: th, id: it.id });
+            cb.onStatusChange("WORKING", "思考中");
+          }
+        } else if (it.type === "file_change") {
+          // [W-ENGCODEX-FIX P1-2]（1110 深测：file_change 每轮写文件都在场而 P0 不映射=
+          // stats 恒 0，连坐 session-manager S1 零产出闸把「干活但没写结果行」的 codex
+          // worker 误翻 failed）：映射 stats——0.154 实测形状 {type:"file_change",
+          // changes:[{path,kind:"update"|"add"|"delete"}]}（无行数，lines 计 0 不猜；
+          // files 计数=变更 path 去重累计，status 非 completed 不计——半途变更不进账）。
+          const changes = Array.isArray((it as { changes?: unknown }).changes)
+            ? ((it as { changes: Array<{ path?: unknown; kind?: unknown }> }).changes.filter((c) => c && typeof c.path === "string") as Array<{ path: string; kind?: string }>)
+            : [];
+          if (it.status !== "failed" && changes.length) {
+            for (const c of changes) this.changedPaths.add(c.path);
+            this.stats = { files_changed: this.changedPaths.size, lines_added: 0, lines_deleted: 0 };
+            cb.onStats({ ...this.stats });
+            cb.onLog("tool_result", `文件变更 ${changes.length} 处（${[...new Set(changes.map((c) => c.kind ?? "update"))].join("/")}）：${changes.map((c) => c.path.split("/").pop()).join("、")}`.slice(0, 200), {
+              tool: "command", id: it.id,
+              full: JSON.stringify(changes).slice(0, 400),
+            });
+          }
         }
-        // file_change / reasoning / mcp_tool_call / web_search / todo_list：P0 不映射
+        // mcp_tool_call / web_search / todo_list：仍不映射（无 claude 对位语义面）
         break;
       }
       case "turn.completed": {
