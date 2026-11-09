@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { accessSync, constants, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentCallbacks } from "./agent-adapter.js";
 import { JsonProcessAgentSession, mapJsonlActivity, preflightEngine, type EngineConfig, type EngineSpawnOptions, type JsonlActivityOptions, type MappedStatusDock, type PreflightResult } from "./agent-jsonl.js";
+import { ensureTraeServerToolPatch, traeFixedCli } from "./engine-install.js";
 
 export const TRAE_CAPABILITIES = {
   resume: false,
@@ -94,10 +95,24 @@ export interface TraeSessionOptions extends Omit<EngineSpawnOptions, "label" | "
   command?: string;
 }
 
+/** W-ENGDIST-A 件④（勘察 §五.6 顺刀定案）：缺省 command 解析链——显式 opts > CCR_TRAE_PATH
+ * （用户 env 意图最优先）> **固定位探测**（~/.cc-deck/engines/trae-agent/.venv/bin/trae-cli
+ * 可执行即用——一键安装器落位，wrapper /tmp 中转退役：buildArgs 恒注入 --config-file 后
+ * wrapper 的 config 使命已被产品侧取代）> PATH 名兜底。 */
+function traeCommandDefault(): string {
+  const env = process.env.CCR_TRAE_PATH?.trim();
+  if (env) return env;
+  try {
+    accessSync(traeFixedCli(), constants.X_OK);
+    return traeFixedCli();
+  } catch { /* 固定位未装（一键安装前常态）——回落 PATH */ }
+  return "trae-cli";
+}
+
 export class TraeAgentSession extends JsonProcessAgentSession {
   constructor(opts: TraeSessionOptions) {
     // profileId 钉死 trae 档（structured=false）：纯文本 stdout 行一律正文（#42）
-    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
+    super({ ...opts, label: "trae", command: opts.command ?? traeCommandDefault(), profileId: "trae" });
   }
 
   protected buildArgs(prompt: string): string[] {
@@ -105,12 +120,16 @@ export class TraeAgentSession extends JsonProcessAgentSession {
     // W-ENGREST-FIX（1109 深测 P1）：恒带 --config-file 权威位（缺省 cwd 相对=生产不可用，
     // 见 traeConfigPath 头注）；缺省位无文件时先生成模板引导。
     ensureTraeConfigTemplate();
+    // W-ENGDIST-A 件②（勘察 A 路定案）：spawn 前补丁自动应用——检测锚=补丁 MARKER 在场性
+    // （零子进程），missing 才跑 python3 脚本（trae 升级覆盖源文件→MARKER 消失→重放）；
+    // 失败降级=告警审计行不阻断对话面（同 ensureTraeConfigTemplate 哲学）。
+    ensureTraeServerToolPatch(this.opts.command);
     return ["run", prompt, "--config-file", traeConfigPath()];
   }
 }
 
 export function preflightTrae(config?: Partial<EngineConfig>): PreflightResult {
-  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
+  return preflightEngine({ command: config?.command ?? traeCommandDefault(), provider: config?.provider });
 }
 
 export function createTraeAgent(opts: Omit<TraeSessionOptions, "cb"> & { cb: AgentCallbacks }): TraeAgentSession {
