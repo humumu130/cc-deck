@@ -1851,7 +1851,10 @@
                   // W-TEAMPOPOLISH B3：前置校验走内联（blur 同源函数——错误就近显示在字段上），
                   // toast 只留传输层失败（下方 command/catch 分支）；重名对照在 blur 已即时暴露，
                   // 提交时再核一次防串行窗口（列表在弹窗打开期间刷新）
-                  if (!teamNameValidate(pop) || !teamAnchorValidate(pop)) return;
+                  // P2BATCH6 件8（C-P2-2）：短路 → 双跑合并判——旧版 || 短路致锚点目录空值被
+                  // 团队名首错掩盖，用户两次试错才见全貌；两校验各自独立执行（各自标红+行级
+                  // 文案一次全出），提交仍任一不过即拦。
+                  { const okName = teamNameValidate(pop); const okAnchor = teamAnchorValidate(pop); if (!okName || !okAnchor) return; }
                   if (teamSeatCount(pop) > 8) { toast("编制最多 8 席——请先减员"); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：本地硬闸兜底（勾选闸漏网路径防整单被 relay 拒）
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;

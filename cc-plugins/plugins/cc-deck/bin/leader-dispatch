@@ -209,7 +209,12 @@ HINTS = {"已知现状": "（待填：文件路径+行号级事实，path/to/fil
          "用户口径": "（待填：用户原话/拍板口径；无特判也要写「无特判」）",
          "验收点": "（待填：一行一条可独立判 ✓/✗ 的可观察结果）"}
 PLACE = re.compile(r"待填|待补|TODO|^[（(【<]\s*[）)】>]?\s*$")
-PATHLINE = re.compile(r"[A-Za-z0-9_./~\-]+\.[A-Za-z0-9]{1,10}:\d+")
+# P2BATCH6 件1（PM 四撞+本单首派被拦自指实锤）：扩展名必选致无扩展名脚本永不匹配——
+# 仓内 bin 目录（bin/org、bin/leader-harvest、bin/leader-dispatch、~/.cc-deck/bin/* 等无
+# 扩展名形态）与「词:行号」引用同样是合法预勘锚。扩展名改可选（(\.[A-Za-z0-9]{1,10})?），
+# 副作用=host:port（如 relay:8787）也会命中——它仍是「路径/标识:数字」形态，作为已知现状
+# 的预勘证据可接受（PATHLINE 语义=行号锚存在性检查，非精确提取器）。
+PATHLINE = re.compile(r"[A-Za-z0-9_./~\-]+(\.[A-Za-z0-9]{1,10})?:\d+")
 
 def section_body(text, name):
     m = re.search(rf"^##\s*[一二三四五六七八九十0-9（()]+[、.．:：]*\s*{re.escape(name)}\s*$|^##\s*{re.escape(name)}\s*$", text, re.M)

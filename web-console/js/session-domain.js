@@ -2339,7 +2339,7 @@
                     // 此处置 null 会永久断引用（updateModelCapsule 读 null 恒 return → 胶囊恒
                     // hidden，用户实测「模型切换缺失」根因）；无会话时 updateModelCapsule(null)
                     // 走 ok=false → hidden=true 的正常隐藏路径
-                    UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…");
+                    UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "" : "等待 relay 连接…"); /* P2BATCH6 件7（A-P2-5）：hasSnapshot 态副标题置空——指引由中央空态独占（原三处同文案连排） */
                     updateModelCapsule(null);
                     updatePermCapsule(null); // UIPOLISH3 件三：无会话权限胶囊隐藏
                     updateCtxMeter(null); // UIPOLISH2 件四：无会话水位胶囊隐藏
@@ -2979,7 +2979,10 @@
                   return null;
                 }
                 // #164 单条消息 HTML（桌面/手机同一渲染路径；返回 "" = 该类开关关闭不渲染）
-                function entryHtml(e, s) {
+                function entryHtml(e, s, hideTs = false) {
+                  // P2BATCH6 件2（A-P2-6）：hideTs=同分钟聚合抑制位——连续相邻对话消息（user/ai-text）
+                  // 落同一分钟时只首条显时间戳，后续传入 true 隐藏（断组=日期分隔/过程组/角色切换外的
+                  // 相邻性由调用方循环判定）。automsg/思考/工具行不受此位管（自有时间语义）。
                   const role = msgRoleOf(e.kind);
                   const k = eKey(e);
                   const ke = esc(k); // data-x 属性安全
@@ -3012,7 +3015,7 @@
                     // 时间戳沿用旧版位=气泡下方右对齐；data-x 随 wrapper 顶层（替换链不变）
                     return '<div class="msg-user-row" data-x="' + ke + '"><div class="bubble me"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" + imgHtml +
                       (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>" +
-                      (e.ts ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
+                      (e.ts && !hideTs ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
                     const eng = engineMetaOf(s); // W-ENGLM G：消息流头像同链（engine 空按 model 推断，glm 不再落 ✻）
@@ -3027,7 +3030,7 @@
                     // x-full「展开全文」钮退役；expanded 键若残留指向 AI 条目恒无效（无害兼容旧会话）。
                     // 桌面/手机同一渲染路径（本函数），手机壳借道 b2Api.entryHtml 同步生效。
                     // 工具面（trow/detail/diff）与用户消息 clamp（.ub.clamp 100 字 3 行）不在本批面
-                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
+                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts && !hideTs ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
                       mdHtml(String(e.full ?? e.text ?? "")) +
                       (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") +
                       "</div></div>";
@@ -3080,8 +3083,8 @@
                   // W-UIFB ⑦：relay 防抢发提示小字号呈现（i=9 附带；文本特征挂 note-xs）
                   return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + (/防抢发/.test(String(e.text ?? "")) ? " note-xs" : "") + '">' + linkifyEscaped(esc(oneLine(e.text))) + "</div>"; // 件D：note 行 URL 亦可点
                 }
-                function entryNode(e, s) {
-                  const html = entryHtml(e, s);
+                function entryNode(e, s, hideTs = false) {
+                  const html = entryHtml(e, s, hideTs);
                   if (!html) return null;
                   const t = document.createElement("template");
                   t.innerHTML = html;
@@ -3095,8 +3098,16 @@
                   const list = s ? (S.timelines.get(s.session_id) || []) : [];
                   const e = list.find((x) => eKey(x) === k);
                   if (!e || !s || !UI || !UI.convPane) return;
-                  const n = entryNode(e, s);
                   const old = UI.convPane.querySelector('[data-x="' + cssEsc(k) + '"]');
+                  // P2BATCH6 件2：单条重建沿用聚合位——前邻居已显同分钟时间戳则重建后仍隐藏
+                  //（防「点展开后时间戳凭空冒出」与全量渲染打架；前邻居无时间戳/不同分钟=重显）
+                  let hideTs = false;
+                  if (old && e.ts) {
+                    const pv = old.previousElementSibling;
+                    const pvTs = pv ? (pv.querySelector(".mt, time") || (pv.matches?.(".mt") ? pv : null)) : null;
+                    if (pvTs && pvTs.textContent === fmtHM(e.ts)) hideTs = true;
+                  }
+                  const n = entryNode(e, s, hideTs);
                   if (old && n) old.replaceWith(n);
                 }
                 // B12 过程/思考开关（W-UIFB 合并裁决：head-actions 静态钮，不再随对话重建；
@@ -3183,10 +3194,12 @@
                     }
                     const noteHtml = (t) => { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(t ?? "")) ? " warn" : ""); d.textContent = t; return d.outerHTML; };
                     if (!s) {
+                      host.setAttribute("data-empty", "1"); // P2BATCH6 件4（A-P2-12）：空态主区垂直居中标记（CSS 配套 min-height 60vh flex 居中——旧态贴 Tab 栏下方留 500px 空置）
                       rk4(host, [["empty", noteHtml(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")]]);
                       syncWaitCard(false); // 审查 P2-2（review-282d-a）：取消选中窗口清残留卡+waitElapsedTimer（旧路径靠 textContent="" 清节点但漏计时器——本路径双清）
                       return;
                     }
+                    host.removeAttribute("data-empty"); // 件4：非空态必清（host 跨帧复用，防空态样式漏到会话渲染）
                     const trunc = S.logsTruncated.get(s.session_id) || 0;
                     const list = S.timelines.get(s.session_id) || [];
                     const desired = [];
@@ -3194,6 +3207,7 @@
                     let prevDay = "";
                     let procBuf = null, procKey = "";
                     let lastAiChain = false, lastAiTs = 0; // 件九 string 版：连续 AI 正文去重署名链（间隔 >5min/过程组/气泡断）
+                    let lastTsMin = -1; // P2BATCH6 件2（A-P2-6）：分钟聚合——最近一条已显时间戳的对话消息所在分钟（-1=重显；日期分隔/过程组边界重置）
                     const flushProc = () => {
                       if (procBuf && procBuf.length) {
                         const open = expanded.has("proc:" + procKey);
@@ -3203,8 +3217,15 @@
                     };
                     for (const e of list) {
                       const dk = e.ts ? dayKey(e.ts) : "";
-                      if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; } // 日期分隔断组（件九：新分节重显署名行）
-                      const eh = entryHtml(e, s); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
+                      if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; lastTsMin = -1; } // 日期分隔断组（件九：新分节重显署名行）；件2：跨日必重显时间戳
+                      const eRole = msgRoleOf(e.kind);
+                      let hideTs = false; // P2BATCH6 件2：同分钟聚合位——仅 user/ai-text 参与判定（automsg 走 user 早退分支不受影响：isAutoInjected 在 entryHtml 内先返，不进 mt 输出）
+                      if ((eRole === "user" || eRole === "ai-text") && e.ts) {
+                        const m = Math.floor(e.ts / 60000);
+                        hideTs = m === lastTsMin;
+                        if (!hideTs) lastTsMin = m;
+                      }
+                      const eh = entryHtml(e, s, hideTs); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
                       if (!eh) continue; // 开关关闭的条目（思考）不断组也不占位
                       // 审查 P1-1（review-282d-a）：过程组判据补 data-role="proc"——#47 任务生命周期行
                       //（trow task-life data-role="task"）同以 <div class="trow 开头，仅前缀判据会把它
@@ -3213,7 +3234,7 @@
                       if (eh.startsWith('<div class="trow') && eh.indexOf('data-role="proc"') > -1) {
                         if (!procBuf) { procBuf = []; procKey = eKey(e); }
                         procBuf.push(eh);
-                        lastAiChain = false; // 件九：过程组是强分隔——组后新正文重显署名
+                        lastAiChain = false; lastTsMin = -1; // 件九：过程组是强分隔——组后新正文重显署名；件2：组边界重显时间戳（组内工具行不携对话时间语义）
                       } else {
                         flushProc();
                         // 件九（层级降噪）string 版：cont 类注入首 class（entryHtml 的 ai 正文恒以
@@ -4178,7 +4199,7 @@
                   UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
                   UI.input.disabled = !editable;
                   // B20 placeholder 承载附件/历史提示（hint 小字行退役）：按会话态给可用性指引
-                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "先从左侧选择会话") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅 · Shift+Enter 换行";
+                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "选择会话后即可输入 …") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅 · Shift+Enter 换行"; /* P2BATCH6 件7：占位差异化（指引句式改「选择会话后…」状态句——与中央空态「从左侧选择…」动宾不重复） */
                   autoGrowSessionInput(); // 件八：随内容长高（发送清空/历史翻阅/切会话草稿恢复后都经此收口）
                 }
                 function autoGrowSessionInput() { // 件八：textarea 自动长高（手机 input 宿主跳过）
@@ -4744,7 +4765,12 @@
                   menu.classList.add("open");
                   const mw = menu.offsetWidth, mh = menu.offsetHeight;
                   menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + "px";
-                  menu.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8)) + "px";
+                  // P2BATCH6 件9（C-P2-3）：向上弹优先——旧版恒 r.bottom+6 向下弹，长目录
+                  // 整片盖住弹窗下半（工作目录+创建/取消钮全被遮，用户选引擎看不到提交口）；
+                  // 触发器上方空间够（≥mh+8+6）即向上（菜单落在弹窗头之上的遮罩区，不遮
+                  // 表单），不足再回落向下 clamp 视口。CSS 侧 .model-menu 限高内滚保底。
+                  const aboveTop = r.top - mh - 6;
+                  menu.style.top = (aboveTop >= 8 ? aboveTop : Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8))) + "px";
                 }
                 function pickEngine(btnOrId) {
                   const id = typeof btnOrId === "string" ? btnOrId : btnOrId.dataset.engineChoice;

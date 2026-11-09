@@ -776,6 +776,9 @@
     /* B22 模型菜单：视觉与 .source-menu 同壳，但不共用类——closeTransientOverlays 会摘
        一切 .source-menu.open 的 open，共类即被全局收起误伤 */
     .model-menu { position: fixed; z-index: 82; display: none; width: 264px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    /* P2BATCH6 件9（C-P2-3）：限高内滚保底——引擎目录长列表不再无限拉伸遮挡表单/提交钮
+       （JS 侧同步改向上弹优先：openEngineMenu 定位段）；60vh 随视口缩放 */
+    .model-menu { max-height: min(420px, 60vh); overflow-y: auto; }
     .model-menu.open { display: block; }
     .model-menu .source-option strong { font-family: var(--mono); }
     .model-menu-custom { display: flex; gap: 5px; padding: 6px 4px 4px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
@@ -1056,6 +1059,12 @@
     .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
     .message-ai.cont .message-author { display: none; } /* 件九：连续同作者正文去重署名行，正文 37px 基线不动 */
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
+    /* P2BATCH6 件4（A-P2-12）：主区空态垂直居中——旧态空提示贴 Tab 栏下方、下方 500px 空置；
+       60vh 视口比例（随窗口缩放，不依赖父级 flex 链），仅空态标记位生效（JS data-empty） */
+    .conversation-pane [data-conv-body][data-empty] {
+      min-height: 60vh; display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+    }
     /* =============== W-CENTERCOL（1103 用户）：大窗阅读列——会话消息居中限宽（WorkBuffy 式） ===============
        宽窗下对话列 max-width 900px 居中（margin auto），超宽部分全变两侧留白；composer
        （footer 行）水平 padding 同步 calc，整行与阅读列几何对齐。窄窗零回归是构造性的：
