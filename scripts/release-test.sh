@@ -19,6 +19,11 @@ if [ "$CUR_BR" != "dev" ]; then
   exit 1
 fi
 git diff --quiet || { echo "ERR: 工作区有未提交改动，先收口"; exit 1; }
+# W-BOARDTRUTH5 刀四（1109 五现治本）：CLI 分发源同步步——repo cc-plugins → 部署位
+# ~/.cc-deck/bin/。部署位有未回流热改=拒发（先回流再出包）；这是五现直接病因的双位
+# 漂移在发版链上的闸（此前发版链零 CLI 同步步——漂移静默累积）。
+echo "[0.5/7] CLI 分发源同步（leader-dispatch）"
+bash scripts/sync-leader-cli.sh || { echo "ERR: leader-dispatch 分发未过（部署位有未回流热改？回流清单见 W-BOARDTRUTH5 回执）——先回流再出包"; exit 1; }
 
 echo "[1/7] VERSION → $V"
 echo "$V" > VERSION

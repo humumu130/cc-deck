@@ -1587,6 +1587,9 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-appoint-target-pid-changed", // 决议时点候选 pid 已换代（提名→决议间 CLI 重启）：作废不入档
   "pm-appoint-superseded-blocked", // 决议时点席位已有活值守 PM：陈旧卡作废不覆写（R1-B-F1 现任复查）
   "dispatch-no-duty-pm", // no-leader 模式派单时值守位空（时序对账告警档——R1-B-F1 半件）
+  // ---- W-BOARDTRUTH5（1109 五现治本）新增审计词 ----
+  "board-recon-loop", // 刀三生效探针心跳：对账常驻环每轮（含空转/off 档）一行——audit 流 >2h 无此行=环死（「建了从未跑」当日暴露）
+  "boardtruth5-zombie-scan", // 刀二僵尸不变量对账轮判定清单（超 TTL 卡×三证分面）——强翻/告警动作前的研判留痕
   // ---- W-CARDLIFE-R2（1105 深夜用户令「不靠规则靠机制」：状态转移内建于动作） ----
   "cardlife-pr-merged", // PR merged 自动翻当轮卡 done（转移内建于动作——机械手降级为兼容路径）
   "cardlife-chain-close", // 终代收割闭同链前代卡（slug 基族+ts 窗 14d）

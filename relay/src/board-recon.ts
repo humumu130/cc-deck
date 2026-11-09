@@ -248,3 +248,102 @@ export function reconcileBoardCards(input: {
   }
   return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
 }
+
+// ── W-BOARDTRUTH5（t-acd5c245，1109 用户军令五现「为啥一而再再而三三而四四而五」）
+// 刀二/刀三：形态免疫不变量对账+生效探针。元根因=治路径不治不变量（五现每一现都是
+// 「某条路径没走通」——收割无翻卡/手工绕过/PR 不闭/审查单无终态/CLI 未传键），路径会
+// 变形态会变，不变量永真：**卡的非终态滞留超 TTL × 交付证据在场/缺席**。五现 10 僵尸=
+// 5 submitted+4 claimed（claimed 不在对账范围=R3 盲区）——本刀 claimed/submitted 同辖。
+
+/** 刀二僵尸 TTL：CCR_BOARD_ZOMBIE_TTL_H（小时，缺省 6；显式 "0"=关（逃生阀））——
+ * 与 unclaimedTtlMs 同配方（board-truth.ts 惯例：阈值全走 env 不进 plugin-config）。 */
+export function zombieTtlMs(): number {
+  const raw = process.env.CCR_BOARD_ZOMBIE_TTL_H;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
+  return Number.isFinite(n) && n > 0 ? n * 3600_000 : 6 * 3600_000;
+}
+
+/** 僵尸告警 note 标记（幂等锚）：已标记卡第二轮不再重复告警（scan 侧滤除）。
+ * 子串稳定无日期——note 内容比对用前缀，追加细节不影响识别。 */
+export const ZOMBIE_NOTE_MARK = "[boardtruth5 僵尸卡告警";
+
+export interface ZombieEvidenceAction {
+  gid: string;
+  entryId: string;
+  text: string;
+  status: "claimed" | "submitted";
+  ageMs: number;
+  /** 三证首个命中（台账 done+回执 → 回执尾行合规 → dev log 词边界）；null=三证全无
+   * （僵尸告警面——不静默翻，进值守视野人工核实：真长任务可忽略/真僵尸人工收口）。 */
+  evidence: "ledger-done" | "receipt-line" | "dev-log" | null;
+}
+
+/**
+ * 刀二形态免疫对账（纯函数零 IO——boards/harvest 调用侧构建，测试直测）：
+ * claimed/submitted 卡超僵尸 TTL → 三证任一成立（台账 done+回执/回执尾行合规/dev log
+ * 收录）=强翻 done；三证全无=僵尸告警（evidence=null，不翻——防误杀 6h+ 真长任务，
+ * 但让僵尸进入值守视野）。**形态免疫**=判据只看不变量（卡态/龄/交付证据），不看
+ * no_pr/派单路径/收割器形态——五现的教训即路径形态必变。
+ * 防误杀护栏（与 R3 harvested-unflipped 同三护栏）：①无时戳不臆断（updated_at/ts
+ * 全缺 skip）②空键/回落键全板碰撞 skip（证据归属不可分辨）③已带僵尸标记 note skip
+ * （告警幂等——一次即记）。skipEntryIds=本拍 reconcileBoardCards 已出判定的卡
+ * （两器不重复动作：孤儿归位 vs 证据强翻同拍冲突时 R3 先判，本刀让位）。
+ */
+export function zombieInvariantScan(input: {
+  boards: Array<{ gid: string; board: ProjectBoard }>;
+  harvest: HarvestEvidence;
+  now?: number;
+  ttlMs?: number;
+  skipEntryIds?: Set<string>;
+}): { actions: ZombieEvidenceAction[] } {
+  const now = input.now ?? Date.now();
+  const ttl = input.ttlMs ?? zombieTtlMs();
+  const skip = input.skipEntryIds ?? new Set<string>();
+  // 回落键全板唯一性索引（R1-P2-2①同款——无 slug 锚卡的前 10 字键跨卡碰撞=证据归属
+  // 不可分辨，一律 skip）
+  const fallbackKeyCounts = new Map<string, number>();
+  for (const { board: fb } of input.boards) {
+    for (const ent of fb.entries) {
+      const k = harvestKeyOf(String(ent.text || ""));
+      if (k && !k.startsWith("w-")) fallbackKeyCounts.set(k, (fallbackKeyCounts.get(k) ?? 0) + 1);
+    }
+  }
+  const actions: ZombieEvidenceAction[] = [];
+  if (!Number.isFinite(ttl)) return { actions }; // 逃生阀开（TTL=∞）：判定族整体关闭
+  for (const { gid, board } of input.boards) {
+    for (const e of board.entries) {
+      if (e.status !== "claimed" && e.status !== "submitted") continue; // 形态面：非终态滞留两态
+      if (skip.has(e.id)) continue; // 本拍 R3 已判定——两器不重复动作
+      if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue; // 告警幂等锚（第二轮不再重复）
+      const updated = Number(e.updated_at || e.ts || 0);
+      if (!updated) continue; // 无时戳不臆断
+      const ageMs = now - updated;
+      if (ageMs <= ttl) continue; // 未超 TTL（在途常态——6h 内交付/审查中是正常节奏）
+      const key = harvestKeyOf(String(e.text || ""));
+      // 空键不参与证据匹配（includes("")/get("") 恒命中=假证据面）；回落键碰撞同 skip
+      if (!key || (!key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1)) continue;
+      const ev = input.harvest;
+      const ledgerHit = ev.doneLedger.get(key);
+      const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt; // 证据①：台账 done+回执
+      const receiptOk = ev.receiptSlugs.has(key); // 证据③：回执尾行合规（判定顺序①→③→②，台账最权威）
+      // 证据②：dev log 词边界（R1-P2-2②同款——卡键 w-abc 不被 log 里 w-abc-r1 超串误命中）
+      const devHit = key.startsWith("w-")
+        ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev.devLogText)
+        : ev.devLogText.toLowerCase().includes(key);
+      const evidence: ZombieEvidenceAction["evidence"] = ledgerOk ? "ledger-done" : receiptOk ? "receipt-line" : devHit ? "dev-log" : null;
+      actions.push({ gid, entryId: e.id, text: String(e.text || ""), status: e.status, ageMs, evidence });
+    }
+  }
+  return { actions };
+}
+
+/**
+ * 刀三生效探针心跳行（纯函数——patrol 对账每轮含空转轮落 audit 一行，测试断言格式）。
+ * 目的：「建了从未跑」类断电（五现元根因之一：对账器在 dev 存在、生产 boards-journal
+ * 该 action 零行）当日暴露——audit 流 >2h 无 board-recon-loop 行=常驻环死，值守/巡检
+ * 可见。off 档也发（mode=off 判定 0——证明 timer 活，动作面零）。
+ */
+export function reconHeartbeatLine(mode: string, judged: number, flipped: number, zombies: number, zDone: number, zAlarm: number): string {
+  return `alive mode=${mode} 对账判定 ${judged}（翻/归 ${flipped}）· 僵尸面 ${zombies}（强翻 ${zDone}/告警 ${zAlarm}）`;
+}
