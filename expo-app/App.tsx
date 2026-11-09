@@ -5,6 +5,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { store, useRelay, type ServerEntry } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
+import { DETAIL_BOTTOM_BASE, DETAIL_BOTTOM_KB } from "./src/fab-band"; // p2batch5 件②（R1 补）：详情页浮钮落位常量——原批换 :169 引用时漏本 import（tsc 2 错根治）
 import type { DetailBackHandle } from "./src/screens/DetailScreen";
 import { projectNotifications, type SessionState } from "./src/protocol";
 import { ensureNotifPermission, fgStatsKey, fgStatsTitle, fgSupported, markPermHintShown, notifPermissionState, notifyAlert, openNotifSettings, permHintActive, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
@@ -166,7 +167,7 @@ function TaskDoneFloat({
   // C2（W-TEAMTAB 三路裁决）：详情页落位 74→114（键盘支 80→120 同步 +40）——恒抬高
   // 让出 dockWork「■ 停止」制动钮 26dp 带（WORKING 期唯一控制路径不再被浮钮遮挡；非
   // WORKING 时 FAB 略高无副作用——止血案，槽位化根治另立）
-  const bottom = kbH > 0 ? kbH + (isDetail ? 120 : 10) : insets.bottom + (isDetail ? 114 : 124);
+  const bottom = kbH > 0 ? kbH + (isDetail ? DETAIL_BOTTOM_KB : 10) : insets.bottom + (isDetail ? DETAIL_BOTTOM_BASE : 124);
   return (
     <View style={st.tdWrap} pointerEvents="box-none">
       {expanded ? (
