@@ -14,30 +14,61 @@
 #   --worktree <dir>   worktree 覆盖
 #   --branch <ref>     分支覆盖
 #   --base <sha|ref>   基线覆盖（git log 起点缺省用派单时记账的 base_sha）
+# PR 互审链（W-PRREVIEW 期一④，1104 用户拍板「Multica 同款」——pr_flow 单适用；终态链
+#   交付→审查→收割→装机真验→回填 不变，PR 只是交付载体与审查评论面）：
+#   --review           发起互审：PR 解析（--pr>回执链接>按分支查>PM 兜底开 draft）→
+#                      PR CI 绿前置闸（红=直接打回 worker，不进审查）→ 互审员路由
+#                     （relay review-route：在编 worker 同域熟手优先、避交付者与同单
+#                      关联会话；无匹配回落 PM 子代理）→ 互审单派发（意见落 PR 评论）→
+#                      review-ledger 台账 begin 段行（时序证据链）
+#   --reviews <n>      互审员数 1..3（缺省 1；**档位纪律零变化**——一行 1 审/常规 2 审
+#                      其一反方/重大 3 审，n 由 PM 按全局审查纪律定，工具不代定档）
+#   --pr <url>         PR 链接覆盖（缺省回执「交付」节解析——pr_link_from_receipt 单点）
+#   --ci-wait <sec>    --review 的 CI 等待窗（缺省 900；超时按打回处置）
+#   --skills <a,b>     互审员路由技能标签（透传 review-route，同域熟手匹配用）
+#   --merge            squash-merge 收割（闸全绿后）：gh pr merge --squash（单笔纪律不变）
+#                      + PR 关闭/删分支 + review-ledger end 段行；gh 失败回落手工 squash
+# 降级路：gh 不可用/远端失败 → 回落现流程（本地审+手工 squash），回执追加「PR 链路 PM
+#   补记」降级标记（PR-DEGRADED）。worker 侧回执含 PR-DEGRADED 标记=合法降级交付，PR 闸跳过。
 # 账源两本：
-#   派单账 $CCR_DATA_DIR/leader-dispatches.ndjson（leader-dispatch 写，slug/分支/回执路径在此）；
+#   派单账 $CCR_DATA_DIR/leader-dispatches.ndjson（leader-dispatch 写，slug/分支/回执路径/pr_flow 在此）；
 #   派单台账 <org>/dispatch-log.ndjson（relay 写，status/收口回执在此；org 目录寻址三段
 #   与 relay orgDir 同款：显式 CCR_ORG_DIR > CCR_DATA_DIR 隔离态随 data > ~/.cc-deck/org）。
 # 回执必需节机器闸（W-DISPATCHX 任务书口径）：根因 / 自测证据 / 验收点 / 尾行「结果：…｜改动文件：…」。
-# 退出码：0 闸全绿｜1 闸有 ✗｜2 单寻址失败
+# 退出码：0 闸全绿（含降级回落）｜1 闸有 ✗｜2 单寻址失败｜3 PR CI 红打回（--review）
 set -uo pipefail
 
 usage() { grep '^# ' "$0" | sed 's/^# //; s/^#$//' >&2; }
 die() { echo "leader-harvest：$2" >&2; exit "$1"; }
 need_value() { [ -n "${2:-}" ] || die 2 "选项 $1 缺值"; }
 
-did=""; rc_opt=""; wt_opt=""; br_opt=""; base_opt=""
+did=""; rc_opt=""; wt_opt=""; br_opt=""; base_opt=""; final_flag=""
+review_mode=0; merge_mode=0; reviews_n=1; pr_opt=""; ci_wait_opt=""; skills_opt=""; base_override=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --receipt) need_value "$1" "${2:-}"; rc_opt="$2"; shift 2 ;;
     --worktree) need_value "$1" "${2:-}"; wt_opt="$2"; shift 2 ;;
     --branch) need_value "$1" "${2:-}"; br_opt="$2"; shift 2 ;;
     --base) need_value "$1" "${2:-}"; base_opt="$2"; shift 2 ;;
+    --final) final_flag=1; shift ;;
+    --review) review_mode=1; shift ;;
+    --merge) merge_mode=1; shift ;;
+    --base-override) base_override=1; shift ;; # W-HARVESTGATE 闸一逃生门：显式声明非 dev 收割目标（台账记 base_override）
+    --reviews) need_value "$1" "${2:-}"; reviews_n="$2"; shift 2 ;;
+    --pr) need_value "$1" "${2:-}"; pr_opt="$2"; shift 2 ;;
+    --ci-wait) need_value "$1" "${2:-}"; ci_wait_opt="$2"; shift 2 ;;
+    --skills) need_value "$1" "${2:-}"; skills_opt="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     -*) die 2 "未知选项: $1" ;;
     *) [ -z "$did" ] || die 2 "多余参数: $1（只收一个 dispatch-id）"; did="$1"; shift ;;
   esac
 done
+case "$reviews_n" in ''|*[!0-9]*) die 2 "--reviews 须为正整数（1..3）" ;; esac
+[ "$reviews_n" -ge 1 ] && [ "$reviews_n" -le 3 ] || die 2 "--reviews 只收 1..3（审查档位上限=3，档位纪律不变）"
+case "$ci_wait_opt" in ''|*[!0-9]*) : ;; esac
+# W-PRREVIEW × BOARDFLIP v3 联动：--merge=squash-merge 真收割收口——隐含 --final
+#（v3 语义「翻 done 只在真收割」；merge 成功后板卡联动翻 done 与旧收割一致）
+[ "$merge_mode" = 1 ] && final_flag=1
 [ -n "$did" ] || { usage; die 2 "用法: leader-harvest <dispatch-id> [选项]"; }
 
 data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
@@ -102,6 +133,7 @@ print(v if isinstance(v,str) else json.dumps(v,ensure_ascii=False))' "$1"
 
 title="$(led_field title)"; [ -n "$title" ] || title="$(dl_field title)"
 sid="$(led_field session_id)"; [ -n "$sid" ] || sid="$(dl_field session_id)"
+slug="$(led_field slug)"
 receipt="${rc_opt:-$(led_field receipt)}"
 worktree="${wt_opt:-$(led_field worktree)}"
 branch="${br_opt:-$(led_field branch)}"
@@ -109,6 +141,70 @@ base="${base_opt:-$(led_field base_sha)}"
 [ -n "$base" ] || base="$(led_field base_ref)"
 dl_status="$(dl_field status)"
 dl_receipt="$(dl_field receipt)"   # 台账的 receipt=收口回执摘要（≠回执文件路径）
+# W-PRREVIEW：PR 链记账位（leader-dispatch 写：pr_flow=true 的单走 PR 互审链）
+gid="$(led_field gid)"
+pr_flow="$(led_field pr_flow)"
+pr_base="$(led_field pr_base)"; [ -n "$pr_base" ] || pr_base="dev"
+hanchor="$(led_field anchor)"; [ -n "$hanchor" ] || hanchor="$HOME/dev/cc-deck"
+
+# ---------- W-PRREVIEW PR 互审链基础设施 ----------
+# relay 寻址（leader-dispatch 同款三段：CCR_TOKEN > data/token；CCR_PORT > bridge.json > 8787）
+rport="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
+: "${rport:=8787}"
+rtoken="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
+# gh 统一包装：代理可覆盖（CCR_GH_PROXY，空串=显式不走代理）；输出降噪。
+# R1 P1-2：gh 无仓上下文（收割常在 /tmp 等非仓目录跑）→ pr 子命令统一挂 $GH_R（-R 仓，
+# CCR_GH_REPO 可覆盖）；**gh api / repo view 不认 -R**——api 走完整路径自带仓、探活
+# 用 gh api repos/<repo>（原始探活 repo view 无 -R 时依赖 CWD=假死根因，弃用）
+GH_REPO="${CCR_GH_REPO:-humumu130/cc-deck}"
+GH_R="-R ${GH_REPO}"
+gh_run() { https_proxy="${CCR_GH_PROXY-http://127.0.0.1:7890}" gh "$@" 2>/dev/null; }
+gh_alive() { gh_run api "repos/${GH_REPO}" -q .name >/dev/null 2>&1; }
+# PR 链接检测**单点**（与 leader-dispatch pr_convention_block 成对——回执里 PR URL 的
+# 解析只此一处；新增收割口必须复用，勿手写 grep 副本）
+pr_link_from_receipt() { [ -n "${1:-}" ] && [ -f "$1" ] && grep -Eo 'https://[^[:space:])]+/pull/[0-9]+' "$1" | tail -1; }
+# CI 状态：green|red|pending|none（gh pr checks 退出码 0=全绿 8=待定 1=有红）
+ci_state() {
+  local rc
+  gh_run pr checks $GH_R "$1" >/dev/null; rc=$?
+  case "$rc" in
+    0) echo green ;;
+    1) echo red ;;
+    8) echo pending ;;
+    *) echo none ;;
+  esac
+}
+relay_post() { # $1=JSON body（或 stdin 管道形态——printf|relay_post 先例多，双入口兼容）
+  local body="${1:-}"
+  [ -n "$body" ] || body="$(cat)"
+  curl -sS --max-time 30 -X POST "http://127.0.0.1:${rport}/api/org?token=${rtoken}" \
+    -H 'content-type: application/json' --data-binary "$body"
+}
+notify_worker() { # $1=text → /api/notify confirm 黄框（打回通知；best-effort）
+  [ -n "$rtoken" ] || return 0
+  curl -sSf --max-time 5 -X POST "http://127.0.0.1:${rport}/api/notify?token=${rtoken}" -H 'content-type: application/json' \
+    -d "$(python3 -c 'import json,sys;print(json.dumps({"mode":"confirm","text":sys.argv[1][:120]},ensure_ascii=False))' "$1")" \
+    >/dev/null 2>&1 || true
+}
+receipt_pm_note() { # $1=markdown 行 → 回执追加 PM 补记节（兜底 PR 链接/降级标记/merge 记录）
+  [ -n "$receipt" ] && [ -f "$receipt" ] || return 0
+  { echo ""; echo "## PR 链路 PM 补记（leader-harvest $(date '+%m-%d %H:%M')）"; echo "$1"; } >> "$receipt"
+}
+# 互审任务书模板（单点：互审口径只此一处）
+review_brief() { # $1=pr $2=branch $3=title $4=receipt $5=did8
+  cat <<BRIEF
+【互审单 · PR 互审链（1104 拍板）】PR：$1（分支 $2）｜原单：$3（$5）
+
+审查材料：gh pr diff（先 export https_proxy=http://127.0.0.1:7890；gh pr diff $1）+ 回执 $4
+审查动作（只审不改码——修复归交付者；不 merge 不改 PR 状态）：
+1. 逐文件过 PR diff：正确性 bug / 边界条件 / 回退面（对照原单验收点）
+2. 抽查回执自测证据与 diff 对得上（数字/断言真实性）
+3. 结论分级：P0（必须修）/ P1（应修）/ P2+（建议）
+4. 意见落 PR 评论（可链接留痕）：gh pr comment $1 --body "<审查结论+逐条 finding（文件:行号）>"
+5. 评论末行固定：「审查结论：通过｜P0 <n> 条｜P1 <n> 条」
+回执不另写文件（PR 评论即留痕）；你的派单台账由 relay 收口。
+BRIEF
+}
 
 # ---------- W-ORG-DEFECTS 件1：收割实例锁（harvest.lock，2026-11-01 用户 1101 定性 P0） ----------
 # 事故回链：1101 收割撞车（双收割实例/PM 与外部会话同时织合同批分支，rebase 半途停手
@@ -124,6 +220,142 @@ if ! python3 "$lock_bin" hlock acquire "$hlock" --pid "$$" --dispatch-id "${did:
   die 1 "收割锁原子获取判负（另一收割实例在跑/竞态输锁/fs 异常）: $hlock（撞车事故源：1101 定性 P0）"
 fi
 trap 'rm -f "$hlock"' EXIT
+
+# ---------- W-PRREVIEW：--review 互审管线（前置位：先审后闸——CI 红不进审查更不进收割） ----------
+do_pr_review() {
+  echo "== PR 互审链（--review · ${did:0:8}）=="
+  # 0) 降级门：gh 不可用 → 回落旧流程（本地审+手工 squash），回执记降级标记
+  if ! gh_alive; then
+    echo "⚠ PR-DEGRADED：gh 不可用/远端失败——回落旧流程（PM 子代理本地审 + 手工 squash）"
+    receipt_pm_note "- 降级标记：PR-DEGRADED gh-unavailable（--review 回落本地审，$(date '+%H:%M')）"
+    echo "RESULT review=${did:0:8} degraded=gh-unavailable（回落旧流程完整可用；收割走手工 squash 建议命令）"
+    return 0
+  fi
+  # 1) PR 解析：--pr 覆盖 > 回执单点解析 > 按分支查 > PM 兜底开 draft（要求1 PM 侧）
+  local pr="${pr_opt:-}"
+  [ -n "$pr" ] || pr="$(pr_link_from_receipt "$receipt")"
+  if [ -z "$pr" ] && [ -n "$branch" ]; then
+    pr="$(gh_run pr view $GH_R "$branch" --json url -q .url 2>/dev/null || true)"
+    [ -n "$pr" ] && echo "ℹ 回执无 PR 链接，按分支查得：$pr"
+  fi
+  if [ -z "$pr" ] && [ -n "$branch" ]; then
+    pr="$(gh_run pr create $GH_R --draft --base "$pr_base" --head "$branch" \
+      --title "[任务] ${title:-<标题>}（PM 兜底开 PR）" \
+      --body "PM 兜底开 PR（worker 未开/回执无链接）。原单 ${did:0:8}：${title:-}" 2>/dev/null || true)"
+    if [ -n "$pr" ]; then
+      receipt_pm_note "- PM 兜底开 draft PR（worker 未开）：$pr"
+      echo "✓ PM 兜底开 PR：$pr（链接已补记回执）"
+    fi
+  fi
+  if [ -z "$pr" ]; then
+    echo "✗ PR 解析失败（无 --pr/回执链接/分支查不到/兜底开败）——交付形态不符（pr_flow 单应推分支开 PR），打回"
+    notify_worker "⚠️ ${title:-单}${did:0:8}：PR 缺失——按任务书「交付 PR 约定」推分支+开 draft PR，回执补链接后重跑 --review"
+    echo "RESULT review=${did:0:8} pr=missing（打回补开）"
+    return 3
+  fi
+  echo "PR：$pr（base=$pr_base head=${branch:-?}）"
+  # 2) CI 绿前置闸（要求4：红=直接打回不进审查；pending/none 等待窗后按打回）
+  local cw="${ci_wait_opt:-900}" waited=0 st
+  while :; do
+    st="$(ci_state "$pr")"
+    case "$st" in
+      green) echo "✓ PR CI 绿（前置闸过，等待 ${waited}s）"; break ;;
+      red)
+        echo "✗ PR CI 红——直接打回 worker（不进审查）；修复重推后重跑 --review"
+        notify_worker "⚠️ ${title:-单}${did:0:8} PR CI 红：$pr——自行修复重推（审查闸只放绿），绿后 PM 重跑 --review"
+        echo "RESULT review=${did:0:8} ci=red（打回：修复重推）"
+        return 3 ;;
+      *)
+        if [ "$waited" -ge "$cw" ]; then
+          echo "✗ PR CI ${st}（等待 ${waited}s ≥ 窗口 ${cw}s）——打回：核对 CI 后重跑 --review"
+          notify_worker "⚠️ ${title:-单}${did:0:8} PR CI ${st} 超 ${cw}s：$pr——核对 CI 状态（未触发/卡死？）后重跑收割审查"
+          echo "RESULT review=${did:0:8} ci=${st}-timeout（打回）"
+          return 3
+        fi
+        sleep 20; waited=$((waited + 20)) ;;
+    esac
+  done
+  # 3) review-ledger begin 段行（时序证据链落权威台账——审查期起算与审查员来源无关，
+  #    先于 gid 分支写：无 gid 回落 PM 子代理同样在审查期）。**note 嵌 PR URL**——
+  #    W-PRBACKFLOW 评论回流按台账行 receipt 里的 PR URL 圈轮询集（relay 单一事实源）
+  beg="$(printf '{"action":"review-ledger","dispatch_id":"%s","phase":"begin","note":"PR %s 互审发起（CI green 后，评论将回流交付会话）"}' "$did" "$pr" | relay_post)"
+  printf '%s' "$beg" | grep -q '"ok": *true' && echo "✓ 台账 begin 段行（in_review）：原单链 ${did:0:8}" || echo "⚠ review-ledger begin 写失败（relay 不可达/原单不在台账？）——org log-append 手工补"
+  # 4) 互审员路由（要求2：在编 worker 同域熟手优先；排除集=交付者+同 slug 关联会话）
+  if [ -z "$gid" ]; then
+    echo "ℹ 无 gid（随手办账外形态）——无在编路由面，回落 PM 子代理本地审"
+    echo "RESULT review=${did:0:8} pr=$pr ci=green routed=0 fallback=pm-subagent（无组路由面）"
+    return 0
+  fi
+  local exclude_sids body resp routed_json n_dispatched=0 fallback_pm=0
+  exclude_sids="$(python3 - "$ledger" "$slug" "$sid" <<'PY'
+import json, sys
+try:
+    rows = [json.loads(l) for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
+except OSError:
+    rows = []
+slug, sid = sys.argv[2], sys.argv[3]
+ex = {sid} | {r.get("session_id") for r in rows if slug and r.get("slug") == slug and r.get("session_id")}
+print(json.dumps(sorted(x for x in ex if x)))
+PY
+)"
+  body="$(python3 - "$gid" "$reviews_n" "$exclude_sids" "${skills_opt:-}" <<'PY'
+import json, sys
+d = {"action": "review-route", "gid": sys.argv[1], "count": int(sys.argv[2]),
+     "exclude_sessions": json.loads(sys.argv[3])}
+if sys.argv[4].strip():
+    d["skills"] = [t.strip() for t in sys.argv[4].split(",") if t.strip()]
+print(json.dumps(d, ensure_ascii=False))
+PY
+)"
+  resp="$(relay_post "$body")"
+  routed_json="$(printf '%s' "$resp" | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+    dd = d.get("data") or {}
+    print(json.dumps({"ok": d.get("ok") is True, "routed": dd.get("routed") is True,
+                      "reviewers": dd.get("reviewers") or [],
+                      "reason": (d.get("error") or dd.get("reason") or "")}, ensure_ascii=False))
+except Exception:
+    print(json.dumps({"ok": False, "routed": False, "reviewers": [], "reason": "relay 响应异常"}, ensure_ascii=False))')"
+  echo "路由（review-route count=${reviews_n} 排除集=$(printf '%s' "$exclude_sids" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?") 席）：$routed_json"
+  if ! printf '%s' "$routed_json" | grep -q '"ok": *true'; then
+    echo "⚠ review-route 失败（relay 拒/不可达）——回落 PM 子代理本地审（意见写回执评论段，不入 PR 评论）"
+    fallback_pm=1
+  elif printf '%s' "$routed_json" | grep -q '"routed": *false'; then
+    echo "ℹ 无在编可承接 worker——回落 PM 子代理（relay：$(printf '%s' "$routed_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("reason",""))' 2>/dev/null)）"
+    fallback_pm=1
+  else
+    # 4) 逐互审员派发（target_sid 定席：路由结果确定性落席）
+    local reviewer_sids brief
+    reviewer_sids="$(printf '%s' "$routed_json" | python3 -c 'import json,sys;print("\n".join(r["session_id"] for r in json.load(sys.stdin)["reviewers"]))')"
+    brief="$(review_brief "$pr" "${branch:-?}" "${title:-<标题>}" "${receipt:-<回执>}" "${did:0:8}")"
+    while IFS= read -r rsid; do
+      [ -n "$rsid" ] || continue
+      local dresp
+      dresp="$(python3 -c 'import json,sys;print(json.dumps({"action":"dispatch","anchor":sys.argv[1],"gid":sys.argv[2],"prompt":sys.argv[3],"title":sys.argv[4],"target_sid":sys.argv[5],"exclude_sessions":json.loads(sys.argv[6])},ensure_ascii=False))' \
+        "${hanchor:-$HOME/dev/cc-deck}" "$gid" "$brief" "[互审] ${title:-单} #${did:0:8}" "$rsid" "$exclude_sids" | relay_post)"
+      if printf '%s' "$dresp" | grep -q '"ok": *true'; then
+        n_dispatched=$((n_dispatched + 1))
+        echo "✓ 互审单已派：reviewer=${rsid:0:12}…（target_sid 定席）$(printf '%s' "$dresp" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(" dispatch_id="+(d.get("dispatch_id") or "")[:8])' 2>/dev/null)"
+      else
+        echo "⚠ 互审单派发失败（reviewer=${rsid:0:12}…）：$dresp——该席回落 PM 子代理补审"
+      fi
+    done <<EOF2
+$reviewer_sids
+EOF2
+    [ "$n_dispatched" -gt 0 ] || fallback_pm=1
+  fi
+  # 5) 收口摘要（begin 段行已在 CI 闸后先行落账）
+  echo "—— 时序证据链：PR=$pr → CI=green → 台账 begin → 路由=${n_dispatched} worker 席$( [ "$fallback_pm" = 1 ] && echo ' + PM 子代理回落' || echo '' ) ——"
+  echo "RESULT review=${did:0:8} pr=$pr ci=green reviewers=${n_dispatched} pm_fallback=${fallback_pm}（互审意见落 PR 评论；PM 终审后 --merge 收割）"
+  return 0
+}
+if [ "$review_mode" = 1 ]; then
+  do_pr_review
+  rc_review=$?
+  rm -f "$hlock"
+  exit "$rc_review"
+fi
 
 echo "== 收割单 ${did:0:8} =="
 echo "标题：${title:-（账无标题）}"
@@ -143,7 +375,7 @@ else
   echo "✓ 回执存在（$(wc -c < "$receipt" | tr -d ' ') 字节）"
   for sec in 根因 自测 验收点; do
     # 行首节头式匹配（## 根因 / - 根因： / **根因**），裸子串会被「结果：缺根因与验收点」这类尾行误命中
-    if grep -Eq "^[[:space:]]*[-*#> ]*${sec}" "$receipt"; then echo "✓ 必需节「${sec}」在"; else echo "✗ 必需节「${sec}」缺（W-DISPATCHX 回执格式）"; fails=$((fails+1)); fi
+    if grep -Eq "^[[:space:]]*[-*#> ]*[一二三四五六七八九十0-9（()]+[、.．:：]*${sec}|^[[:space:]]*[-*#> ]*${sec}" "$receipt"; then echo "✓ 必需节「${sec}」在"; else echo "✗ 必需节「${sec}」缺（W-DISPATCHX 回执格式）"; fails=$((fails+1)); fi
   done
   if grep -qE '^[[:space:]]*结果：.*' "$receipt" && grep '^[[:space:]]*结果：' "$receipt" | tail -1 | grep -q '改动文件'; then
     echo "✓ 尾行结果摘要（结果：…｜改动文件：…）在"
@@ -178,6 +410,37 @@ else
   echo "（无 worktree 记录——随手办/账外单，分支账跳过）"
 fi
 
+# ---------- 闸③：PR CI 绿（W-PRREVIEW 收割闸新增检查位；pr_flow 单适用） ----------
+# 非 PR 单（pr_flow!=true 且无 --pr）零影响——本闸整体跳过（既有闸输出零变化）。
+# worker 合法降级（回执含 PR-DEGRADED 标记）= 跳过不拦（收割走手工 squash 建议段）。
+# R1 P1-2：gh 不可用=**硬拒**（✗ 计 fails）——原「降级跳过」是 fail-open：--merge 假降级
+# 照翻板=dev 零提交板面 done 两面账。降级回落只属 worker 交付侧（PR-DEGRADED 标记），
+# 收割侧无 PR 状态核验能力就不得放行收割。
+if [ "$pr_flow" = "true" ] || [ -n "$pr_opt" ]; then
+  echo "== PR 闸（pr_flow 单）：CI 绿检查位 =="
+  if [ -f "$receipt" ] && grep -q 'PR-DEGRADED' "$receipt" 2>/dev/null; then
+    echo "  ◐ 合法降级单（回执 PR-DEGRADED 标记在册）——PR 闸跳过，收割走手工 squash"
+  elif ! gh_alive; then
+    echo "  ✗ gh 不可用（含 -R ${GH_REPO} 探测失败）——PR 单收割硬拒：无 PR 身份/CI 核验能力不得放行（R1 P1-2 fail-closed；worker 侧降级交付才可走手工路径）"
+    fails=$((fails+1))
+  else
+    pr_gate="${pr_opt:-$(pr_link_from_receipt "$receipt")}"
+    if [ -z "$pr_gate" ] && [ -n "$branch" ]; then pr_gate="$(gh_run pr view $GH_R "$branch" --json url -q .url 2>/dev/null || true)"; fi
+    if [ -z "$pr_gate" ]; then
+      echo "  ✗ PR 缺失（回执无链接/分支无 PR）——交付形态不符（先 --review 走互审链或打回补开）"
+      fails=$((fails+1))
+    else
+      st_gate="$(ci_state "$pr_gate")"
+      if [ "$st_gate" = "green" ]; then
+        echo "  ✓ PR CI 绿：$pr_gate"
+      else
+        echo "  ✗ PR CI 非绿（${st_gate}）：$pr_gate——先 --review（红=打回 worker 修复重推）"
+        fails=$((fails+1))
+      fi
+    fi
+  fi
+fi
+
 # ---------- 建议（打印不执行；判断与执行全留 PM） ----------
 main_repo=""
 if [ -n "$worktree" ] && [ -d "$worktree" ]; then
@@ -185,27 +448,179 @@ if [ -n "$worktree" ] && [ -d "$worktree" ]; then
   [ -n "$gd" ] && main_repo="$(dirname "$gd")"
 fi
 echo "== squash 命令建议（不自动执行；✗/未验项先修复，全 ✓ 且你复核过 diff 再动手）=="
+if [ "$pr_flow" = "true" ] || [ -n "$pr_opt" ]; then
+  echo "  # PR 单（pr_flow）：人工判断过 → 本工具 --merge 一条龙（squash-merge+PR 关闭+删分支+台账 end）；或手工："
+  [ -n "$branch" ] && echo "  gh pr merge ${pr_opt:-<PR-url>} --squash --delete-branch"
+fi
 echo "  # 1) worker 未提交时先收口："
 [ -n "$branch" ] && echo "  git -C ${worktree:-<worktree>} add -A && git -C ${worktree:-<worktree>} commit -m \"[正经立项] ${title:-<标题>}\""
 echo "  # 2) 主仓 squash 一笔（dev 只收验证过的一笔，一 worker 一笔）："
 echo "  cd ${main_repo:-<主仓>} && git merge --squash ${branch:-<分支>} && git commit   # 信息带 #NN，body 列逐条清单"
 echo "  # 3) 收尾："
 [ -n "$worktree" ] && echo "  git worktree remove ${worktree} && git branch -D ${branch:-<分支>}"
-echo "  # 4) W-BOARDRECON-R3 手工收割翻卡（gh 闸坏绕行 squash 时的断链点——第二现 18 张实锤）："
-echo "  #    手工 squash 完成后必须翻板卡，否则对账器 2h 后会按收割证据自动翻（auto 档）——"
-echo "  #    但别依赖自动兜底，主动翻："
-echo "  #    org board move <gid> <entry_id> done    # 或面板拖卡到 done"
-echo "  #    提示来源：boards-journal 会记 boardrecon-auto-done 审计行（自动翻时的证据摘要）"
 echo "  # 不自动化项（SSOT 内核，逐项人工）：diff 抽查｜自测证据核验｜真机分级（L2 看 UI，L3/L4 未真机不收）"
 
 if [ "$fails" -gt 0 ]; then
   echo "RESULT harvest=$did fails=${fails}（闸有 ✗，处置后重跑）"
   exit 1
 fi
+
+# ---------- W-PRREVIEW：--merge squash-merge 收割（闸全绿后执行；PM 终审在前） ----------
+if [ "$merge_mode" = 1 ]; then
+  echo "== squash-merge 收割（--merge · ${did:0:8}）=="
+  # R1 P1-2：gh 不可用=硬拒（不降级不翻板）——降级 merge+板卡翻 done=dev 零提交两面账
+  if ! gh_alive; then
+    echo "✗ gh 不可用（含 -R ${GH_REPO} 探测失败）——PR 单 --merge 硬拒（不降级不翻板；R1 P1-2）。手工路径：上方 squash 建议 + 自担 PR 状态核验"
+    echo "RESULT harvest=$did merge=gh-unavailable（硬拒，零副作用）"
+    exit 1
+  fi
+  pr_merge="${pr_opt:-$(pr_link_from_receipt "$receipt")}"
+  if [ -z "$pr_merge" ] && [ -n "$branch" ]; then pr_merge="$(gh_run pr view $GH_R "$branch" --json url -q .url 2>/dev/null || true)"; fi
+  if [ -z "$pr_merge" ]; then
+    echo "✗ --merge 需 PR（--pr 指路 / 回执链接 / 分支查得三源皆空）——非 PR 单走上方手工 squash 建议"
+    echo "RESULT harvest=$did merge=no-pr（回落手工 squash）"
+    exit 1
+  fi
+  # R1 P1-1：merge 前 PR 身份双验——回执取「最后 PR URL」纯约定，可能链错 PR：head 必须
+  # ==本单分支、base==本单 pr_base（缺省 dev）；查询失败（空值）=不可核验=fail-closed 拒
+  ident_head="$(gh_run pr view $GH_R "$pr_merge" --json headRefName -q .headRefName 2>/dev/null | tr -d '[:space:]')"
+  ident_base="$(gh_run pr view $GH_R "$pr_merge" --json baseRefName -q .baseRefName 2>/dev/null | tr -d '[:space:]')"
+  want_head="${branch#origin/}"
+  if [ "$ident_head" != "$want_head" ] || [ "$ident_base" != "$pr_base" ]; then
+    echo "✗ PR 身份不符拒 merge：PR#${pr_merge##*/} head=${ident_head:-?}/base=${ident_base:-?} ≠ 本单 ${want_head:-?}/${pr_base}（回执链错 PR？--pr 显式指路核对）"
+    echo "RESULT harvest=$did merge=identity-mismatch（拒：head/base 双验不过）"
+    exit 1
+  fi
+  echo "✓ PR 身份双验：head=${ident_head} base=${ident_base}（==本单分支/基线）"
+  # W-HARVESTGATE 闸一（1109 三现治本：#68 冲突未进 dev/#70 长期 OPEN 发版缺货/#71 空笔 877ccaf5）：
+  # 意图不变量=收割内容进 dev——记账 pr_base 比对之上再校验 baseRefName==="dev"（派单 --base
+  # 传返修基线时记账比对放行错 base=三现共同根因）。非 dev 拒+改法指引；确需非 dev（未来多级链
+  # 场景）走 --base-override 显式声明（台账记）。R1 链正确形态=worker 在 dev 基分支追加笔。
+  if [ "$ident_base" != "dev" ] && [ "$base_override" != 1 ]; then
+    echo "✗ 收割闸·base 错位拒：PR base=${ident_base} ≠ dev（意图不变量：收割=内容进 dev）"
+    echo "  三现形态：#68 merge conflicts 才暴露未进 dev ｜ #70 长期 OPEN 发版缺货 ｜ #71 squash 落 fix/patrolfix=空笔 877ccaf5"
+    echo "  改法：①worker 在 dev 基分支追加笔重开 PR（base=dev）②PM git cherry-pick 落 dev ③确需非 dev：--base-override（台账记 base_override）"
+    echo "RESULT harvest=$did merge=base-mismatch:${ident_base}（闸一拒）"
+    exit 1
+  fi
+  if [ "$ident_base" != "dev" ]; then
+    echo "⚠ --base-override 生效：base=${ident_base} 非 dev 收割（台账记 base_override=true）"
+  fi
+  # R1 P2-1：先查态再动——已 MERGED=幂等续收（跳过 merge 调用）；CLOSED 等他态拒
+  st_pr="$(gh_run pr view $GH_R "$pr_merge" --json state -q .state 2>/dev/null | tr -d '[:space:]')"
+  if [ "$st_pr" = "MERGED" ]; then
+    echo "◐ PR 已 MERGED——幂等续收（跳过 merge 动作，补台账 end/分支清/回执记）"
+  elif [ "$st_pr" != "OPEN" ]; then
+    echo "✗ PR 态=${st_pr:-未知}（非 OPEN 非 MERGED：CLOSED/草稿撤？）——不动作，人工核 $pr_merge"
+    echo "RESULT harvest=$did merge=state-${st_pr:-unknown}（拒）"
+    exit 1
+  else
+    st_merge="$(ci_state "$pr_merge")"
+    if [ "$st_merge" != "green" ]; then
+      echo "✗ PR CI 非绿（${st_merge}）：$pr_merge——收割闸不放（先 --review 前置链）"
+      echo "RESULT harvest=$did merge=ci-${st_merge}（拦截）"
+      exit 1
+    fi
+    # worker 约定开 draft PR（交付即 draft）——merge 前 PM 收口标 ready（幂等：已
+    # ready 时 gh pr ready 静默成功）；标失败（权限/状态异常）响亮回落手工路径
+    if ! gh_run pr ready $GH_R "$pr_merge" 2>/dev/null; then
+      echo "⚠ gh pr ready 失败（PR 非 draft？权限？）——继续尝试 merge（非 draft 直接过）"
+    fi
+    # 判定以 PR 终态为准：gh pr merge --delete-branch 在「远端 merge 成功但本地分支
+    # 删不掉（分支正被 worktree checkout 占用）」时返非零——裸 rc 会把成功误报失败
+    gh_run pr merge $GH_R "$pr_merge" --squash --delete-branch
+    mstate="$(gh_run pr view $GH_R "$pr_merge" --json state -q .state 2>/dev/null || true)"
+    if [ "$mstate" != "MERGED" ]; then
+      echo "✗ gh pr merge 失败（PR 终态=${mstate:-未知}；冲突/权限/PR 状态？）——回落手工 squash（建议命令见上段）"
+      echo "RESULT harvest=$did merge=gh-fail（回落手工 squash）"
+      exit 1
+    fi
+  fi
+  # —— 共享成功尾（本回合 MERGED 或 已 MERGED 幂等续收）——
+  echo "✓ squash-merge 完成（单笔纪律不变；PR 关闭；终态 MERGED 实证）：$pr_merge"
+  # W-HARVESTGATE 闸二：MERGED ≠ 内容进 dev——fetch 实证 mergeCommit 在 origin/dev 祖先链
+  #（防两形态：空笔 squash 落错枝即祖先链不在 dev／squash 成功但目标分支拿到的不是意图内容）。
+  # 未到=ERR+回滚指引（不自动回滚——PM 主权判断）；幂等续收路径同过本闸（补验历史单）。
+  hg_msha="$(gh_run pr view $GH_R "$pr_merge" --json mergeCommit -q .mergeCommit.oid 2>/dev/null | tr -d '[:space:]')"
+  hg_dev_contains="unverified"
+  if [ -n "$hg_msha" ]; then
+    hg_repo_dir="${main_repo:-$PWD}"
+    ( git -C "$hg_repo_dir" fetch -q origin dev 2>/dev/null || git fetch -q origin dev 2>/dev/null || true )
+    if git -C "$hg_repo_dir" merge-base --is-ancestor "$hg_msha" origin/dev 2>/dev/null; then
+      hg_dev_contains="yes"
+      echo "✓ dev 实证（闸二）：merge ${hg_msha:0:8} 在 origin/dev 祖先链——内容真到 dev"
+    else
+      hg_dev_contains="no"
+      echo "✗ dev 实证失败（闸二）：merge ${hg_msha:0:8} 不在 origin/dev 祖先链——空笔/落错枝形态（#71 同族）"
+      echo "  处置（不自动回滚）：核对 $pr_merge 的 base 与 mergeCommit；内容需手动救：git cherry-pick -m 1 ${hg_msha:0:12} 落 dev；台账已记 dev_contains=no"
+    fi
+  else
+    echo "⚠ mergeCommit 查询失败——dev_contains=unverified（人工核 dev log 与 PR base）"
+  fi
+  # 远端分支删除兜底：gh pr merge --delete-branch 在本地分支被 worktree checkout
+  # 占用时整个删除步被跳过（E2E 实锤：远端分支残留）——MERGED 后按 API 显式删一道
+  # （repo 路径从 PR URL 派生，不硬编码仓名）
+  ghrepo="$(printf '%s' "$pr_merge" | sed -nE 's#^https://github\.com/([^/]+)/([^/]+)/pull/[0-9]+.*$#\1/\2#p')"
+  if [ -n "$branch" ] && [ -n "$ghrepo" ]; then
+    gh_run api -X DELETE "repos/${ghrepo}/git/refs/heads/${branch#origin/}" 2>/dev/null \
+      && echo "✓ 远端分支已删：${branch}" \
+      || echo "⚠ 远端分支删除失败（已并已删/权限？）：${branch}——人工核 ls-remote"
+  fi
+  hg_extra=""
+  [ "$base_override" = 1 ] && hg_extra="${hg_extra},\"base_override\":true"
+  printf '{"action":"review-ledger","dispatch_id":"%s","phase":"end","note":"PR squash-merge 收割（leader-harvest --merge，单笔纪律不变）","merge_commit_sha":"%s","dev_contains":"%s"%s}' "$did" "${hg_msha:-}" "${hg_dev_contains:-unverified}" "$hg_extra" | relay_post | grep -q '"ok": *true' \
+    && echo "✓ 台账 end 段行（done 收口视图恢复）：原单链 ${did:0:8}" \
+    || echo "⚠ review-ledger end 写失败（relay 不可达？）——org log-append 手工补一行"
+  receipt_pm_note "- squash-merge 收割：$pr_merge（CI green，--merge）"
+fi
 # W-ORG-DEFECTS 件2：闸全绿=单终态，顺手清 worktree 互斥锁（relay 收口边/harvest 收尾/2h
 # 过期三路清锁之二；fails>0 时保留锁——单未收口，同树仍需互斥）。
 if [ -n "$worktree" ] && [ -d "$worktree" ] && [ -f "$worktree/.cc-deck-lock" ]; then
   rm -f "$worktree/.cc-deck-lock" && echo "✓ worktree 互斥锁已清（$worktree/.cc-deck-lock）"
+fi
+# W-HARVEST-BOARDFLIP v3（1104 晚·板面说谎第四现治本）：翻 done 只在真收割
+# （--final 显式给出）时执行——闸绿≠收成：PM 常用本工具做中途机器闸检查
+# （回执补节/审查前核账），v2 在闸绿即翻会把「审查中/返修中」的卡提前判终态
+# （chainrecall/domstep1 双实锤：卡 done 但双审打回 R1 在途=板面说谎）。缺省不翻。
+if [ -n "$did" ] && [ "${final_flag:-0}" = "1" ]; then
+  flip_out=$(python3 - "$did" "$slug" <<'PYEOF' 2>/dev/null
+import json, sys, glob, subprocess, time
+did, slug = sys.argv[1], (sys.argv[2] or "")
+flipped = []
+for bf in glob.glob('/Users/xdd/.cc-deck/org/boards/*.json'):
+    try: b = json.load(open(bf))
+    except Exception: continue
+    gid = b.get('gid') or bf.split('/')[-1][:-5]
+    dirty = False
+    for e in b.get('entries', []):
+        if e.get('status') == 'done': continue
+        ed = e.get('dispatch_id') or ''
+        hit = (ed == did) or (slug and ed and ed != did and False)
+        if not hit and slug:
+            # 同 slug 续单：卡 text 前缀匹配 slug 派生题名不可靠，只认 dispatch_id 精确命中 + 台账代际
+            continue
+        if hit:
+            # W-HARVEST-BOARDFLIP v2（1104 治本升级）：走 relay org API 通道（有 BOARD_UPDATED 帧推送，
+            # 端上实时见）——API 失败才落文件直写兜底（文件面无帧，30min 巡检兜底）。
+            import subprocess
+            api = subprocess.run(["/Users/xdd/.cc-deck/bin/org", 'board', 'move', gid, e['id'], 'done'],
+                                 capture_output=True, text=True, shell=False)
+            if '"ok":true' in (api.stdout or ''):
+                flipped.append(f"{gid}:{e['id']}:{e.get('text','')[:30]}（API 帧✓）")
+            else:
+                e['status'] = 'done'
+                e.setdefault('transitions', []).append({'status': 'done', 'ts': int(time.time()*1000), 'by': 'leader-harvest'})
+                e['updated_at'] = int(time.time()*1000)
+                flipped.append(f"{gid}:{e['id']}:{e.get('text','')[:30]}（文件兜底）")
+                dirty = True
+    if dirty:
+        json.dump(b, open(bf, 'w'), ensure_ascii=False)
+if flipped:
+    for f in flipped: print(f"✓ 板卡翻 done: {f}")
+else:
+    print("ℹ 板面无本单在途卡（已终态或无卡）")
+PYEOF
+) && echo "$flip_out" || echo "⚠ 板卡翻 done 失败（不阻塞收割——手动核 ~/.cc-deck/org/boards/）"
 fi
 echo "RESULT harvest=$did fails=0（机器闸全绿；人工判断项见上，勿跳过）"
 exit 0
