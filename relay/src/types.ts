@@ -1615,6 +1615,7 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-override-pid-replenished", // 回合拉起 pid 注册边补水 override（CLI 重启换代自愈——刀2）
   "pm-claim-renewed", // 同 sid 24h 内 claim 续任免卡（上次批准即续任授权——刀3）
   "pm-claim-idempotent-incumbent", // W-P2BATCH4 件5：现任同 sid claim 幂等零二卡（ownPending 后第三道防线——审计形态可观测）
+  "engine-tool-blocked", // W-ENGSEC 批三：非 claude 引擎危险工具拦截（检测即斩/外部仅通知——engine-tool-audit.ndjson 同步落账）
   "pm-no-target-streak", // no_pm_target 连续≥2 轮告警卡（3h 静默睡不允许——刀4）
   "pm-override-pid-stale-candidate", // 刀2：pid 死但回合窗内候选保留（可观测不静默）
 ] as const;
