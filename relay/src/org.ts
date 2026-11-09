@@ -653,6 +653,8 @@ export interface DispatchEntry {
   pr_state?: string;
   /** W-CARDLIFE-R4-R1（双审 P0-1 修法 a）：--no-pr 派单受理时落 dispatched 行（源头
    *  真值）；converge submitted 兜底仅翻显式 no_pr:true。schema 镜像 org-schema.ts。 */
+  /** W-REVEXCL：选席排除集（审查单防派回实施者）——dispatched 行落盘（schema 镜像 org-schema.ts） */
+  exclude_sessions?: string[];
   no_pr?: boolean;
 }
 

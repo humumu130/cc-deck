@@ -9925,7 +9925,7 @@ ${lines.join("\n")}
       const clash = withStorageTx(undefined, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey });
+          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), ...(input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey });
           return null;
         }
         return c;
@@ -9936,7 +9936,7 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId }; /* dispatch_id 随拒收返回：调用方/审计按 id 关联 failed 记因行（编制闸同族但本行含活单语义，对账需要） */
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等；R4-R1 no_pr=派单面打标 */
+      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), ...(input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等；R4-R1 no_pr=派单面打标 */
     }
 
     // M1 run 留档①任务书快照（multica 借①，m-observ 织合补）：实际派发注入后全文
