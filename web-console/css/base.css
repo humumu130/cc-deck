@@ -375,6 +375,54 @@
        消灭「浅桃勾选 vs 锈橙主钮」双橙并存（弹窗=单 accent 场既有原则，上文 C5 注释同源）；
        #201 的 --brand 浅桃选中 token 仍归列表选中态（rail 等），本覆盖限建团弹窗域 */
     #team-create-pop .create-check input { accent-color: var(--brand-strong); }
+
+    /* ============ W-AGGRED（1109 三路汇总裁决）：建团弹窗重设计——全部 #team-create-pop 域内
+       （新建会话弹窗共享 create-* 类零波及）。B 路六节 token 规格（w-aggui2-b.md §①-§⑥）+
+       A 路三段结构/页脚/chips 形态（裁决 1-12）============ */
+    /* B§① 灰阶角色重映射：label→text-strong 600（rname-label 先例）；hint/摘要→dim；
+       placeholder→dim 不透明（去 .8 打薄——亮档 2.81:1 根治）；faint 退役为装饰禁用专属 */
+    #team-create-pop .create-label { color: var(--text-strong); }
+    #team-create-pop .create-hint { color: var(--dim); margin: 4px 2px 0; } /* B§③ 负 margin 补丁退役 */
+    #team-create-pop .create-field::placeholder { color: var(--dim); opacity: 1; }
+    #team-create-pop .seat-count, #team-create-pop .team-micro-btn { color: var(--dim); }
+    #team-create-pop .seat-count.full { color: var(--working); } /* 满员边界提示（琥珀非错误） */
+    #team-create-pop .create-origin { margin: 2px 2px 0; color: var(--dim); font-size: var(--fs-B); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 摘要行（C 路转译一句人话） */
+    /* B§② focus 案乙变体：border 不变色+光晕 28%——全弹窗唯一实色面=主 CTA（token 不动防全站扇出） */
+    #team-create-pop .create-field:focus { border-color: var(--line); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-hover) 28%, transparent); }
+    /* B§⑤ 控件皮肤统一：取消钮入填充式一族（亮档白上白根治——bg=弹窗底仅剩边框） */
+    #team-create-pop .secondary-btn { background: var(--surface1); border-color: var(--line); }
+    /* B§③ 间距 scale：区块 12/附着 8/注解 4/控件内 6/行 2；弹窗 padding 首尾对称 */
+    #team-create-pop { padding: 16px 16px 16px; }
+    #team-create-pop .team-cand-list { gap: 2px; margin: 4px 0 4px; max-height: 240px; overflow-x: clip; } /* 裁决 10：176→240=8 席一屏可见；横滚 clip 断根 */
+    #team-create-pop .team-cand { min-width: 0; }
+    /* A§二 三段结构：line-soft 分隔线（pair-pop 既有分区语言，背景块/组标题零先例弃） */
+    #team-create-pop .create-sec { border-top: 1px solid var(--line-soft); margin-top: 12px; padding-top: 12px; }
+    /* A§五 页脚化：负 margin 拉通弹窗 padding+border-top+surface2 底+sticky 钉底（分隔线随脚钉住）；
+       CTA min-width 9.5em+tabular-nums——N 0→8 变化按钮不跳宽（裁决 9） */
+    #team-create-pop .create-actions { position: sticky; bottom: -16px; z-index: 2; margin: 12px -16px -16px; padding: 10px 16px 12px; border-top: 1px solid var(--line-soft); background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 55%, transparent), var(--surface2) 42%); }
+    #team-create-pop .create-actions .primary-btn { min-width: 9.5em; justify-content: center; font-variant-numeric: tabular-nums; }
+    /* 裁决 1：chips 形态——勾选池 checked 态投影（basename 短名+状态点+×+野生小标，每行 3-4 枚） */
+    #team-create-pop[data-team-mode="chips"] [data-team-cands] { display: none; } /* 池本体隐藏（chips=投影） */
+    #team-create-pop .team-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0; }
+    #team-create-pop .team-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--text); font-size: var(--fs-B); min-width: 0; }
+    #team-create-pop .team-chip .status-dot { width: 6px; height: 6px; flex: 0 0 6px; }
+    #team-create-pop .team-chip .chip-ext { color: var(--faint); font-size: var(--fs-micro); }
+    #team-create-pop .team-chip [data-chip-x] { border: 0; background: none; padding: 0 0 0 2px; color: var(--faint); cursor: pointer; font-size: 11px; line-height: 1; }
+    #team-create-pop .team-chip [data-chip-x]:hover { color: var(--text); }
+    /* 裁决 5 细部：角色模板段尾紧凑行/PM 人选行/锚点 ⓘ */
+    #team-create-pop .team-tpl-row { margin-top: 8px; }
+    #team-create-pop .team-tpl-row .create-field { height: 30px; }
+    #team-create-pop .team-pm-row { margin-top: 6px; color: var(--dim); font-size: var(--fs-B); }
+    #team-create-pop .anchor-info { border: 0; background: none; padding: 0 0 0 5px; color: var(--faint); cursor: help; font-size: var(--fs-B); line-height: 1; }
+    /* L3：chips 模式「＋添加成员」并入「其他候选 ▾」行尾（同一调整成员心智） */
+    #team-create-pop .cand-fold-line { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+    #team-create-pop .cand-fold-line .team-add-btn { margin-top: 0; }
+    /* 裁决 11：挂靠模式（高级区整段隐藏时两分隔线防贴背——gid 态中区与页脚间正常隔） */
+    #team-create-pop details.team-adv > summary { cursor: pointer; color: var(--dim); font-size: var(--fs-B); padding: 2px 0; user-select: none; }
+    #team-create-pop details.team-adv > summary:hover { color: var(--text); }
+    #team-create-pop details.team-adv[open] > summary { margin-bottom: 4px; }
+    #team-create-pop .team-adv-body .create-label { margin-top: 10px; }
+    #team-create-pop .team-adv-body .create-label:first-child { margin-top: 0; }
     /* #277 ① 建团弹窗 v2（PM 美化基调）：头行 h3+✕（标题不截断）、锚点行内浏览钮、
        分段卡片流（灰盒 create-group 退役）、滚动条弱化、select 自绘箭头（原生朴素） */
     .create-pop .create-head { display: flex; align-items: flex-start; gap: 8px; }

@@ -68,9 +68,13 @@ console.log("#277 建团弹窗重设计+团队域多源化+成员tab修坏（六
   const local = cands("local", { lanRelayName: "Mac本机", cloudRelayName: "公司机" }) as Array<{ session_id: string }>;
   ok(cloud.length === 2 && cloud.map((x) => x.session_id).join(",") === "s2,s4", "A3 云源候选=relay_source 对位该源的会话（W-AGGREGATE-V1：external 观察位保留+托管优先排序——野生垫底不挤视野）");
   ok(local.length === 2 && local.map((x) => x.session_id).join(",") === "s1,s3", "A3 本机源候选=本机名+无标记兜底（旧快照兼容）");
-  const listHtml = link(blockFrom("function teamCandListHtml(cands)"), ["cands"], {
+  const shortNames = link(blockFrom("function teamCandShortNames(cands)"), ["cands"], {}); // W-AGGRED：候选行 v3 短名化助手（纯函数补挂）
+  const dotCls = link(blockFrom("function teamStDotClass(st)"), ["st"], {});
+  const listHtml = link(blockFrom("function teamCandListHtml(cands, hitSet)"), ["cands", "hitSet"], {
     banner: (t: string) => "<p>" + t + "</p>",
     escape: (x: string) => String(x),
+    teamCandShortNames: shortNames,
+    teamStDotClass: dotCls,
   });
   const html2 = listHtml([{ session_id: "s1", title: "推广主控" }]) as string;
   ok(html2.includes('data-team-member="s1"') && html2.includes("推广主控"), "A4 候选行 v2 勾选锚+标题保留");

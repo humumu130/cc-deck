@@ -78,8 +78,8 @@ const zhLen = (s: string) => [...s].reduce((n, ch) => n + (/[\u2E80-\u9FFF\uF900
 // ---------- B2 副标题删+tier 动态 hint / B4 两列+紧凑空态 ----------
 {
   ok(!td.includes('class="create-sub">需确认的新建项目会在确认卡上请你决议'), "B2 头部副标题退役（答非所问行删除）");
-  ok(td.includes('TEAM_TIER_HINTS = { "轻立项": "创建即生效", "正经立项": "提交后在确认卡上等你决议" }'), "B2 档位后果文案入库（决策点可见）"); // W-AGGFIX A5：hint 与选项文案去重（「日常免确认」留选项侧）——断言随文案演进
-  ok(td.includes('[data-team-tier-hint]') && td.includes("teamTierHint(tierSel.value)"), "B2 tier hint 随选项动态切换（change 联动）");
+  ok(td.includes("轻量项目（日常免确认）") && td.includes("正式项目（需你确认）") && !td.includes("data-team-tier-hint"), "B2 档位后果文案承位=option 文案（W-AGGRED 裁决 4：hint 行直删——后果语言在选项侧，独立 hint 行退役）"); // W-AGGFIX A5→W-AGGRED 语义等价迁移
+  ok(!td.includes("TEAM_TIER_HINTS") && !td.includes("function teamTierHint"), "B2 tier hint 机制零残留（死常量+死函数随批清）");
   ok(/\.create-two \{ display: grid; grid-template-columns: 1fr 1fr;/.test(css), "B4 团队名+立项档并排两列行");
   ok(/@media \(max-width: 400px\) \{ \.create-two \{ grid-template-columns: 1fr; \} \}/.test(css), "B4 窄屏折行保竖排");
   ok(td.includes('class="team-empty-row"') && td.includes("＋ 添加</button></div>"), "B4 空态 banner+添加钮合并一行");
