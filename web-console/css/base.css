@@ -33,7 +33,7 @@
     /* W-WBARSLIM（1109 三路裁决案② D10 下沉）三退役：
        ①hint 域提示位退役（session 已走第三列 head-sub，team/project 内容本就在场=死位实证）；
        ②顶栏常驻刷新钮退役（迁源菜单「重新连接」项+断连态连接点按重连——就近 affordance）；
-       ③源胶囊 windowbar 专设规则退役（宿主迁会话侧栏头 .queue-source，样式见下段；
+       ③源胶囊 windowbar 专设规则退役（W-SRCPILL 1109 晚用户实锤：宿主回 windowbar 全局位——源=全局概念跨页常驻，.queue-source 类名随宿主走、规则见下段；
          连接态色随迁接全局轴 --done/--working/--error，浅色双主题在位=B 路 P0×2 根治）。
        spin 两 keyframes 保留——新宿主菜单重连项复用。 */
     @keyframes wrefSpinKf { to { transform: rotate(360deg); } }
@@ -118,9 +118,8 @@
        五壳同色系，双壳不同步随迁归一，且 fail 与 wait 呼吸态拉开）；断连态点连接图标=重连
        affordance（settings-domain click 分支）。菜单 276px 会被 .queue overflow:hidden 横裁
        ——JS placeSourceMenu 对 .queue 内宿主开菜单改 fixed 定位。 */
-    .queue-source { display: flex; align-items: center; min-width: 0; margin-bottom: 10px; }
-    #d-session .queue-source { padding: 0 14px; } /* 与 queue-head/session-list-tools 的 14px 行内补偿同律（:435 区） */
-    .queue-source .source-switcher { margin-right: 0; background: transparent; } /* 侧栏头语境不承 windowbar 亮底 */
+    .queue-source { display: flex; align-items: center; min-width: 0; } /* W-SRCPILL：宿主回 windowbar（用户实锤全局位）——margin-bottom 侧栏头语境退役，横向间距由 .windowbar gap 承担；首内容距交通灯 ≥28px 让位律天然合规 */
+    .queue-source .source-switcher { margin-right: 0; background: transparent; } /* 顶栏语境 ghost 延续（1102 裸形态语义） */
     .queue-source .source-trigger { min-height: 28px; gap: 8px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; max-width: 100%; } /* 1102 裸形态语义在新宿主延续 */
     .queue-source .source-trigger:hover { background: var(--hover); }
     .queue-source .source-trigger strong { word-spacing: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* D8 同律：中英混排呼吸+窄侧栏截断 */
