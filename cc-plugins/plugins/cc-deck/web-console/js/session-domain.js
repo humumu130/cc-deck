@@ -883,7 +883,7 @@
                 // UI 反馈批 1029 件D：消息流 URL 可开——document 级统一接管（#d-session 域与手机屏
                 // #m-* 全覆盖）。语义：修饰键（Ctrl/⌘）点击=显式打开；触屏（hover:none/pointer:coarse）
                 // 直接点按打开；无修饰键桌面/浏览器不接管（桌面壳由 INIT_SCRIPT capture 兜底转系统
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint", "relay_source"]; // W-SRC2 #134（本批①）：增量 SESSION_UPDATED 透传 relay_source——SNAPSHOT 打标被后到无标增量覆写时自愈（relay 恒注入后此键恒在场，等值覆写零副作用）
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint", "relay_source", "activity_capabilities"]; // W-SRC2 #134（本批①）：增量 SESSION_UPDATED 透传 relay_source——SNAPSHOT 打标被后到无标增量覆写时自愈（relay 恒注入后此键恒在场，等值覆写零副作用）
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -1394,7 +1394,12 @@
                   // bgCount>0 恒显（任意状态、含 WORKING）；r3 回归置顶/引擎/来源
                   // #227 三排定稿③：竖条退役——源信息回归第三排双胶囊（b2SrcCap=件A
                 // 电脑图标前缀+源名，色=sourcePalette 同色）
-                const b2SrcCap = (item) => item.source
+                // W-SRCPILL（1109 用户实锤）：源胶囊回归 windowbar 全局位后，会话卡第三排源胶囊
+                // 降级「仅异源显示」——当前主源会话不再重复标源（全局位已常驻表达主源）；
+                // 异源会话（聚合两源各显其名/云桥外部）保留源色胶囊=卡级归属标记
+                //（#101/#128 源归属误判史：多源混列时这是唯一区分位，不退役）。
+                const b2SelfSourceName = () => esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(S.relayName) : S.relayName);
+                const b2SrcCap = (item) => item.source && item.source !== b2SelfSourceName()
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
                   return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"' + (item.standby ? ' title="已接单未开工或挂起——无近期工具活动，不占在跑计数（#291 待命）"' : "") + '></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.pmStandby ? '<span class="tag mini" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
@@ -1814,6 +1819,23 @@
                       if (n.nodeType === 1) desired.push([n.getAttribute("data-session-card") || "n:" + desired.length, n.outerHTML]);
                     });
                     if (!desired.length) desired.push(["empty", '<div class="readonly-banner"></div>']);
+                    // W-RENAMEFOCUS（1109 用户实锤：重命名一秒失焦）：编辑中的卡冻结替换——
+                    // 现挂卡内含 .row-rename-input（重命名编辑态）时，该键 desired 改用节点上
+                    // __rkHtml 快照旧值。根因链：WORKING 卡 html 含走秒位（workSecs 每次
+                    // myCardItem 实时算）→他话任一 SESSION_UPDATED → renderMyList → 该卡新
+                    // html 恒≠快照 → reconcile 判变 replaceChild 整卡替换 → input 被摘离 →
+                    // blur 触发 commit 自动提交（CDP 复现：首帧 258ms 即 REMOVED）。
+                    // 冻结语义：编辑中该卡 DOM 原样保留（1s 走秒 timer 定点 textContent 直更
+                    // 不经 reconcile 不受影响）；编辑结束 commit 后 title 真变→下一次渲染自然
+                    // 替换显新名，未变/Escape→input.replaceWith(titleEl) 已复原与快照一致。
+                    // #282/:1797 定点替换语义零动（他卡照旧增删定点；本冻结仅改 desired 输入值）。
+                    (() => {
+                      const editing = upper.querySelector("[data-session-card] .row-rename-input")?.closest("[data-session-card]");
+                      if (!editing) return;
+                      const ek = editing.getAttribute("data-rk") || editing.getAttribute("data-session-card");
+                      const di = desired.findIndex((p) => p[0] === ek);
+                      if (di >= 0 && editing.__rkHtml) desired[di][1] = editing.__rkHtml;
+                    })();
                     rk(upper, desired);
                     moMaybeStagger();
                     if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 兜底写回（节点复用时通常 no-op）
@@ -2322,7 +2344,7 @@
                     // 此处置 null 会永久断引用（updateModelCapsule 读 null 恒 return → 胶囊恒
                     // hidden，用户实测「模型切换缺失」根因）；无会话时 updateModelCapsule(null)
                     // 走 ok=false → hidden=true 的正常隐藏路径
-                    UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "从左侧选择一个会话" : "等待 relay 连接…");
+                    UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "" : "等待 relay 连接…"); /* P2BATCH6 件7（A-P2-5）：hasSnapshot 态副标题置空——指引由中央空态独占（原三处同文案连排） */
                     updateModelCapsule(null);
                     updatePermCapsule(null); // UIPOLISH3 件三：无会话权限胶囊隐藏
                     updateCtxMeter(null); // UIPOLISH2 件四：无会话水位胶囊隐藏
@@ -2466,6 +2488,22 @@
                     return;
                   }
                   cap.hidden = false;
+                  // [W-ENGCODEX-FIX P1-1]（1110 深测：codex headless 无审批/权限运行时面
+                  // ——setPermissionMode no-op、面板切换「成功」但引擎侧无动作=误导）：
+                  // 无审批能力引擎的托管会话显示只读胶囊+人话说明，与外部会话同形态不硬闯。
+                  // 判定=capabilities.approval（relay 经 SESSION_ACTIVITY/UPDATED 的
+                  // capabilities 位下发——agent-codex 恒 false 声明；claude/带远程决议通道
+                  // 的引擎 true 不受影响；缺键=旧 relay 宽容放行不倒退）
+                  const noApproval = s.engine && s.activity_capabilities && s.activity_capabilities.approval === false;
+                  if (noApproval) {
+                    cap.disabled = false;
+                    const curA = s.permission_mode || "default";
+                    const modeA = PERM_MODES.find((m) => m.key === curA);
+                    if (txt) txt.textContent = modeA ? modeA.zh : curA;
+                    cap.title = "该引擎（" + String(s.engine) + "）不支持运行时权限切换——权限由引擎自身沙盒配置决定（codex=config.toml sandbox），此处仅回显（点击查看说明）";
+                    cap.dataset.permReadonly = "1";
+                    return;
+                  }
                   cap.disabled = false;
                   const cur = s.permission_mode || "default";
                   const mode = PERM_MODES.find((m) => m.key === cur);
@@ -2479,6 +2517,7 @@
                   const s = curSession();
                   if (!anchor || !s || !canCmd(s)) return;
                   if (s.external) { b2Toast("CLI 会话的权限模式在本机 CLI 里定（启动参数），这里不能切换"); return; } // W-UIPOLISH4 件四：只读胶囊点击给反馈，不静默
+                  if (s.engine && s.activity_capabilities && s.activity_capabilities.approval === false) { b2Toast("该引擎不支持运行时权限切换（由引擎沙盒配置决定），这里仅回显"); return; } // [W-ENGCODEX-FIX P1-1]
                   const menu = document.createElement("div");
                   menu.id = "b2-perm-menu";
                   menu.className = "model-menu"; // 与模型菜单同壳样式（独立 id 防互误伤）
@@ -2962,7 +3001,10 @@
                   return null;
                 }
                 // #164 单条消息 HTML（桌面/手机同一渲染路径；返回 "" = 该类开关关闭不渲染）
-                function entryHtml(e, s) {
+                function entryHtml(e, s, hideTs = false) {
+                  // P2BATCH6 件2（A-P2-6）：hideTs=同分钟聚合抑制位——连续相邻对话消息（user/ai-text）
+                  // 落同一分钟时只首条显时间戳，后续传入 true 隐藏（断组=日期分隔/过程组/角色切换外的
+                  // 相邻性由调用方循环判定）。automsg/思考/工具行不受此位管（自有时间语义）。
                   const role = msgRoleOf(e.kind);
                   const k = eKey(e);
                   const ke = esc(k); // data-x 属性安全
@@ -2995,7 +3037,7 @@
                     // 时间戳沿用旧版位=气泡下方右对齐；data-x 随 wrapper 顶层（替换链不变）
                     return '<div class="msg-user-row" data-x="' + ke + '"><div class="bubble me"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" + imgHtml +
                       (long ? '<span class="x-full" data-x="' + ke + '">' + (open ? "收起 ▴" : "展开全文 " + src.length + " 字 ▾") + "</span>" : "") + "</div>" +
-                      (e.ts ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
+                      (e.ts && !hideTs ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
                     const eng = engineMetaOf(s); // W-ENGLM G：消息流头像同链（engine 空按 model 推断，glm 不再落 ✻）
@@ -3010,7 +3052,7 @@
                     // x-full「展开全文」钮退役；expanded 键若残留指向 AI 条目恒无效（无害兼容旧会话）。
                     // 桌面/手机同一渲染路径（本函数），手机壳借道 b2Api.entryHtml 同步生效。
                     // 工具面（trow/detail/diff）与用户消息 clamp（.ub.clamp 100 字 3 行）不在本批面
-                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
+                    return '<div class="message-ai" data-x="' + ke + '"><button type="button" class="copy-btn msg-copy" data-x="' + ke + '" title="复制全文" aria-label="复制消息全文">⧉</button><div class="message-author"><span class="ai-ava" style="--ai-ava-c:' + aiAvaColor + '">' + (ENGINE_BRAND_SVG[eng[1]] ? '<span class="badge-brand">' + ENGINE_BRAND_SVG[eng[1]] + "</span>" : "✻") + '</span><strong>' + esc(eng[0]) + "</strong>" + (e.ts && !hideTs ? "<time>" + fmtHM(e.ts) + "</time>" : "") + '</div><div class="message-body">' +
                       mdHtml(String(e.full ?? e.text ?? "")) +
                       (isStreaming(e, s) ? '<span class="stream-dots" role="status" aria-label="生成中"><i></i><i></i><i></i></span>' : "") +
                       "</div></div>";
@@ -3063,8 +3105,8 @@
                   // W-UIFB ⑦：relay 防抢发提示小字号呈现（i=9 附带；文本特征挂 note-xs）
                   return '<div class="timeline-note' + (/^\s*⚠/.test(String(e.text ?? "")) ? " warn" : "") + (/防抢发/.test(String(e.text ?? "")) ? " note-xs" : "") + '">' + linkifyEscaped(esc(oneLine(e.text))) + "</div>"; // 件D：note 行 URL 亦可点
                 }
-                function entryNode(e, s) {
-                  const html = entryHtml(e, s);
+                function entryNode(e, s, hideTs = false) {
+                  const html = entryHtml(e, s, hideTs);
                   if (!html) return null;
                   const t = document.createElement("template");
                   t.innerHTML = html;
@@ -3078,8 +3120,16 @@
                   const list = s ? (S.timelines.get(s.session_id) || []) : [];
                   const e = list.find((x) => eKey(x) === k);
                   if (!e || !s || !UI || !UI.convPane) return;
-                  const n = entryNode(e, s);
                   const old = UI.convPane.querySelector('[data-x="' + cssEsc(k) + '"]');
+                  // P2BATCH6 件2：单条重建沿用聚合位——前邻居已显同分钟时间戳则重建后仍隐藏
+                  //（防「点展开后时间戳凭空冒出」与全量渲染打架；前邻居无时间戳/不同分钟=重显）
+                  let hideTs = false;
+                  if (old && e.ts) {
+                    const pv = old.previousElementSibling;
+                    const pvTs = pv ? (pv.querySelector(".mt, time") || (pv.matches?.(".mt") ? pv : null)) : null;
+                    if (pvTs && pvTs.textContent === fmtHM(e.ts)) hideTs = true;
+                  }
+                  const n = entryNode(e, s, hideTs);
                   if (old && n) old.replaceWith(n);
                 }
                 // B12 过程/思考开关（W-UIFB 合并裁决：head-actions 静态钮，不再随对话重建；
@@ -3166,10 +3216,12 @@
                     }
                     const noteHtml = (t) => { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(t ?? "")) ? " warn" : ""); d.textContent = t; return d.outerHTML; };
                     if (!s) {
+                      host.setAttribute("data-empty", "1"); // P2BATCH6 件4（A-P2-12）：空态主区垂直居中标记（CSS 配套 min-height 60vh flex 居中——旧态贴 Tab 栏下方留 500px 空置）
                       rk4(host, [["empty", noteHtml(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")]]);
                       syncWaitCard(false); // 审查 P2-2（review-282d-a）：取消选中窗口清残留卡+waitElapsedTimer（旧路径靠 textContent="" 清节点但漏计时器——本路径双清）
                       return;
                     }
+                    host.removeAttribute("data-empty"); // 件4：非空态必清（host 跨帧复用，防空态样式漏到会话渲染）
                     const trunc = S.logsTruncated.get(s.session_id) || 0;
                     const list = S.timelines.get(s.session_id) || [];
                     const desired = [];
@@ -3177,6 +3229,7 @@
                     let prevDay = "";
                     let procBuf = null, procKey = "";
                     let lastAiChain = false, lastAiTs = 0; // 件九 string 版：连续 AI 正文去重署名链（间隔 >5min/过程组/气泡断）
+                    let lastTsMin = -1; // P2BATCH6 件2（A-P2-6）：分钟聚合——最近一条已显时间戳的对话消息所在分钟（-1=重显；日期分隔/过程组边界重置）
                     const flushProc = () => {
                       if (procBuf && procBuf.length) {
                         const open = expanded.has("proc:" + procKey);
@@ -3186,8 +3239,15 @@
                     };
                     for (const e of list) {
                       const dk = e.ts ? dayKey(e.ts) : "";
-                      if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; } // 日期分隔断组（件九：新分节重显署名行）
-                      const eh = entryHtml(e, s); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
+                      if (dk && dk !== prevDay) { flushProc(); desired.push(["d:" + dk, '<div class="timeline-note day-sep">── ' + esc(dayLabel(e.ts)) + " ──</div>"]); prevDay = dk; lastAiChain = false; lastTsMin = -1; } // 日期分隔断组（件九：新分节重显署名行）；件2：跨日必重显时间戳
+                      const eRole = msgRoleOf(e.kind);
+                      let hideTs = false; // P2BATCH6 件2：同分钟聚合位——仅 user/ai-text 参与判定（automsg 走 user 早退分支不受影响：isAutoInjected 在 entryHtml 内先返，不进 mt 输出）
+                      if ((eRole === "user" || eRole === "ai-text") && e.ts) {
+                        const m = Math.floor(e.ts / 60000);
+                        hideTs = m === lastTsMin;
+                        if (!hideTs) lastTsMin = m;
+                      }
+                      const eh = entryHtml(e, s, hideTs); // 字符串直出（不 parse——未变帧零解析是本改造核心收益）
                       if (!eh) continue; // 开关关闭的条目（思考）不断组也不占位
                       // 审查 P1-1（review-282d-a）：过程组判据补 data-role="proc"——#47 任务生命周期行
                       //（trow task-life data-role="task"）同以 <div class="trow 开头，仅前缀判据会把它
@@ -3196,7 +3256,7 @@
                       if (eh.startsWith('<div class="trow') && eh.indexOf('data-role="proc"') > -1) {
                         if (!procBuf) { procBuf = []; procKey = eKey(e); }
                         procBuf.push(eh);
-                        lastAiChain = false; // 件九：过程组是强分隔——组后新正文重显署名
+                        lastAiChain = false; lastTsMin = -1; // 件九：过程组是强分隔——组后新正文重显署名；件2：组边界重显时间戳（组内工具行不携对话时间语义）
                       } else {
                         flushProc();
                         // 件九（层级降噪）string 版：cont 类注入首 class（entryHtml 的 ai 正文恒以
@@ -4161,7 +4221,7 @@
                   UI.sendBtn.title = running ? "发送（运行中发送将排队，回合结束后自动发送）" : "发送（Enter）";
                   UI.input.disabled = !editable;
                   // B20 placeholder 承载附件/历史提示（hint 小字行退役）：按会话态给可用性指引
-                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "先从左侧选择会话") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅 · Shift+Enter 换行";
+                  UI.input.placeholder = !editable ? (s ? "历史会话只读" : "选择会话后即可输入 …") : running ? "运行中 · 发送将排队，回合结束后自动发出" : "拖入/粘贴即附 · ↑↓ 翻阅 · Shift+Enter 换行"; /* P2BATCH6 件7：占位差异化（指引句式改「选择会话后…」状态句——与中央空态「从左侧选择…」动宾不重复） */
                   autoGrowSessionInput(); // 件八：随内容长高（发送清空/历史翻阅/切会话草稿恢复后都经此收口）
                 }
                 function autoGrowSessionInput() { // 件八：textarea 自动长高（手机 input 宿主跳过）
@@ -4727,7 +4787,12 @@
                   menu.classList.add("open");
                   const mw = menu.offsetWidth, mh = menu.offsetHeight;
                   menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + "px";
-                  menu.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8)) + "px";
+                  // P2BATCH6 件9（C-P2-3）：向上弹优先——旧版恒 r.bottom+6 向下弹，长目录
+                  // 整片盖住弹窗下半（工作目录+创建/取消钮全被遮，用户选引擎看不到提交口）；
+                  // 触发器上方空间够（≥mh+8+6）即向上（菜单落在弹窗头之上的遮罩区，不遮
+                  // 表单），不足再回落向下 clamp 视口。CSS 侧 .model-menu 限高内滚保底。
+                  const aboveTop = r.top - mh - 6;
+                  menu.style.top = (aboveTop >= 8 ? aboveTop : Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8))) + "px";
                 }
                 function pickEngine(btnOrId) {
                   const id = typeof btnOrId === "string" ? btnOrId : btnOrId.dataset.engineChoice;

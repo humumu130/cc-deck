@@ -23,7 +23,7 @@
        注意：本段新增规则只写在雷前区（文件尾部 @media reduce 未闭合地雷 3207 仍在，append=被吞）。 */
     .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; background: var(--windowbar-bg); border-bottom: 1px solid var(--windowbar-line); } /* 1104 用户拍板 40→36；子元素 28 热区不动（VS Code 35/Chrome 40 主流带内）；唯一落点——全仓 windowbar 高度无第二落点（media/紧凑/print 零变体），下位改档只动本行 */
     .windowbar { --windowbar-bg: var(--rail); --windowbar-line: #24304A; /* 用户 1102 拍板：顶栏与侧边导航栏同色（分层突兀回改）；line 浅 Broken→B 路 1109 P2 验算 #24304A=1.51（原 --line-soft 1.26 弱） */ --windowbar-ink: rgba(255, 255, 255, 0.55); }
-    html[data-theme="light"] .windowbar { --windowbar-bg: var(--rail); --windowbar-line: #C4C4C4; --windowbar-ink: #52525B; } /* W-WBARSLIM：token 族随瘦身清死键（trigger-line/hover/active/dot-ok/dot-warn/dot-idle 六键随胶囊/刷新/hint 迁出或退役删）；B 路 1109 P1 验算值：ink 5.75/hairline 1.30（原 #71717A 3.59/原 --line-soft 1.10 双不过线） */
+    html[data-theme="light"] .windowbar { --windowbar-bg: var(--rail); --windowbar-line: #BDBDBD; --windowbar-ink: #52525B; } /* W-WBARSLIM：token 族随瘦身清死键（trigger-line/hover/active/dot-ok/dot-warn/dot-idle 六键随胶囊/刷新/hint 迁出或退役删）；B 路 1109 P1 验算值：ink 5.75/hairline 1.30（原 #71717A 3.59/原 --line-soft 1.10 双不过线）；W-GRAYSCALE 顺刀：line #C4C4C4→#BDBDBD=对 surface1 1.60（原 1.49）/对 rail 1.40（原 1.30）——head B 路 P3 底界 1.35 提档 */
     /* W-UIFIX A（2026-10-11 test.11 真机反馈「比其他软件小多了」）：9px→12px 对齐 macOS
        系统灯标准直径，间距 6→8px；色值本就是 mac 标准三色（下方 nova 覆盖段）。
        W-STATUSBAR 标题退役后交通灯区让位：首内容距灯 ≥28px */
@@ -33,7 +33,7 @@
     /* W-WBARSLIM（1109 三路裁决案② D10 下沉）三退役：
        ①hint 域提示位退役（session 已走第三列 head-sub，team/project 内容本就在场=死位实证）；
        ②顶栏常驻刷新钮退役（迁源菜单「重新连接」项+断连态连接点按重连——就近 affordance）；
-       ③源胶囊 windowbar 专设规则退役（宿主迁会话侧栏头 .queue-source，样式见下段；
+       ③源胶囊 windowbar 专设规则退役（W-SRCPILL 1109 晚用户实锤：宿主回 windowbar 全局位——源=全局概念跨页常驻，.queue-source 类名随宿主走、规则见下段；
          连接态色随迁接全局轴 --done/--working/--error，浅色双主题在位=B 路 P0×2 根治）。
        spin 两 keyframes 保留——新宿主菜单重连项复用。 */
     @keyframes wrefSpinKf { to { transform: rotate(360deg); } }
@@ -118,9 +118,8 @@
        五壳同色系，双壳不同步随迁归一，且 fail 与 wait 呼吸态拉开）；断连态点连接图标=重连
        affordance（settings-domain click 分支）。菜单 276px 会被 .queue overflow:hidden 横裁
        ——JS placeSourceMenu 对 .queue 内宿主开菜单改 fixed 定位。 */
-    .queue-source { display: flex; align-items: center; min-width: 0; margin-bottom: 10px; }
-    #d-session .queue-source { padding: 0 14px; } /* 与 queue-head/session-list-tools 的 14px 行内补偿同律（:435 区） */
-    .queue-source .source-switcher { margin-right: 0; background: transparent; } /* 侧栏头语境不承 windowbar 亮底 */
+    .queue-source { display: flex; align-items: center; min-width: 0; } /* W-SRCPILL：宿主回 windowbar（用户实锤全局位）——margin-bottom 侧栏头语境退役，横向间距由 .windowbar gap 承担；首内容距交通灯 ≥28px 让位律天然合规 */
+    .queue-source .source-switcher { margin-right: 0; background: transparent; } /* 顶栏语境 ghost 延续（1102 裸形态语义） */
     .queue-source .source-trigger { min-height: 28px; gap: 8px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; max-width: 100%; } /* 1102 裸形态语义在新宿主延续 */
     .queue-source .source-trigger:hover { background: var(--hover); }
     .queue-source .source-trigger strong { word-spacing: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* D8 同律：中英混排呼吸+窄侧栏截断 */
@@ -376,6 +375,54 @@
        消灭「浅桃勾选 vs 锈橙主钮」双橙并存（弹窗=单 accent 场既有原则，上文 C5 注释同源）；
        #201 的 --brand 浅桃选中 token 仍归列表选中态（rail 等），本覆盖限建团弹窗域 */
     #team-create-pop .create-check input { accent-color: var(--brand-strong); }
+
+    /* ============ W-AGGRED（1109 三路汇总裁决）：建团弹窗重设计——全部 #team-create-pop 域内
+       （新建会话弹窗共享 create-* 类零波及）。B 路六节 token 规格（w-aggui2-b.md §①-§⑥）+
+       A 路三段结构/页脚/chips 形态（裁决 1-12）============ */
+    /* B§① 灰阶角色重映射：label→text-strong 600（rname-label 先例）；hint/摘要→dim；
+       placeholder→dim 不透明（去 .8 打薄——亮档 2.81:1 根治）；faint 退役为装饰禁用专属 */
+    #team-create-pop .create-label { color: var(--text-strong); }
+    #team-create-pop .create-hint { color: var(--dim); margin: 4px 2px 0; } /* B§③ 负 margin 补丁退役 */
+    #team-create-pop .create-field::placeholder { color: var(--dim); opacity: 1; }
+    #team-create-pop .seat-count, #team-create-pop .team-micro-btn { color: var(--dim); }
+    #team-create-pop .seat-count.full { color: var(--working); } /* 满员边界提示（琥珀非错误） */
+    #team-create-pop .create-origin { margin: 2px 2px 0; color: var(--dim); font-size: var(--fs-B); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 摘要行（C 路转译一句人话） */
+    /* B§② focus 案乙变体：border 不变色+光晕 28%——全弹窗唯一实色面=主 CTA（token 不动防全站扇出） */
+    #team-create-pop .create-field:focus { border-color: var(--line); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-hover) 28%, transparent); }
+    /* B§⑤ 控件皮肤统一：取消钮入填充式一族（亮档白上白根治——bg=弹窗底仅剩边框） */
+    #team-create-pop .secondary-btn { background: var(--surface1); border-color: var(--line); }
+    /* B§③ 间距 scale：区块 12/附着 8/注解 4/控件内 6/行 2；弹窗 padding 首尾对称 */
+    #team-create-pop { padding: 16px 16px 16px; }
+    #team-create-pop .team-cand-list { gap: 2px; margin: 4px 0 4px; max-height: 240px; overflow-x: clip; } /* 裁决 10：176→240=8 席一屏可见；横滚 clip 断根 */
+    #team-create-pop .team-cand { min-width: 0; }
+    /* A§二 三段结构：line-soft 分隔线（pair-pop 既有分区语言，背景块/组标题零先例弃） */
+    #team-create-pop .create-sec { border-top: 1px solid var(--line-soft); margin-top: 12px; padding-top: 12px; }
+    /* A§五 页脚化：负 margin 拉通弹窗 padding+border-top+surface2 底+sticky 钉底（分隔线随脚钉住）；
+       CTA min-width 9.5em+tabular-nums——N 0→8 变化按钮不跳宽（裁决 9） */
+    #team-create-pop .create-actions { position: sticky; bottom: -16px; z-index: 2; margin: 12px -16px -16px; padding: 10px 16px 12px; border-top: 1px solid var(--line-soft); background: linear-gradient(180deg, color-mix(in srgb, var(--surface2) 55%, transparent), var(--surface2) 42%); }
+    #team-create-pop .create-actions .primary-btn { min-width: 9.5em; justify-content: center; font-variant-numeric: tabular-nums; }
+    /* 裁决 1：chips 形态——勾选池 checked 态投影（basename 短名+状态点+×+野生小标，每行 3-4 枚） */
+    #team-create-pop[data-team-mode="chips"] [data-team-cands] { display: none; } /* 池本体隐藏（chips=投影） */
+    #team-create-pop .team-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0; }
+    #team-create-pop .team-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--text); font-size: var(--fs-B); min-width: 0; }
+    #team-create-pop .team-chip .status-dot { width: 6px; height: 6px; flex: 0 0 6px; }
+    #team-create-pop .team-chip .chip-ext { color: var(--faint); font-size: var(--fs-micro); }
+    #team-create-pop .team-chip [data-chip-x] { border: 0; background: none; padding: 0 0 0 2px; color: var(--faint); cursor: pointer; font-size: 11px; line-height: 1; }
+    #team-create-pop .team-chip [data-chip-x]:hover { color: var(--text); }
+    /* 裁决 5 细部：角色模板段尾紧凑行/PM 人选行/锚点 ⓘ */
+    #team-create-pop .team-tpl-row { margin-top: 8px; }
+    #team-create-pop .team-tpl-row .create-field { height: 30px; }
+    #team-create-pop .team-pm-row { margin-top: 6px; color: var(--dim); font-size: var(--fs-B); }
+    #team-create-pop .anchor-info { border: 0; background: none; padding: 0 0 0 5px; color: var(--faint); cursor: help; font-size: var(--fs-B); line-height: 1; }
+    /* L3：chips 模式「＋添加成员」并入「其他候选 ▾」行尾（同一调整成员心智） */
+    #team-create-pop .cand-fold-line { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+    #team-create-pop .cand-fold-line .team-add-btn { margin-top: 0; }
+    /* 裁决 11：挂靠模式（高级区整段隐藏时两分隔线防贴背——gid 态中区与页脚间正常隔） */
+    #team-create-pop details.team-adv > summary { cursor: pointer; color: var(--dim); font-size: var(--fs-B); padding: 2px 0; user-select: none; }
+    #team-create-pop details.team-adv > summary:hover { color: var(--text); }
+    #team-create-pop details.team-adv[open] > summary { margin-bottom: 4px; }
+    #team-create-pop .team-adv-body .create-label { margin-top: 10px; }
+    #team-create-pop .team-adv-body .create-label:first-child { margin-top: 0; }
     /* #277 ① 建团弹窗 v2（PM 美化基调）：头行 h3+✕（标题不截断）、锚点行内浏览钮、
        分段卡片流（灰盒 create-group 退役）、滚动条弱化、select 自绘箭头（原生朴素） */
     .create-pop .create-head { display: flex; align-items: flex-start; gap: 8px; }
@@ -776,6 +823,9 @@
     /* B22 模型菜单：视觉与 .source-menu 同壳，但不共用类——closeTransientOverlays 会摘
        一切 .source-menu.open 的 open，共类即被全局收起误伤 */
     .model-menu { position: fixed; z-index: 82; display: none; width: 264px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    /* P2BATCH6 件9（C-P2-3）：限高内滚保底——引擎目录长列表不再无限拉伸遮挡表单/提交钮
+       （JS 侧同步改向上弹优先：openEngineMenu 定位段）；60vh 随视口缩放 */
+    .model-menu { max-height: min(420px, 60vh); overflow-y: auto; }
     .model-menu.open { display: block; }
     .model-menu .source-option strong { font-family: var(--mono); }
     .model-menu-custom { display: flex; gap: 5px; padding: 6px 4px 4px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
@@ -1056,6 +1106,12 @@
     .timeline-note.day-sep { margin: 20px 0 6px; } /* 件九：分节呼吸（原 15/0）——日期分隔是节拍点不是普通注 */
     .message-ai.cont .message-author { display: none; } /* 件九：连续同作者正文去重署名行，正文 37px 基线不动 */
     .conversation-pane { padding-bottom: 18px; } /* 件九：滚动尾留白（原 0，最后一条贴 dock） */
+    /* P2BATCH6 件4（A-P2-12）：主区空态垂直居中——旧态空提示贴 Tab 栏下方、下方 500px 空置；
+       60vh 视口比例（随窗口缩放，不依赖父级 flex 链），仅空态标记位生效（JS data-empty） */
+    .conversation-pane [data-conv-body][data-empty] {
+      min-height: 60vh; display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+    }
     /* =============== W-CENTERCOL（1103 用户）：大窗阅读列——会话消息居中限宽（WorkBuffy 式） ===============
        宽窗下对话列 max-width 900px 居中（margin auto），超宽部分全变两侧留白；composer
        （footer 行）水平 padding 同步 calc，整行与阅读列几何对齐。窄窗零回归是构造性的：
@@ -1521,6 +1577,23 @@
     /* UIPOLISH3 件四②：刷新从底部常驻栏改 head 圆圈箭头小钮 */
     #d-team .head-refresh { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--line-soft); border-radius: 50%; background: none; color: var(--dim); cursor: pointer; }
     #d-team .head-refresh:hover { color: var(--text-strong); background: var(--hover); }
+    /* [W-TEAMDISSOLVE] 解散入口（head 弱危险态——常驻不出红，hover 才热）+已解散区开合 */
+    #d-team .head-dissolve { margin-left: auto; min-height: 24px; padding: 0 9px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--faint); font-size: var(--fs-C); cursor: pointer; }
+    #d-team .head-dissolve:hover { color: var(--danger, #e5484d); border-color: color-mix(in srgb, var(--danger, #e5484d) 36%, transparent); background: color-mix(in srgb, var(--danger, #e5484d) 8%, transparent); }
+    #d-team .team-grp-toggle { width: 100%; text-align: left; background: none; border: 0; cursor: pointer; font: inherit; color: var(--dim); }
+    #d-team .team-grp-toggle:hover { color: var(--text); }
+    #d-team .team-grp-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+    /* [W-TEAMDISSOLVE] 确认弹窗（遮罩+对话卡；danger 钮延后亮=输组名门） */
+    .dissolve-mask { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, #000 52%, transparent); }
+    .dissolve-dialog { width: min(420px, calc(100vw - 48px)); padding: 18px 20px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 18px 48px color-mix(in srgb, #000 42%, transparent); }
+    .dissolve-dialog h3 { margin: 0 0 10px; font-size: var(--fs-B2, 15px); color: var(--text-strong); }
+    .dissolve-fx { margin: 0 0 10px; padding-left: 18px; color: var(--dim); font-size: var(--fs-C); line-height: 1.7; }
+    .dissolve-warn { margin: 0 0 8px; color: var(--text); font-size: var(--fs-C); }
+    .dissolve-warn code { padding: 1px 5px; border-radius: 4px; background: var(--hover); color: var(--text-strong); font-family: var(--mono); }
+    .dissolve-input { width: 100%; margin: 0 0 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg, transparent); color: var(--text); font: inherit; font-size: var(--fs-C); }
+    .dissolve-input:focus { outline: none; border-color: var(--danger, #e5484d); }
+    .dissolve-err { margin: 0 0 8px; color: var(--danger, #e5484d); font-size: var(--fs-C); }
+    .dissolve-actions { display: flex; justify-content: flex-end; gap: 8px; }
     #d-team .head-refresh:disabled { opacity: .45; cursor: not-allowed; }
     #d-team .head-refresh .icon-inline { width: 13px; height: 13px; }
     /* UIPOLISH3 件四⑥：成员 tab 矩形卡片网格（每行 2+，参照旧原型）——只改 pane 内成员列表，
@@ -1803,7 +1876,7 @@
        在岗可跳/reviewer-none 灰牌无 PM）——交互语义同 member-msg-btn 先例（:1390） */
     #d-team .task-owner .tchip.owner-jump { cursor: pointer; }
     #d-team .task-owner .tchip.owner-jump:hover, #d-team .task-owner .tchip.owner-jump:focus-visible { border: 1px solid var(--border-strong); color: var(--brand); }
-    #d-team .task-owner .tchip.reviewer { cursor: pointer; background: color-mix(in srgb, var(--st-blocked, #8b7ac6) 14%, transparent); color: var(--st-blocked, #8b7ac6); font-weight: 600; }
+    #d-team .task-owner .tchip.reviewer { cursor: pointer; background: color-mix(in srgb, var(--p-submitted, #E08A63) 14%, transparent); color: var(--p-submitted, #E08A63); font-weight: 600; } /* W-PATROLFIX F1：审查中处理者徽章向泳道列点靠（--p-submitted 单轴）——原 --st-blocked 紫蓝与列点琥珀同屏双映射（B 路实锤）；reviewer-none 灰虚线牌保持中性 */
     #d-team .task-owner .tchip.reviewer:hover, #d-team .task-owner .tchip.reviewer:focus-visible { border: 1px solid var(--border-strong); }
     #d-team .task-owner .tchip.reviewer-none { background: transparent; border: 1px dashed var(--border-strong); color: var(--faint); }
     /* #G3 板卡富模型：优先级 chip（P0 红/P1 琥珀——P2=默认档不显）+卡左缘色条；
@@ -1844,6 +1917,10 @@
     #d-team .task-owner.unassigned .tchip b { color: var(--working); }
     #d-team .task-cline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; color: var(--dim); font-size: var(--fs-C); line-height: 1.45; }
     #d-team .task-cline .cline-sep { flex: none; color: var(--faint); font-style: normal; }
+    /* W-PATROLFIX P2-4：cline 分隔符前置化——分隔符由「元素间显式 <i>」改「每元素 ::before 前缀」
+       （:first-child 无前缀）：flex-wrap 换行/容器截断时分隔符随后随元素走，行末永不悬空
+       （原「排队 #1 ·」尾留 sep=截断吞文本留分隔符形态根除；JS 侧 join 的 sep 元素已退役） */
+    #d-team .task-cline > * + *::before { content: "·\2009"; color: var(--faint); }
     #d-team .task-cline .cline-run { color: var(--working); }
     #d-team .task-cline .cline-miss { color: var(--error); } /* W-SMIMPL ②：done 卡「无回执」角标（回执缺失警示色，与 task-flag 同族） */
     #d-team .task-card.task-done { opacity: .45; }
@@ -3206,9 +3283,10 @@
        W-NOTIFYPOLISH ②A6：L3 两端分离——act-slot 推右+左竖线断口（8px 贴身读成一句根修） */
     .nrow .t .s .act-slot {
       margin-left: auto; white-space: nowrap; flex: none; padding-left: 12px;
+      display: inline-flex; align-items: baseline; gap: 12px; /* W-PATROLFIX P1-1：主/次钮间距 4→12px——扫视连读「打开验收单稍后」歧义根除 */
       border-left: 1px solid color-mix(in srgb, var(--text-strong) 10%, transparent);
     }
-    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: 12px; }
+    .nrow .t .s .act-slot .act { grid-column: auto; align-self: auto; padding: 0; font-size: 12px; font-weight: 600; } /* P1-1：主行动 600 字重一档突出（次级 snooze/restore 400 faint 已分档） */
     /* W-NOTIFYPOLISH ⑦A4：.nid nowrap 三连——版本号芯片（v0.7.0-test.97-nova 类长 token）
        在窄列劈行破损根修；inline-block 让 overflow 生效，超宽走 ellipsis（title 全文有 tooltip） */
     .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
