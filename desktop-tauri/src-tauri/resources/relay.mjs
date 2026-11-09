@@ -16060,7 +16060,9 @@ var PROJECT_GROUP_SCHEMA = {
   hold_suggested_at: { type: "number" },
   duty_policy: { type: "object" },
   mixed_engine: { type: "boolean" },
-  headcount_cap: { type: "number" }
+  headcount_cap: { type: "number" },
+  team: { type: "object" }
+  // W-PROJTEAM1 期一：团队层可选挂靠 {formed_at, dissolved_at?}——formed_at=0 哨兵=未组队（仅立项目）；键缺席=存量组派生有团队（读侧 teamStateOf 单点）
 };
 var BOARD_ENTRY_SCHEMA = {
   id: { type: "string", required: true },
@@ -16130,6 +16132,8 @@ var DISPATCH_ENTRY_SCHEMA = {
   // prchip：PR 互审链交付上报（orgAction pr-report 写入，快照值）
   pr_state: { type: "enum", enumTable: PR_STATES },
   // prchip：PR 状态快照（词表 PR_STATES）
+  exclude_sessions: { type: "string-array" },
+  // W-REVEXCL（1109 二现治本）：选席排除集（审查单防派回实施者本人）——派单受理时落 dispatched 行（CLI --exclude/--review-of → payload → dispatchWorker；可审计：审后可查该单排除了谁）
   no_pr: { type: "boolean" }
   // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
 };
@@ -17472,6 +17476,51 @@ function reconcileBoardCards(input) {
   }
   return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
 }
+function zombieTtlMs() {
+  const raw = process.env.CCR_BOARD_ZOMBIE_TTL_H;
+  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
+  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
+  return Number.isFinite(n) && n > 0 ? n * 36e5 : 6 * 36e5;
+}
+var ZOMBIE_NOTE_MARK = "[boardtruth5 \u50F5\u5C38\u5361\u544A\u8B66";
+function zombieInvariantScan(input) {
+  const now = input.now ?? Date.now();
+  const ttl = input.ttlMs ?? zombieTtlMs();
+  const skip = input.skipEntryIds ?? /* @__PURE__ */ new Set();
+  const fallbackKeyCounts = /* @__PURE__ */ new Map();
+  for (const { board: fb2 } of input.boards) {
+    for (const ent of fb2.entries) {
+      const k3 = harvestKeyOf(String(ent.text || ""));
+      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
+    }
+  }
+  const actions = [];
+  if (!Number.isFinite(ttl)) return { actions };
+  for (const { gid, board } of input.boards) {
+    for (const e of board.entries) {
+      if (e.status !== "claimed" && e.status !== "submitted") continue;
+      if (skip.has(e.id)) continue;
+      if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue;
+      const updated = Number(e.updated_at || e.ts || 0);
+      if (!updated) continue;
+      const ageMs = now - updated;
+      if (ageMs <= ttl) continue;
+      const key = harvestKeyOf(String(e.text || ""));
+      if (!key || !key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1) continue;
+      const ev2 = input.harvest;
+      const ledgerHit = ev2.doneLedger.get(key);
+      const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
+      const receiptOk = ev2.receiptSlugs.has(key);
+      const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
+      const evidence = ledgerOk ? "ledger-done" : receiptOk ? "receipt-line" : devHit ? "dev-log" : null;
+      actions.push({ gid, entryId: e.id, text: String(e.text || ""), status: e.status, ageMs, evidence });
+    }
+  }
+  return { actions };
+}
+function reconHeartbeatLine(mode, judged, flipped, zombies, zDone, zAlarm) {
+  return `alive mode=${mode} \u5BF9\u8D26\u5224\u5B9A ${judged}\uFF08\u7FFB/\u5F52 ${flipped}\uFF09\xB7 \u50F5\u5C38\u9762 ${zombies}\uFF08\u5F3A\u7FFB ${zDone}/\u544A\u8B66 ${zAlarm}\uFF09`;
+}
 
 // src/board-truth.ts
 var branchBaseOf = (branch) => {
@@ -18079,6 +18128,11 @@ function tagRouting(gid, sessionId, tags, dir) {
 
 // src/projects.ts
 init_read_mode();
+function teamStateOf(g2) {
+  if (!g2.team) return { has: true, formedAt: g2.created_at };
+  if (!g2.team.formed_at) return { has: false };
+  return g2.team.dissolved_at ? { has: false, formedAt: g2.team.formed_at, dissolvedAt: g2.team.dissolved_at } : { has: true, formedAt: g2.team.formed_at };
+}
 function projectsFilePath(dir) {
   return join25(dir ?? orgDir(), "projects.json");
 }
@@ -18342,6 +18396,8 @@ function createGroupInner(input, dir) {
     ...input.role_defaults ? { role_defaults: input.role_defaults } : {},
     ...input.mixed_engine === true ? { mixed_engine: true } : {},
     single_card: input.tier === "\u8F7B\u7ACB\u9879",
+    ...input.no_team === true ? { team: { formed_at: 0 } } : {},
+    // W-PROJTEAM1 期一：仅立项目（formed_at=0 哨兵=未组队——键缺席=存量形状零变化）
     created_at: now,
     updated_at: now
   };
@@ -18418,7 +18474,7 @@ function handleOrgActionCreate(payload, dir, gate) {
   const hc2 = sanitizeHeadcount(raw.headcount, gate);
   if (!hc2.ok) return { ok: false, error: hc2.error };
   const anchorDirs = Array.isArray(raw.anchor_dirs) ? Array.from(new Set(raw.anchor_dirs.filter((d2) => typeof d2 === "string" && d2.trim()).map((d2) => String(d2).trim()))).filter((d2) => d2 !== anchor) : [];
-  return createGroup({ name, anchor_dir: anchor, tier, ...hc2.headcount ? { headcount: hc2.headcount } : {}, ...raw.mixed_engine === true ? { mixed_engine: true } : {}, ...anchorDirs.length ? { anchor_dirs: anchorDirs } : {} }, dir);
+  return createGroup({ name, anchor_dir: anchor, tier, ...hc2.headcount ? { headcount: hc2.headcount } : {}, ...raw.mixed_engine === true ? { mixed_engine: true } : {}, ...anchorDirs.length ? { anchor_dirs: anchorDirs } : {}, ...raw.no_team === true ? { no_team: true } : {} }, dir);
 }
 var adaptOrgAction = handleOrgActionCreate;
 function setGroupStatus(id2, to2, note, dir) {
@@ -18463,6 +18519,30 @@ function setGroupTierInner(id2, to2, dir) {
   g2.updated_at = Date.now();
   if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
   return { ok: true, group: g2 };
+}
+function formTeamOnGroup(gid, rawHeadcount, gate, dir) {
+  const g2 = findGroup(gid, dir);
+  if (!g2) return { ok: false, error: `\u9879\u76EE\u7EC4 ${gid} \u4E0D\u5B58\u5728` };
+  if (g2.status === "archived") return { ok: false, error: `\u9879\u76EE\u7EC4\u300C${g2.name}\u300D\u5DF2\u7ED3\u9879\uFF08\u56E2\u961F\u5C42\u968F\u9879\u76EE\u7EC8\u2014\u2014\u590D\u6D3B\u8FB9\u53E6\u8D70\uFF09` };
+  const st2 = teamStateOf(g2);
+  if (st2.dissolvedAt) return { ok: false, error: `\u300C${g2.name}\u300D\u7684\u56E2\u961F\u5DF2\u89E3\u6563\uFF08\u671F\u4E09\u6062\u590D\u94FE\u53E6\u7ACB\uFF0C\u672C\u6279\u4E0D\u5728\u6B64\u590D\u6D3B\uFF09` };
+  const hc2 = sanitizeHeadcount(rawHeadcount, gate);
+  if (!hc2.ok) return hc2;
+  const now = Date.now();
+  let added = 0;
+  if (Array.isArray(hc2.headcount)) {
+    const seen = new Set(g2.headcount.map((x) => x.session_id));
+    for (const row of hc2.headcount) {
+      if (seen.has(row.session_id)) continue;
+      g2.headcount.push(row);
+      seen.add(row.session_id);
+      added++;
+    }
+  }
+  if (!g2.team || !g2.team.formed_at) g2.team = { formed_at: now };
+  g2.updated_at = now;
+  if (!saveGroup(g2, dir)) return { ok: false, error: "\u7D22\u5F15\u5199\u5165\u5931\u8D25" };
+  return { ok: true, group: g2, added };
 }
 function addMember(gid, sessionId, role, selectionOrDir, dir, opts) {
   const lockDir = typeof selectionOrDir === "string" ? selectionOrDir : dir;
@@ -20040,9 +20120,14 @@ function readDutyReviewed(dir) {
   }
 }
 function markDutyReviewed(sids, dir) {
-  if (!sids.length) return;
+  const okForm = /^[0-9a-f]{32}$/;
+  const valid = sids.filter((s) => okForm.test(s));
+  if (valid.length < sids.length) {
+    console.warn(`[duty-reviewed] \u62D2\u5199 ${sids.length - valid.length} \u4E2A\u975E\u6CD5\u5F62\u6001\u952E\uFF08\u987B 32 \u4F4D hex acceptance id\u2014\u2014\u77ED\u622A\u65AD\u5F62\u6001\u6052\u4E0D\u5339\u914D=\u590D\u6295\u6C38\u52A8\u6839\u6E90\uFF1B\u975E\u6CD5\u539F\u6837\uFF1A${sids.filter((s) => !okForm.test(s)).slice(0, 3).join(",")}\uFF09`);
+  }
+  if (!valid.length) return;
   const cur = new Set(readDutyReviewed(dir));
-  for (const s of sids) cur.add(s);
+  for (const s of valid) cur.add(s);
   try {
     writeFileSync14(join31(dir ?? orgDir(), "duty-reviewed.json"), JSON.stringify([...cur], null, 2) + "\n", "utf-8");
   } catch {
@@ -63214,19 +63299,33 @@ ${lines.join("\n")}
   // receipt 候选源（dutySnapshot 消费）：待填验收单=submitted:false（#195 生命周期
   // 语义——提交过即已处理不再催）。reviewed:false 进候选，receiptCandidates filter
   // reviewed!==true 天然跳过已处理单。目录缺失/读炸=空档（值守判定不因验收面故障挂）。
+  // W-DUTYREVIEWED：陈回执防御日志去重表（id→上次告警时刻，60s 去重——复投永动可发现面）
+  dutyReceiptStaleNotedAt = /* @__PURE__ */ new Map();
   pendingAcceptanceReceipts() {
     try {
       const dir = acceptanceDir();
-      const reviewedSet = new Set(readDutyReviewed());
-      return listAcceptances(50).filter((s) => !s.submitted).map((s) => {
+      const reviewedRaw = readDutyReviewed();
+      const reviewedSet = new Set(reviewedRaw);
+      const FULL_FORM = /^[0-9a-f]{32}$/;
+      const shortPrefixes = new Set(reviewedRaw.filter((k3) => !FULL_FORM.test(k3) && /^[0-9a-f]{6,31}$/.test(k3)));
+      const out = listAcceptances(50).filter((s) => !s.submitted).map((s) => {
         const p = join57(dir, `${s.id}.json`);
         let mtime = 0;
         try {
           mtime = statSync16(p).mtimeMs;
         } catch {
         }
-        return { sid: s.id, receipt_path: p, mtime, reviewed: reviewedSet.has(s.id) };
+        const reviewed = reviewedSet.has(s.id) || shortPrefixes.size > 0 && [...shortPrefixes].some((k3) => s.id.startsWith(k3));
+        if (!reviewed && mtime > 0 && Date.now() - mtime > 24 * 36e5) {
+          const now = Date.now();
+          if (now - (this.dutyReceiptStaleNotedAt.get(s.id) ?? 0) > 6e4) {
+            this.dutyReceiptStaleNotedAt.set(s.id, now);
+            console.warn(`[duty-receipt] \u9648\u56DE\u6267\u5019\u9009\u672A\u6838\u9500 >24h\uFF08id=${s.id}\u2014\u2014\u82E5\u5DF2\u4EBA\u5DE5\u6838\u9500\u4ECD\u590D\u6295=reviewed \u952E\u5F62\u6001\u75C5\uFF0Cduty-reviewed.json \u987B 32 \u4F4D acceptance id \u539F\u6587\uFF09`);
+          }
+        }
+        return { sid: s.id, receipt_path: p, mtime, reviewed };
       });
+      return out;
     } catch {
       return [];
     }
@@ -63334,6 +63433,23 @@ ${lines.join("\n")}
             return { ok: false, error: "Leader \u4E0D\u53EF\u5165\u7F16\uFF08\u5206\u8BCA\u8005\u4E0D\u63A5\u6D3B\uFF09" };
           }
         }
+      }
+      if (typeof payload.gid === "string" && payload.gid.trim()) {
+        const r2 = formTeamOnGroup(payload.gid.trim(), payload.headcount, (sid, role) => {
+          const seat = seatGate(sid, role, this.seatGateCtx());
+          if (seat.ok) return null;
+          if (seat.reason === "not_present") return `\u7EC4\u961F\u7F16\u5236\u62D2\u7EDD\uFF1A\u4F1A\u8BDD ${sid.slice(0, 8)} \u4E0D\u5728\u518C`;
+          if (seat.reason === "external") return `\u7EC4\u961F\u7F16\u5236\u62D2\u7EDD\uFF1A\u5916\u90E8\u4F1A\u8BDD ${sid.slice(0, 8)} \u4E0D\u53EF\u4F5C\u6210\u5458\u89D2\u8272\uFF08\u4EC5 PM \u8EAB\u4EFD\u884C\u5141\u8BB8\u5916\u90E8\uFF09`;
+          return `\u7EC4\u961F\u7F16\u5236\u62D2\u7EDD\uFF1ALeader \u4E0D\u53EF\u5165\u7F16`;
+        });
+        if (!r2.ok) {
+          this.auditOrgCommand(actor, device, action, anchor, tier, false, r2.error);
+          return { ok: false, error: r2.error };
+        }
+        ensureProjectClaudeMd(r2.group.anchor_dir, r2.group.name);
+        this.emitOrgState();
+        this.auditOrgCommand(actor, device, action, r2.group.anchor_dir, r2.group.tier, true, `\u7EC4\u961F\u6302\u9760\uFF1A${r2.group.name}\uFF08team \u663E\u5F0F\u5316+\u5E76\u5165 ${r2.added} \u5E2D\uFF09`);
+        return { ok: true, data: { group: r2.group } };
       }
       const r = adaptOrgAction(payload, void 0, (sid, role) => {
         const seat = seatGate(sid, role, this.seatGateCtx());
@@ -65829,7 +65945,7 @@ ${lines.join("\n")}
       const clash = withStorageTx(void 0, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
           return null;
         }
         return c;
@@ -65840,7 +65956,7 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId };
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
     }
     archiveDispatchPrompt(dispatchId, dispatchPrompt, { tier, ...input.title ? { title: input.title } : {}, ...veteran ? { target: veteran } : {} });
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
@@ -73613,7 +73729,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.6";
+  const verRelay = "0.7.1-test.7";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -74902,6 +75018,9 @@ var PatrolModule = class {
   reconLastSig = "";
   reconLastMismatch = "";
   fullTimer = null;
+  /** W-BOARDTRUTH5 刀一：对账常驻稳态 timer（每小时）+启动错峰首轮 delay */
+  reconTimer = null;
+  reconDelayTimer = null;
   // 去重账本：key → 上次告警文本（onset-only）
   lastAlerts = /* @__PURE__ */ new Map();
   // observe3 R1 P2⑧：observe 档独立去重账（不写 lastAlerts——防 observe→auto 切换后
@@ -74947,12 +75066,36 @@ var PatrolModule = class {
     }, fullMs);
     this.lightTimer.unref?.();
     this.fullTimer.unref?.();
+    const reconDelayMs = num3(process.env.CCR_BOARD_RECON_DELAY_MS, 3 * 6e4);
+    const reconMs = num3(process.env.CCR_BOARD_RECON_MS, 60 * 6e4);
+    this.reconDelayTimer = setTimeout(() => {
+      if (!this.opts.enabled()) return;
+      try {
+        this.runBoardRecon();
+      } catch (e) {
+        console.warn(`[patrol] recon steady error: ${e instanceof Error ? e.message : e}`);
+      }
+    }, reconDelayMs);
+    this.reconTimer = setInterval(() => {
+      if (!this.opts.enabled()) return;
+      try {
+        this.runBoardRecon();
+      } catch (e) {
+        console.warn(`[patrol] recon steady error: ${e instanceof Error ? e.message : e}`);
+      }
+    }, reconMs);
+    this.reconDelayTimer.unref?.();
+    this.reconTimer.unref?.();
   }
   stop() {
     if (this.lightTimer) clearInterval(this.lightTimer);
     if (this.fullTimer) clearInterval(this.fullTimer);
+    if (this.reconTimer) clearInterval(this.reconTimer);
+    if (this.reconDelayTimer) clearTimeout(this.reconDelayTimer);
     this.lightTimer = null;
     this.fullTimer = null;
+    this.reconTimer = null;
+    this.reconDelayTimer = null;
   }
   // ---------- 轻探针（5min）：磁盘 / dataDir 可写 / 事件循环漂移 ----------
   runLight() {
@@ -75249,112 +75392,7 @@ var PatrolModule = class {
         }
       }
     } else this.resolve(`worker-stale`);
-    try {
-      const mode = autoTierOf("boardrecon");
-      if (mode !== "off") {
-        const boards = [];
-        for (const g2 of listGroups()) {
-          if (g2.status !== "active") continue;
-          const b = loadBoardFile(g2.id);
-          if (b && !b.frozen) boards.push({ gid: g2.id, board: b });
-        }
-        const sessions = this.mgr.snapshot().map((x) => ({ session_id: x.session_id, done_reason: x.done_reason ?? null, status: x.status, cli_pid: x.cli_pid ?? null, last_active_at: x.updated_at ?? 0 }));
-        const dispatchLog = readDispatchLog(void 0, 2e4);
-        const harvest = (() => {
-          const doneLedger = /* @__PURE__ */ new Map();
-          const byId = /* @__PURE__ */ new Map();
-          try {
-            for (const line of readFileSync56(dispatchLogPath(), "utf-8").split("\n")) {
-              const t = line.trim();
-              if (!t) continue;
-              try {
-                const r2 = JSON.parse(t);
-                if (typeof r2.id !== "string" || !r2.id) continue;
-                const cur = byId.get(r2.id);
-                byId.set(r2.id, {
-                  title: r2.title || cur?.title,
-                  // 首行（dispatched）title 保住——终态行不带
-                  done: r2.status === "done" || (cur?.done ?? false),
-                  // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done）
-                  hasReceipt: !!r2.receipt || (cur?.hasReceipt ?? false)
-                });
-              } catch {
-              }
-            }
-          } catch {
-          }
-          for (const { title, done, hasReceipt } of byId.values()) {
-            if (!done || !title) continue;
-            const key = harvestKeyOf(title);
-            if (!key) continue;
-            const cur = doneLedger.get(key);
-            doneLedger.set(key, { count: (cur?.count ?? 0) + 1, hasReceipt: (cur?.hasReceipt ?? false) || hasReceipt });
-          }
-          if (Date.now() - this.reconDevLogCache.at > 10 * 6e4) {
-            try {
-              const anchor = listGroups().find((g2) => g2.status === "active")?.anchor_dir;
-              if (anchor) {
-                this.reconDevLogCache.text = execFileSync7("git", ["-C", anchor, "log", "--oneline", "-400"], { encoding: "utf-8", timeout: 1e4 }).toLowerCase();
-                this.reconDevLogCache.at = Date.now();
-              }
-            } catch {
-            }
-          }
-          const receiptSlugs = /* @__PURE__ */ new Set();
-          try {
-            const artDir = process.env.CCR_ARTIFACTS_DIR ?? join66(homedir24(), ".cc-deck", "artifacts");
-            for (const f of readdirSync23(artDir)) {
-              const m = f.match(/^w-[a-z0-9][a-z0-9-]{1,40}\.md$/i);
-              if (!m) continue;
-              try {
-                const tail2 = readFileSync56(join66(artDir, f), "utf-8").slice(-400);
-                if (tail2.includes("\u7ED3\u679C\uFF1A") && tail2.includes("\u6539\u52A8\u6587\u4EF6\uFF1A")) receiptSlugs.add(m[0].replace(/\.md$/i, "").toLowerCase());
-              } catch {
-              }
-            }
-          } catch {
-          }
-          return { doneLedger, devLogText: this.reconDevLogCache.text, receiptSlugs };
-        })();
-        const flagNow = /* @__PURE__ */ new Set();
-        const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow, harvest });
-        this.reconFlagged = flagNow;
-        const sig = r.actions.map((a) => a.entryId + a.reason).sort().join("|") + (r.mismatch ?? "");
-        if (r.actions.length && sig !== this.reconLastSig) {
-          this.reconLastSig = sig;
-          const lines2 = r.actions.slice(0, 8).map((a) => `${a.entryId}\u300C${a.text}\u300D${a.reason}\uFF1A${a.detail}`);
-          this.mgr.emitChainAudit("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08${mode}\uFF09\uFF1A${r.actions.length} \u5F20\u5224\u5B9A\u2014\u2014${lines2.join("\uFF1B").slice(0, 400)}`);
-          if (mode === "auto") {
-            let moved = 0;
-            let flipped = 0;
-            for (const a of r.actions) {
-              if (a.advisory) continue;
-              const b = boards.find((x) => x.gid === a.gid)?.board;
-              const e = b?.entries.find((x) => x.id === a.entryId);
-              if (a.toDone && e && e.status === "submitted") {
-                const up2 = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "done", note: `[boardrecon auto ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u5DF2\u6536\u5272\u672A\u7FFB\u81EA\u52A8\u6536\u53E3\uFF1A${a.detail}`, journal_action: "boardrecon-auto-done" });
-                if (up2.ok) flipped++;
-                continue;
-              }
-              if (e && e.status === "claimed") {
-                const up2 = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] ${a.reason} \u5F52\u4F4D\u53EF\u91CD\u6D3E\uFF1A${a.detail}` });
-                if (up2.ok) moved++;
-              }
-            }
-            this.push("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08auto\uFF09\uFF1A${moved} \u5F20\u5B64\u513F\u5361\u5F52\u4F4D + ${flipped} \u5F20\u5DF2\u6536\u5272\u672A\u7FFB\u6536\u53E3\uFF08advisory ${r.actions.filter((a) => a.advisory).length} \u6761\u4EC5\u63D0\u9192\uFF09`);
-          } else {
-            this.wouldDo("boardrecon", "\u5F52\u4F4D\u5B64\u513F\u5361", `${r.actions.filter((a) => !a.advisory).length} \u5F20\u5019\u9009\uFF08\u4E24\u62CD\u786E\u8BA4+\u65C1\u8BC1\u805A\u5408\u540E\uFF09\u2014\u2014\u5E72\u8DD1\u4E0D\u6267\u884C`);
-            this.push("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08observe\uFF09\uFF1A${r.actions.length} \u5F20\u5224\u5B9A\uFF08\u5B64\u513F\u5019\u9009/\u6EDE\u7559\u63D0\u9192\uFF09\u2014\u2014\u6E05\u5355\u5728\u5BA1\u8BA1\u6D41\uFF0CPM \u8FC7\u76EE\u540E config autoBoardrecon=auto \u751F\u6548`);
-          }
-        }
-        if (r.mismatch && r.mismatch !== this.reconLastMismatch) {
-          this.reconLastMismatch = r.mismatch;
-          this.push("board-recon", `\u8D26\u5B9E\u4E0D\u7B26\u544A\u8B66\uFF1A${r.mismatch}`);
-        }
-      }
-    } catch (e) {
-      console.warn(`[patrol] \u4E09\u65B9\u5BF9\u8D26\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF09: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    this.runBoardRecon();
     const boardAlerts = [];
     try {
       for (const g2 of listGroups()) {
@@ -75450,6 +75488,161 @@ var PatrolModule = class {
       const st2 = statSync23(hb2);
       if (Date.now() - st2.mtimeMs > 70 * 6e4) this.push("recon-stalled", `\u4E09\u8D26\u5BF9\u8D26\u5FC3\u8DF3\u505C\u8DF3 ${Math.round((Date.now() - st2.mtimeMs) / 6e4)}min\uFF08PM turn-report \u4E0E patrol \u53CC\u89E6\u53D1\u5747\u672A\u8DD1\uFF09`);
       else this.resolve("recon-stalled");
+    } catch {
+    }
+  }
+  /** W-BOARDTRUTH5 刀一提取：三方对账段独立方法——runFull 轮头+启动错峰首轮+每小时
+   * 稳态（start() 常驻 timer）三口同体。幂等：upsert 幂等+R3 审计签名去重+刀二 note
+   * 标记锚/翻后离辖——重复跑零重复副作用（test ⑥两轮断言）。刀二=僵尸不变量对账
+   *（claimed/submitted 超僵尸 TTL×三证任一强翻/三证全无告警不翻）；刀三=每轮心跳
+   * 一行（含空转与 off 档——audit 键 board-recon-loop，「建了从未跑」当日暴露）。 */
+  runBoardRecon() {
+    let modeNow = "off";
+    let judged = 0, appliedN = 0, zombieN = 0, zDoneN = 0, zAlarmN = 0;
+    try {
+      const mode = autoTierOf("boardrecon");
+      modeNow = mode;
+      if (mode !== "off") {
+        const boards = [];
+        for (const g2 of listGroups()) {
+          if (g2.status !== "active") continue;
+          const b = loadBoardFile(g2.id);
+          if (b && !b.frozen) boards.push({ gid: g2.id, board: b });
+        }
+        const sessions = this.mgr.snapshot().map((x) => ({ session_id: x.session_id, done_reason: x.done_reason ?? null, status: x.status, cli_pid: x.cli_pid ?? null, last_active_at: x.updated_at ?? 0 }));
+        const dispatchLog = readDispatchLog(void 0, 2e4);
+        const harvest = (() => {
+          const doneLedger = /* @__PURE__ */ new Map();
+          const byId = /* @__PURE__ */ new Map();
+          try {
+            for (const line of readFileSync56(dispatchLogPath(), "utf-8").split("\n")) {
+              const t = line.trim();
+              if (!t) continue;
+              try {
+                const r2 = JSON.parse(t);
+                if (typeof r2.id !== "string" || !r2.id) continue;
+                const cur = byId.get(r2.id);
+                byId.set(r2.id, {
+                  title: r2.title || cur?.title,
+                  // 首行（dispatched）title 保住——终态行不带
+                  done: r2.status === "done" || (cur?.done ?? false),
+                  // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done）
+                  hasReceipt: !!r2.receipt || (cur?.hasReceipt ?? false)
+                });
+              } catch {
+              }
+            }
+          } catch {
+          }
+          for (const { title, done, hasReceipt } of byId.values()) {
+            if (!done || !title) continue;
+            const key = harvestKeyOf(title);
+            if (!key) continue;
+            const cur = doneLedger.get(key);
+            doneLedger.set(key, { count: (cur?.count ?? 0) + 1, hasReceipt: (cur?.hasReceipt ?? false) || hasReceipt });
+          }
+          if (Date.now() - this.reconDevLogCache.at > 10 * 6e4) {
+            try {
+              const anchor = listGroups().find((g2) => g2.status === "active")?.anchor_dir;
+              if (anchor) {
+                this.reconDevLogCache.text = execFileSync7("git", ["-C", anchor, "log", "--oneline", "-400"], { encoding: "utf-8", timeout: 1e4 }).toLowerCase();
+                this.reconDevLogCache.at = Date.now();
+              }
+            } catch {
+            }
+          }
+          const receiptSlugs = /* @__PURE__ */ new Set();
+          try {
+            const artDir = process.env.CCR_ARTIFACTS_DIR ?? join66(homedir24(), ".cc-deck", "artifacts");
+            for (const f of readdirSync23(artDir)) {
+              const m = f.match(/^w-[a-z0-9][a-z0-9-]{1,40}\.md$/i);
+              if (!m) continue;
+              try {
+                const tail2 = readFileSync56(join66(artDir, f), "utf-8").slice(-400);
+                if (tail2.includes("\u7ED3\u679C\uFF1A") && tail2.includes("\u6539\u52A8\u6587\u4EF6\uFF1A")) receiptSlugs.add(m[0].replace(/\.md$/i, "").toLowerCase());
+              } catch {
+              }
+            }
+          } catch {
+          }
+          return { doneLedger, devLogText: this.reconDevLogCache.text, receiptSlugs };
+        })();
+        const flagNow = /* @__PURE__ */ new Set();
+        const r = reconcileBoardCards({ boards, sessions, dispatchLog, previouslyFlagged: this.reconFlagged, flaggedNow: flagNow, harvest });
+        judged = r.actions.length;
+        this.reconFlagged = flagNow;
+        const sig = r.actions.map((a) => a.entryId + a.reason).sort().join("|") + (r.mismatch ?? "");
+        if (r.actions.length && sig !== this.reconLastSig) {
+          this.reconLastSig = sig;
+          const lines2 = r.actions.slice(0, 8).map((a) => `${a.entryId}\u300C${a.text}\u300D${a.reason}\uFF1A${a.detail}`);
+          this.mgr.emitChainAudit("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08${mode}\uFF09\uFF1A${r.actions.length} \u5F20\u5224\u5B9A\u2014\u2014${lines2.join("\uFF1B").slice(0, 400)}`);
+          if (mode === "auto") {
+            let moved = 0;
+            let flipped = 0;
+            for (const a of r.actions) {
+              if (a.advisory) continue;
+              const b = boards.find((x) => x.gid === a.gid)?.board;
+              const e = b?.entries.find((x) => x.id === a.entryId);
+              if (a.toDone && e && e.status === "submitted") {
+                const up2 = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "done", note: `[boardrecon auto ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u5DF2\u6536\u5272\u672A\u7FFB\u81EA\u52A8\u6536\u53E3\uFF1A${a.detail}`, journal_action: "boardrecon-auto-done" });
+                if (up2.ok) flipped++;
+                continue;
+              }
+              if (e && e.status === "claimed") {
+                const up2 = upsertBoardEntry(a.gid, { id: e.id, text: e.text, status: "backlog", note: `[boardrecon ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] ${a.reason} \u5F52\u4F4D\u53EF\u91CD\u6D3E\uFF1A${a.detail}` });
+                if (up2.ok) moved++;
+              }
+            }
+            this.push("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08auto\uFF09\uFF1A${moved} \u5F20\u5B64\u513F\u5361\u5F52\u4F4D + ${flipped} \u5F20\u5DF2\u6536\u5272\u672A\u7FFB\u6536\u53E3\uFF08advisory ${r.actions.filter((a) => a.advisory).length} \u6761\u4EC5\u63D0\u9192\uFF09`);
+            appliedN = moved + flipped;
+          } else {
+            this.wouldDo("boardrecon", "\u5F52\u4F4D\u5B64\u513F\u5361", `${r.actions.filter((a) => !a.advisory).length} \u5F20\u5019\u9009\uFF08\u4E24\u62CD\u786E\u8BA4+\u65C1\u8BC1\u805A\u5408\u540E\uFF09\u2014\u2014\u5E72\u8DD1\u4E0D\u6267\u884C`);
+            this.push("board-recon", `\u4E09\u65B9\u5BF9\u8D26\uFF08observe\uFF09\uFF1A${r.actions.length} \u5F20\u5224\u5B9A\uFF08\u5B64\u513F\u5019\u9009/\u6EDE\u7559\u63D0\u9192\uFF09\u2014\u2014\u6E05\u5355\u5728\u5BA1\u8BA1\u6D41\uFF0CPM \u8FC7\u76EE\u540E config autoBoardrecon=auto \u751F\u6548`);
+          }
+        }
+        if (r.mismatch && r.mismatch !== this.reconLastMismatch) {
+          this.reconLastMismatch = r.mismatch;
+          this.push("board-recon", `\u8D26\u5B9E\u4E0D\u7B26\u544A\u8B66\uFF1A${r.mismatch}`);
+        }
+        const zs2 = zombieInvariantScan({ boards, harvest, skipEntryIds: new Set(r.actions.map((a) => a.entryId)) });
+        zombieN = zs2.actions.length;
+        if (zs2.actions.length) {
+          this.mgr.emitChainAudit("boardtruth5-zombie-scan", `\u50F5\u5C38\u4E0D\u53D8\u91CF\u5BF9\u8D26\uFF08${mode}\uFF09\uFF1A${zs2.actions.length} \u5F20\u8D85 TTL\uFF08\u8BC1\u5728 ${zs2.actions.filter((z2) => z2.evidence).length}/\u8BC1\u65E0 ${zs2.actions.filter((z2) => !z2.evidence).length}\uFF09\u2014\u2014\u8BC1\u5728\u5F3A\u7FFB\u8D70 auto\u3001\u8BC1\u65E0\u544A\u8B66\u4E0D\u7FFB`);
+          for (const z2 of zs2.actions) {
+            const be2 = boards.find((x) => x.gid === z2.gid)?.board.entries.find((x) => x.id === z2.entryId);
+            if (!be2) continue;
+            if (z2.evidence) {
+              if (mode === "auto") {
+                const up2 = upsertBoardEntry(z2.gid, { id: z2.entryId, text: be2.text, status: "done", note: `${be2.note ? be2.note + " " : ""}[boardtruth5 ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u50F5\u5C38\u8BC1\u636E\u5F3A\u7FFB\uFF08\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u8BC1\u636E=${z2.evidence}\uFF09\u2014\u2014\u5F62\u6001\u514D\u75AB\u4E0D\u53D8\u91CF\u6536\u53E3\uFF081109 \u4E94\u73B0\u5200\u4E8C\uFF09`, journal_action: "boardtruth5-zombie-done" });
+                if (up2.ok) zDoneN++;
+              } else {
+                this.wouldDo("boardtruth5", "\u5F3A\u7FFB\u50F5\u5C38\u5361\uFF08\u8BC1\u636E\u5728\uFF09", `${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u8BC1\u636E=${z2.evidence}\u2014\u2014observe \u6863\u672A\u6267\u884C`);
+              }
+            } else {
+              if (mode === "auto") {
+                try {
+                  this.mgr.emitDutyFeedEvent("zombie-card", `\u50F5\u5C38\u5361\u544A\u8B66\uFF1A${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${z2.status} ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\uFF08\u53F0\u8D26/\u56DE\u6267/dev log \u5747\u65E0\uFF09\u2014\u2014\u4E0D\u9759\u9ED8\u7FFB\uFF0C\u8BF7\u6838\u5B9E\uFF08\u771F\u957F\u4EFB\u52A1\u5FFD\u7565\uFF0C\u771F\u50F5\u5C38\u4EBA\u5DE5\u6536\u53E3\uFF09`);
+                } catch {
+                }
+                try {
+                  this.mgr.upsertNotification("system", "boardtruth5-zombie", z2.entryId, { title: `\u50F5\u5C38\u5361\uFF1A${String(be2.text).slice(0, 20)}`, body: `\u6EDE\u7559 ${z2.status} ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014\u5DF2\u544A\u8B66\u4E0D\u9759\u9ED8\u7FFB\uFF08\u5200\u4E8C\uFF09\uFF0C\u4EBA\u5DE5\u6838\u5B9E`, severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/" });
+                } catch {
+                }
+                const up2 = upsertBoardEntry(z2.gid, { id: z2.entryId, text: be2.text, note: `${be2.note ? be2.note + " " : ""}${ZOMBIE_NOTE_MARK} ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014\u5DF2\u544A\u8B66\u4E0D\u9759\u9ED8\u7FFB\uFF08\u4EBA\u5DE5\u6838\u5B9E\uFF1A\u771F\u957F\u4EFB\u52A1\u5FFD\u7565/\u771F\u50F5\u5C38\u6536\u53E3\uFF09` });
+                if (up2.ok) zAlarmN++;
+              } else {
+                this.wouldDo("boardtruth5", "\u50F5\u5C38\u5361\u544A\u8B66\uFF08\u4E09\u8BC1\u5168\u65E0\uFF09", `${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014observe \u6863\u672A\u544A\u8B66`);
+              }
+            }
+          }
+          this.push("board-recon", `\u50F5\u5C38\u4E0D\u53D8\u91CF\u5BF9\u8D26\uFF08${mode}\uFF09\uFF1A\u5F3A\u7FFB ${zDoneN}\xB7\u544A\u8B66 ${zAlarmN}\uFF08TTL ${Math.round(zombieTtlMs() / 36e5)}h\u2014\u2014\u4E94\u73B0\u5200\u4E8C\u5F62\u6001\u514D\u75AB\uFF09`);
+        }
+      }
+    } catch (e) {
+      console.warn(`[patrol] \u4E09\u65B9\u5BF9\u8D26\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    try {
+      this.mgr.emitChainAudit("board-recon-loop", reconHeartbeatLine(modeNow, judged, appliedN, zombieN, zDoneN, zAlarmN));
     } catch {
     }
   }

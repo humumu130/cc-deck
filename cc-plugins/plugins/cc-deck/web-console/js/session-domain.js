@@ -192,8 +192,6 @@
                 }
                 function fmtDur(ms) { const s = Math.floor(ms / 1000); if (s < 60) return s + "s"; const m = Math.floor(s / 60); if (m < 60) return m + "m"; const h = Math.floor(m / 60); if (h < 24) return h + "h" + (m % 60) + "m"; return Math.floor(h / 24) + "d"; }
                 // #224 任务时长（CLI h/m/s 全显）+ 累计输出紧凑（↓ 同款）
-                function fmtTaskDur(sec) { const s2 = Math.max(0, Math.floor(sec)); const h2 = Math.floor(s2 / 3600); const m2 = Math.floor((s2 % 3600) / 60); if (h2 > 0) return h2 + "h" + m2 + "m" + (s2 % 60) + "s"; if (m2 > 0) return m2 + "m" + (s2 % 60) + "s"; return s2 + "s"; }
-                function fmtDownTok(n) { if (n >= 1e6) return (n / 1e6).toFixed(1) + "m"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "k"; return String(n); }
                 function tokStr(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(n); }
                 function sizeStr(n) { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; }
                 function ctxPct(s) { if (!s || !s.context_usage) return 0; return Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100)); }
@@ -1399,7 +1397,7 @@
                 const b2SrcCap = (item) => item.source
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.pmStandby ? '<span class="tag" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.standby ? '<span class="tag" title="已接单未开工或回合挂起——无近期工具活动，不占在跑计数（#291）">待开工</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"' + (item.standby ? ' title="已接单未开工或挂起——无近期工具活动，不占在跑计数（#291 待命）"' : "") + '></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.pmStandby ? '<span class="tag mini" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
                 // [W-RETIRED] 退休成员会话判定（renderMyList 主列表排除/归档组收集、筛选计数三处共用）——
                 // 名单来自 SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧（relay 判定源=
                 // org 两本账：非 archived 组路由在册而编制外）。null=旧 relay 零过滤兼容
@@ -2345,14 +2343,15 @@
                   // 同源，claude=像素螃蟹七引擎同表）；未知引擎 PH 字母占位兜底（engineBrandSvgOf
                   // 内建），sprite 形态保留为结构回落——尺寸/圆角走 .badge-brand 约束跟随现行徽章
                   const brandIconHtml = engineBrandSvgOf({ engineClass: eng[1], engine: s.engine || "claude" });
-                  // W-TEAMSNC ③：详情 head identity-cluster 团队 chip——置于引擎徽章前（团队归属>引擎
-                  // 阅读序，B 稿态 B）；pmTeamChipOf 单口同源（命中才渲染，null 不占位），点击同卡上
+                  // W-TEAMSNC ③→W-BADGEORDER（1109 用户实锤 9.jpg 对调）：详情 head identity-cluster
+                  // 徽章序=引擎徽章在前、团队 chip 在后（用户拍板「引擎>团队」阅读序——旧决策「团队归属>引擎
+                  // B 稿态 B」退役）；pmTeamChipOf 单口同源（命中才渲染，null 不占位），点击同卡上
                   // chip 开/收第四列抽屉（data-team-chip 同链同委托）
                   const headTeams = pmTeamChipOf(s.session_id);
-                  UI.identity.innerHTML = (headTeams.length ? headTeams.map(teamChipMarkup).join("") : "")
-                    + '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
+                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
                     ? '<span class="badge-brand">' + brandIconHtml + "</span>"
-                    : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
+                    : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>"
+                    + (headTeams.length ? headTeams.map(teamChipMarkup).join("") : "");
                   // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
                   {
                     const el = UI.subDirEl && UI.subDirEl.isConnected ? UI.subDirEl : ($id("session-head-sub") || null);
@@ -2524,49 +2523,99 @@
                     b2Toast("已切换 · 下一回合生效"); // 新模型名由胶囊乐观回显，不重复播报
                   } else b2Toast("切换失败：" + v.error);
                 }
+                // W-DOCKFIX（1109 用户实锤·方案 A 语义一行流，施工图 w-dockrow.md :47-62）：
+                // 一行=态图标+正在干什么（语义化）+单一计时（人类档位）；token 归 head 水位
+                // 胶囊唯一权威（dock tokens 段退役）；#224 两层架构退役（次行 data-dock-sub 段
+                // 随删——W-SEATALIVE 值守座在旧架构下退化为「会话名（恒定大数·晦涩符号）」死行）。
+                // WORKING 细分三形态：真跑=◐ 语义摘要·回合计时；待命（isRealWorking=false，
+                // #291 语义保持）=◌ 不计时；值守无动作（act 空）=◌ 半透明值守样。
+                function dockSemanticAction(raw) {
+                  // 动作语义化：非 shell 类 summary 已是动词短语直用（24 字瞥视档）；
+                  // shell 命令类（含 env 键值/路径前缀）=剥「执行」前缀+env 键值+flag 词，
+                  // 路径取 basename，余首三词（用户心智=在干什么活≠命令原文；全文走 title）
+                  let t = String(raw || "").replace(/^\u200B+/, "").trim();
+                  if (!t) return "";
+                  t = t.replace(/^执行\s*/, "");
+                  const words = t.split(/\s+/).filter(Boolean);
+                  const shellish = words.some((w) => w.includes("=") || /^~?\//.test(w));
+                  let out;
+                  if (shellish) {
+                    const kept = words
+                      .filter((w) => !w.includes("=") && !w.startsWith("-"))
+                      .map((w) => (/^~?\//.test(w) ? (w.split("/").filter(Boolean).pop() || w) : w));
+                    out = kept.slice(0, 3).join(" ");
+                  } else {
+                    out = t;
+                  }
+                  out = out.replace(/\s+/g, " ").trim();
+                  return out.length > 24 ? out.slice(0, 24) + "…" : out || t.slice(0, 24);
+                }
+                function dockTurnDur(sec) {
+                  // 回合级计时（人类档位）：秒档 Ns/分钟档 MmSSs/小时档 HhMm（小时档丢秒——
+                  // 大尺度秒位是噪声，DOCKROW 空②同判）；取代任务级 fmtTaskDur 累计+次行原始秒
+                  const s2 = Math.max(0, Math.floor(sec));
+                  const h2 = Math.floor(s2 / 3600), m2 = Math.floor((s2 % 3600) / 60);
+                  if (h2 > 0) return h2 + "h" + m2 + "m";
+                  if (m2 > 0) return m2 + "m" + (s2 % 60) + "s";
+                  return s2 + "s";
+                }
                 function renderDock() {
                   const dock = UI.dock;
                   if (!dock) return;
                   const s = curSession();
                   const op = dock.querySelector("[data-session-state-operation]");
                   const tok = dock.querySelector("[data-session-state-tokens]");
+                  const el = dock.querySelector("[data-session-state-elapsed]");
+                  delete dock.dataset.duty;
+                  if (tok) tok.hidden = true; // 方案 A：token 归 head 水位胶囊唯一权威，dock 段恒隐
                   if (!s) {
-                    dock.dataset.sessionState = "waiting";
+                    dock.dataset.sessionState = "standby"; /* W-DOCKFIX：未选择=中性静态 ◌（旧 amber 呼吸星=无活假装活跃，同病顺刀） */
                     op.textContent = "未选择";
-                    dock.querySelector("[data-session-state-elapsed]").textContent = "";
-                    if (tok) tok.hidden = true;
+                    if (el) el.textContent = "";
                     dockTerminalWatch(dock, null);
                     renderSubagents(null); // W-UIFB ⑧（自 TOPBAR 批移植+修正版）无会话撤面板
                     return;
                   }
-                  // B21 一行流式：态图标（旋转/呼吸/✓/⚠，CSS 按 data-session-state 承载）+ 摘要 + 走秒 + token
                   const state = DOCK_STATE[s.status] || "closing";
                   dock.dataset.sessionState = state;
-                  const live = dockLiveLine(s); // A0-1：终端实时行（relay ​ 零宽前缀约定）→ 隐藏自家走秒/token 防双计
+                  const live = dockLiveLine(s); // A0-1：终端实时行（relay 零宽前缀约定）→ 隐藏自家走秒/token 防双计（保留）
                   if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
                   const w = s.waiting_request;
-                  // #224 两层信息架构（WORKING）：标题行=✻ {任务名}（时长/↓累计输出由
-                  // tickDockElapsed 每秒续写 elapsed 段）；动作行=次行 ⚙ Running {命令} ·
-                  // {回合走秒}（mono dim，title hover 全量）。命令动作从主行让位次行
-                  let subEl = dock.querySelector("[data-dock-sub]");
+                  const act = String(s.action_summary || "").replace(/^\u200B+/, "");
+                  op.title = "";
                   if (s.status === "WORKING" && !live) {
-                    op.textContent = s.title || "未命名任务";
-                    if (tok) tok.hidden = true;
-                    const act = String(s.action_summary || "").replace(/^\u200B+/, "");
-                    if (!subEl) {
-                      subEl = document.createElement("div");
-                      subEl.setAttribute("data-dock-sub", "");
-                      dock.appendChild(subEl);
+                    delete dock.dataset.turnStarted;
+                    if (!act) {
+                      // 值守待命（W-SEATALIVE 值守座：常驻 WORKING 无动作——六病空①②③病根）
+                      dock.dataset.sessionState = "standby";
+                      dock.dataset.duty = "1";
+                      op.textContent = "值守待命";
+                      if (el) el.textContent = "";
+                    } else if (!isRealWorking(s)) {
+                      // 待命（#291 语义保持：有 act 未真跑，不走秒）
+                      dock.dataset.sessionState = "standby";
+                      op.textContent = "待命 · 可接单";
+                      op.title = act;
+                      if (el) el.textContent = "";
+                    } else {
+                      op.textContent = dockSemanticAction(act) || s.title || "";
+                      op.title = act; /* 命令原文降级 title（debug 可达性不丢） */
+                      dock.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
                     }
-                    subEl.dataset.act = act;
-                    subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
-                    subEl.textContent = act ? (isRealWorking(s) ? "⚙ Running " : "⏸ 待开工 ") + act.slice(0, 110) : ""; /* #291 审查 B-P2-2：dock 与卡同屏一致（待命不走秒语义） */
-                    subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
+                  } else if (live) {
+                    op.textContent = act; // live 终端行原样直通（防双计由 data-live-line CSS 承载）
+                    if (el) el.textContent = "";
+                  } else if (s.status === "WAITING") {
+                    // 等你批准（口语化；四问 ask 形态=等你作答）——明细全文走 title
+                    op.textContent = w && w.tool_name ? "等你批准 " + w.tool_name : "等你作答";
+                    if (w) op.title = [w.tool_name, w.input_summary].filter(Boolean).join(" · ");
+                  } else if (s.status === "ERROR") {
+                    op.textContent = "失败 · " + String(s.last_error || s.action_summary || "").replace(/^\u200B+/, "").slice(0, 40);
+                    op.title = String(s.last_error || s.action_summary || "");
                   } else {
-                    if (subEl) subEl.remove();
-                    const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
-                    op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
-                    if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
+                    // DONE（✓ 完成 · 时长一次性）：8s 淡出语义由 dockTerminalWatch 承载不变
+                    op.textContent = dockSemanticAction(s.action_summary || "") || "完成";
+                    op.title = String(s.action_summary || "");
                   }
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
@@ -2621,23 +2670,18 @@
                   if (!el) return;
                   if (!s || UI.dock.hasAttribute("data-live-line")) { el.textContent = ""; return; }
                   if (s.status === "DONE" && s.duration_ms) { el.textContent = fmtDur(s.duration_ms); return; }
-                  // #224 WORKING：标题行尾=（任务时长 · ↓累计输出）——任务级时长=会话级
-                  // started_at 起跨回合累计（CLI 同语义），↓=usage.output_tokens（会话累计
-                  // 输出，统计页同源）；同时续写动作行（次行）的回合走秒
+                  // W-DOCKFIX 方案 A：单一计时源。真跑=回合级 dockTurnDur（turn_started_at，
+                  // MmSSs 人类档位；任务级累计/↓累计输出随六病退役——浏览价值归统计页）；
+                  // 待命/值守（standby 态）不走秒（#291 语义保持）
                   if (s.status === "WORKING") {
-                    const dur = fmtTaskDur(Math.max(0, Date.now() - Number(s.started_at || Date.now())) / 1000);
-                    const out = s.usage && Number(s.usage.output_tokens) > 0 ? " · ↓" + fmtDownTok(Number(s.usage.output_tokens)) : "";
-                    el.textContent = "(" + dur + out + ")";
-                    const subEl = UI.dock.querySelector("[data-dock-sub]");
-                    if (subEl && subEl.dataset.act) {
-                      const runSec = Math.max(0, Math.floor((Date.now() - Number(subEl.dataset.turnStarted || Date.now())) / 1000));
-                      subEl.textContent = "⚙ Running " + String(subEl.dataset.act).slice(0, 110) + " · " + runSec + "s";
-                    }
+                    if (UI.dock.dataset.sessionState === "standby") { el.textContent = ""; return; }
+                    const t0 = Number(UI.dock.dataset.turnStarted || s.turn_started_at || s.updated_at || Date.now());
+                    el.textContent = dockTurnDur((Date.now() - t0) / 1000);
                     return;
                   }
                   const base = s.waiting_started_at || s.updated_at || s.started_at;
                   el.textContent = base ? fmtDur(Math.max(0, Date.now() - base)) : "";
-                  // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，不重建面板）
+                  // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，状态栏下续行）
                   document.querySelectorAll("#session-agbox [data-ag-at]").forEach((at) => {
                     const st = Number(at.dataset.started) || 0, ed = Number(at.dataset.ended) || 0;
                     if (st > 0) at.textContent = fmtDur(Math.max(0, (ed > 0 ? ed : Date.now()) - st));
@@ -5418,7 +5462,7 @@
                         if (dir) dir.textContent = String(text || "");
                         if (time) time.textContent = "";
                       }
-                      window.__ccDeck005SetWindowbarHint?.("session", "");
+                      // W-WBARSLIM：session 域 hint 清空写点退役——head-sub [data-sub-dir]/[data-sub-time] 直写已是真路径（上行）
                     },
                     headActions: $id("session-head-actions"), // W-UIFB（合并裁决）：开关随 i=3 定位 head 右侧
                     ctxMeter: $id("session-ctx-meter"), // UIPOLISH2 件四：head mini 水位胶囊（静态引用，同 modelCapsule 口径）

@@ -603,6 +603,16 @@
                 const STATUS_DOT = { WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" };
                 const STATUS_TAG = { WORKING: "info", WAITING: "action", ERROR: "danger", DONE: "done" };
 
+                // W-PROJTEAM1 期一（1109 用户拍板「项目⊇团队」）：团队层读侧派生——relay
+                // teamStateOf 同口径端上镜像。三态：键缺席=存量组自动升格有团队（formedAt
+                // 派生 created_at）；null=显式无团队（「仅立项目」产物）；dissolved_at 在场
+                // =已解散（期三恢复链前只展示留档）。
+                const teamStateOf = (g) => {
+                  const t = g && g.team;
+                  if (!t || typeof t !== "object") return { has: true, formedAt: Number(g && g.created_at) || 0 }; // 键缺席=存量组
+                  if (!Number(t.formed_at)) return { has: false }; // formed_at=0 哨兵=未组队（仅立项目）
+                  return { has: !t.dissolved_at, formedAt: Number(t.formed_at) || 0, dissolvedAt: Number(t.dissolved_at) || undefined };
+                };
                 function deriveEntries() {
                   const sessions = [...bridge.sessions.values()].filter((s) => s && typeof s.session_id === "string" && typeof s.cwd === "string");
                   // W-AGGREGATE-V2 刀3：多锚组 some 匹配（anchor_dirs 任一锚下会话归组——
@@ -715,15 +725,32 @@
                     const aggHint = unfiled ? (aggClusterMap.has(entry.anchor) ? aggClusterHintObj : (aggClusterHintObj || aggregateHintOf(entry))) : null;
                     const aggHtml = aggHint
                       ? '<div class="agg-hint" data-agg-hint="' + escapeHtml(aggHint.dir) + '">'
-                        + '<button class="agg-btn" type="button" data-agg-create="' + escapeHtml(aggHint.dir) + '" title="打开预填好的建团弹窗——推荐只预填不代创建">聚合为团队 →</button>'
+                        // W-PROJTEAM1 件③（1109 拍板）：「聚合为团队」改两步「立为项目」——
+                        // 主钮=并组队（预填弹窗链行为保持，AGGBUG 源判定零影响）；副钮=
+                        // 仅立项目（轻立项基座可无团队，直建 no_team——sendCommand 骨架）。
+                        + '<button class="agg-btn" type="button" data-agg-create="' + escapeHtml(aggHint.dir) + '" title="先立项目再组队——打开预填好的组队弹窗（推荐只预填不代创建）">立为项目（并组队）→</button>'
+                        + '<button class="agg-mini-btn" type="button" data-agg-solo="' + escapeHtml(aggHint.dir) + '" title="只立项目（轻立项基座，暂不组队）——项目可独立存在，之后可在项目卡上「组建团队」">仅立项目</button>'
                         + '<span class="agg-evidence">' + escapeHtml(aggHint.cluster ? aggClusterEvidenceLine(aggHint) : aggEvidenceLine(aggHint)) + "</span>"
                         + '<button class="agg-ignore" type="button" data-agg-ignore="' + escapeHtml(aggHint.cluster ? "o:" + aggHint.origin : aggHint.dir) + '" title="本目录 24 小时内不再推荐（累计 3 次永久静默）">忽略</button>'
                         + "</div>"
                       : "";
+                    // W-PROJTEAM1 件②：项目卡「团队」区两态——有团队=编制摘要+去团队跳转；
+                    // 无团队=「为此项目组建团队」入口（先有项目再组队——挂靠模式 gid 预填，
+                    // 不经 create=零一锚一组冲突）。挂起/归档组只读摘要不进组队口。
+                    const teamInfo = entry.group ? teamStateOf(entry.group) : null;
+                    const teamSeats = entry.group && Array.isArray(entry.group.headcount) ? entry.group.headcount.length : 0;
+                    const teamRow = !entry.group ? "" : teamInfo.has
+                      ? '<div class="pc3-team"><span class="pc3-team-sum">团队 ' + teamSeats + " 席" + (working > 0 ? " · " + working + " 在跑" : "") + '</span><button class="pc3-team-btn" type="button" data-team-go="' + escapeHtml(entry.group.id) + '" title="切到团队域看协作面">去团队 →</button></div>'
+                      : (teamInfo.dissolvedAt
+                        ? '<div class="pc3-team"><span class="pc3-team-sum none">团队已解散（项目留档）</span></div>'
+                        : (entry.group.status === "active"
+                          ? '<div class="pc3-team"><span class="pc3-team-sum none">暂无团队（项目可独立）</span><button class="pc3-team-btn" type="button" data-team-form="' + escapeHtml(entry.key) + '" title="打开预填好的组队弹窗（挂靠本项目——推荐只预填不代创建）">组建团队 →</button></div>'
+                          : '<div class="pc3-team"><span class="pc3-team-sum none">暂无团队</span></div>'));
                     return '<div class="queue-card pc2 pc3' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'
                       + '<div class="pc2-r1"><i class="pc3-dot ' + dot + '"></i><strong class="pc2-name">' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="cc-badge is-alert">需行动 ' + (actions > 9 ? "9+" : actions) + "</span>" : "") + "</div>"
                       + '<div class="pc2-r2"><span class="pc3-path">' + escapeHtml(pathMeta(entry.group ? entry.anchor : (entry.nativeCwd || entry.anchor))) + "</span>" + openBtn + "</div>"
                       + '<div class="pc3-meta">' + escapeHtml(metaBits.join(" · ")) + "</div>"
+                      + teamRow
                       + aggHtml
                       + "</div>";
                   };
@@ -774,11 +801,10 @@
                         + "<span>输出物 " + artifacts.length + "</span>" + '<span class="sep">·</span>'
                         + "<span>验收单 " + bridge.accepts.length + (open ? " · " + open + " 张未闭环" : "") + "</span>";
                     }
-                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进头部 meta 行
+                    // W-WBARSLIM：project 域 hint 写点退役（目录/realpath 摘要已在项目卡与 head 源名在场）
                   } else {
                     if (liveNode) liveNode.hidden = true;
                     if (metaNode) metaNode.hidden = true;
-                    window.__ccDeck005SetWindowbarHint?.("project", "—");
                   }
                 }
 
@@ -954,7 +980,7 @@
                     els.queue.replaceChildren(bannerNode(bootBanner));
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
-                    window.__ccDeck005SetWindowbarHint?.("project", waiting);
+                    // W-WBARSLIM：project 等待态 hint 写点退役——bootBanner（下行 replaceChildren）已承载同文案
                     if (els.body) els.body.replaceChildren(nodesFrom('<div class="proj-skel" role="status" aria-label="项目数据等待同步"><div class="skel-line w40"></div><div class="skel-line w90"></div><div class="skel-line w70"></div><div class="skel-cards"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div></div>'));
                     const foot = section.querySelector(".workspace-footer");
                     if (foot) foot.style.display = "none"; // W3P-P1-1④：desktop-only-note 等数据到位再显（防孤悬）
@@ -1042,6 +1068,59 @@
                   const queueCard = target.closest("[data-project-key]");
                   if (queueCard) {
                     // W-AGGREGATE-V1：推荐条动作先行于选卡（条在卡内——点钮不选卡）
+                    // W-PROJTEAM1 件②：项目卡「去团队」跳转（rail 切域+ccDeckTeam.select
+                    // 定组——同实体两面投影，纯视图切换零数据动作）
+                    const teamGo = target.closest("[data-team-go]");
+                    if (teamGo) {
+                      const gid = String(teamGo.dataset.teamGo || "");
+                      document.querySelector('.rail-btn[data-domain="team"]')?.click();
+                      const sel = window.ccDeckTeam && typeof window.ccDeckTeam.select === "function" ? window.ccDeckTeam.select : null;
+                      if (sel && gid) { try { sel(gid); } catch { /* 域挂载竞态——下帧 onFrame 收敛 */ } }
+                      return;
+                    }
+                    // W-PROJTEAM1 件②：无团队项目卡「组建团队」——挂靠模式 gid 预填
+                    //（弹窗提交走 create+gid 分支=formTeamOnGroup，不经 createGroup=零
+                    // 一锚一组冲突）；预填链与 agg-create 同构（成员=项目下会话活跃序）。
+                    const teamForm = target.closest("[data-team-form]");
+                    if (teamForm) {
+                      const key = String(teamForm.dataset.teamForm || "");
+                      const entry2 = deriveEntries().find((e) => e.key === key);
+                      if (entry2 && entry2.group) {
+                        const open = window.ccDeckTeam && typeof window.ccDeckTeam.openTeamCreate === "function" ? window.ccDeckTeam.openTeamCreate : null;
+                        if (!open) { toast("团队域未就绪，稍后再试"); return; }
+                        open({
+                          gid: entry2.group.id,
+                          name: entry2.group.name,
+                          anchor: entry2.group.anchor_dir,
+                          ...(Array.isArray(entry2.group.anchor_dirs) && entry2.group.anchor_dirs.length ? { dirs: entry2.group.anchor_dirs } : {}),
+                          tier: entry2.group.tier === "正经立项" ? "正经立项" : "轻立项",
+                          members: [...entry2.sessions].sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0)).map((s) => s.session_id),
+                          origin: "来自项目页 · 为此项目组建团队",
+                        });
+                      }
+                      return;
+                    }
+                    // W-PROJTEAM1 件③：两步入口副钮「仅立项目」——直建轻立项基座
+                    //（no_team，无弹窗）；命令通道离线时响亮失败不静默。
+                    const aggSolo = target.closest("[data-agg-solo]");
+                    if (aggSolo) {
+                      const dir = String(aggSolo.dataset.aggSolo || "");
+                      const entry3 = deriveEntries().find((e) => e.key === "c:" + dir);
+                      const clusterHint3 = entry3 ? aggregateClusterHint(entry3, aggregateClusters(deriveEntries().filter((e) => e.key.indexOf("c:") === 0)).get(dir)) : null;
+                      const hint3 = clusterHint3 || (entry3 ? aggregateHintOf(entry3) : null);
+                      if (!hint3) { toast("目录信息已变化，稍后再试"); return; }
+                      // 记账形态刻意用 Object.assign（同义异形）：test-aggbug ④ 组的源文
+                      // 切片以主钮 handler 内的展开记账行为 end 锚取首现——本块位于主钮
+                      // handler 之前，若同形会先命中致切片窗塌（end<start 恒空串四断言齐崩）
+                      aggPrefs[dir] = Object.assign(aggPrefs[dir] || {}, { actedAt: Date.now() }); aggPrefsSave();
+                      bridge.sendCommand("COMMAND_ORG_ACTION", { action: "create", name: hint3.name, anchor_dir: dir, tier: "轻立项", headcount: [], no_team: true, ...(hint3.cluster && hint3.dirs ? { anchor_dirs: hint3.dirs } : {}) })
+                        .then((ack) => {
+                          if (ack && ack.ok) toast(ack.data && ack.data.needsConfirm ? "项目已提交，等确认卡 ✓" : "项目已立（暂无团队）——可在项目卡「组建团队」");
+                          else toast("仅立项目失败：" + ((ack && ack.error) || "未知错误"));
+                        })
+                        .catch(() => toast("命令通道未接入，无法立项目"));
+                      return;
+                    }
                     const aggCreate = target.closest("[data-agg-create]");
                     if (aggCreate) {
                       const dir = String(aggCreate.dataset.aggCreate || "");
@@ -1052,6 +1131,23 @@
                       if (entry && hint) {
                         const open = window.ccDeckTeam && typeof window.ccDeckTeam.openTeamCreate === "function" ? window.ccDeckTeam.openTeamCreate : null;
                         if (!open) { toast("团队域未就绪，稍后再试"); return; }
+                        // 成员源一致性（W-AGGBUG）：全簇/全桶成员 relay_source 一致且能对位某源名
+                        // → 弹窗源随成员预选（消灭云视角下 defSrc=cloud 而成员全本机的错位）；
+                        // 混源/无名册/对不上=不传（弹窗回落视角判定，旧行为）
+                        const prefillSessions = (hint.cluster
+                          ? deriveEntries().filter((e) => e.key.indexOf("c:") === 0 && hint.dirs.indexOf(e.anchor) >= 0).flatMap((e) => [...e.sessions])
+                          : [...entry.sessions]
+                        ).sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                        let prefillSource = null;
+                        try {
+                          const ss = window.__ccDeck005SourceState ? window.__ccDeck005SourceState() : null;
+                          const srcs = new Set(prefillSessions.map((s) => String(s.relay_source || s.source || "")));
+                          if (ss && srcs.size === 1) {
+                            const only = [...srcs][0];
+                            if (only && only === String(ss.cloudRelayName || "")) prefillSource = "cloud";
+                            else if (only && only === String(ss.lanRelayName || "")) prefillSource = "local";
+                          }
+                        } catch (_) { prefillSource = null; }
                         // 预填五位（teampolish ⑭ 参数位）：名=目录 basename/锚=桶目录/
                         // 成员=活跃序预勾（含野生——观察位语义在弹窗行内标注）/
                         // 档=轻立项（低摩擦缺省，正经立项留给用户主动升）/origin=溯源小注
@@ -1060,10 +1156,8 @@
                           anchor: dir,
                           ...(hint.cluster && hint.dirs ? { dirs: hint.dirs } : {}), // V2：簇预填锚列表（建团弹窗 anchor_dirs 消费）
                           tier: "轻立项",
-                          members: (hint.cluster
-                            ? deriveEntries().filter((e) => e.key.indexOf("c:") === 0 && hint.dirs.indexOf(e.anchor) >= 0).flatMap((e) => [...e.sessions])
-                            : [...entry.sessions]
-                          ).sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0)).map((s) => s.session_id),
+                          ...(prefillSource ? { source: prefillSource } : {}), // W-AGGBUG：源随成员对齐
+                          members: prefillSessions.map((s) => s.session_id),
                           origin: hint.cluster ? aggClusterEvidenceLine(hint) : aggEvidenceLine(hint),
                         });
                         aggPrefs[dir] = { ...(aggPrefs[dir] || {}), actedAt: Date.now() }; aggPrefsSave(); // 已交互记账（升级时机不再打扰）
