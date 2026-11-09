@@ -21,10 +21,12 @@
 //   codebuddy  spawn `<CCR_CODEBUDDY_PATH|codebuddy-code> auth status`，输出含
 //              "Authentication required" → needs_auth（实测输出「Authentication required.
 //              Please use /login command to sign in to your account」）
-//   qwen-code  凭据文件/env 存在性（本机未装，路径按 gemini-cli fork 惯例候选——
-//              上游版本漂移会误报 needs_auth，误报代价=用户照 hint 重新登录一次，
-//              无锁死风险，备案）
-//   trae       同上（凭据候选 ~ per trae-cli 惯例；同备案）
+//   qwen-code  三层判定（W-ENGREST-FIX 1109 对版 0.27.1）：settings 选型位
+//              security.auth.selectedType → env 组合（上游 getAuthTypeFromEnv 逐字：
+//              anthropic/openai/gemini/QWEN_OAUTH）→ 旧单键+凭据文件候选宽松尾路
+//   trae       config 文件判定（W-ENGREST-FIX 1109 对版）：CCR_TRAE_CONFIG ||
+//              ~/.trae-agent/trae_config.yaml 存在且 api_key 非空 → ready（真 CLI 无
+//              login 子命令，认证=YAML；与 agent-trae traeConfigPath 同源）
 //   zcode      枚举占位未接入编排，恒 ready（catalog unsupported 分支不会调到）
 //
 // 运行时兜底（token 中途过期）：authFailureHint 对引擎输出/退出尾行做 pattern 匹配
@@ -51,8 +53,13 @@ export interface AuthProbeOptions {
 const HINTS: Record<string, string> = {
   codex: "终端运行 codex login 完成登录；用 API 中转则在 ~/.codex/config.toml 配 bearer_token，或设置 OPENAI_API_KEY 环境变量",
   codebuddy: "终端运行 codebuddy-code，输入 /login 完成登录（桌面版登录态与 CLI 相互独立）",
-  "qwen-code": "终端启动 qwen-code 后按提示登录（输入 /auth），或设置 QWEN_API_KEY / GEMINI_API_KEY 环境变量",
-  trae: "终端运行 trae-cli，按 ? 选 Login with Email 完成登录（或点引擎目录的立即登录）",
+  // W-ENGREST-FIX（1109 对版）：qwen auth 子命令 0.27.1 已 removed；选型=settings
+  // security.auth.selectedType（顶层 authType 不是读取位）或 --auth-type；env 面按上游
+  // getAuthTypeFromEnv 组合制（如 anthropic=API_KEY+BASE_URL+MODEL 三键齐才自动选型）
+  "qwen-code": "在 ~/.qwen/settings.json 设置 security.auth.selectedType（如 anthropic/openai/qwen-subscription）并配置对应环境变量（如 ANTHROPIC_API_KEY+ANTHROPIC_BASE_URL），或运行 qwen --auth-type <类型> 选型",
+  // W-ENGREST-FIX（1109 对版）：trae-agent 无登录命令（commands=interactive/run/show-config/
+  // tools），认证=YAML api_key；探测位与 agent-trae 注入位同源（CCR_TRAE_CONFIG 或全局位）
+  trae: "在 ~/.trae-agent/trae_config.yaml 配置 model_providers 的 api_key 与 base_url（trae-agent 无登录命令，认证走配置文件），或设置 CCR_TRAE_CONFIG 指向已有配置",
 };
 
 function fileExists(path: string): boolean {
@@ -88,6 +95,51 @@ function codexConfigAuthPresent(homeDir: string): boolean {
 function credentialCandidatePresent(files: string[], envKeys: string[]): boolean {
   if (envKeys.some((k) => process.env[k]?.trim())) return true;
   return files.some(fileExists);
+}
+
+/** qwen 登录态判定（W-ENGREST-FIX 1109 对版 0.27.1 源码级）：非交互权威闸=「已选型」——
+ * settings 读取位是 security.auth.selectedType（顶层 authType 非读取位；validateNon-
+ * InteractiveAuth 实测「No auth type is selected」即此）；env 面按上游 getAuthTypeFromEnv
+ * 组合制（单键不选型）：anthropic=API_KEY+BASE_URL+MODEL、openai=API_KEY+BASE_URL+
+ * (OPENAI_MODEL|QWEN_MODEL)、gemini=API_KEY+MODEL、QWEN_OAUTH 单键即选。旧单键/文件
+ * 候选保留为宽松尾路（fail-open：在场按可试判 ready，选型缺失由 spawn 报错可见）。 */
+function qwenAuthCandidatePresent(homeDir: string): boolean {
+  try {
+    const s = JSON.parse(readFileSync(join(homeDir, ".qwen", "settings.json"), "utf-8")) as { security?: { auth?: { selectedType?: unknown } } };
+    if (typeof s?.security?.auth?.selectedType === "string" && s.security.auth.selectedType.trim() !== "") return true;
+  } catch { /* 无 settings/坏 JSON → 走 env/候选面 */ }
+  const v = (k: string): string | undefined => {
+    const raw = process.env[k]?.trim();
+    return raw ? raw : undefined;
+  };
+  if (v("QWEN_OAUTH")) return true;
+  if (v("ANTHROPIC_API_KEY") && v("ANTHROPIC_BASE_URL") && v("ANTHROPIC_MODEL")) return true;
+  if (v("OPENAI_API_KEY") && v("OPENAI_BASE_URL") && (v("OPENAI_MODEL") || v("QWEN_MODEL"))) return true;
+  if (v("GEMINI_API_KEY") && v("GEMINI_MODEL")) return true;
+  return credentialCandidatePresent(
+    [join(homeDir, ".qwen", "oauth_creds.json"), join(homeDir, ".qwen", "google-accounts.json"), join(homeDir, ".qwen", "aws_credentials.json")],
+    ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"],
+  );
+}
+
+/** trae 登录态判定（W-ENGREST-FIX 1109 对版）：真 trae-agent CLI 无 login 子命令
+ * （commands=interactive/run/show-config/tools），认证=YAML api_key。旧探针
+ * `trae-cli login status` 对真 CLI 是不存在的子命令（恒 fail-open 假 ready）。改 config
+ * 文件判定：存在且 api_key 非空值 → ready；缺席/空 key → needs_auth（trae 无登录命令
+ * 可走，config 缺席=真不可跑，非探针故障不适用 fail-open）。位与 agent-trae 注入位
+ * 同源（CCR_TRAE_CONFIG || ~/.trae-agent/trae_config.yaml）；show-config 能验同判据但
+ * 要 spawn 0.5~5s 且富文本格式随版本漂移，文件判定零成本零漂移。 */
+function traeConfigAuthPresent(homeDir: string): boolean {
+  const p = process.env.CCR_TRAE_CONFIG?.trim() || join(homeDir, ".trae-agent", "trae_config.yaml");
+  try {
+    const y = readFileSync(p, "utf-8");
+    // 剥注释再匹配：模板/用户配置的注释示例行（# 填 api_key: sk-xxx 之类）不含真实凭据
+    //（首启模板实测教训：注释字面量会被正则误命中→模板态误报 ready）
+    const code = y.split("\n").filter((l) => !l.trimStart().startsWith("#")).join("\n").replace(/\s+#.*$/gm, "");
+    return /api_key:\s*["']?[^\s"']+/i.test(code);
+  } catch {
+    return false;
+  }
 }
 
 function needsAuth(engine: SessionEngine): EngineAuthProbe {
@@ -165,27 +217,11 @@ function probeEngineAuthDirect(engine: SessionEngine, opts?: AuthProbeOptions): 
       }
     }
     case "qwen-code":
-      // 候选路径按 gemini-cli fork 惯例（oauth_creds/google-accounts）；本机未装未实测，
-      // 漂移误报代价=引导重登一次，无锁死（登录后凭据文件出现即 ready）
-      return credentialCandidatePresent(
-        [join(home, ".qwen", "oauth_creds.json"), join(home, ".qwen", "google-accounts.json"), join(home, ".qwen", "aws_credentials.json")],
-        ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
-      ) ? readyProbe : needsAuth(engine);
-    case "trae": {
-      // #102 批 B 实测修正（与 probeEngineAuthAsync 同源）：文件候选恒 miss 误报，
-      // 改探针命令文本匹配——`trae-cli login status` v2 输出「Not logged in」rc=0；
-      // 1.0 输出空 → fail-open ready
-      try {
-        const r = spawnSync(process.env.CCR_TRAE_PATH ?? "trae-cli", ["login", "status"], {
-          stdio: ["ignore", "pipe", "pipe"], timeout: timeoutMs, encoding: "utf-8",
-        });
-        if (r.error || r.signal) return readyProbe;
-        const out = `${r.stdout ?? ""}\n${r.stderr ?? ""}`;
-        return /not logged in|未登录|请先登录/i.test(out) ? needsAuth(engine) : readyProbe;
-      } catch {
-        return readyProbe;
-      }
-    }
+      // W-ENGREST-FIX：判定上收 qwenAuthCandidatePresent（settings 选型位+env 组合+旧候选）
+      return qwenAuthCandidatePresent(home) ? readyProbe : needsAuth(engine);
+    case "trae":
+      // W-ENGREST-FIX：config 文件+api_key 非空判定（真 CLI 无 login 子命令，旧探针恒假 ready）
+      return traeConfigAuthPresent(home) ? readyProbe : needsAuth(engine);
     default:
       return readyProbe;
   }
@@ -242,24 +278,11 @@ export async function probeEngineAuthAsync(engine: SessionEngine, opts?: AuthPro
       }
     }
     case "qwen-code":
-      return credentialCandidatePresent(
-        [join(home, ".qwen", "oauth_creds.json"), join(home, ".qwen", "google-accounts.json"), join(home, ".qwen", "aws_credentials.json")],
-        ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
-      ) ? readyProbe : needsAuth(engine);
+      // W-ENGREST-FIX：与同步版同源（qwenAuthCandidatePresent——纯文件/env 判定微秒级）
+      return qwenAuthCandidatePresent(home) ? readyProbe : needsAuth(engine);
     case "trae":
-      // #102 批 B 实测修正（Leader 追加要求）：trae 凭据不在批 A 候选的
-      // ~/.trae/.credentials.json 等路径（实测 v2 状态存 ~/.trae/cli/*.sqlite），文件
-      // 候选恒 miss → 长期误报 needs_auth。改与 codex 同款探针命令文本匹配：
-      // `trae-cli login status` 实测输出「Not logged in」rc=0（v2 traex 同款）；
-      // 1.0 老版该子命令输出为空 → fail-open 判 ready（1.0 已 limited maintenance，
-      // 主线适配 v2，取舍回执备案）
-      try {
-        const r = await execFileText(process.env.CCR_TRAE_PATH ?? "trae-cli", ["login", "status"], timeoutMs);
-        if (!r.ok) return readyProbe;
-        return /not logged in|未登录|请先登录/i.test(r.out) ? needsAuth(engine) : readyProbe;
-      } catch {
-        return readyProbe;
-      }
+      // W-ENGREST-FIX：与同步版同源（traeConfigAuthPresent——纯文件判定，无 spawn 面）
+      return traeConfigAuthPresent(home) ? readyProbe : needsAuth(engine);
     default:
       return readyProbe;
   }

@@ -6,9 +6,10 @@
 //   结构化事件按纯文本能力位落地，不因通用 parser 存在而虚构 JSONL）、:560（能力位快照）
 // 引擎本机安装：trae-cli/qwen/zcode 未装、codebuddy-code 已装——三新引擎全部走
 //   stub fixture（#69：Qwen 真机冒烟待装后补验，不阻塞本单）。
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   GenericJsonEventMapper,
   mapJsonlStream,
@@ -140,7 +141,7 @@ try {
 
   process.env.CCR_STUB_MODE = "codebuddy-ok";
   const cbOk = callbacks();
-  const cbOkAgent = new CodeBuddyAgentSession({ cwd: root, model: "cb-test", command: bin, cb: cbOk.cb, initialPrompt: "正常流" });
+  const cbOkAgent = new CodeBuddyAgentSession({ cwd: root, model: "custom:cb-test", command: bin, cb: cbOk.cb, initialPrompt: "正常流" });
   await wait(1500);
   assert(cbOk.turns[0] === true, "CodeBuddy stream-json 正常流 result→DONE");
   assert(cbOk.logs.some((x) => x.kind === "assistant_text" && x.text.includes("CB 正文输出")), "CodeBuddy message.content 块正文提取");
@@ -150,7 +151,7 @@ try {
 
   process.env.CCR_STUB_MODE = "codebuddy";
   const codebuddy = callbacks();
-  const codebuddyAgent = new CodeBuddyAgentSession({ cwd: root, model: "cb-test", command: bin, cb: codebuddy.cb, initialPrompt: "权限测试" });
+  const codebuddyAgent = new CodeBuddyAgentSession({ cwd: root, model: "custom:cb-test", command: bin, cb: codebuddy.cb, initialPrompt: "权限测试" });
   await wait(1500);
   assert(codebuddy.turns[0] === false, "CodeBuddy CI 权限错误映射 ERROR");
   assert(!codebuddy.statuses.includes("WAITING"), "CodeBuddy CI 不伪造 WAITING");
@@ -209,6 +210,15 @@ try {
     assert(agent.allow("r1") === false && agent.deny("r1") === false && agent.answer("r1", ["a"]) === false, `${name} 无审批能力：allow/deny/answer 恒 false 不伪造通过`);
   }
   assert(trae.waiting === 0 && qwen.waiting === 0 && cbOk.waiting === 0 && codebuddy.waiting === 0, "四路会话全程零 WAITING（无 decision channel 引擎不伪造审批）");
+
+  // ============ G. W-ENGREST-FIX args 锚（trae config 注入 + qwen yolo 工具装载）============
+  // 真链行为证据在真机复测帧（本套件为源码锚防回退——test-277 真源码抽取范式）
+  const traeSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "agent-trae.ts"), "utf-8");
+  assert(traeSrc.includes('["run", prompt, "--config-file", traeConfigPath()]'), "G1 trae buildArgs 恒带 --config-file 权威位（cwd 相对缺省=生产不可用，深测 P1）");
+  assert(traeSrc.includes("CCR_TRAE_CONFIG") && traeSrc.includes('.trae-agent", "trae_config.yaml"'), "G2 trae config 位=CCR_TRAE_CONFIG || ~/.trae-agent/（探测位同源）");
+  assert(traeSrc.includes("ensureTraeConfigTemplate") && traeSrc.includes("CCR_STUB_MODE"), "G3 trae 缺省位首启模板引导（桩环境护栏，不写真实 home）");
+  const qwenSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "agent-qwen.ts"), "utf-8");
+  assert(qwenSrc.includes('"--approval-mode", "yolo"'), "G4 qwen buildArgs 带 --approval-mode yolo（headless 默认档剔除 shell/write/edit——考证④，init 工具面 26→31 实证）");
 
   assert(!Object.values(process.env).some((v) => v === "长 prompt"), "测试未把 prompt/key 写入环境输出");
 } finally {
