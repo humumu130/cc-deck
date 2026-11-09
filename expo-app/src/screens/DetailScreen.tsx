@@ -25,7 +25,7 @@ import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { withA, STATUS_ZH, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import { artPoolGate } from "../artpool";
 import { markEchoState, pushPending, reconcilePending, type PendingEcho } from "../pending-echo";
@@ -302,8 +302,9 @@ function matchFilter(kind: string, f: ViewKind, tool?: string): boolean {
 // 思考过程显示开关：app 生命周期内记忆（跨页面切换，不落盘）
 let thinkShown = false;
 
-// 详情页工具区折叠开关：同样 app 生命周期内记忆
-let ctrlCollapsed = false;
+// W-HEADFIX（1109 A′）：srcMeta 托管徽记是否回显 head（PM 拍板②默认不留——紧凑权重第一；
+// 需要时一行开回 true，缀标题后同排 10px dim；全量源信息始终在「更多」tab 统计区）
+const HEAD_SHOW_SRC_META = false;
 
 // #142 子 Agent 面板折叠开关：app 生命周期内记忆（跨页面/会话切换，1s tick 重渲不丢态）
 let agCollapsed = false;
@@ -1530,7 +1531,6 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
     Animated.timing(jumpOp, { toValue: showJump && view === "msg" ? 1 : 0, duration: 150, useNativeDriver: true }).start();
   }, [showJump, view, jumpOp]);
   const [showThink, setShowThink] = useState(thinkShown);
-  const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   // #142 子 Agent 面板展开态（初始同步模块级记忆，点按写回）
   const [agOpen, setAgOpen] = useState(!agCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -2369,10 +2369,12 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
           拉回底部（视口收缩旧 transform 方案没有的问题）。沿用 2026-09-16 调定的
           -2px 藏缝余量（键盘压住输入栏底 2px 不露缝） */}
       <View style={{ flex: 1, paddingBottom: kb > 0 ? kb - 2 : 0 }}>
-      {/* 头部（用户 22:14/22:20 拍板口径，#155 收敛，#159 方案A再收敛）：R1 = ‹ + 标题主角；
-          R2 = 元信息行——源·ctx 缝成一句单色元信息（·分隔，全 dim 10px 一档字号；ctx 百分比
-          仅报警档亮色），设置簇右锚（原时长已删：消息时间戳已提供时间感，统计区保留耗时全量）。
-          可点元素统一圆角 8/tintSoft 底无边框；#164 红线：标题可用宽度不动 */}
+      {/* 头部（W-HEADFIX 1109 A′ 单行化——用户「head 布局难看」三路审查 C 路裁决+PM 拍板）：
+          单行 = ‹ + 头像 + 标题 + 水位计（水位=分钟级监控信号，C 路裁决留位）。Row2 元信息行
+          整行退役：模型 chip+思考开关迁「更多」tab 会话设置节（#218 权限族同款连续性）；
+          目录/活跃时间随删（全长在统计区/消息时间戳已覆盖时间感）；srcMeta 托管徽记默认不留
+          （PM 拍板②紧凑权重第一；HEAD_SHOW_SRC_META 常量一行开回）。历史口径：#155/#159
+          收敛、#218「head 只留状态」、W-UIFIX 件二水位右锚。#164 红线：标题可用宽度不动 */}
       <View style={d.head}>
         {/* W-UIFIX 件七：去 tintSoft 方块底，纯 chevron 放大到微信式 24px；触区 40 宽 */}
         <Pressable style={d.backPlain} onPress={onBack} hitSlop={{ left: 14, right: 8, top: 10, bottom: 10 }} accessibilityLabel="返回会话列表">
@@ -2395,10 +2397,15 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
           <EngineIcon engine={inferEngine(s.engine, s.model) ?? "claude"} size={18} />
         )}
         <View style={{ flex: 1, minWidth: 0 }}>
-          {/* W-UIFIX 件二：水位计挪标题行右端+整体调小一号——副题行还给元信息文字
-              （目录/活跃时间不再被挤截断）；标题 flexShrink 保省略，水位 flexShrink:0 右锚 */}
+          {/* 单行制（W-HEADFIX A′）：标题 flexShrink 保省略，水位计 flexShrink:0 右锚
+              （W-UIFIX 件二右锚语义不变）。srcMeta 托管徽记默认不留（PM 拍板②），
+              开关位 HEAD_SHOW_SRC_META 常量一行开回——开回时缀标题后同排（10px dim 一档，
+              承继 #159「一行一档」） */}
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
+            {HEAD_SHOW_SRC_META && srcMeta ? (
+              <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>{" · "}{srcMeta}</Text>
+            ) : null}
             {ctxUsed > 0 ? (
               <View style={[d.headCtx, { marginLeft: "auto" }]}>
                 <CtxSegMeter pct={ctxPct} tone={ctxTone} small />
@@ -2406,76 +2413,20 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               </View>
             ) : null}
           </View>
-          <View style={d.headMeta}>
-            {/* A4-4 查漏（桌面件十六信息行序）：目录→水位→活跃时间。#159 方案A 的
-                「一行一档字号一种形态」保持；W-LIST2 件二②③：水位从纯文本百分比升级
-                颗粒水位计（20 格分段形制，正常 dim/60-84 黄/≥85 红）——颗粒承形、数字
-                承精确值；目录=尾两段缩短（全长在「更多」tab 统计区） */}
-            {srcMeta || s.cwd || ctxUsed > 0 ? (
-              <>
-                <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
-                  {srcMeta}
-                  {srcMeta && (s.cwd || ctxUsed > 0) ? " · " : ""}
-                  {s.cwd ? `${s.cwd.replace(/[\\/]/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).slice(-2).join("/")}` : ""}
-                  {/* C4（W-TEAMTAB）：本行尾部 " · " 已删——分隔职责归尾段头部拼接，双点根除 */}
-                </Text>
-                <Text style={[d.sub, { flexShrink: 0 }]}>{" · "}{fmtLastActive(s.updated_at || s.started_at)}</Text>
-              </>
-            ) : null}
-            {/* #36 设置簇（右锚）：权限胶囊 + 思考开关成组——同为会话级 14px 小胶囊，
-                形态语言一致。权限胶囊是"状态灯"：标准=幽灵盾标（低噪声保锚点）、
-                自动/规划=品牌蓝点亮+两字短标签、跳过=waiting 红警示+盾内感叹号
-                （危险档必须 ambient 常显视口顶——读转录/切 tab 都看得见） */}
-            <View style={d.permCluster}>
-              {/* W-PORT-B P0-1：模型切换 chip（R2 元信息行右锚，权限胶囊旁）——中性幽灵
-                  形态（模型是低频操作，视觉弱于权限状态灯）；文案=当前模型尾段或「默认模型」 */}
-              {modelSupported ? (
-                <Pressable
-                  style={d.modelChip}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  onPress={() => setModelSheet(true)}
-                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                  accessibilityLabel={`模型 ${s.model || "默认模型"}，点按切换（下一回合生效）`}
-                >
-                  <Text style={d.modelChipT} numberOfLines={1}>
-                    {s.model ? String(s.model).split(/[/:]/).pop() : "默认模型"}
-                  </Text>
-                </Pressable>
-              ) : null}
-              {/* #218 追加件：托管权限胶囊整颗退役（Leader 裁决 R1——用户指的「审批开关」
-                  即这颗 bypassPermissions 循环切换胶囊；权限模式入口不挂 head，创建时勾选/
-                  桌面端设置即可，P81 语义下无需常驻切换）。head 设置簇只留模型 chip+思考开关 */}
-              {/* #218 追加件：外部只读胶囊（#191）同步退役——head 权限标识整族清（状态走
-                  状态条/横幅与「更多」tab 统计区，relay permission_mode 数据面不动） */}
-              {/* #218 件一：远程审批开关退役（用户点名 head 只留状态；审批横幅/状态条承载不变，
-                  relay COMMAND_EXT_MODE 命令面与 SESSION_UPDATED remote_mode 数据面不动；
-                  桌面对齐：W-COMPOSER ⑤ 同批已移桌面开关）。思考开关紧随模型 chip（共享
-                  thinkToggle 形态不动） */}
-              <Pressable
-                style={[d.thinkToggle, showThink && d.thinkToggleOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
-                hitSlop={6}
-                accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
-              >
-                <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考过程</Text>
-              </Pressable>
-            </View>
-          </View>
-          {/* W-EXPOLISH 件四：头部活动舱已迁输入区上沿（单行制，见底部栈 dockLine）——
-              header 只留标题+元信息+权限胶囊 */}
         </View>
       </View>
 
       {/* 固定工具区：状态条 + 过滤 chips。不放进 ScrollView——RN Android 吸顶头有触点丢失问题，
-          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。头部 ▴/▾ 可整体折叠 */}
-      {!collapsed ? (
+          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。
+          （W-HEADFIX：旧「▴/▾ 整体折叠」UI 已在前次改版移除——死 state+本注释残句随批清理；
+          折叠态会把 Tab 翻页指示器一并折掉，与六视图翻页交互自相矛盾，C 路裁决不复活） */}
       <View style={d.fixedBar}>
         {/* E3a：状态/收口条收编 StatusStrip——ERROR ⚠ 常驻 / DONE ✓ 尾窗收口 / WAITING
             兜底行；投影与显隐判定内聚组件内（含尾窗自隐计时），WORKING 状态行仍居
             对话流（类 CLI），顶栏只留「需要注意」的态 */}
         <StatusStrip s={s} wr={wr} bannerVisible={bannerVisible} />
-          {/* tab 行：模型 chip 已挪头部副信息行（#391 返工）；tabWrap 自测宽供指示条几何 */}
+          {/* tab 行：模型 chip 已迁「更多」tab 会话设置节（W-HEADFIX A′，#391 旧注退役）；
+              tabWrap 自测宽供指示条几何 */}
           <View style={d.filterRow}>
             <View style={d.tabWrap} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
               {VS.map((v, i) => (
@@ -2492,7 +2443,6 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             </View>
           </View>
       </View>
-      ) : null}
 
       {/* 六视图横向翻页（#250/#252）：面板上左右滑动切换，懒渲染相邻 ±1 页（远跳飞行中临时全渲染）；
           滚动位置原生驱动 tab 指示条逐像素跟手。任务视图：整屏列表（网页端"任务" tab 同构）。
@@ -2856,6 +2806,39 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                       <Text style={d.meterLimit}> / {fmtTok(limit)} tokens</Text>
                     </Text>
                     <Text style={[d.meterPct, { color: gColor }]}>{used > 0 ? `${pct}%` : "--"}</Text>
+                  </View>
+                </View>
+
+                {/* W-HEADFIX（1109 A′）：会话设置节——模型 chip+思考开关自 head Row2 迁入
+                    （#218 权限族同款连续性：设置类控件不挂 head）。B 刀1 形态统一：两颗均
+                    thinkToggle 填充式 14px 族（modelChip 描边式 18px 旧形态不搬家）。
+                    触区不再受 head 紧凑约束：hitSlop 垂直补足到 10（C 路触达审计 26dp 最小
+                    可点目标问题在落地位根治） */}
+                <View style={d.moreSec}>
+                  <Text style={d.moreSecT}>会话设置</Text>
+                  <View style={d.moreCtrlRow}>
+                    {modelSupported ? (
+                      <Pressable
+                        style={d.modelChip}
+                        android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                        onPress={() => setModelSheet(true)}
+                        hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                        accessibilityLabel={`模型 ${s.model || "默认模型"}，点按切换（下一回合生效）`}
+                      >
+                        <Text style={d.modelChipT} numberOfLines={1}>
+                          {s.model ? String(s.model).split(/[/:]/).pop() : "默认模型"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      style={[d.thinkToggle, showThink && d.thinkToggleOn]}
+                      android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                      onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
+                      hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                      accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
+                    >
+                      <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考过程</Text>
+                    </Pressable>
                   </View>
                 </View>
 

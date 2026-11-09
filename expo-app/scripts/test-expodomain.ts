@@ -272,10 +272,12 @@ async function main(): Promise<void> {
   check(listSrc.includes("metaRow.shown.length > 0 || metaRow.hidden > 0 || engineBadgeable(effEngine ?? undefined) ? ("), "A3-5 r3 全空整行不渲染（r3Meta 重构形态锚——W-MOBLIST 跟改：engine 兜底走 effEngine 推断链；W-MOBFUSION 件①跟改：r3 统一排补 teamChips；R2 审查跟改：紧凑档 metaRow=仅 📁 不摘行）");
   // A3-7：头像引擎淡彩
   check(listSrc.includes('ENGINE_ACCENT[effEngine ?? "claude"]'), "A3-7 头像底色=引擎品牌色淡彩（W-MOBLIST 跟改：底色随推断链）");
-  // A4-4：信息行序 目录→水位→活跃时间
+  // A4-4→W-HEADFIX（1109 A′）演进：Row2 元信息行整行退役——目录/活跃时间出 head
+  //（全长在「更多」tab 统计区/消息时间戳已覆盖时间感），水位计留 Row1 右锚（C 路裁决）
   const detailSrc = srcOf("../src/screens/DetailScreen.tsx");
-  check(detailSrc.includes("A4-4 查漏"), "A4-4 信息行序注记");
-  check(/s\.cwd.*ctxPct.*fmtLastActive/s.test(detailSrc), "A4-4 序=目录→水位→活跃时间");
+  check(!/headMeta|fmtLastActive/.test(detailSrc), "A′ Row2 退役（headMeta/活跃时间出 head，目录全长归统计区）");
+  check(detailSrc.includes("const HEAD_SHOW_SRC_META = false") && detailSrc.includes("HEAD_SHOW_SRC_META && srcMeta"), "A′ srcMeta 开关位在（PM 拍板②默认 false，一行可开回）");
+  check(detailSrc.includes("会话设置") && detailSrc.includes("d.moreCtrlRow") && detailSrc.includes("setModelSheet(true)") && detailSrc.includes("thinkShown = !thinkShown"), "A′ 迁移落位：模型 chip+思考开关在「更多」tab 会话设置节（sheet 入口+a11y 随迁）");
   // A4-6→件六①演进：长按位改为操作菜单（复制 ID 并入菜单行；Clipboard 直写保持）
   check(listSrc.includes("onLongPress"), "长按入口在场（件六①）");
   check(listSrc.includes("Clipboard.setStringAsync"), "A4-6 剪贴板直写");
@@ -486,8 +488,9 @@ check(/borderBottomWidth: 1\.5,[^\n]*\n\s*borderBottomColor: c\.lineStrong/.test
     // ③：双缺问号灰块根修——headRoleKind（pm/leader 词表+leader 压 pm）+双缺兜底 claude
     check(detailSrc.includes("const headRoleKind = useMemo(") && detailSrc.includes("/^(leader|领队)$/i") && detailSrc.includes("/^(pm|产品经理|项目经理)$/i"), "③ head 头像角色档判定（列表卡 pmRoleKindOf 同词表，leader 后扫压 pm）");
     check(detailSrc.includes('crab-leader.png') && detailSrc.includes('crab-pm.png') && detailSrc.includes('?? "claude") === "claude" ? (') && detailSrc.includes('inferEngine(s.engine, s.model) ?? "claude"'), "③ PM/Leader claude 档（双缺视同）=角色蟹；普通会话双缺兜底 claude（问号灰块灭迹）");
-    // ④：模型 chip 22→18 同族档
-    check(styleSrc.includes("height: 18, paddingHorizontal: 7") && styleSrc.includes("lineHeight: 11") && !styleSrc.includes("height: 22, paddingHorizontal: 8"), "④ modelChip 22→18/paddingH 7/lineHeight 11（r3 18px 同族档，桌面 FB66C ⑫）");
+    // ④→W-HEADFIX（1109 B 刀1）演进：modelChip 迁「更多」tab 时对齐 thinkToggle 填充式
+    // 14px 族——描边式 18px 旧形态退役（B 路定谳「胶囊语言分裂」，#36 形态语言一致性恢复）
+    check(styleSrc.includes("height: 14, paddingHorizontal: 6, borderRadius: 7") && styleSrc.includes("borderColor: \"transparent\", backgroundColor: c.tintSoft") && !styleSrc.includes("height: 18, paddingHorizontal: 7"), "④ modelChip 填充式 14px 族统一（tintSoft 底+transparent 描边，18px 描边式退役）");
     // ⑤：head 水位三档色（阈值=ctxLevel 60/85 桌面同款；色键=既有 ctx* 族）
     check(detailSrc.includes('ctxLevel === "waiting" ? c.ctxCritical : ctxLevel === "working" ? c.ctxAttention : c.ctxSafe') && !detailSrc.includes('ctxLevel === "waiting" ? c.waiting : ctxLevel === "working" ? c.working : c.dim'), "⑤ head 水位彩色分层（低绿/中黄/高红，「更多」tab gColor 同链；旧会话状态三态退役）");
     check(themeSrc.includes('ctxSafe: "#35DC97"') && themeSrc.includes('ctxSafe: "#168D60"'), "⑤ theme ctx 三档双主题色在场（既有键复用零新增）");
