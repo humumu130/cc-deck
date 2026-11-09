@@ -28,6 +28,9 @@
 #   --skills <a,b>     互审员路由技能标签（透传 review-route，同域熟手匹配用）
 #   --merge            squash-merge 收割（闸全绿后）：gh pr merge --squash（单笔纪律不变）
 #                      + PR 关闭/删分支 + review-ledger end 段行；gh 失败回落手工 squash
+#   --post-merge <pr>  W-LANEFLIP 刀二 b：手工 merge 后收口（不 merge——PR 须已 MERGED）：
+#                      只补 台账 end 段行+板卡翻 done+worktree 锁清——治「手工 gh pr merge
+#                      后翻卡/台账双断」的 19 卡滞留形态（1110 夜令）
 # 降级路：gh 不可用/远端失败 → 回落现流程（本地审+手工 squash），回执追加「PR 链路 PM
 #   补记」降级标记（PR-DEGRADED）。worker 侧回执含 PR-DEGRADED 标记=合法降级交付，PR 闸跳过。
 # 账源两本：
@@ -43,9 +46,10 @@ die() { echo "leader-harvest：$2" >&2; exit "$1"; }
 need_value() { [ -n "${2:-}" ] || die 2 "选项 $1 缺值"; }
 
 did=""; rc_opt=""; wt_opt=""; br_opt=""; base_opt=""; final_flag=""
-review_mode=0; merge_mode=0; reviews_n=1; pr_opt=""; ci_wait_opt=""; skills_opt=""; base_override=0
+review_mode=0; merge_mode=0; reviews_n=1; pr_opt=""; ci_wait_opt=""; skills_opt=""; base_override=0; post_merge=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --post-merge) need_value "$1" "${2:-}"; pr_opt="$2"; post_merge=1; merge_mode=1; final_flag=1; shift 2 ;; # W-LANEFLIP 刀二 b：手工 merge 后收口（只翻卡+台账 end+worktree 清理，不 merge——PR 必须已 MERGED）
     --receipt) need_value "$1" "${2:-}"; rc_opt="$2"; shift 2 ;;
     --worktree) need_value "$1" "${2:-}"; wt_opt="$2"; shift 2 ;;
     --branch) need_value "$1" "${2:-}"; br_opt="$2"; shift 2 ;;
@@ -483,10 +487,27 @@ if [ "$merge_mode" = 1 ]; then
   fi
   # R1 P1-1：merge 前 PR 身份双验——回执取「最后 PR URL」纯约定，可能链错 PR：head 必须
   # ==本单分支、base==本单 pr_base（缺省 dev）；查询失败（空值）=不可核验=fail-closed 拒
+  # W-LANEFLIP 刀二 a（1110 夜令·19 卡滞留根因）：head 严格等值被「派单台账分支 vs worker
+  # 自建 PR 分支前缀漂移」实锤四现（台账 feat/X vs PR fix/X——PR#92/93/97/98 全走此断链）→
+  # PM 手工 gh pr merge→翻卡/台账 end 双断。放宽两路：①前缀等价（剥 feat|fix|diag|build/
+  # type 前缀后 slug 相等=同单）；②--pr/--post-merge 显式指路=PM 人工指名链路，跳过 head
+  # 比对（**base 双验与 HARVESTGATE 闸一（=dev）不变**——身份闸的实质不变量是收割进 dev）。
   ident_head="$(gh_run pr view $GH_R "$pr_merge" --json headRefName -q .headRefName 2>/dev/null | tr -d '[:space:]')"
   ident_base="$(gh_run pr view $GH_R "$pr_merge" --json baseRefName -q .baseRefName 2>/dev/null | tr -d '[:space:]')"
   want_head="${branch#origin/}"
-  if [ "$ident_head" != "$want_head" ] || [ "$ident_base" != "$pr_base" ]; then
+  head_ok=0
+  if [ "$ident_head" = "$want_head" ] && [ -n "$want_head" ]; then
+    head_ok=1
+  elif [ -n "$pr_opt" ]; then
+    head_ok=1; echo "ℹ head 比对跳过（--pr/--post-merge 显式指路：head=${ident_head:-?} vs 账 ${want_head:-?}——base 双验照常）"
+  elif [ -n "$want_head" ] && [ -n "$ident_head" ]; then
+    sh_head="$(printf '%s' "$ident_head" | sed -E 's#^(feat|fix|diag|build)/##')"
+    sh_want="$(printf '%s' "$want_head" | sed -E 's#^(feat|fix|diag|build)/##')"
+    if [ "$sh_head" = "$sh_want" ]; then
+      head_ok=1; echo "ℹ head 前缀等价匹配：PR=${ident_head} ≈ 账 ${want_head}（type 前缀漂移容忍——W-LANEFLIP 刀二）"
+    fi
+  fi
+  if [ "$head_ok" != "1" ] || [ "$ident_base" != "$pr_base" ]; then
     echo "✗ PR 身份不符拒 merge：PR#${pr_merge##*/} head=${ident_head:-?}/base=${ident_base:-?} ≠ 本单 ${want_head:-?}/${pr_base}（回执链错 PR？--pr 显式指路核对）"
     echo "RESULT harvest=$did merge=identity-mismatch（拒：head/base 双验不过）"
     exit 1
@@ -510,6 +531,10 @@ if [ "$merge_mode" = 1 ]; then
   st_pr="$(gh_run pr view $GH_R "$pr_merge" --json state -q .state 2>/dev/null | tr -d '[:space:]')"
   if [ "$st_pr" = "MERGED" ]; then
     echo "◐ PR 已 MERGED——幂等续收（跳过 merge 动作，补台账 end/分支清/回执记）"
+  elif [ "$post_merge" = "1" ]; then
+    echo "✗ --post-merge 只收已 MERGED 的 PR（当前 state=${st_pr:-未知}）——手工 merge 完成后重跑，或改用 --merge 走机器闸全链"
+    echo "RESULT harvest=$did post-merge=state-${st_pr:-unknown}（拒：非 MERGED）"
+    exit 1
   elif [ "$st_pr" != "OPEN" ]; then
     echo "✗ PR 态=${st_pr:-未知}（非 OPEN 非 MERGED：CLOSED/草稿撤？）——不动作，人工核 $pr_merge"
     echo "RESULT harvest=$did merge=state-${st_pr:-unknown}（拒）"

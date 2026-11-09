@@ -309,7 +309,7 @@ export interface ZombieEvidenceAction {
   gid: string;
   entryId: string;
   text: string;
-  status: "claimed" | "submitted";
+  status: "claimed" | "submitted" | "backlog"; // W-LANEFLIP 刀三：backlog+dispatch_id 形态（续跑卡对账残余）
   ageMs: number;
   /** 三证首个命中（台账 done+回执 → 回执尾行合规 → dev log 词边界）；null=三证全无
    * （僵尸告警面——不静默翻，进值守视野人工核实：真长任务可忽略/真僵尸人工收口）。 */
@@ -350,7 +350,12 @@ export function zombieInvariantScan(input: {
   if (!Number.isFinite(ttl)) return { actions }; // 逃生阀开（TTL=∞）：判定族整体关闭
   for (const { gid, board } of input.boards) {
     for (const e of board.entries) {
-      if (e.status !== "claimed" && e.status !== "submitted") continue; // 形态面：非终态滞留两态
+      // 形态面：非终态滞留两态；W-LANEFLIP 刀三（1110 夜令·续跑卡滞 8h 实锤）补第三态——
+      // **backlog+dispatch_id**（曾派发过的卡）：前续单终态 failed（如 S1 误翻）后卡回 backlog、
+      // 续跑/后继单已 done 但卡 dispatch_id 还挂前续（fail 不翻卡=等重投语义）→对账残余滞留。
+      // 判据收窄：纯待办 backlog（无 dispatch_id）不动——形态免疫不变量原则保持（只看
+      // 「曾派发+超 TTL+交付证据」三事实，不引入路径形态）。
+      if (e.status !== "claimed" && e.status !== "submitted" && !(e.status === "backlog" && e.dispatch_id)) continue;
       if (skip.has(e.id)) continue; // 本拍 R3 已判定——两器不重复动作
       if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue; // 告警幂等锚（第二轮不再重复）
       const updated = Number(e.updated_at || e.ts || 0);
