@@ -42,7 +42,12 @@ export class QwenCodeAgentSession extends JsonProcessAgentSession {
 
   protected buildArgs(prompt: string): string[] {
     // 006 §3.2 已确认的基线：-p + --output-format json；其余能力仍待冒烟。
-    return ["-p", prompt, "--output-format", "json"];
+    // W-ENGREST-FIX（1109 根因考证）：headless（-p 非交互）默认档剔除审批类工具——CLI 警告
+    // 原文点名 (shell, write, edit)，init 帧 tools 恒无 write_file/edit/run_shell_command
+    //（实测基线 26 工具 8 轮空转建不成文件）；--approval-mode yolo 后 31 工具含执行类、
+    // 2 轮建成（b.txt 实证）。relay 层即权限边界（能力位 approval=false=006 口径 auto
+    // 全放行），CLI 侧 yolo 与之同义——审批策略由 relay 统一，不靠引擎交互。
+    return ["-p", prompt, "--output-format", "json", "--approval-mode", "yolo"];
   }
 }
 
