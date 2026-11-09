@@ -1885,7 +1885,11 @@ export function buildArchiveChecklist(gid: string, dir?: string): ArchiveCheckli
   const openDispatches = readDispatchLog(dir)
     .filter((e) => {
       const anchor = e.project_anchor ?? "";
-      return anchor && anchor.replace(/\/+$/, "") === g.anchor_dir.replace(/\/+$/, "") && (e.status === "running" || e.status === "dispatched");
+      // R1（P2-C·teamdissolve 审查定谳）：词表补 queued|in_review——queued（排队活单）此前
+      // 不进拦截清单=过闸后被 closeOpenDispatches 按「中断」静默收口（用户未获先收割/撤单
+      // 明示）；in_review（PR 互审期段行）拦截与收口白名单都不认=解散后审查期单悬死
+      //（台账末行恒非终态无卡无告警——孤儿形态再生面）。补齐后解散前置检查与活单白名单对齐。
+      return anchor && anchor.replace(/\/+$/, "") === g.anchor_dir.replace(/\/+$/, "") && (e.status === "running" || e.status === "dispatched" || e.status === "queued" || e.status === "in_review");
     })
     .map((e) => ({ id: e.id, tier: e.tier, status: e.status, target: e.target, ts: e.ts }));
   const b = loadBoardOrEmpty(gid, dir);

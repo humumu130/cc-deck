@@ -7574,6 +7574,12 @@ ${lines.join("\n")}
           const st = teamStateOf(g);
           if (st.dissolvedAt) return { ok: true, data: { group: g, noop: true, dissolved: true } }; // 幂等
           if (!st.has) return { ok: false, error: `「${g.name}」无团队层（仅立项目形态），无需解散` };
+          // R1（P1-A·审查定谳）：破坏性确认参数后端闸——confirm_name 必填且严格等组名
+          //（与前端解散弹窗输组名解锁同一道门；幂等分支在前=重复点击不被此拦）。此前
+          // 仅前端输组名门（纯客户端），持 token API 直调/org CLI 无门单发成毁。
+          if (str("confirm_name") !== g.name) {
+            return { ok: false, error: `confirm_name 必填且须严格等于组名「${g.name}」（解散为破坏性操作——与解散弹窗输组名同门）` };
+          }
           if (g.status === "pending") return { ok: false, error: `「${g.name}」待立项确认（pending）——去留由立项卡 ✓/✗ 决议（✗ 即归档留痕）` };
           if (this.leaderId && g.headcount.some((h) => h.session_id === this.leaderId)) {
             return { ok: false, error: `值守 PM 会话在「${g.name}」编制内——解散会自毁值守席位；先把 PM 挪到其他组（org member-add 目标组）再解散` };
@@ -7586,7 +7592,7 @@ ${lines.join("\n")}
             };
           }
           const before = g.headcount.length;
-          this.disbandGroupMembers(id); // 成员脱组全链（在途中断收口+停流+退休档案+retired 事件）
+          this.disbandGroupMembers(id, "团队解散（项目保留）"); // 成员脱组全链（在途中断收口+停流+退休档案+retired 事件；R1-P3-G：retired 档案归因与结项区分）
           const r = markTeamDissolved(id);
           if (!r.ok) return r;
           this.emitChainAudit("group-dissolve", `团队解散：「${g.name}」(${id.slice(0, 8)}) ${before} 席脱组；项目保留（状态 ${g.status} 不动，team.dissolved_at 落值）`);
@@ -8871,6 +8877,10 @@ ${lines.join("\n")}
           const g = findGroup(gid);
           if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
           if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}（挂起冻结/结项只读），不可入编` };
+          // R1（P1-B·审查定谳）：已解散组侧门拒——正门 formTeamOnGroup（projects.ts:874 邻域）
+          // 对 dissolved 拒重组，本侧门（member-add）此前无判定=正门拒侧门开，解散后仍可
+          // 入编→派单全链复活「已解散」团队（UI 承诺「团队层能力随之停用」的服务端支撑）
+          if (teamStateOf(g).dissolvedAt) return { ok: false, error: `团队已解散，不可入编（「${g.name}」编制已散、项目保留；重组走恢复链）` };
           // W-SMIMPL ①：判据收口 seatGate 单源。**归一语义变化（任务书授权「全改调它」的
           // 直接产物，W-SMDESIGN §2.2 记录的 P3-3 不对称正是旧结构病）**：本入口旧版无
           // pm 词表豁免（外部会话不可勾 pm 身份行），归一后与 create/纵深门同口径获得
@@ -9537,6 +9547,9 @@ ${lines.join("\n")}
       const g = group;
       if (!g) return { ok: false, error: `项目组不存在: ${input.gid}` };
       if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可派单（挂起冻结/结项只读）` };
+      // R1（P1-B·审查定谳）：已解散组派单拒——与 member-add 侧门拒同源（teamStateOf 单点），
+      // UI「团队层能力随之停用」的服务端闸；正门 formTeamOnGroup 同语义（projects.ts:874 邻域）
+      if (teamStateOf(g).dissolvedAt) return { ok: false, error: `团队已解散，不可派单（「${g.name}」编制已散、项目保留；重组走恢复链）` };
       tier = g.tier;
       anchor = g.anchor_dir;
       // #087 beads 思想采纳（009 §4 M2）：派单前置检查——认领既有板卡时依赖非全 done
@@ -11265,8 +11278,11 @@ ${lines.join("\n")}
   // 悬账收口（中断口径）+ 停流 + 解除归属（project_gid/dispatch_tier 清空——列表
   // 归组/徽标随散，M2 注释承诺的「只解除归属」落地）；路由表档案永存（结项后
   // 熟手池仍可查历史）；编制快照留组内（headcount 不动，结项详情可查）
-  private disbandGroupMembers(gid: string): void {
-    this.retireMembers(gid, "disbanded", "项目组结项，编制解散");
+  private disbandGroupMembers(gid: string, reasonText = "项目组结项，编制解散"): void {
+    // R1（P3-G·teamdissolve 审查定谳）：reasonText 参数化——dissolve 调用点传「团队解散
+    //（项目保留）」（解散团队≠结项项目，本批核心语义；旧档 detail「项目组结项」3 条已污染
+    // 归因留档不改写，新档不再污染）；结项/挂起两调用点维持原文案（缺省值）。
+    this.retireMembers(gid, "disbanded", reasonText);
   }
 
   // 挂起/结项成员收口共用（审查修正抽取）：reasonText = 中断回执文案

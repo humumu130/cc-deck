@@ -72,8 +72,13 @@ async function main() {
         if (!a.ok) throw new Error("立项卡批准失败");
       }
     };
-    const dissolve = (id: string, by = "web-1") =>
-      send({ command_id: randomUUID(), type: "COMMAND_ORG_ACTION", payload: { action: "dissolve", id } } as unknown as Command, by) as Promise<{ ok: boolean; error?: string; data?: { dissolved?: boolean; retired?: number; noop?: boolean; group?: { id: string; status: string; team?: { formed_at: number; dissolved_at?: number } } } }>;
+    const dissolve = (id: string, by = "web-1") => {
+      // R1-P1-A：helper 默认带 confirm_name（=组名真值——与前端弹窗提交同门）；专测无/错名走 dissolveRaw
+      const g = findGroup(id);
+      return send({ command_id: randomUUID(), type: "COMMAND_ORG_ACTION", payload: { action: "dissolve", id, confirm_name: g?.name ?? "" } } as unknown as Command, by) as Promise<{ ok: boolean; error?: string; data?: { dissolved?: boolean; retired?: number; noop?: boolean; group?: { id: string; status: string; team?: { formed_at: number; dissolved_at?: number } } } }>;
+    };
+    const dissolveRaw = (id: string, confirmName?: string, by = "web-1") =>
+      send({ command_id: randomUUID(), type: "COMMAND_ORG_ACTION", payload: { action: "dissolve", id, ...(confirmName === undefined ? {} : { confirm_name: confirmName }) } } as unknown as Command, by) as Promise<{ ok: boolean; error?: string; data?: { dissolved?: boolean; noop?: boolean } }>;
 
     // ---------- A 主路径（active 组全效果链） ----------
     console.log("A dissolve 主路径:");
@@ -186,6 +191,45 @@ async function main() {
     assert(shellSrc.includes("data-team-dissolve"), "F6 活壳入口钮在册");
     assert(cssSrc.includes(".dissolve-dialog") && cssSrc.includes(".head-dissolve"), "F7 弹窗+入口样式在册");
     void readDispatchLog;
+
+    // ---------- R 组（R1 返修：P1-A confirm_name 闸+P1-B dissolved 双拒+P2-C 词表+P3-G 档案文案） ----------
+    console.log("R 返修闸:");
+    // R1（P1-A）：无 confirm_name 拒（API 直调无门单发成毁绝迹）/错名拒/幂等不带 confirm 放行
+    const rNone = await dissolveRaw(gid); // gid=A 组（已解散态——幂等分支在 confirm 闸之前，恰好证幂等免确认）
+    assert(rNone.ok === true && rNone.data?.noop === true, `R1a 幂等分支先于 confirm 闸（重复点击不被确认拦：ok=${rNone.ok} noop=${rNone.data?.noop}）`);
+    const anchorR = mkdtempSync(join(tmpdir(), "td-anchor-r-"));
+    const ackR = await send({ command_id: "c-r1", type: "COMMAND_ORG_ACTION", payload: { action: "create", name: "TD-返修组", anchor_dir: anchorR, tier: "轻立项" } } as unknown as Command, "web-1") as { ok: boolean; data?: { group?: { id: string } } };
+    const gidR = ackR.data?.group?.id;
+    if (!gidR) throw new Error("R 前置建组失败");
+    await approveCreate(ackR as never);
+    const rBad = await dissolveRaw(gidR);
+    assert(rBad.ok === false && String(rBad.error ?? "").includes("confirm_name") && String(rBad.error ?? "").includes("TD-返修组"), `R1b 无 confirm_name 拒（err=${(rBad.error ?? "").slice(0, 60)}）`);
+    const rWrong = await dissolveRaw(gidR, "TD-错误名");
+    assert(rWrong.ok === false && String(rWrong.error ?? "").includes("confirm_name"), `R1c 错名拒（严格相等——err=${(rWrong.error ?? "").slice(0, 50)}）`);
+    // R1（P1-B）：dissolved 组 member-add+dispatch 双拒
+    const rOk = await dissolve(gidR); // helper 带对名
+    assert(rOk.ok === true && rOk.data?.dissolved === true, `R1d 带对名解散通过（ok=${rOk.ok} err=${rOk.error ?? ""}）`);
+    const rAdd = await send({ command_id: "c-r2", type: "COMMAND_ORG_ACTION", payload: { action: "member-add", gid: gidR, sid: "sess-any", role: "worker" } } as unknown as Command, "web-1") as { ok: boolean; error?: string };
+    assert(rAdd.ok === false && String(rAdd.error ?? "").includes("团队已解散，不可入编"), `R2a dissolved 组 member-add 拒（err=${(rAdd.error ?? "").slice(0, 60)}）`);
+    const rDispatch = mgr.orgAction("dispatch", { anchor: anchorR, prompt: "x", gid: gidR }) as { ok: boolean; error?: string };
+    assert(rDispatch.ok === false && String(rDispatch.error ?? "").includes("团队已解散，不可派单"), `R2b dissolved 组 dispatch 拒（err=${(rDispatch.error ?? "").slice(0, 60)}）`);
+    // R3（P2-C）：queued/in_review 在途拦截（词表对齐——queued 不再静默中断、in_review 不再悬死）
+    setGroupStatus(gidR, "archived", "R3 腾位（dissolved 组归档——项目层收口，团队层已散）"); // active 上限 5：解散不降 status 占位，归档腾名额
+    const anchorR3 = mkdtempSync(join(tmpdir(), "td-anchor-r3-"));
+    const ackR3 = await send({ command_id: "c-r3", type: "COMMAND_ORG_ACTION", payload: { action: "create", name: "TD-词表组", anchor_dir: anchorR3, tier: "轻立项" } } as unknown as Command, "web-1") as { ok: boolean; data?: { group?: { id: string } } };
+    const gidR3 = ackR3.data?.group?.id;
+    if (!gidR3) throw new Error("R3 前置建组失败: " + JSON.stringify(ackR3).slice(0, 200));
+    await approveCreate(ackR3 as never);
+    appendDispatch({ id: "disp-q-1", ts: Date.now(), tier: "随手办", target: "someone", project_anchor: anchorR3, status: "queued", session_id: "sess-q", title: "排队单" });
+    const rQ = await dissolve(gidR3);
+    assert(rQ.ok === false && String(rQ.error ?? "").includes("queued"), `R3a queued 拦截（不再静默中断——err=${(rQ.error ?? "").slice(0, 60)}）`);
+    appendDispatch({ id: "disp-q-1", ts: Date.now(), tier: "随手办", target: "someone", project_anchor: anchorR3, status: "in_review", session_id: "sess-q", title: "审查期单" });
+    const rI = await dissolve(gidR3);
+    assert(rI.ok === false && String(rI.error ?? "").includes("in_review"), `R3b in_review 拦截（不再悬死——err=${(rI.error ?? "").slice(0, 60)}）`);
+    // R4（P3-G）：dissolve 档案归因=团队解散（与结项区分——新档不污染）
+    const retired = listRetiredEvents();
+    assert(retired.some((x) => String((x as { detail?: string }).detail ?? "").includes("团队解散（项目保留）")), `R4a retired 档案 detail=团队解散（项目保留）（${retired.length} 条中 ${retired.filter((x) => String((x as { detail?: string }).detail ?? "").includes("团队解散")).length} 条新语义）`);
+    assert(smSrc.includes('disbandGroupMembers(id, "团队解散（项目保留）")'), "R4b 源码锚：dissolve 调用点传新文案");
   } finally {
     const keep = new Set(Object.keys(prev));
     for (const k of Object.keys(process.env)) if (!keep.has(k) && k.startsWith("CCR_")) delete process.env[k];

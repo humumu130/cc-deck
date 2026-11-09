@@ -1303,7 +1303,7 @@
                     dissolveFlight = true;
                     go.disabled = true;
                     go.textContent = "解散中…";
-                    const ack = await state.command("COMMAND_ORG_ACTION", { action: "dissolve", id: g.id });
+                    const ack = await state.command("COMMAND_ORG_ACTION", { action: "dissolve", id: g.id, confirm_name: String(g.name || "") }); // R1-P1-A：后端组名确认闸同门（弹窗输组名解锁=客户端门，此参数=服务端门）
                     dissolveFlight = false;
                     if (ack && ack.ok === true) {
                       closeDissolveModal();
