@@ -42,19 +42,29 @@ export interface EngineGuardVerdict {
 //   - 敏感外发：.ssh 私钥/环境凭据文件出现在 curl/wget/nc 的 URL 或 body 参位
 //   - 强制推送：git push --force / -f（改远端历史——allow-rules BASH_TOKEN_DENY 同族口径 git 族放行但 force 拦）
 const BUILTIN_PATTERNS: Array<{ id: string; re: RegExp; reason: string }> = [
-  { id: "rm-recursive", re: /\brm\s+[^;|&]*[-][rRf]/, reason: "rm 递归/强删（-r/-f 族）" },
+  // W-ENGSEC-R1 P2-4：rm 强删正则收紧为「必须含 r」（-r/-rf/-fr）——-f 单文件不拦
+  //（与宣称「单文件 rm 不拦」对齐；rm --force 无 r 同放——单文件 force 语义）。
+  { id: "rm-recursive", re: /\brm\s+[^;|&]*[-](?:[rR][fF]?|[fF][rR])/, reason: "rm 递归/强删（-r/-rf/-fr 族）" },
   { id: "privilege-esc", re: /\b(sudo|doas)\b|\bsu\s+-|\bsu\s+root/, reason: "提权执行（sudo/su/doas）" },
   { id: "pipe-execute", re: /\b(curl|wget)\b[^;|&]*\|\s*(sudo\s+)?(sh|bash|zsh|python|python3)\b/, reason: "远程载荷管道直执行（curl|sh 形态）" },
-  { id: "chmod-world", re: /\bchmod\s+(-R\s+)?777\b/, reason: "chmod 777 世界可写" },
+  // W-ENGSEC-R1 P2-3：-R 双参数序（chmod -R 777 / chmod 777 -R 同拦）
+  { id: "chmod-world", re: /\bchmod\s+(-R\s+)?777\b(\s+-R\b)?/, reason: "chmod 777 世界可写" },
   { id: "chown-recursive", re: /\bchown\s+[^;|&]*-R\b/, reason: "chown 递归改属主" },
   { id: "disk-write", re: /\bmkfs(\.\w+)?\b|\bdd\b[^;|&]*\bof=\/dev\//, reason: "盘级写入（mkfs/dd of=块设备）" },
-  { id: "secrets-exfil", re: /\b(curl|wget|nc|ncat|ssh|scp)\b[^;|&]*(\.ssh\/|id_rsa|id_ed25519|\.env\b|\.aws\/credentials|\.netrc)/, reason: "敏感凭据/私钥外发" },
-  { id: "git-force-push", re: /\bgit\s+push\s+[^;|&]*(-f\b|--force\b)/, reason: "git 强推改远端历史" },
+  // W-ENGSEC-R1 P2-2：前缀组负向后行 (?<!\.) ——「.ssh/」子串里的 ssh 不再自供前缀词
+  //（本地读/引用私钥路径（cat/stat/echo）不再被当外发拦；外发语义=网络工具在前+凭据在后）。
+  { id: "secrets-exfil", re: /(?<!\.)(?:\b(curl|wget|nc|ncat|ssh|scp)\b)[^;|&]*(\.ssh\/|id_rsa|id_ed25519|\.env\b|\.aws\/credentials|\.netrc)|(?:\.ssh\/|id_rsa|id_ed25519|\.env\b|\.aws\/credentials|\.netrc)[^;|&]*\|\s*(curl|wget|nc|ncat)\b/, reason: "敏感凭据/私钥外发" },
+  // W-ENGSEC-R1 P2-1：--force 负向前瞻 (?![\w-]) ——--force-with-lease（安全推荐形态）不再误拦
+  { id: "git-force-push", re: /\bgit\s+push\s+[^;|&]*(-f\b|--force(?![\w-]))/, reason: "git 强推改远端历史" },
 ];
 
-// 路径白名单（命令文本含这些锚时不拦该条——/tmp 作业面是测试常态：
-// rm -rf /tmp/testdir 是验收真测命令本身，default 档下 /tmp 内的 rm 放行由白名单承载）
+// 路径白名单（W-ENGSEC-R1 P1-A/P1-B：**段级白名单**——命中分段内含白名单锚才豁免该
+// 分段的该条规则，不早退不短路其他规则/分段；/tmp 作业面是测试常态）。
 const BUILTIN_PATH_ALLOW = ["/tmp/", "/private/tmp/", "/var/folders/"];
+// W-ENGSEC-R1 P1-A：常态构建/依赖目录（相对路径形态）——rm -rf node_modules 类高频
+// 开发命令（重装依赖/清构建产物）放行。**封闭词表非开放相对路径**（rm -rf .. 仍拦）；
+// 分段内同时含绝对路径/家目录/父遍历目标时不豁免（rm -rf node_modules /etc 照拦）。
+const BUILTIN_BENIGN_REL = /(?:^|[\s=])(?:node_modules|dist|build|target|\.next|\.turbo|\.parcel-cache|out|coverage|__pycache__|venv|\.venv|\.cache)(?:\/[\w.@-]+)*\b/;
 
 export function engineGuardExtraPatterns(): Array<{ id: string; source: string; re: RegExp; reason: string }> {
   // 用户可配置扩展：CCR_ENGSEC_EXTRA（分号分段，每段 pattern::reason）
@@ -73,19 +83,46 @@ export function engineGuardExtraPatterns(): Array<{ id: string; source: string; 
   return out;
 }
 
-/** 命令/工具调用文本评估。opts.allowTmpWhiteList=false 时关白名单（白名单仅命令类主评估用）。 */
+/** 命令/工具调用文本评估。opts.useBuiltinWhiteList=false 时关白名单（白名单仅命令类主评估用）。
+ * W-ENGSEC-R1 P1-B 重构：**段级评估不早退**——命令按 ;/&&/||/| 拆段，白名单豁免只
+ * 作用于「白名单族规则（rm/chmod/chown）命中的那一段」；任何规则任何段的不豁免命中
+ * 都会导致 block（sudo rm -rf /tmp/x=同段提权照拦；rm -rf /tmp/x; sudo dd=次段盘写
+ * 照拦；rm -rf /tmp/x && rm -rf ~=次段无白名单照拦）。旧版首命中白名单即 return
+ * 短路全部后续评估=复合命令把危险藏 /tmp rm 后的双形态绕过根除。 */
 export function assessEngineCommand(text: string, opts?: { extra?: Array<{ id: string; source: string; re: RegExp; reason: string }>; useBuiltinWhiteList?: boolean }): EngineGuardVerdict {
   const cmd = String(text ?? "");
   if (!cmd.trim()) return { block: false, rule: "", reason: "" };
   const extra = opts?.extra ?? engineGuardExtraPatterns();
+  const useWl = opts?.useBuiltinWhiteList ?? true;
+  const segs = cmd.split(/[;|&]+/).map((s) => s.trim()).filter(Boolean);
+  const segsOf = segs.length ? segs : [cmd];
+  const wlFamily = (id: string) => id === "rm-recursive" || id === "chmod-world" || id === "chown-recursive";
+  // 段级豁免判定：①段含作业面绝对路径锚（/tmp 族）；②R1 P1-A 常态目录相对形态——
+  // 段命中封闭词表（node_modules 等）且不含绝对/家/父遍历目标（含则不豁免——
+  // rm -rf node_modules /etc 照拦；~ 形态保守拦——家目录目标不进相对白名单）。
+  const segAllowed = (id: string, seg: string): boolean => {
+    if (!useWl) return false;
+    if (BUILTIN_PATH_ALLOW.some((a) => seg.includes(a))) return true;
+    if (!wlFamily(id)) return false;
+    if (!BUILTIN_BENIGN_REL.test(seg)) return false;
+    return !/(?:^|[\s=])(?:\/|~\/|\.\.)/.test(seg);
+  };
+  let whitelistedHit: EngineGuardVerdict | null = null;
   for (const p of BUILTIN_PATTERNS) {
-    if (!p.re.test(cmd)) continue;
-    if ((opts?.useBuiltinWhiteList ?? true) && BUILTIN_PATH_ALLOW.some((a) => cmd.includes(a)) && (p.id === "rm-recursive" || p.id === "chmod-world" || p.id === "chown-recursive")) {
-      // /tmp 等作业面白名单：rm -rf /tmp/testdir 类测试命令放行（审计仍记——white-listed 形态）
-      return { block: false, rule: p.id + ":whitelisted", reason: p.reason + "（作业面白名单路径）" };
+    if (wlFamily(p.id)) {
+      let anyHit = false;
+      for (const seg of segsOf) {
+        if (!p.re.test(seg)) continue;
+        anyHit = true;
+        if (!segAllowed(p.id, seg)) return { block: true, rule: p.id, reason: p.reason };
+      }
+      if (anyHit && !whitelistedHit) whitelistedHit = { block: false, rule: p.id + ":whitelisted", reason: p.reason + "（作业面白名单路径）" };
+    } else if (p.re.test(cmd)) {
+      // 非白名单族：全串命中即拦（sudo/管道/盘写/外发/强推无良性形态，/tmp 不豁免）
+      return { block: true, rule: p.id, reason: p.reason };
     }
-    return { block: true, rule: p.id, reason: p.reason };
   }
+  if (whitelistedHit) return whitelistedHit;
   for (const p of extra) {
     if (p.re.test(cmd)) return { block: true, rule: p.id, reason: p.reason + `（扩展规则 ${p.source.slice(0, 40)}）` };
   }

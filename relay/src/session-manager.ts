@@ -3086,12 +3086,15 @@ export class SessionManager {
       const last = this.engSecLastBlock.get(target);
       const deduped = last && last.rule === v.rule && Date.now() - last.at < 60_000;
       this.engSecLastBlock.set(target, { rule: v.rule, at: Date.now() });
-      const stopWord = face === "managed" ? "——回合已终止，下轮继续请改用安全方式完成" : "——外部会话请人工检查终端";
+      // W-ENGSEC-R1 P1-A（PM 口径「拦截不斩回合/降级改道」）：托管面退役 stop() 斩回合
+      //——误拦成本被斩首机制乘数放大（单命令误拦=整回合终止，rm -rf node_modules 类
+      // 高频开发形态每撞必斩）。降级=拒绝语入时间线（模型下轮 resume 读到改道）+审计
+      //+通知；exec 型转录本为事后事件（命令多已执行完），斩对触发命令本体无损益、
+      // 只杀后续合法工作——斩退役为纯增益。能力边界：同回合后续命令不再被阻断（原斩
+      // 面的残余价值），由档位体系与审计可观测性承担。
+      const stopWord = face === "managed" ? "——请改用安全方式完成" : "——外部会话请人工检查终端";
       const line = "⛔ 已被 CC Deck 安全策略拦截：" + v.reason + "（规则 " + v.rule + " · 档位 " + mode + "）" + stopWord;
       if (face === "managed") {
-        // 斩回合（stop 尽力而为）+拦截语入托管时间线（模型下轮 resume 读到改道）
-        const agent = (target as { agent?: { stop?: () => Promise<void> } }).agent;
-        try { void agent?.stop?.().catch(() => {}); } catch { /* 斩尽力而为 */ }
         const entry: LogEntry = { ts: Date.now(), kind: "system", text: line };
         const managed = target as unknown as { logs: LogEntry[] };
         managed.logs.push(entry);
@@ -3104,12 +3107,12 @@ export class SessionManager {
         rule: v.rule, reason: v.reason, action: face === "managed" ? "blocked" : "notified-only",
         detail: face,
       });
-      this.emitChainAudit("engine-tool-blocked", `engine=${st.engine} session=${sid.slice(0, 8)} face=${face} 规则=${v.rule} 档位=${mode}——${v.reason}（${face === "managed" ? "回合已斩" : "external 无句柄仅通知"}）`);
+      this.emitChainAudit("engine-tool-blocked", `engine=${st.engine} session=${sid.slice(0, 8)} face=${face} 规则=${v.rule} 档位=${mode}——${v.reason}（${face === "managed" ? "已拒绝+改道语入时间线" : "external 无句柄仅通知"}）`);
       if (!deduped) {
         try {
           this.upsertNotification("system", "engine-tool-blocked", sid + ":" + v.rule, {
             title: "危险命令已拦截（" + st.engine + "）",
-            body: truncate(`会话 ${sid.slice(0, 8)} 尝试执行被安全策略拦截：${v.reason}。${face === "managed" ? "回合已终止，模型下轮将改道。" : "外部会话无进程句柄，请人工检查终端。"}`, 200),
+            body: truncate(`会话 ${sid.slice(0, 8)} 尝试执行被安全策略拦截：${v.reason}。${face === "managed" ? "拒绝语已入时间线，模型下轮将改道（不斩回合）。" : "外部会话无进程句柄，请人工检查终端。"}`, 200),
             severity: "waiting", group: "attention", actionable: true, sessionId: sid, domain: "session", returnPath: "sessions",
           });
         } catch { /* 通知尽力而为 */ }

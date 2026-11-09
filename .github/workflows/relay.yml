@@ -99,9 +99,9 @@ D
             // W-P2BATCH4-R1 方向②（丢键向——A 审备案法）：核心键锚定+键数下限。
             // 全量反向不可用（pkg 158 个 test:* 大量设计态排除≠精选矩阵）；键丢=CI 静默
             // 少跑（#46 R4 实锤形态）——锚定集与上行 script: [...] 同源维护（键增改这里）。
-            const anchored = ["test:boardtruth","test:laneflip","test:boardrecon","test:dutybackoffr2","test:277-team-create-redesign","test:artifacts-dead","test:autorevive","test:bridge","test:bus","test:cardlife","test:subagent","test:cardlifer2","test:cloud","test:codex","test:deliver-session","test:dispatch","test:dispatchbomb","test:dutywire","test:history","test:inboxv1","test:leader","test:linkquality","test:org","test:aggregatev2","test:org-defects","test:pmseat","test:pmappoint-gap","test:prbackflow","test:prchip","test:projects","test:prreview","test:reviewseat","test:routing","test:settings","test:settings-ws","test:sqlite-resilience","test:teampolish","test:teamdissolve"];
+            const anchored = ["test:boardtruth","test:laneflip","test:boardrecon","test:dutybackoffr2","test:277-team-create-redesign","test:artifacts-dead","test:autorevive","test:bridge","test:bus","test:cardlife","test:subagent","test:cardlifer2","test:cloud","test:codex","test:deliver-session","test:dispatch","test:dispatchbomb","test:dutywire","test:history","test:inboxv1","test:leader","test:linkquality","test:org","test:aggregatev2","test:org-defects","test:pmseat","test:engsec","test:pmappoint-gap","test:prbackflow","test:prchip","test:projects","test:prreview","test:reviewseat","test:routing","test:settings","test:settings-ws","test:sqlite-resilience","test:teampolish","test:aggbug","test:engdista","test:teamdissolve"];
             const dropped = anchored.filter(k => !matrix.includes(k));
             if (dropped.length) { console.error("ERR: 矩阵丢键（删整键盲区——键丢=测试静默不跑）: [" + dropped.join(", ") + "]（锚定集随 script 行同源维护）"); process.exit(1); }
-            if (matrix.length < 36) { console.error("ERR: 矩阵键数 " + matrix.length + " < 36 下限（批量丢键形式——键增同步抬锚定值；W-BOARDTRUTH5 增 boardrecon+锚定债补齐 aggregatev2/pmappoint-gap 抬至 36）"); process.exit(1); }
-            console.log("OK: 矩阵 " + matrix.length + " 键双向守卫过（拼写向全注册+丢键向 36 锚定键全在+键数下限 36）");
+            if (matrix.length < 41) { console.error("ERR: 矩阵键数 " + matrix.length + " < 41 下限（批量丢键形式——键增同步抬锚定值；W-ENGSEC-R1 补齐 engsec+还 teamdissolve/aggbug/engdista 锚定债抬至 41）"); process.exit(1); }
+            console.log("OK: 矩阵 " + matrix.length + " 键双向守卫过（拼写向全注册+丢键向 41 锚定键全在+键数下限 41）");
           '
