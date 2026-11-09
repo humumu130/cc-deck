@@ -137,10 +137,10 @@ export const LIGHT: ThemeColors = {
   panel: "#FFFFFF",
   panel2: "#ECF1F8",
   line: "#E2E9F2",
-  lineStrong: "#C8D5E5",
+  lineStrong: "#B2C2DA", // W-GRAYSCALE（1109 沉淀）：#C8D5E5 对 bg 1.35 差底界 →#B2C2DA=1.64（head B 路 P3 提档，panel 侧 1.81）
   text: "#34445C",
   textStrong: "#16202F",
-  dim: "#66758E",
+  dim: "#5F6D85", // W-GRAYSCALE（1109 沉淀）：#66758E 对 bg 4.23 差 AA 正文线 0.27（head B 路实锤）→#5F6D85=4.75（panel 5.23；蓝灰族保相同向加深，层级序 text 8.95>dim 4.75>faint 2.80 全保）
   faint: "#8494AC",
   brandA: "#B85228",
   brandB: "#96391A",
