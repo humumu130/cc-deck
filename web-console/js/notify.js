@@ -334,7 +334,7 @@
                     if (headSub.textContent !== next) headSub.textContent = next;
                   }
                   if (railBadge) {
-                    railBadge.textContent = count > 99 ? "99+" : String(count) /* visualfix（1104 V-P2-5）：659 直出=角标宽超铃铛本体遮挡——99+ 封顶（aria/title 保真全数） */;
+                    railBadge.textContent = count > 9 ? "9+" : String(count) /* visualfix（1104 V-P2-5）→W-WBARSLIM 顺刀再收紧：99+→9+（C 路 1109 权重再平衡——它是全图唯一高饱和色；aria/title 保真全数不变） */;
                     railBadge.hidden = count === 0;
                     railBadge.setAttribute("aria-label", "通知有 " + count + " 项需行动");
                     railBadge.setAttribute("title", "通知 · " + count + " 项需行动");

@@ -5419,7 +5419,7 @@
                         if (dir) dir.textContent = String(text || "");
                         if (time) time.textContent = "";
                       }
-                      window.__ccDeck005SetWindowbarHint?.("session", "");
+                      // W-WBARSLIM：session 域 hint 清空写点退役——head-sub [data-sub-dir]/[data-sub-time] 直写已是真路径（上行）
                     },
                     headActions: $id("session-head-actions"), // W-UIFB（合并裁决）：开关随 i=3 定位 head 右侧
                     ctxMeter: $id("session-ctx-meter"), // UIPOLISH2 件四：head mini 水位胶囊（静态引用，同 modelCapsule 口径）

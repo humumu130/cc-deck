@@ -774,11 +774,10 @@
                         + "<span>输出物 " + artifacts.length + "</span>" + '<span class="sep">·</span>'
                         + "<span>验收单 " + bridge.accepts.length + (open ? " · " + open + " 张未闭环" : "") + "</span>";
                     }
-                    window.__ccDeck005SetWindowbarHint?.("project", "目录 " + shortenDir(entry.anchor) + " · realpath 已归一"); // ⑥a-5 终态：追加计数已收口进头部 meta 行
+                    // W-WBARSLIM：project 域 hint 写点退役（目录/realpath 摘要已在项目卡与 head 源名在场）
                   } else {
                     if (liveNode) liveNode.hidden = true;
                     if (metaNode) metaNode.hidden = true;
-                    window.__ccDeck005SetWindowbarHint?.("project", "—");
                   }
                 }
 
@@ -954,7 +953,7 @@
                     els.queue.replaceChildren(bannerNode(bootBanner));
                     els.name.textContent = "项目";
                     els.source.textContent = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName) : bridge.relayName; // 件十三：命名映射统一
-                    window.__ccDeck005SetWindowbarHint?.("project", waiting);
+                    // W-WBARSLIM：project 等待态 hint 写点退役——bootBanner（下行 replaceChildren）已承载同文案
                     if (els.body) els.body.replaceChildren(nodesFrom('<div class="proj-skel" role="status" aria-label="项目数据等待同步"><div class="skel-line w40"></div><div class="skel-line w90"></div><div class="skel-line w70"></div><div class="skel-cards"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div></div>'));
                     const foot = section.querySelector(".workspace-footer");
                     if (foot) foot.style.display = "none"; // W3P-P1-1④：desktop-only-note 等数据到位再显（防孤悬）

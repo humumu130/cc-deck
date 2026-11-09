@@ -471,29 +471,14 @@
         desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
         railButtons.forEach((button) => button.classList.toggle("active", button.dataset.domain === domain));
         // B16 域切换 toast 退役：rail 高亮已是即时可瞥反馈，弹toast 反遮内容
-        renderWindowbarHint();
+        // W-WBARSLIM（1109 三路裁决案② D10 下沉）：renderWindowbarHint 域切换重渲随 hint 位退役——各域提示真路径=第三列 head-sub/横幅直写（session [data-sub-dir]/team head-sub meta/project bootBanner），不再经顶栏集中路由。
       }
 
-      // ---------- FB2：workspace-sub 出舱入顶栏——各域提示文字集中路由到 windowbar 右侧 ----------
-      // 每域存自己的最新文案，展示活动域的那条；windowbar 全局唯一，避免后写覆盖前域。
-      // 域各在独立 <script> 块（函数声明不跨块），写点经 window.__ccDeck005SetWindowbarHint 进来
-      const windowbarHintStore = { session: "加载中…", team: "尚未收到团队快照", project: "等待 relay SNAPSHOT…", settings: "" }; /* #119：notify 域改弹窗，不再占域提示位 */
-      function setWindowbarHint(domain, text) {
-        if (!(domain in windowbarHintStore)) return;
-        windowbarHintStore[domain] = String(text || "");
-        renderWindowbarHint();
-      }
-      function renderWindowbarHint() {
-        const el = document.getElementById("windowbar-hint");
-        const active = document.querySelector(".desktop-screen.active")?.id.replace(/^d-/, "");
-        const text = active ? (windowbarHintStore[active] || "") : "";
-        // W-TOPBAR ②：会话域提示（工作目录/最近活动，随会话切换变来变去）改路由第三列 head
-        // 的 .head-meta——顶栏源胶囊右侧不再抖动；其余域维持顶栏右簇静态摘要
-        const meta = document.getElementById("session-head-meta");
-        if (meta) meta.textContent = active === "session" ? text : "";
-        if (el) el.textContent = active === "session" ? "" : text;
-      }
-      window.__ccDeck005SetWindowbarHint = setWindowbarHint;
+      // ---------- FB2 hint 集中路由——W-WBARSLIM（1109 三路裁决案② D10 下沉）退役 ----------
+      // windowbar 瘦身为纯 chrome 条后 hint 域提示位退役（C 路 1109 实证死位：session 已走
+      // 第三列 head（W-TOPBAR ②/W-UIFB ③ 合并裁决 head-sub）；team/project 内容本就在各域
+      // 第三列头/横幅在场=原写点重复投递）。windowbarHintStore/renderer/__ccDeck005SetWindowbarHint
+      // 跨块写点（bridge-core×3/team×1/session×1/settings×1）全数清退，grep 零残留为验收点。
       window.__ccDeck005SourceDisplayName = sourceDisplayName; // W-UIFB ①：跨块消费（head 源徽标「本机」同口径）
 
       function openMobileRoot(root) {
@@ -619,11 +604,25 @@ function connectLan(ctx) {
           || document.querySelector(".desktop-frame .source-switcher [data-source-menu]")?.closest(".source-switcher")
           || null;
       }
+      // W-WBARSLIM：侧栏头宿主的菜单防裁——.queue 容器 overflow:hidden 会横向裁掉 276px 下拉，
+      // 该宿主开菜单时改 fixed 定位（trigger rect 实算坐标）；windowbar/mobile 宿主维持原 absolute。
+      function placeSourceMenu(menu) {
+        if (!menu.closest(".queue")) return;
+        const trigger = menu.closest(".source-switcher")?.querySelector("[data-source-trigger]");
+        if (!trigger) return;
+        const r = trigger.getBoundingClientRect();
+        menu.style.position = "fixed";
+        menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 284)) + "px";
+        menu.style.top = (r.bottom + 8) + "px";
+        menu.style.zIndex = "80";
+      }
       function openSourceMenu() {
         closeTransientOverlays();
         const switcher = activeSourceSwitcher();
         if (!switcher) return;
-        switcher.querySelector("[data-source-menu]")?.classList.add("open");
+        const menu = switcher.querySelector("[data-source-menu]");
+        menu?.classList.add("open");
+        if (menu) placeSourceMenu(menu); // W-WBARSLIM：侧栏头宿主 fixed 防裁
         switcher.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "true");
       }
       function closeSourceMenu(switcher) {
@@ -709,7 +708,7 @@ function connectLan(ctx) {
         document.querySelectorAll(".source-switcher").forEach((switcher) => {
           // W-STATUSBAR-OVERHAUL：桌面 windowbar 壳=状态胶囊（未连接后缀「· 未连接」+
           // 多源下拉箭头）；移动 sourcebar 壳保持旧形态（纯源名）
-          const isBar = !!switcher.closest(".windowbar");
+          const isBar = !!switcher.closest(".windowbar, .queue-source"); /* W-WBARSLIM：胶囊宿主自 windowbar 迁会话侧栏头 .queue-source——未连接后缀/多源箭头逻辑随宿主走 */
           const multiSource = !!(cloudLinked || pairedCloud.length);
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
           switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
@@ -1339,7 +1338,7 @@ function connectLan(ctx) {
           panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === key));
           cards.forEach((card, cardIndex) => card.classList.toggle("selected", cardIndex === index));
           if (title) title.textContent = SETTINGS_TITLES[index] || "设置";
-          setWindowbarHint("settings", ""); // 件十二-A：设置域顶栏不挂 hint（副题 mono 文本曾被误读为按钮点击无反应；面板语义由第二列卡承载，与其他域统一）
+          // W-WBARSLIM：setWindowbarHint("settings","") 随 hint 位退役（件十二-A 语义已恒真）
           if (segmentBar) segmentBar.style.display = key === "connections" ? "flex" : "none";
         };
         cards.forEach((card, index) => { card.dataset.settingsIndex = String(index); });
@@ -4537,7 +4536,17 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         } catch { clearTimeout(timer); done(false); }
       }
       document.addEventListener("click", (event) => {
-        // W-STATUSBAR-OVERHAUL B4：点击 300ms 单圈反馈（reflow 重启连点；busy 态长转不受影响）
+        // W-WBARSLIM（1109 三路裁决案②）：断连态连接点=重连 affordance——点胶囊上的连接图标
+        // 直接触发重拉（就近修它），不再开菜单；stopImmediatePropagation 防冒泡到同节点后注册的
+        // source-menu 监听把菜单顶开。conn-wait 不拦（自动重连中，人为重启=噪音）。
+        const connDot = event.target.closest("[data-source-conn]");
+        if (connDot && connDot.classList.contains("conn-fail")) {
+          event.stopImmediatePropagation();
+          refreshAllData();
+          return;
+        }
+        // W-STATUSBAR-OVERHAUL B4→W-WBARSLIM：刷新宿主自顶栏常驻钮迁源菜单「重新连接」项
+        //（点击 300ms 单圈反馈；busy 态长转不受影响）
         const refreshBtn = event.target.closest("[data-refresh-all]");
         if (refreshBtn) {
           const ico = refreshBtn.querySelector(".icon-inline");
@@ -4561,7 +4570,11 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           const trigger = target.closest("[data-source-trigger]");
           if (trigger) {
             const menu = switcher.querySelector("[data-source-menu]");
-            if (menu) { const open = menu.classList.toggle("open"); trigger.setAttribute("aria-expanded", String(open)); }
+            if (menu) {
+              const open = menu.classList.toggle("open");
+              if (open) placeSourceMenu(menu); // W-WBARSLIM：侧栏头宿主 fixed 防裁
+              trigger.setAttribute("aria-expanded", String(open));
+            }
             return;
           }
           const option = target.closest(".source-option[data-source-choice]");
