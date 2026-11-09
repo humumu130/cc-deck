@@ -65,19 +65,29 @@ export interface HarvestEvidence {
 /** W-ORPHANCARD 刀二（1109 用户质问治本）：收割闭链基族键——去代尾/审查尾/复审尾
  * （多重尾循环剥，w-xxx-r1-review → w-xxx）。原 cardlife 内联 baseSlug 只剥 -rN——
  * 审查单卡（w-xxx-review）不归主单基族=终代收割不闭审查卡（1109 实锤 9 张滞留）。
- * 提取为导出纯函数：cardlife 段与对账器同源单点，测试直测。 */
+ * 提取为导出纯函数：cardlife 段与对账器同源单点，测试直测。
+ * R1（审查 P2-2）：review/audit 吃数字代尾（-review2=今日现行重派约定形态——1109
+ * W-HEADFIX-REVIEW2 真单；regex 词后带数字旧白名单不匹配漏网）。-fin/-re/-b 低频
+ * 形态不扩（误伤面大于收益），漏网卡走 zombie TTL 三证兜底（boardrecon 保守路径）。 */
 export function chainBaseSlug(key: string): string {
   let s = String(key || "");
-  for (let i = 0; i < 3; i++) s = s.replace(/-(r\d+|review|audit)$/, "");
+  for (let i = 0; i < 3; i++) s = s.replace(/-(r\d+|review\d*|audit\d*)$/, "");
   return s;
 }
 
-/** W-ORPHANCARD 刀一：续跑唤醒复用查找——title 以「续跑 w-xxx」起时在板找同基族卡
- * （任意状态——终态卡续跑=复活原卡不建新卡）。返回卡 id 或 null（null=首次形态照旧建新卡）。 */
+/** W-ORPHANCARD 刀一：续跑唤醒复用查找——title 含续跑词时在板找同基族卡（任意状态
+ * ——终态卡续跑=复活原卡不建新卡）。返回卡 id 或 null（null=非续跑形态/板上无原卡，
+ * 照旧建新卡）。
+ * R1（审查 P0 定谳·双形态触发）：首版正则 `^续跑\s+w-` 只吃前缀式，而生产真身 7 张
+ * 全后缀式「W-XXX 续跑」（1109 现板逐张实勘+当日台账 50 笔零前缀式）——0/7 命中空转。
+ * 现触发=title 含续跑词（词边界 (?:^|\s)续跑(?:\s|$)——「不诺自动续跑」类正文词不误触，
+ * leader 台账 311 笔唯一续跑词命中即该形态）+ raw=harvestKeyOf 首枚 w- 键（前后缀词
+ * 天然不进键，刀三锁测在案）。 */
 export function findContCard(entries: Array<{ id: string; text?: string }>, title: string): string | null {
-  const m = /^续跑\s+(w-[a-z0-9][a-z0-9-]{1,40})/i.exec(String(title || "").trim());
-  if (!m) return null;
-  const raw = m[1].toLowerCase();
+  const t = String(title || "").trim();
+  if (!/(?:^|\s)续跑(?:\s|$)/.test(t)) return null; // 续跑词边界（双形态通吃：前缀式/后缀式）
+  const raw = harvestKeyOf(t);
+  if (!raw.startsWith("w-")) return null; // 含续跑词但无 w- 键（如「续跑 巡查员上岗」）→非本面
   const base = chainBaseSlug(raw);
   let baseHit: string | null = null;
   for (const e of entries) {
