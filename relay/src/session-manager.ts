@@ -7688,11 +7688,24 @@ ${lines.join("\n")}
                     const ct = Number(hit.entry.ts || 0);
                     return ct > 0 && xt > 0 && xt < ct && ct - xt < CHAIN_WINDOW_MS;
                   });
+                  const closedIds: string[] = [];
+                  const skippedAlive: string[] = [];
                   for (const pv of prevs) {
+                    // W-ORPHANCARD-R1 P1-1（审查 t-ea2391a7 定谳·误翻守卫）：claimed=可能仍在跑
+                    //（双审并行常态：A 路先收割 R1 时 B 路还在审——审查重演实锤）。活性闸：owner
+                    // 近窗有事件=活→跳过闭链（板面不谎「已完成」）+告警审计留其自然收口；死会话/
+                    // 无 owner 照翻（波②治理保真——9 张滞留审查卡多为死会话 claimed）。
+                    // submitted/ready_to_install=交付态无「在跑」语义，不受此闸。
+                    if (pv.status === "claimed" && pv.owner_session && sessionActiveByEvents(this.cfg.dataDir, pv.owner_session)) {
+                      skippedAlive.push(pv.id);
+                      continue;
+                    }
                     // W-CARDLIFE-R3 P2-2：同款 note 拼接保留（前代卡的打回留痕不被闭链覆写洗掉）
                     upsertBoardEntry(hit.gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}[cardlife-r2 ${today}] 同链闭卡：终代 ${hit.entry.id} PR merged（链基 ${base}）`, journal_action: "cardlife-chain-close" });
+                    closedIds.push(pv.id);
                   }
-                  if (prevs.length) this.emitChainAudit("cardlife-chain-close", `终代 ${hit.entry.id} PR merged→同链闭前代 ${prevs.length} 张（${prevs.map((x) => x.id).join(",")}）`);
+                  if (skippedAlive.length) this.emitChainAudit("cardlife-chain-skip-live", `终代 ${hit.entry.id} PR merged→同链在途卡跳过 ${skippedAlive.length} 张（${skippedAlive.join(",")}）——owner 会话活跃（双审并行在跑）不误翻，待其自然收口`);
+                  if (closedIds.length) this.emitChainAudit("cardlife-chain-close", `终代 ${hit.entry.id} PR merged→同链闭前代 ${closedIds.length} 张（${closedIds.join(",")}）`);
                 }
                 this.emitChainAudit("cardlife-pr-merged", `卡 ${hit.entry.id} submitted→done（PR merged 自动收口——转移内建于动作，机械手降级为兼容路径）`);
                 this.emitBoard(hit.gid);
