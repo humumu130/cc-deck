@@ -1137,7 +1137,7 @@
                   // 活跃（与团队卡状态胶囊整合同族去重）；[data-team-status] 元素随标签退役
                   query("[data-team-status-dot]").className = "status-dot " + (project?.status === "pending" ? "waiting" : project?.status === "active" ? "done" : "");
                   // 1026 用户裁定：head 源徽标移除（列表卡 src-cap 已有源信息，head 冗余）——data-team-source 元素与填充一并退役
-                  window.__ccDeck005SetWindowbarHint?.("team", project ? [tierDisplay(project.tier), window.__ccDeck005PathUi.displayPath(project.anchor_dir), members(project).length + " 个编制席位", "待确认 " + count + " 项"].filter(Boolean).join(" · ") : "确认单由用户决议，不自动执行。");
+                  // W-WBARSLIM：team 域 hint 写点退役——同款 meta（tier/路径/编制/待确认）已在第三列 head-sub data-team-meta 在场（上行 meta.hidden 分支），此写点属重复投递
                   const memberHtml = sortRoster(members(project), project).map((m) => memberMarkup(m, project)).join("") || banner("暂无编制数据");
                   const activityHtml = activityMarkup(project);
                   const activityCompactHtml = activityMarkup(project, { compact: true });
