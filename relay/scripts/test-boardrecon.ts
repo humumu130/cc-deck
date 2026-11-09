@@ -7,7 +7,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
-import { reconcileBoardCards, type ReconSession, type ReconDispatchRow } from "../src/board-recon.js";
+import { reconcileBoardCards, type ReconSession, type ReconDispatchRow, zombieInvariantScan, zombieTtlMs, ZOMBIE_NOTE_MARK, reconHeartbeatLine, type HarvestEvidence } from "../src/board-recon.js";
 import type { BoardEntry } from "../src/projects.js";
 import type { ProjectBoard } from "../src/projects.js";
 
@@ -117,6 +117,105 @@ async function main(): Promise<void> {
     const sessions: ReconSession[] = [{ session_id: "s-1", status: "WORKING" }];
     const r2 = reconcileBoardCards({ boards: [{ gid: "g", board: mkBoard([mkEntry({ owner_session: "s-1", status: "claimed" })]) }], sessions, dispatchLog: [], now });
     assert(r2.mismatch === null && r2.actions.length === 0, `账实相符：零告警零动作（实 ${JSON.stringify(r2.mismatch)}/${r2.actions.length}）`);
+  }
+  console.log("④ W-BOARDTRUTH5 刀二：形态免疫不变量对账（claimed/submitted 超 TTL×三证任一强翻）:");
+  {
+    // 三证各一卡 + 三证全无 + 未超 TTL + 非 claimed/submitted 态（六卡一板同拍）
+    const harvest: HarvestEvidence = {
+      doneLedger: new Map([["w-lead", { count: 1, hasReceipt: true }]]), // 证据①：台账 done+回执
+      devLogText: "abc123 [任务] w-devlog 修板 (#70)\nabc124 [任务] w-devlog-r2 修板 (#71)", // 证据②（含超串干扰 w-devlog-r2）
+      receiptSlugs: new Set(["w-receipt"]), // 证据③：回执尾行合规
+    };
+    const b = mkBoard([
+      mkEntry({ id: "z1", status: "claimed", text: "[任务] W-LEAD 修板", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "z2", status: "submitted", text: "[任务] W-RECEIPT 修板", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "z3", status: "claimed", text: "[任务] W-DEVLOG 修板", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "z4", status: "claimed", text: "[任务] W-NONE 修板", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "z5", status: "claimed", text: "[任务] W-LEAD 修板（嫩）", updated_at: now - 1 * 3600_000 }),
+      mkEntry({ id: "z6", status: "backlog", text: "[任务] W-LEAD 修板（陈积）", updated_at: now - 9 * 3600_000 }),
+    ]);
+    const r = zombieInvariantScan({ boards: [{ gid: "g", board: b }], harvest, now, ttlMs: 6 * 3600_000 });
+    assert(r.actions.find((a) => a.entryId === "z1")?.evidence === "ledger-done", "①claimed+台账 done+回执 → 强翻证据 ledger-done（五现 4/10 僵尸=claimed 形态——R3 盲区本刀收辖）");
+    assert(r.actions.find((a) => a.entryId === "z2")?.evidence === "receipt-line", "②submitted+回执尾行合规 → 强翻证据 receipt-line");
+    assert(r.actions.find((a) => a.entryId === "z3")?.evidence === "dev-log", "③claimed+dev log 命中 → 强翻证据 dev-log");
+    assert(r.actions.find((a) => a.entryId === "z4")?.evidence === null, "④三证全无 → evidence=null（僵尸告警面——不静默翻，防误杀真长任务）");
+    assert(!r.actions.some((a) => a.entryId === "z5"), "⑤未超 TTL 零判定（6h 内交付/审查是常态节奏）");
+    assert(!r.actions.some((a) => a.entryId === "z6"), "⑥backlog 态不辖（只有 claimed/submitted 两态在刀二辖区）");
+    // 形态免疫正证：z1/z3 无 dispatch_id/no_pr 任何路径痕迹——判据零看路径字段
+    const z1src = r.actions.find((a) => a.entryId === "z1");
+    assert(!!z1src && !("dispatch_id" in z1src) && !("no_pr" in z1src), "⑦判据形态无关（action 无路径字段——只看卡态/龄/证据三不变量）");
+  }
+
+  console.log("④b 刀二护栏（词边界/时戳/标记幂等/回落碰撞/skip 让位）:");
+  {
+    const harvest: HarvestEvidence = { doneLedger: new Map(), devLogText: "xxx [任务] w-super 修板 (#80)", receiptSlugs: new Set() };
+    // 词边界：卡键 w-super≠log 里 w-super（命中）；反例键 w-sup 不被 w-super 超串误命中
+    const b = mkBoard([
+      mkEntry({ id: "k1", status: "claimed", text: "[任务] W-SUP 修板", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "k2", status: "claimed", text: "[任务] W-SUPER 修板", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "k3", status: "claimed", text: "[任务] W-MARK 修板", updated_at: now - 7 * 3600_000, note: `${ZOMBIE_NOTE_MARK} 11/09] 滞留 7h 三证全无——已告警不静默翻` }),
+      mkEntry({ id: "k4", status: "claimed", text: "[任务] W-NOAGE 修板", ts: 0, updated_at: 0 }),
+      mkEntry({ id: "k5", status: "claimed", text: "人工板卡无slug锚", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "k6", status: "claimed", text: "人工板卡无slug锚", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "k7", status: "claimed", text: "[任务] W-SKIP 让位卡", updated_at: now - 7 * 3600_000 }),
+    ]);
+    const r = zombieInvariantScan({ boards: [{ gid: "g", board: b }], harvest, now, ttlMs: 6 * 3600_000, skipEntryIds: new Set(["k7"]) });
+    assert(r.actions.find((a) => a.entryId === "k2")?.evidence === "dev-log", "词边界正例：w-super 命中 log");
+    assert(r.actions.find((a) => a.entryId === "k1")?.evidence === null, "词边界反例：w-sup 不被 w-super 超串误命中（假证据面封死）");
+    assert(!r.actions.some((a) => a.entryId === "k3"), "僵尸标记 note 在场 skip（告警幂等锚——第二轮不重复）");
+    assert(!r.actions.some((a) => a.entryId === "k4"), "无时戳卡 skip（不臆断）");
+    assert(!r.actions.some((a) => a.entryId === "k5" || a.entryId === "k6"), "回落键全板碰撞 skip（前 10 字键跨卡碰撞=证据归属不可分辨）");
+    assert(!r.actions.some((a) => a.entryId === "k7"), "skipEntryIds 让位（本拍 R3 已判定卡——两器不重复动作）");
+  }
+
+  console.log("④c 刀二幂等（两轮零重复副作用）:");
+  {
+    const harvest: HarvestEvidence = { doneLedger: new Map([["w-idem", { count: 1, hasReceipt: true }]]), devLogText: "", receiptSlugs: new Set() };
+    const round1 = mkBoard([
+      mkEntry({ id: "i1", status: "claimed", text: "[任务] W-IDEM 强翻卡", updated_at: now - 7 * 3600_000 }),
+      mkEntry({ id: "i2", status: "claimed", text: "[任务] W-IDEM2 告警卡", updated_at: now - 7 * 3600_000 }),
+    ]);
+    const r1 = zombieInvariantScan({ boards: [{ gid: "g", board: round1 }], harvest, now, ttlMs: 6 * 3600_000 });
+    assert(r1.actions.length === 2 && r1.actions.find((a) => a.entryId === "i1")?.evidence === "ledger-done" && r1.actions.find((a) => a.entryId === "i2")?.evidence === null, "第一轮：1 强翻+1 告警判定");
+    // 模拟应用：i1 翻 done（离辖）+i2 note 标记（幂等锚）——第二轮板面
+    const round2 = mkBoard([
+      { ...round1.entries[0], status: "done" as never, updated_at: now },
+      { ...round1.entries[1], note: `${ZOMBIE_NOTE_MARK} 11/09] 滞留 7h 三证全无——已告警` },
+    ]);
+    const r2 = zombieInvariantScan({ boards: [{ gid: "g", board: round2 }], harvest, now, ttlMs: 6 * 3600_000 });
+    assert(r2.actions.length === 0, "第二轮零判定（翻后离辖+标记锚滤除——两轮零重复副作用，幂等成立）");
+  }
+
+  console.log("⑤ W-BOARDTRUTH5 刀三：生效探针心跳行 + 常驻挂点源锚:");
+  {
+    const line = reconHeartbeatLine("auto", 3, 2, 1, 1, 0);
+    assert(line.startsWith("alive mode=auto") && line.includes("判定 3") && line.includes("僵尸面 1") && line.includes("强翻 1/告警 0"), `心跳行格式与计数（实 ${line}）`);
+    assert((() => { const l = reconHeartbeatLine("off", 0, 0, 0, 0, 0); return l.includes("mode=off") && l.includes("判定 0"); })(), "空转轮/off 档心跳也发（timer 活体证明——「建了从未跑」当日暴露）");
+    const pt = readFileSync(join(process.cwd(), "src", "patrol.ts"), "utf-8");
+    assert(pt.includes("CCR_BOARD_RECON_DELAY_MS") && pt.includes("CCR_BOARD_RECON_MS") && pt.includes("this.runBoardRecon();"), "刀一常驻挂点在（错峰首轮 delay+每小时稳态双 timer+runFull 轮头三口同体）");
+    assert(pt.includes('"board-recon-loop"'), "刀三心跳 emit 在（audit 可检索键 board-recon-loop）");
+    assert(pt.includes("zombieInvariantScan") && pt.includes('"boardtruth5-zombie-done"'), "刀二应用面在（强翻 journal action 可检索）");
+    // 结构锚：runBoardRecon 方法体必须在 runFull 的 stale 闭行之后（①既有结构断言同源——
+    // 方法提取后仍满足「对账块与 stale 分支平级或其后」）
+    const ptLines = pt.split("\n");
+    const staleClose = ptLines.findIndex((l) => l.includes("else this.resolve(`worker-stale`)"));
+    const reconMethod = ptLines.findIndex((l) => l.includes("private runBoardRecon(): void"));
+    assert(staleClose >= 0 && reconMethod > staleClose, `runBoardRecon 方法体位于 stale 闭行后（${reconMethod} > ${staleClose}——①组结构断言兼容）`);
+  }
+
+  console.log("⑤b 刀二 TTL 配置读取（CCR_BOARD_ZOMBIE_TTL_H）:");
+  {
+    process.env.CCR_BOARD_ZOMBIE_TTL_H = "1";
+    assert(zombieTtlMs() === 3600_000, "env=1 → 1h");
+    process.env.CCR_BOARD_ZOMBIE_TTL_H = "0";
+    assert(zombieTtlMs() === Number.POSITIVE_INFINITY, "显式 0=关（逃生阀——判定族整体关闭）");
+    const harvest: HarvestEvidence = { doneLedger: new Map([["w-shut", { count: 1, hasReceipt: true }]]), devLogText: "", receiptSlugs: new Set() };
+    const shut = zombieInvariantScan({ boards: [{ gid: "g", board: mkBoard([mkEntry({ id: "s1", status: "claimed", text: "[任务] W-SHUT 关阀卡", updated_at: now - 99 * 3600_000 })]) }], harvest, now });
+    assert(shut.actions.length === 0, "关阀态零判定（TTL=∞——逃生阀实证非纸面）");
+    delete process.env.CCR_BOARD_ZOMBIE_TTL_H;
+    assert(zombieTtlMs() === 6 * 3600_000, "缺省 6h（任务书建议值）");
+    const ttlParam = zombieInvariantScan({ boards: [{ gid: "g", board: mkBoard([mkEntry({ id: "s2", status: "claimed", text: "[任务] W-SHUT 参数卡", updated_at: now - 7 * 3600_000 })]) }], harvest, now, ttlMs: 6 * 3600_000 });
+    assert(ttlParam.actions.length === 1 && ttlParam.actions[0].evidence === "ledger-done", "ttlMs 参数直调同效（缺省 env 路径之外的第二入口）");
   }
   console.log(`\n========== boardrecon 套件：${pass} 通过 / ${fail} 失败 ==========`);
   process.exit(fail > 0 ? 1 : 0);

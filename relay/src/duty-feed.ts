@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { orgDir } from "./org.js";
 import { appendJournal } from "./fs-safe.js";
 
-export type DutyFeedKind = "harvest-done" | "review-receipt" | "pm-lost" | "flush"; // flush=补投收口审计行
+export type DutyFeedKind = "harvest-done" | "review-receipt" | "pm-lost" | "flush" | "zombie-card"; // flush=补投收口审计行；zombie-card=板面僵尸卡告警（W-BOARDTRUTH5 刀二——三证全无超 TTL 卡进值守视野，web-console KIND_META 缺省回落 system 安全）
 
 /** 活跃窗（分钟）：claim 资格判定与 pid=0 席位判活共用 */
 export function dutyActivityWindowMin(): number {
