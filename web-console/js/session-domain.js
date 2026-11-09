@@ -2345,14 +2345,15 @@
                   // 同源，claude=像素螃蟹七引擎同表）；未知引擎 PH 字母占位兜底（engineBrandSvgOf
                   // 内建），sprite 形态保留为结构回落——尺寸/圆角走 .badge-brand 约束跟随现行徽章
                   const brandIconHtml = engineBrandSvgOf({ engineClass: eng[1], engine: s.engine || "claude" });
-                  // W-TEAMSNC ③：详情 head identity-cluster 团队 chip——置于引擎徽章前（团队归属>引擎
-                  // 阅读序，B 稿态 B）；pmTeamChipOf 单口同源（命中才渲染，null 不占位），点击同卡上
+                  // W-TEAMSNC ③→W-BADGEORDER（1109 用户实锤 9.jpg 对调）：详情 head identity-cluster
+                  // 徽章序=引擎徽章在前、团队 chip 在后（用户拍板「引擎>团队」阅读序——旧决策「团队归属>引擎
+                  // B 稿态 B」退役）；pmTeamChipOf 单口同源（命中才渲染，null 不占位），点击同卡上
                   // chip 开/收第四列抽屉（data-team-chip 同链同委托）
                   const headTeams = pmTeamChipOf(s.session_id);
-                  UI.identity.innerHTML = (headTeams.length ? headTeams.map(teamChipMarkup).join("") : "")
-                    + '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
+                  UI.identity.innerHTML = '<span class="engine-badge ' + eng[1] + '">' + (brandIconHtml
                     ? '<span class="badge-brand">' + brandIconHtml + "</span>"
-                    : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>";
+                    : '<svg class="engine-icon" aria-hidden="true"><use href="#icon-' + b2EngineIconFor(eng[1]) + '"></use></svg>') + esc(eng[0]) + (s.external ? " · CLI" : "") + "</span>"
+                    + (headTeams.length ? headTeams.map(teamChipMarkup).join("") : "");
                   // 件十六：信息行序=工作目录→水位胶囊→活跃时间（胶囊居中夹段，updateCtxMeter 填充）
                   {
                     const el = UI.subDirEl && UI.subDirEl.isConnected ? UI.subDirEl : ($id("session-head-sub") || null);
