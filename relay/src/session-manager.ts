@@ -31,7 +31,7 @@ import {
   clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, readPmLastApproved, recordPmLastApproved, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
   appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
-import { harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）
+import { chainBaseSlug, findContCard, harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）；W-ORPHANCARD 刀一/刀二（chainBaseSlug 基族扩展+findContCard 续跑复用）
 import { supersededChainPrs, branchBaseOf, type OpenPrSnap } from "./board-truth.js"; // W-BOARDTRUTH 刀1：同链 PR 收割即闭判定（纯函数）
 import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, lastRealUserMessageAt, dutyUserActiveMin, dutyNoProgressDelayMs, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）；W-DUTYBACKOFF：三刀数据面
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
@@ -7675,7 +7675,9 @@ ${lines.join("\n")}
                 // 一并翻 done——终代收割闭整链（cardlife R0 机械手版 cardlife_chain_cards
                 // 移植 relay 侧；ts 窗 14d 防远古卡误闭）
                 const CHAIN_WINDOW_MS = 14 * 24 * 3600_000;
-                const baseSlug = (t: string) => t.replace(/-r\d+$/, "");
+                // W-ORPHANCARD 刀二（1109 实锤 9 张审查卡滞留）：基族换 chainBaseSlug 单点
+                //（-rN 之外扩剥 -review/-audit 审查尾——终代收割闭整链含审查卡；多重尾循环剥）
+                const baseSlug = chainBaseSlug;
                 const curKey = harvestKeyOf(hit.entry.text);
                 if (curKey.startsWith("w-")) {
                   const base = baseSlug(curKey);
@@ -9884,7 +9886,17 @@ ${lines.join("\n")}
     // 注入结构化头——[task_ref:卡id] [gid:组id] 标题。卡 id 预生成（新卡）或取认领卡
     //（entry_id），建卡点带同 id 落板：prompt/板卡/回执/台账文本四处同键，人读与工具
     // 匹配都不再靠标题启发式。随手办（无 gid）无板卡 → 不注入（task_ref 是板卡匹配键）。
-    const taskRefId = input.gid ? (input.entry_id ?? `t-${randomUUID().slice(0, 8)}`) : "";
+    // W-ORPHANCARD 刀一（1109 用户质问「为什么每次都要依赖手工清」治本）：「续跑 W-XXX」
+    // 唤醒形态不建新卡——PM org dispatch 续跑停滞单时复用原卡（翻回 claimed+挂新
+    // dispatch_id+note 续跑留痕），不产孤儿卡（续跑本质=原单继续；历史孤儿由对账兜底翻）。
+    // 复用 id 即 taskRefId（prompt 头/板卡/回执/台账四处同键不变）；找不到原卡=首次形态照旧建新卡。
+    let contCardId: string | null = null;
+    if (input.gid && !input.entry_id) {
+      try {
+        contCardId = findContCard(loadBoard(input.gid).entries || [], String(input.title || ""));
+      } catch { contCardId = null; /* 复用查找尽力而为：失败回落新卡路径 */ }
+    }
+    const taskRefId = input.gid ? (input.entry_id ?? contCardId ?? `t-${randomUUID().slice(0, 8)}`) : "";
     const taskRefHead = taskRefId
       ? `[task_ref:${taskRefId}] [gid:${input.gid}] ${truncate(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}\n`
       : "";
@@ -10180,11 +10192,18 @@ ${lines.join("\n")}
           }
         } catch { /* 接卡尽力而为：失败回落新卡路径 */ }
       }
-      upsertBoardEntry(input.gid, claimEntryId
+      if (contCardId) {
+        // W-ORPHANCARD 刀一复用分支（sessionId 已在此域）：原卡翻回 claimed+挂新
+        // dispatch_id+note 拼接续跑留痕（保留前代打回/闭链留痕——cardlife R3 P2-2 同款口径）
+        const prevCard = loadBoard(input.gid).entries.find((x) => x.id === contCardId);
+        const u = prevCard ? upsertBoardEntry(input.gid, { id: prevCard.id, text: prevCard.text, status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, note: `${prevCard.note ? prevCard.note + " " : ""}[orphancard ${new Date().toLocaleDateString("zh-CN")}] 续跑复用原卡（dispatch=${dispatchId.slice(0, 8)}——不建新卡）` }) : { ok: false };
+        if (!u.ok) contCardId = null; // 板写失败回落新卡路径
+      }
+      if (!contCardId) upsertBoardEntry(input.gid, claimEntryId
         ? // #087 beads：认领模式——前置检查已过，既有卡 backlog→claimed 挂派单（卡是同一张，依赖关系保留）
           { id: claimEntryId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...(input.priority ? { priority: input.priority } : {}), ...(input.parent_id ? { parent_id: input.parent_id } : {}) }
         : // W-TASKFLOW task_ref：新卡带预生成 id（与 prompt 头注入的 [task_ref:...] 同键）
-          { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...(input.priority ? { priority: input.priority } : {}), ...(input.parent_id ? { parent_id: input.parent_id } : {}) }); /* #G3：priority/parent_id 透传建卡（认领模式既有卡不动富字段——只新卡带；改卡走显式 upsert） */
+          { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: sessionId, dispatch_id: dispatchId, ...(input.priority ? { priority: input.priority } : {}), ...(input.parent_id ? { parent_id: input.parent_id } : {}) }); /* #G3：priority/parent_id 透传建卡（认领模式既有卡不动富字段——只新卡带；改卡走显式 upsert）；W-ORPHANCARD 刀一：contCardId 路径上方已 upsert 复用——此处跳过防双写 */
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, input.title.trim().slice(0, 40)); // 1013 用户令：会话名不带 [立项档] 前缀（档位在项目数据里，名字保持干净）
