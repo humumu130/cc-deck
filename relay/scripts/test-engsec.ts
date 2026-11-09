@@ -35,7 +35,7 @@ async function main() {
 
   // ---------- A 模式库矩阵 ----------
   console.log("A 模式库矩阵：");
-  const A: Array<[string, string, boolean, string]> = [
+  const A: Array<[string, boolean, string]> = [
     ["rm -rf /Users/x/data", true, "rm-recursive"],
     ["rm notes.txt", false, ""],
     ["sudo npm install -g x", true, "privilege-esc"],
