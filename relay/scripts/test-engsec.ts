@@ -72,9 +72,7 @@ async function main() {
     let stopped = 0;
     const fakeAgent = { id: "a1", startedAt: Date.now(), ended: false, sendMessage: () => {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => { stopped++; }, setPermissionMode: async () => {} };
     mgr.setAgentFactory(() => fakeAgent as never);
-    const s = mgr.newSession ? (mgr as unknown as { newSession: (o: Record<string, unknown>) => { session_id: string } }).newSession({ engine, permission_mode: mode }) : null;
-    // 直捣 sessions map（newSession 形态跨版本不稳）：ensureExternal 建 external 托管位再改 engine/agent
-    (mgr as unknown as { sessions: Map<string, unknown> });
+    // 直捣 sessions map：ensureExternal 建会话位再改 engine/mode/agent（fixture 形态）
     const sid = "es-" + Math.random().toString(36).slice(2, 8);
     (mgr as unknown as { ensureExternal: (a: string, b: string, c: string, d: string) => void }).ensureExternal(sid, "/tmp/proj", "测试", "");
     const m = (mgr as unknown as { sessions: Map<string, { state: Record<string, unknown>; agent: unknown; logs: unknown[] }> }).sessions.get(sid)!;
@@ -103,7 +101,7 @@ async function main() {
   const f2 = mk("codex", "bypassPermissions");
   f2.setAgent({ stop: async () => {} });
   guard(f2, "执行命令：sudo rm -rf /", { tool: "command" });
-  ok(!(f2.m.logs as Array<{ kind: string }>).some((l) => l.kind === "system" && (l as { text: string }).text.includes("拦截")), "B2 bypass 档全放（零拦截行）");
+  ok(!(f2.m.logs as Array<{ kind: string; text: string }>).some((l) => l.kind === "system" && l.text.includes("拦截")), "B2 bypass 档全放（零拦截行）");
 
   const f3 = mk("claude", "default");
   guard(f3, "执行命令：rm -rf /Users/x", { tool: "Bash" });
