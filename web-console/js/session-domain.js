@@ -192,8 +192,6 @@
                 }
                 function fmtDur(ms) { const s = Math.floor(ms / 1000); if (s < 60) return s + "s"; const m = Math.floor(s / 60); if (m < 60) return m + "m"; const h = Math.floor(m / 60); if (h < 24) return h + "h" + (m % 60) + "m"; return Math.floor(h / 24) + "d"; }
                 // #224 任务时长（CLI h/m/s 全显）+ 累计输出紧凑（↓ 同款）
-                function fmtTaskDur(sec) { const s2 = Math.max(0, Math.floor(sec)); const h2 = Math.floor(s2 / 3600); const m2 = Math.floor((s2 % 3600) / 60); if (h2 > 0) return h2 + "h" + m2 + "m" + (s2 % 60) + "s"; if (m2 > 0) return m2 + "m" + (s2 % 60) + "s"; return s2 + "s"; }
-                function fmtDownTok(n) { if (n >= 1e6) return (n / 1e6).toFixed(1) + "m"; if (n >= 1e3) return (n / 1e3).toFixed(1) + "k"; return String(n); }
                 function tokStr(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M"; if (n >= 1e3) return Math.round(n / 1e3) + "k"; return String(n); }
                 function sizeStr(n) { n = Number(n) || 0; if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB"; if (n >= 1024) return Math.round(n / 1024) + " KB"; return n + " B"; }
                 function ctxPct(s) { if (!s || !s.context_usage) return 0; return Math.min(100, Math.round((s.context_usage / (s.context_limit || 1e6)) * 100)); }
@@ -2525,49 +2523,99 @@
                     b2Toast("已切换 · 下一回合生效"); // 新模型名由胶囊乐观回显，不重复播报
                   } else b2Toast("切换失败：" + v.error);
                 }
+                // W-DOCKFIX（1109 用户实锤·方案 A 语义一行流，施工图 w-dockrow.md :47-62）：
+                // 一行=态图标+正在干什么（语义化）+单一计时（人类档位）；token 归 head 水位
+                // 胶囊唯一权威（dock tokens 段退役）；#224 两层架构退役（次行 data-dock-sub 段
+                // 随删——W-SEATALIVE 值守座在旧架构下退化为「会话名（恒定大数·晦涩符号）」死行）。
+                // WORKING 细分三形态：真跑=◐ 语义摘要·回合计时；待命（isRealWorking=false，
+                // #291 语义保持）=◌ 不计时；值守无动作（act 空）=◌ 半透明值守样。
+                function dockSemanticAction(raw) {
+                  // 动作语义化：非 shell 类 summary 已是动词短语直用（24 字瞥视档）；
+                  // shell 命令类（含 env 键值/路径前缀）=剥「执行」前缀+env 键值+flag 词，
+                  // 路径取 basename，余首三词（用户心智=在干什么活≠命令原文；全文走 title）
+                  let t = String(raw || "").replace(/^\u200B+/, "").trim();
+                  if (!t) return "";
+                  t = t.replace(/^执行\s*/, "");
+                  const words = t.split(/\s+/).filter(Boolean);
+                  const shellish = words.some((w) => w.includes("=") || /^~?\//.test(w));
+                  let out;
+                  if (shellish) {
+                    const kept = words
+                      .filter((w) => !w.includes("=") && !w.startsWith("-"))
+                      .map((w) => (/^~?\//.test(w) ? (w.split("/").filter(Boolean).pop() || w) : w));
+                    out = kept.slice(0, 3).join(" ");
+                  } else {
+                    out = t;
+                  }
+                  out = out.replace(/\s+/g, " ").trim();
+                  return out.length > 24 ? out.slice(0, 24) + "…" : out || t.slice(0, 24);
+                }
+                function dockTurnDur(sec) {
+                  // 回合级计时（人类档位）：秒档 Ns/分钟档 MmSSs/小时档 HhMm（小时档丢秒——
+                  // 大尺度秒位是噪声，DOCKROW 空②同判）；取代任务级 fmtTaskDur 累计+次行原始秒
+                  const s2 = Math.max(0, Math.floor(sec));
+                  const h2 = Math.floor(s2 / 3600), m2 = Math.floor((s2 % 3600) / 60);
+                  if (h2 > 0) return h2 + "h" + m2 + "m";
+                  if (m2 > 0) return m2 + "m" + (s2 % 60) + "s";
+                  return s2 + "s";
+                }
                 function renderDock() {
                   const dock = UI.dock;
                   if (!dock) return;
                   const s = curSession();
                   const op = dock.querySelector("[data-session-state-operation]");
                   const tok = dock.querySelector("[data-session-state-tokens]");
+                  const el = dock.querySelector("[data-session-state-elapsed]");
+                  delete dock.dataset.duty;
+                  if (tok) tok.hidden = true; // 方案 A：token 归 head 水位胶囊唯一权威，dock 段恒隐
                   if (!s) {
-                    dock.dataset.sessionState = "waiting";
+                    dock.dataset.sessionState = "standby"; /* W-DOCKFIX：未选择=中性静态 ◌（旧 amber 呼吸星=无活假装活跃，同病顺刀） */
                     op.textContent = "未选择";
-                    dock.querySelector("[data-session-state-elapsed]").textContent = "";
-                    if (tok) tok.hidden = true;
+                    if (el) el.textContent = "";
                     dockTerminalWatch(dock, null);
                     renderSubagents(null); // W-UIFB ⑧（自 TOPBAR 批移植+修正版）无会话撤面板
                     return;
                   }
-                  // B21 一行流式：态图标（旋转/呼吸/✓/⚠，CSS 按 data-session-state 承载）+ 摘要 + 走秒 + token
                   const state = DOCK_STATE[s.status] || "closing";
                   dock.dataset.sessionState = state;
-                  const live = dockLiveLine(s); // A0-1：终端实时行（relay ​ 零宽前缀约定）→ 隐藏自家走秒/token 防双计
+                  const live = dockLiveLine(s); // A0-1：终端实时行（relay 零宽前缀约定）→ 隐藏自家走秒/token 防双计（保留）
                   if (live) dock.setAttribute("data-live-line", ""); else dock.removeAttribute("data-live-line");
                   const w = s.waiting_request;
-                  // #224 两层信息架构（WORKING）：标题行=✻ {任务名}（时长/↓累计输出由
-                  // tickDockElapsed 每秒续写 elapsed 段）；动作行=次行 ⚙ Running {命令} ·
-                  // {回合走秒}（mono dim，title hover 全量）。命令动作从主行让位次行
-                  let subEl = dock.querySelector("[data-dock-sub]");
+                  const act = String(s.action_summary || "").replace(/^\u200B+/, "");
+                  op.title = "";
                   if (s.status === "WORKING" && !live) {
-                    op.textContent = s.title || "未命名任务";
-                    if (tok) tok.hidden = true;
-                    const act = String(s.action_summary || "").replace(/^\u200B+/, "");
-                    if (!subEl) {
-                      subEl = document.createElement("div");
-                      subEl.setAttribute("data-dock-sub", "");
-                      dock.appendChild(subEl);
+                    delete dock.dataset.turnStarted;
+                    if (!act) {
+                      // 值守待命（W-SEATALIVE 值守座：常驻 WORKING 无动作——六病空①②③病根）
+                      dock.dataset.sessionState = "standby";
+                      dock.dataset.duty = "1";
+                      op.textContent = "值守待命";
+                      if (el) el.textContent = "";
+                    } else if (!isRealWorking(s)) {
+                      // 待命（#291 语义保持：有 act 未真跑，不走秒）
+                      dock.dataset.sessionState = "standby";
+                      op.textContent = "待命 · 可接单";
+                      op.title = act;
+                      if (el) el.textContent = "";
+                    } else {
+                      op.textContent = dockSemanticAction(act) || s.title || "";
+                      op.title = act; /* 命令原文降级 title（debug 可达性不丢） */
+                      dock.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
                     }
-                    subEl.dataset.act = act;
-                    subEl.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
-                    subEl.textContent = act ? (isRealWorking(s) ? "⚙ Running " : "⏸ 待开工 ") + act.slice(0, 110) : ""; /* #291 审查 B-P2-2：dock 与卡同屏一致（待命不走秒语义） */
-                    subEl.title = act; // 点按/hover 展开全量（单行截断不折叠）
+                  } else if (live) {
+                    op.textContent = act; // live 终端行原样直通（防双计由 data-live-line CSS 承载）
+                    if (el) el.textContent = "";
+                  } else if (s.status === "WAITING") {
+                    // 等你批准（口语化；四问 ask 形态=等你作答）——明细全文走 title
+                    op.textContent = w && w.tool_name ? "等你批准 " + w.tool_name : "等你作答";
+                    if (w) op.title = [w.tool_name, w.input_summary].filter(Boolean).join(" · ");
+                  } else if (s.status === "ERROR") {
+                    op.textContent = "失败 · " + String(s.last_error || s.action_summary || "").replace(/^\u200B+/, "").slice(0, 40);
+                    op.title = String(s.last_error || s.action_summary || "");
                   } else {
-                    if (subEl) subEl.remove();
-                    const opText = w ? [w.tool_name, w.input_summary].filter(Boolean).join(" · ") : (s.action_summary || s.last_error || "");
-                    op.textContent = opText ? String(opText).replace(/^\u200B+/, "").slice(0, 90) : "";
-                    if (tok) { const u = Number(s.context_usage) || 0; tok.hidden = live || !u; tok.textContent = u ? tokStr(u) + "/" + tokStr(s.context_limit || 1e6) : ""; } // A0-1 token 内联「34k/200k」
+                    // DONE（✓ 完成 · 时长一次性）：8s 淡出语义由 dockTerminalWatch 承载不变
+                    op.textContent = dockSemanticAction(s.action_summary || "") || "完成";
+                    op.title = String(s.action_summary || "");
                   }
                   tickDockElapsed();
                   dockTerminalWatch(dock, s);
@@ -2622,23 +2670,18 @@
                   if (!el) return;
                   if (!s || UI.dock.hasAttribute("data-live-line")) { el.textContent = ""; return; }
                   if (s.status === "DONE" && s.duration_ms) { el.textContent = fmtDur(s.duration_ms); return; }
-                  // #224 WORKING：标题行尾=（任务时长 · ↓累计输出）——任务级时长=会话级
-                  // started_at 起跨回合累计（CLI 同语义），↓=usage.output_tokens（会话累计
-                  // 输出，统计页同源）；同时续写动作行（次行）的回合走秒
+                  // W-DOCKFIX 方案 A：单一计时源。真跑=回合级 dockTurnDur（turn_started_at，
+                  // MmSSs 人类档位；任务级累计/↓累计输出随六病退役——浏览价值归统计页）；
+                  // 待命/值守（standby 态）不走秒（#291 语义保持）
                   if (s.status === "WORKING") {
-                    const dur = fmtTaskDur(Math.max(0, Date.now() - Number(s.started_at || Date.now())) / 1000);
-                    const out = s.usage && Number(s.usage.output_tokens) > 0 ? " · ↓" + fmtDownTok(Number(s.usage.output_tokens)) : "";
-                    el.textContent = "(" + dur + out + ")";
-                    const subEl = UI.dock.querySelector("[data-dock-sub]");
-                    if (subEl && subEl.dataset.act) {
-                      const runSec = Math.max(0, Math.floor((Date.now() - Number(subEl.dataset.turnStarted || Date.now())) / 1000));
-                      subEl.textContent = "⚙ Running " + String(subEl.dataset.act).slice(0, 110) + " · " + runSec + "s";
-                    }
+                    if (UI.dock.dataset.sessionState === "standby") { el.textContent = ""; return; }
+                    const t0 = Number(UI.dock.dataset.turnStarted || s.turn_started_at || s.updated_at || Date.now());
+                    el.textContent = dockTurnDur((Date.now() - t0) / 1000);
                     return;
                   }
                   const base = s.waiting_started_at || s.updated_at || s.started_at;
                   el.textContent = base ? fmtDur(Math.max(0, Date.now() - base)) : "";
-                  // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，不重建面板）
+                  // W-TOPBAR ⑥：子 Agent 面板走秒随 1s 心跳刷新（只改 .at 文本，状态栏下续行）
                   document.querySelectorAll("#session-agbox [data-ag-at]").forEach((at) => {
                     const st = Number(at.dataset.started) || 0, ed = Number(at.dataset.ended) || 0;
                     if (st > 0) at.textContent = fmtDur(Math.max(0, (ed > 0 ? ed : Date.now()) - st));
