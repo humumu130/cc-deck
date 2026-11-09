@@ -1814,6 +1814,23 @@
                       if (n.nodeType === 1) desired.push([n.getAttribute("data-session-card") || "n:" + desired.length, n.outerHTML]);
                     });
                     if (!desired.length) desired.push(["empty", '<div class="readonly-banner"></div>']);
+                    // W-RENAMEFOCUS（1109 用户实锤：重命名一秒失焦）：编辑中的卡冻结替换——
+                    // 现挂卡内含 .row-rename-input（重命名编辑态）时，该键 desired 改用节点上
+                    // __rkHtml 快照旧值。根因链：WORKING 卡 html 含走秒位（workSecs 每次
+                    // myCardItem 实时算）→他话任一 SESSION_UPDATED → renderMyList → 该卡新
+                    // html 恒≠快照 → reconcile 判变 replaceChild 整卡替换 → input 被摘离 →
+                    // blur 触发 commit 自动提交（CDP 复现：首帧 258ms 即 REMOVED）。
+                    // 冻结语义：编辑中该卡 DOM 原样保留（1s 走秒 timer 定点 textContent 直更
+                    // 不经 reconcile 不受影响）；编辑结束 commit 后 title 真变→下一次渲染自然
+                    // 替换显新名，未变/Escape→input.replaceWith(titleEl) 已复原与快照一致。
+                    // #282/:1797 定点替换语义零动（他卡照旧增删定点；本冻结仅改 desired 输入值）。
+                    (() => {
+                      const editing = upper.querySelector("[data-session-card] .row-rename-input")?.closest("[data-session-card]");
+                      if (!editing) return;
+                      const ek = editing.getAttribute("data-rk") || editing.getAttribute("data-session-card");
+                      const di = desired.findIndex((p) => p[0] === ek);
+                      if (di >= 0 && editing.__rkHtml) desired[di][1] = editing.__rkHtml;
+                    })();
                     rk(upper, desired);
                     moMaybeStagger();
                     if (keepScroll > 0) upper.scrollTop = keepScroll; // #281 兜底写回（节点复用时通常 no-op）
