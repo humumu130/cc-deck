@@ -1051,6 +1051,23 @@
                       if (entry && hint) {
                         const open = window.ccDeckTeam && typeof window.ccDeckTeam.openTeamCreate === "function" ? window.ccDeckTeam.openTeamCreate : null;
                         if (!open) { toast("团队域未就绪，稍后再试"); return; }
+                        // 成员源一致性（W-AGGBUG）：全簇/全桶成员 relay_source 一致且能对位某源名
+                        // → 弹窗源随成员预选（消灭云视角下 defSrc=cloud 而成员全本机的错位）；
+                        // 混源/无名册/对不上=不传（弹窗回落视角判定，旧行为）
+                        const prefillSessions = (hint.cluster
+                          ? deriveEntries().filter((e) => e.key.indexOf("c:") === 0 && hint.dirs.indexOf(e.anchor) >= 0).flatMap((e) => [...e.sessions])
+                          : [...entry.sessions]
+                        ).sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0));
+                        let prefillSource = null;
+                        try {
+                          const ss = window.__ccDeck005SourceState ? window.__ccDeck005SourceState() : null;
+                          const srcs = new Set(prefillSessions.map((s) => String(s.relay_source || s.source || "")));
+                          if (ss && srcs.size === 1) {
+                            const only = [...srcs][0];
+                            if (only && only === String(ss.cloudRelayName || "")) prefillSource = "cloud";
+                            else if (only && only === String(ss.lanRelayName || "")) prefillSource = "local";
+                          }
+                        } catch (_) { prefillSource = null; }
                         // 预填五位（teampolish ⑭ 参数位）：名=目录 basename/锚=桶目录/
                         // 成员=活跃序预勾（含野生——观察位语义在弹窗行内标注）/
                         // 档=轻立项（低摩擦缺省，正经立项留给用户主动升）/origin=溯源小注
@@ -1059,10 +1076,8 @@
                           anchor: dir,
                           ...(hint.cluster && hint.dirs ? { dirs: hint.dirs } : {}), // V2：簇预填锚列表（建团弹窗 anchor_dirs 消费）
                           tier: "轻立项",
-                          members: (hint.cluster
-                            ? deriveEntries().filter((e) => e.key.indexOf("c:") === 0 && hint.dirs.indexOf(e.anchor) >= 0).flatMap((e) => [...e.sessions])
-                            : [...entry.sessions]
-                          ).sort((a, b) => (Number(b.updated_at) || 0) - (Number(a.updated_at) || 0)).map((s) => s.session_id),
+                          ...(prefillSource ? { source: prefillSource } : {}), // W-AGGBUG：源随成员对齐
+                          members: prefillSessions.map((s) => s.session_id),
                           origin: hint.cluster ? aggClusterEvidenceLine(hint) : aggEvidenceLine(hint),
                         });
                         aggPrefs[dir] = { ...(aggPrefs[dir] || {}), actedAt: Date.now() }; aggPrefsSave(); // 已交互记账（升级时机不再打扰）

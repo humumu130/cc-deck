@@ -1676,7 +1676,11 @@
                   pop.setAttribute("aria-modal", "true");
                   pop.setAttribute("aria-label", "新建团队");
                   const st = teamSourceInfo(); // #277 ②：聚合/云在线透出「创建到」（NewSessionModal 同语义）
-                  const defSrc = (window.__ccDeck005SourceState && window.__ccDeck005SourceState())?.view === "cloud" ? "cloud" : "local";
+                  // W-AGGBUG（1109）：prefill.source 优先——聚合预填 8 会话全同源时弹窗源随成员源
+                  // （消灭「云视角下 defSrc=cloud 而 8 成员全在本机」的错位面）；无 prefill/值非法时
+                  // 维持视角判定（旧行为不变）
+                  const pfSrc = pf && (pf.source === "local" || pf.source === "cloud") ? pf.source : null;
+                  const defSrc = pfSrc || ((window.__ccDeck005SourceState && window.__ccDeck005SourceState())?.view === "cloud" ? "cloud" : "local");
                   const defCands = teamCandsForSource(defSrc, st);
                   // #277 ① 弹窗重设计 + W-TEAMPOPOLISH（1105 三路审查落地）：
                   // B2 头部副标题退役（答案在决策点：tier 动态 hint）；B4 团队名+立项档并排两列行；
@@ -1871,9 +1875,14 @@
                     const online = window.__ccDeck005WsFor ? window.__ccDeck005WsFor(srcSelEarly.value) : null;
                     if (online && pmSid) {
                       const v = pmInSource(srcSelEarly.value, pmSid);
+                      // W-AGGBUG（1109 用户实锤）：out 从整单硬拦降级为不带 PM 行——PM 人选是
+                      // 「会话列表残留选中」的隐式默认（用户未显式指定），源不匹配时缺席降级
+                      // 与 absent 同质（先例：absent 分支早已降级）；原硬拦=8 本机成员无辜陪绑
+                      // （用户被挡在建团外，文案不点名 sid 又归因成「成员不在本机源」）。跨源
+                      // 防线不撤：成员面候选过滤（relay_source 对位）+relay seatGate 权威闸原样。
                       if (v.verdict === "out") {
-                        feedback("PM 会话需属于所选源：当前选中会话不在" + srcLabel + "——请切换目标源或先在会话列表选中该源的 PM 会话");
-                        return; // 审查 P2②：feedback 即 toast 别名，双响退役
+                        feedback("当前选中会话（" + pmSid.slice(0, 6) + "…）不在" + srcLabel + "——本团未带 PM 行，可稍后在编制面板补任 PM");
+                        pmSidOut.v = "";
                       }
                       if (v.verdict === "unknown") feedback("暂无法核对选中会话是否属于" + srcLabel + "（源名册未同步）——将以该源 relay 校验为准");
                       if (v.verdict === "absent") { feedback("未取到当前选中会话，本团未带 PM 行（可稍后编制面板补）"); pmSidOut.v = ""; } // 审查 B：让提示为真（payload 不带该行）
