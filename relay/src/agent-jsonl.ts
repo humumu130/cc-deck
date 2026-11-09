@@ -11,7 +11,9 @@ export type { MappedStatusDock } from "./agent-adapter.js";
 export type JsonLineEvent = Record<string, unknown>;
 
 export interface EngineCapabilities {
-  resume: false;
+  // [W-ENGCB-FIX G3] resume 由字面量 false 放宽为 boolean——codebuddy 实测原生
+  // -r/--resume 可用（2.179.3 help），能力位按引擎各自声明；其余键保持既有语义。
+  resume: boolean;
   reinjection: true;
   approval: false;
   images: false;
@@ -408,6 +410,18 @@ export class GenericJsonEventMapper {
     const blocks = messageBlocksOf(event);
     const blockToolUse = blockOf(blocks, "tool_use");
     const blockToolResult = blockOf(blocks, "tool_result");
+    // [W-ENGCB-FIX G5]（1109 深测：codebuddy 流原生 content[{type:"thinking"}] 帧每轮
+    // 在场而 mapper 零映射=思考不进活动舱）：thinking 块映射进日志流——kind="thinking"
+    // 与 claude SDK 路径同词（agent-adapter.ts:621 先例，web 活动舱既有渲染面直接吃）。
+    // 帧结构同构：{type:"thinking", thinking:"…"}（text/thinking 双键容错）。
+    const blockThinking = blockOf(blocks, "thinking");
+    if (blockThinking) {
+      const th = textOf((blockThinking as { thinking?: unknown; text?: unknown }).thinking ?? (blockThinking as { text?: unknown }).text);
+      if (th) {
+        cb.onLog("thinking", th.slice(0, 400), { full: th });
+        cb.onStatusChange("WORKING", "思考中");
+      }
+    }
     if (type.includes("tool") || type.includes("command") || type === "function_call" || blockToolUse) {
       const name = String(event.name ?? event.tool ?? event.command ?? blockToolUse?.name ?? "工具");
       const detail = textOf(event.input ?? event.arguments ?? event.detail ?? blockToolUse?.input);
@@ -503,6 +517,12 @@ export abstract class JsonProcessAgentSession implements AgentLike {
   // B1a 畸形行计数：JSONL 档单行解析失败跳过并计数（不中断流）。批量纯函数面
   // mapJsonlStream 同口径供 fixture 直跑断言；此处是流式会话侧的落地
   private malformedLines = 0;
+  // [W-ENGCB-FIX G3]（1109 深测回执）：引擎侧原生会话 id（stream-json init 帧 session_id，
+  // mapperCallbacks.onInit 捕获）。execTurn 传给 buildArgs 第二参——支持 --resume 的
+  // 引擎（codebuddy 2.179.3 help 实证 -r/--resume）以此原生续会话，替代每轮新进程
+  // 重注全文（深测实测单轮 input 22.7k 全量重付）。不支持 resume 的子类忽略该参即可
+  //（buildArgs 可选参向后兼容，trae/qwen 零改动）。
+  protected engineSessionId?: string;
   protected readonly opts: EngineSpawnOptions;
 
   get childPid(): number | undefined { return this.pid; }
@@ -519,7 +539,7 @@ export abstract class JsonProcessAgentSession implements AgentLike {
     if (opts.initialPrompt !== undefined) this.execTurn(opts.initialPrompt);
   }
 
-  protected abstract buildArgs(prompt: string): string[];
+  protected abstract buildArgs(prompt: string, resumeSessionId?: string): string[];
 
   sendMessage(text: string, _images?: string[], echo?: string, ackId?: string): void {
     if (this.ended) return;
@@ -557,7 +577,7 @@ export abstract class JsonProcessAgentSession implements AgentLike {
   private execTurn(text: string): void {
     const prompt = this.promptFor(text);
     const command = this.opts.command ?? this.opts.label;
-    const args = this.buildArgs(prompt);
+    const args = this.buildArgs(prompt, this.engineSessionId);
     const env = {
       ...childEnv(),
       ...safeProviderEnv(this.opts.providerProfile),
@@ -673,6 +693,10 @@ export abstract class JsonProcessAgentSession implements AgentLike {
       ...this.opts.cb,
       onInit: (id, model, permission) => {
         this.initialized = true;
+        // [W-ENGCB-FIX G3] 捕获引擎侧原生会话 id（供下一回合 --resume 原生续）。
+        // "external" 是 mapper 无 id 帧的占位值（见 GenericJsonEventMapper.handle），
+        // 不能当 resume 锚；真实 id 才落 engineSessionId。
+        if (id && id !== "external") this.engineSessionId = id;
         this.opts.cb.onInit(id === "external" ? this.id : id, model === "unknown" ? this.opts.model : model, permission);
       },
     };
