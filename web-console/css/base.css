@@ -1255,17 +1255,20 @@
        顶线退役归 B17（底栈唯一横线在 footer） */
     .session-state-dock {display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 16px; color: var(--dim); font: var(--fs-B) var(--mono);}
     .session-state-spin { flex: 0 0 auto; display: inline-grid; place-items: center; width: 14px; height: 14px; color: var(--working); font-size: 12px; line-height: 1; }
-    .session-state-spin::before { content: "✻"; }
-    .session-state-dock[data-session-state="running"] .session-state-spin { animation: dock-spin 2.8s linear infinite; }
-    .session-state-dock[data-session-state="waiting"] .session-state-spin { animation: dock-breath 1.8s ease-in-out infinite; }
-    .session-state-dock[data-session-state="closing"] .session-state-spin::before { content: "✓"; color: var(--done); }
-    .session-state-dock[data-session-state="suspended"] .session-state-spin::before { content: "⚠"; color: var(--error); }
+    /* W-DOCKFIX（1109 方案 A·桌面 id 域内）：字形语义化——standby 基座 ◌ 空心静态
+       （待命/值守/未选择）；running ◐ 旋转（半填充=正在干活）；waiting ◍ 呼吸（圆点=
+       等你）。作用域收窄 #session-state-dock——#mobile-detail-state-dock 共享类不受
+       波及（手机共通面按任务书留评估不实施），动画/closing ✓/suspended ⚠ 共用键原样 */
+    #session-state-dock .session-state-spin::before { content: "◌"; }
+    #session-state-dock[data-session-state="running"] .session-state-spin::before { content: "◐"; }
+    #session-state-dock[data-session-state="waiting"] .session-state-spin::before { content: "◍"; }
+    /* 值守座（duty）：行半透明——有座无活的降存在感（六病空①②③的对症收笔） */
+    #session-state-dock[data-duty] { opacity: .55; }
     @keyframes dock-spin { to { transform: rotate(360deg); } }
     @keyframes dock-breath { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
     .session-state-flow { flex: 1 1 auto; min-width: 0; white-space: nowrap; }
     /* #224 动作行（次行）：⚙ Running {命令} · {回合走秒}——mono+dim 弱色小一档
        （CLI 原生小字）；单行截断（title hover 全量），不折叠 */
-    .session-state-dock [data-dock-sub] { overflow: hidden; color: var(--dim); font: 10.5px/15px var(--mono); white-space: nowrap; text-overflow: ellipsis; cursor: default; }
     .session-state-operation { display: block; min-width: 0; overflow: hidden; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; }
     .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
     /* B2 批2 A0-1/B#133：token 内联 + 终端实时行防双计 + 终态收口（DONE ✓ 8s 淡出在 terminal-fade） */

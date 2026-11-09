@@ -197,7 +197,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(/x && x\.status === "WORKING" && isRealWorking\(x\) \? 1 : 0\); \/\* #291：待命不占在跑计数/.test(list), "A16 expo 团队入口卡在跑计数过真判定");
   ok(list.includes("const standby = s.status === \"WORKING\" && !isRealWorking(s);") && list.includes('accessibilityLabel={"待开工，"') && !list.includes("待开工 · "), "A17 expo 会话卡待命态（灰呼吸点#a11y 承载词；W-STATUSCHIP 1109：行内词冠退役负断言——摘要回 srowSum 原生档）");
   ok(detail.includes("isRealWorking(r.s)).length") && detail.includes('standby ? "待开工"'), "A18 expo 详情 roster 计数+行词（待命不占在跑）");
-  ok(web.includes("已接单未开工或挂起（无近期工具活动）") && web.includes('"⏸ 待开工 "') && mobile.includes("待开工</b><span>已接单未开工或挂起") && detail.includes('"⏸ 待开工 · "'), "A19 详情/dock/mobile 同屏一致（审查 B-P2-2：卡待开工而详情运行中走秒的矛盾根除——四面同一判定）");
+  ok(web.includes("已接单未开工或挂起（无近期工具活动）") && web.includes('"待命 · 可接单"') /* W-DOCKFIX 语义等价迁移：dock 待命文案随方案 A 一行流改（isRealWorking 同判定不动） */ && mobile.includes("待开工</b><span>已接单未开工或挂起") && detail.includes('"⏸ 待开工 · "'), "A19 详情/dock/mobile 同屏一致（审查 B-P2-2：卡待开工而详情运行中走秒的矛盾根除——四面同一判定）");
   ok(detail.includes("isRealWorking(s) && s.turn_started_at ? fmtElapsed"), "A19b expo 详情 turnRun 待命不走秒");
 }
 
