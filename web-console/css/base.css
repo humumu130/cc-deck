@@ -23,7 +23,7 @@
        注意：本段新增规则只写在雷前区（文件尾部 @media reduce 未闭合地雷 3207 仍在，append=被吞）。 */
     .windowbar { flex: none; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; background: var(--windowbar-bg); border-bottom: 1px solid var(--windowbar-line); } /* 1104 用户拍板 40→36；子元素 28 热区不动（VS Code 35/Chrome 40 主流带内）；唯一落点——全仓 windowbar 高度无第二落点（media/紧凑/print 零变体），下位改档只动本行 */
     .windowbar { --windowbar-bg: var(--rail); --windowbar-line: #24304A; /* 用户 1102 拍板：顶栏与侧边导航栏同色（分层突兀回改）；line 浅 Broken→B 路 1109 P2 验算 #24304A=1.51（原 --line-soft 1.26 弱） */ --windowbar-ink: rgba(255, 255, 255, 0.55); }
-    html[data-theme="light"] .windowbar { --windowbar-bg: var(--rail); --windowbar-line: #C4C4C4; --windowbar-ink: #52525B; } /* W-WBARSLIM：token 族随瘦身清死键（trigger-line/hover/active/dot-ok/dot-warn/dot-idle 六键随胶囊/刷新/hint 迁出或退役删）；B 路 1109 P1 验算值：ink 5.75/hairline 1.30（原 #71717A 3.59/原 --line-soft 1.10 双不过线） */
+    html[data-theme="light"] .windowbar { --windowbar-bg: var(--rail); --windowbar-line: #BDBDBD; --windowbar-ink: #52525B; } /* W-WBARSLIM：token 族随瘦身清死键（trigger-line/hover/active/dot-ok/dot-warn/dot-idle 六键随胶囊/刷新/hint 迁出或退役删）；B 路 1109 P1 验算值：ink 5.75/hairline 1.30（原 #71717A 3.59/原 --line-soft 1.10 双不过线）；W-GRAYSCALE 顺刀：line #C4C4C4→#BDBDBD=对 surface1 1.60（原 1.49）/对 rail 1.40（原 1.30）——head B 路 P3 底界 1.35 提档 */
     /* W-UIFIX A（2026-10-11 test.11 真机反馈「比其他软件小多了」）：9px→12px 对齐 macOS
        系统灯标准直径，间距 6→8px；色值本就是 mac 标准三色（下方 nova 覆盖段）。
        W-STATUSBAR 标题退役后交通灯区让位：首内容距灯 ≥28px */
