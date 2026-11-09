@@ -87,6 +87,24 @@ export interface ProjectGroup {
    * worker（idle 最久优先），全忙排队不自动扩编——见 session-manager dispatchWorker。
    * 缺席/undefined=用全局缺省；显式数字（>0）覆盖。 */
   headcount_cap?: number;
+  /** W-PROJTEAM1 期一（1109 用户拍板「项目⊇团队」·方案 §2.1）：团队层可选挂靠标记。
+   * 归属切分：锚/状态/档位/板=项目层（基座，可独立存在）；headcount/role_defaults/
+   * 派单台账/熟手路由/评审池/组级值守=团队层（挂靠，可无）。形状三态：
+   * **键缺席=存量组**——读侧派生=有团队（formed_at 派生 created_at，零写迁移，
+   * 旧端忽略本键零破坏）；**对象=显式团队层**（formed_at>0=组队时刻；**formed_at=0
+   * 哨兵=未组队**——「仅立项目（暂不组队）」产物，org-schema 写严格模式不收 null 故
+   * 用零值哨兵；dissolved_at 在场=已解散、项目仍在——期三 disband 动作消费，本批只
+   * 落形）。判定统一走 teamStateOf 单点（读侧派生），勿散写 `g.team &&` 裸判定。 */
+  team?: { formed_at: number; dissolved_at?: number };
+}
+
+/** W-PROJTEAM1 期一：团队层读侧派生单点（方案 §2.1「派生而非强约束」）——
+ * 键缺席=存量组自动升格有团队（formedAt 派生 created_at）；null=显式无团队；
+ * dissolved_at 在场=已解散（has=false 留组队档案，期三恢复链的输入）。 */
+export function teamStateOf(g: Pick<ProjectGroup, "team" | "created_at">): { has: boolean; formedAt?: number; dissolvedAt?: number } {
+  if (!g.team) return { has: true, formedAt: g.created_at }; // 键缺席=存量组自动升格（零写迁移）
+  if (!g.team.formed_at) return { has: false }; // formed_at=0 哨兵=未组队（仅立项目）
+  return g.team.dissolved_at ? { has: false, formedAt: g.team.formed_at, dissolvedAt: g.team.dissolved_at } : { has: true, formedAt: g.team.formed_at };
 }
 
 // 板状态六态词表（D18 五态 + planlane 批 planned 规划中，1104 用户想法）：planned
@@ -590,7 +608,7 @@ export type CreateGroupResult =
  */
 /** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
 export function createGroup(
-  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean; /** W-AGGREGATE-V2 刀3：多锚（附锚列表——主锚恒 anchor_dir；单锚建团缺省 undefined 零变化） */ anchor_dirs?: string[] },
+  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean; /** W-AGGREGATE-V2 刀3：多锚（附锚列表——主锚恒 anchor_dir；单锚建团缺省 undefined 零变化） */ anchor_dirs?: string[]; /** W-PROJTEAM1 期一：「仅建项目（暂不组队）」开关——true=team:null（显式无团队；缺省不落键=存量形状有团队） */ no_team?: boolean },
   dir?: string,
 ): CreateGroupResult  {
   // #292-B3 A-P1-2/B-P1-1：确认单通知回调外层补发——Inner 直调 addConfirmInner 不发
@@ -605,7 +623,7 @@ export function createGroup(
   return r;
 }
 function createGroupInner(
-  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean; anchor_dirs?: string[] },
+  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault>; mixed_engine?: boolean; anchor_dirs?: string[]; no_team?: boolean },
   dir?: string,
 ): CreateGroupResult {
   const f = readProjectsFileJson(dir);
@@ -637,6 +655,7 @@ function createGroupInner(
     ...(input.role_defaults ? { role_defaults: input.role_defaults } : {}),
     ...(input.mixed_engine === true ? { mixed_engine: true } : {}),
     single_card: input.tier === "轻立项",
+    ...(input.no_team === true ? { team: { formed_at: 0 } } : {}), // W-PROJTEAM1 期一：仅立项目（formed_at=0 哨兵=未组队——键缺席=存量形状零变化）
     created_at: now,
     updated_at: now,
   };
@@ -663,6 +682,9 @@ export interface OrgActionCreatePayload {
   tier: string;
   /** P81-5 混编标记（可选）：true=组内多引擎混编（派单 policy_source=mixed_team_default）。 */
   mixed_engine?: boolean;
+  /** W-PROJTEAM1 期一（1109 拍板）：「仅建项目（暂不组队）」开关（可选）——true=
+   * team:{formed_at:0} 未组队哨兵（项目可独立存在；组队走项目卡「组建团队」挂靠）。 */
+  no_team?: boolean;
   /** FB4 团队创建表单：随团种子编制（可选）。会话在册性/外部会话/Leader 排除在
    * session-manager orgCommand 咽喉校验（有 this.sessions 视野）；此处只做形状校验。 */
   headcount?: { session_id: string; role: string }[];
@@ -776,7 +798,7 @@ export function handleOrgActionCreate(payload: unknown, dir?: string, gate?: Hea
   const anchorDirs = Array.isArray(raw.anchor_dirs)
     ? Array.from(new Set(raw.anchor_dirs.filter((d) => typeof d === "string" && d.trim()).map((d) => String(d).trim()))).filter((d) => d !== anchor)
     : [];
-  return createGroup({ name, anchor_dir: anchor, tier, ...(hc.headcount ? { headcount: hc.headcount } : {}), ...(raw.mixed_engine === true ? { mixed_engine: true } : {}), ...(anchorDirs.length ? { anchor_dirs: anchorDirs } : {}) }, dir);
+  return createGroup({ name, anchor_dir: anchor, tier, ...(hc.headcount ? { headcount: hc.headcount } : {}), ...(raw.mixed_engine === true ? { mixed_engine: true } : {}), ...(anchorDirs.length ? { anchor_dirs: anchorDirs } : {}), ...(raw.no_team === true ? { no_team: true } : {}) }, dir); // W-PROJTEAM1 期一：「仅建项目」开关透传
 }
 
 export const adaptOrgAction = handleOrgActionCreate;
@@ -833,6 +855,42 @@ function setGroupTierInner(id: string, to: ProjectTier, dir?: string): Transitio
 }
 
 /** #292-B3 八口事务外包（批2 范式，B-P2-3 收编） */
+/** W-PROJTEAM1 期一件②支撑（1109 拍板）：既有项目组上的组队动作骨架——「仅立项目」
+ * 后的补组队路径（payload.gid 挂靠模式，session-manager orgCommand create 分支消费）。
+ * 不经 createGroup（零一锚一组冲突）；行为：①team 标记落值（null→{formed_at:now}；
+ * 缺席=首次显式化；已有活团队层=幂等空过保留 formed_at；已解散=拒——期三恢复链另立）
+ * ②headcount 并入（sanitize 同门校验+session_id 去重保首行，既有席保留原角色）。
+ * archived 组拒（结项连团队层一起终，方案 §2.4）。 */
+export function formTeamOnGroup(
+  gid: string,
+  rawHeadcount: unknown,
+  gate?: HeadcountGate,
+  dir?: string,
+): { ok: true; group: ProjectGroup; added: number } | { ok: false; error: string } {
+  const g = findGroup(gid, dir);
+  if (!g) return { ok: false, error: `项目组 ${gid} 不存在` };
+  if (g.status === "archived") return { ok: false, error: `项目组「${g.name}」已结项（团队层随项目终——复活边另走）` };
+  const st = teamStateOf(g);
+  if (st.dissolvedAt) return { ok: false, error: `「${g.name}」的团队已解散（期三恢复链另立，本批不在此复活）` };
+  const hc = sanitizeHeadcount(rawHeadcount, gate);
+  if (!hc.ok) return hc;
+  const now = Date.now();
+  let added = 0;
+  if (Array.isArray(hc.headcount)) {
+    const seen = new Set(g.headcount.map((x) => x.session_id));
+    for (const row of hc.headcount) {
+      if (seen.has(row.session_id)) continue; // 既有席保留原角色（去重保首行=建团同口径）
+      g.headcount.push(row);
+      seen.add(row.session_id);
+      added++;
+    }
+  }
+  if (!g.team || !g.team.formed_at) g.team = { formed_at: now }; // 未组队哨兵（仅立项目）/缺席（存量首显式化）→ 活团队层；已活=幂等空过
+  g.updated_at = now;
+  if (!saveGroup(g, dir)) return { ok: false, error: "索引写入失败" };
+  return { ok: true, group: g, added };
+}
+
 export function addMember(
   gid: string,
   sessionId: string,

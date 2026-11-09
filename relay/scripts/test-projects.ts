@@ -10,7 +10,7 @@ import {
   loadBoard, upsertBoardEntry, moveBoardEntry, removeBoardEntry, moveEntryByDispatch,
   listConfirms, listPendingConfirms, addConfirm, decideConfirm,
   ensureProjectClaudeMd, buildArchiveChecklist, setLightConfirmTrusted, isLightConfirmTrusted, isProjectsReadOnly,
-  computeReady, computeReadySet, addLesson, listLessons,
+  computeReady, computeReadySet, addLesson, listLessons, teamStateOf, formTeamOnGroup,
 } from "../src/projects.js";
 
 // 显式钉 json 档（SQLITE-FLIP 后缺省=sqlite，本件直测 projects.ts json 读写面 fixture——
@@ -356,6 +356,45 @@ const after = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as 
 assert(after.groups.find((x) => x.id === gidF)!.hold_suggested_at === now - 1 * DAY, "冷却戳落盘");
 assert(after.groups.find((x) => x.id === gidF)!.updated_at === updBefore, "戳记不动 updated_at（不自我续命）");
 rmSync(dir3, { recursive: true, force: true });
+
+// ---------- W-PROJTEAM1 期一（1109 拍板「项目⊇团队」）：team? 可选层+读侧派生+组队挂靠骨架 ----------
+{
+  console.log("W-PROJTEAM1 期一 分层语义:");
+  // ① teamStateOf 三态读侧派生（零写迁移）
+  const dirPT = mkdtempSync(join(tmpdir(), "cc-deck-projects-pt1-"));
+  const t0 = Date.now();
+  const t1 = t0 + 500;
+  assert(teamStateOf({ created_at: t0 }).has === true && teamStateOf({ created_at: t0 }).formedAt === t0, "键缺席=存量组派生有团队（formedAt=created_at——零迁移兼容）");
+  assert(teamStateOf({ team: { formed_at: 0 }, created_at: t0 }).has === false, "formed_at=0 哨兵=未组队（仅立项目产物——schema 严格不收 null 故零值哨兵）");
+  assert(teamStateOf({ team: { formed_at: t1 }, created_at: t0 }).has === true && teamStateOf({ team: { formed_at: t1 }, created_at: t0 }).formedAt === t1, "对象=活团队层（formed_at 权威）");
+  const dis = teamStateOf({ team: { formed_at: t1, dissolved_at: t0 + 1 }, created_at: t0 });
+  assert(dis.has === false && dis.dissolvedAt === t0 + 1, "dissolved_at 在场=已解散（has=false 留档案——期三恢复链输入）");
+  // ② createGroup no_team 落形（键缺席=存量形状零变化）
+  const rc = createGroup({ name: "仅立项目甲", anchor_dir: "/tmp/w/projteam1-solo", tier: "轻立项", no_team: true }, dirPT);
+  assert(rc.ok && !!rc.group.team && rc.group.team.formed_at === 0, "no_team=true → team:{formed_at:0}（未组队哨兵）");
+  const rn = createGroup({ name: "常规立队乙", anchor_dir: "/tmp/w/projteam1-team", tier: "轻立项" }, dirPT);
+  assert(rn.ok && rn.group.team === undefined, "缺省不落键=存量形状（旧端零破坏）");
+  // ③ formTeamOnGroup 挂靠骨架：null→显式化+headcount 并入去重；解散拒；幂等保留 formed_at
+  const rft = formTeamOnGroup((rc as { ok: true; group: { id: string } }).group.id, [{ session_id: "s-x", role: "worker" }, { session_id: "s-x", role: "pm" }], undefined, dirPT);
+  assert(rft.ok && !!(rft as { group: { team: { formed_at: number } } }).group.team && (rft as { added: number }).added === 1, "组队挂靠：未组队哨兵→{formed_at}+并入 1 席（同 sid 去重保首行）");
+  const formedAt1 = (rft as { group: { team: { formed_at: number } } }).group.team.formed_at;
+  const rft2 = formTeamOnGroup((rc as { ok: true; group: { id: string } }).group.id, [], undefined, dirPT);
+  assert(rft2.ok && (rft2 as { group: { team: { formed_at: number } } }).group.team.formed_at === formedAt1 && (rft2 as { added: number }).added === 0, "重复挂靠幂等（formed_at 保留+零加席）");
+  // 常规组挂靠（缺席→首显式化）既有席保留原角色
+  const rft3 = formTeamOnGroup((rn as { ok: true; group: { id: string } }).group.id, [{ session_id: "s-y", role: "worker" }], () => null, dirPT);
+  assert(rft3.ok && teamStateOf((rft3 as { group: { team?: { formed_at: number; dissolved_at?: number }; created_at: number } }).group).has === true, "存量组挂靠首显式化（缺席→{formed_at}）");
+  // 解散组拒（期三恢复链前不复活）
+  const dir4 = mkdtempSync(join(tmpdir(), "cc-deck-projects-pt1d-"));
+  const rd = createGroup({ name: "解散留档组", anchor_dir: "/tmp/w/projteam1-dis", tier: "轻立项" }, dir4);
+  const gidD = (rd as { ok: true; group: { id: string } }).group.id;
+  writeFileSync(join(dir4, "projects.json"), JSON.stringify({ groups: [{ id: gidD, name: "解散留档组", anchor_dir: "/tmp/w/projteam1-dis", status: "active", tier: "轻立项", single_card: true, headcount: [], created_at: t0, updated_at: t0, team: { formed_at: t1, dissolved_at: t0 + 2 } }] }), "utf-8");
+  const rrej = formTeamOnGroup(gidD, [], undefined, dir4);
+  assert(!rrej.ok && (rrej as { error: string }).error.includes("已解散"), "已解散团队拒挂靠（期三恢复链另立）");
+  const rmiss = formTeamOnGroup("pg-nope", [], undefined, dir4);
+  assert(!rmiss.ok, "gid 不存在拒");
+  rmSync(dir4, { recursive: true, force: true });
+  rmSync(dirPT, { recursive: true, force: true });
+}
 
 // ---------- 收尾 ----------
 rmSync(dir, { recursive: true, force: true });

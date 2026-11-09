@@ -44,7 +44,7 @@ import { runDrill } from "./drill.js"; // W-CMDIMPL T6：链路演练
 import {
   adaptOrgAction, addConfirm, addLesson, addMember, appendRetiredEvent, buildArchiveChecklist, canTransition, computeReady, computeReadySet, createGroup, decideConfirm,
   convergeBoardsWithDispatchLog,
-  findGroup, findGroupByAnchor, findStaleGroups, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
+  findGroup, findGroupByAnchor, findStaleGroups, formTeamOnGroup, genericWorkerCount, headcountCapOf, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, listRetiredEvents, loadBoard, loadBoardFile, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch, planHeadcountTrim, DEFAULT_TRIM_KEEP_IDLE_MS,
   removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupHeadcount, setGroupHeadcountCap, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
@@ -6973,6 +6973,27 @@ ${lines.join("\n")}
             return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
           }
         }
+      }
+      // W-PROJTEAM1 期一件②支撑（1109 拍板「项目⊇团队」）：payload.gid 在场=挂靠模式
+      //（「仅立项目」后的补组队——项目页无团队卡「组建团队」/建团弹窗 gid 预填路径）。
+      // 上方 pm/headcount 前置门全量复用（本分支在其后）；不经 createGroup=零一锚一组
+      // 冲突；门禁闭包同款注入（sanitize 纵深同判据）。
+      if (typeof payload.gid === "string" && payload.gid.trim()) {
+        const r2 = formTeamOnGroup(payload.gid.trim(), payload.headcount, (sid, role) => {
+          const seat = seatGate(sid, role, this.seatGateCtx());
+          if (seat.ok) return null;
+          if (seat.reason === "not_present") return `组队编制拒绝：会话 ${sid.slice(0, 8)} 不在册`;
+          if (seat.reason === "external") return `组队编制拒绝：外部会话 ${sid.slice(0, 8)} 不可作成员角色（仅 PM 身份行允许外部）`;
+          return `组队编制拒绝：Leader 不可入编`;
+        });
+        if (!r2.ok) {
+          this.auditOrgCommand(actor, device, action, anchor, tier, false, r2.error);
+          return { ok: false, error: r2.error };
+        }
+        ensureProjectClaudeMd(r2.group.anchor_dir, r2.group.name);
+        this.emitOrgState();
+        this.auditOrgCommand(actor, device, action, r2.group.anchor_dir, r2.group.tier, true, `组队挂靠：${r2.group.name}（team 显式化+并入 ${r2.added} 席）`);
+        return { ok: true, data: { group: r2.group } };
       }
       // B2a 单漏斗：create → createGroup（校验 name/anchor_dir/tier；needsConfirm 时
       // addConfirm 已落 confirms.json，组停 pending 等用户 ✓/✗）
