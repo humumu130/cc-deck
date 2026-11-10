@@ -361,6 +361,10 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // W-AUTOMSG #194 + 居中精修（Leader 追加件）：完全居中系统提示形态——收起=水平
   // 居中一行小灰字（无气泡无底色不占左右对齐位，视觉同微信时间戳行）；展开=居中
   // 无底色弱化块（限宽 85%、dim 色、无边框）。alignSelf stretch 让子级自身居中
+  // W-UICLEAN2（1110 实锤②）：DUTY_RECEIPT 巡检卡——对齐 trAuto 定时巡检行视觉（居中一行制）
+  dutyRow: { marginBottom: 6, alignItems: "center" },
+  dutyT: { color: c.faint, fontSize: 11, lineHeight: 16, textAlign: "center" },
+  dutyRaw: { marginTop: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: withA(c.faint, 0.12), color: c.dim, fontSize: 10.5, lineHeight: 15, width: "85%", textAlign: "left", overflow: "hidden" },
   trAuto: { marginBottom: 6, alignItems: "center" },
   trAutoHead: { color: c.faint, fontSize: 11, lineHeight: 16, textAlign: "center" },
   trAutoText: { color: c.dim, fontSize: 11.5, lineHeight: 17, marginTop: 4, width: "85%", textAlign: "left" },
