@@ -91,5 +91,19 @@ ok(ssd.includes("else if (UI && S.selected && pmTeamChipOf(S.selected).length) r
 ok(!ssd.includes('<i class="tc-dot"') && !css.includes("animation: slimPulseKf"), "K2 黄橙小灯移除（markup+动画全退役）");
 ok(!css.includes("button.team-chip::after"), "K3 ▸ 微三角移除（hover 态+title 承担可展开语义）");
 
+
+console.log("件L 值守巡检卡+状态栏前缀（W-UICLEAN2，1110 用户实锤×2）：");
+ok(ssd.includes("function dutySummaryOf") && ssd.includes("function dutyCardHtml") && ssd.includes('dutySrc.startsWith("DUTY_RECEIPT ")'), "L1 DUTY_RECEIPT 行首识别→巡检卡（渲染层拦截，协议/转录零改动）");
+ok(ssd.includes("一切正常") && ssd.includes('accept: "收单", dispatch: "派单"'), "L2 摘要动词化（none+无受阻=一切正常；动作映射收单/派单/板卡/通知）");
+ok(ssd.includes("记录（原文截断）"), "L2b truncate 400 截断兜底（解析失败→记录+原文可见）");
+ok(css.includes(".duty-row summary") && css.includes(".duty-row .duty-raw"), "L3 巡检卡样式（居中一行制+原文折叠块）");
+ok(!/dockSemanticAction\(act\) \|\| s\.title/.test(ssd) && ssd.includes('dockSemanticAction(act) || "干活中"'), "L4 dock 会话名 fallback 封死（语义空落通用词「干活中」——零会话名铁律）");
+{
+  const dp = rf("expo-app", "src", "components", "detail-parts.tsx");
+  const ds = rf("expo-app", "src", "components", "detail-styles.ts");
+  ok(dp.includes("export function dutySummaryOf") && dp.includes('dutySrc.startsWith("DUTY_RECEIPT ")') && dp.includes("🛡 巡检"), "L5 expo 同款拦截卡（detail-parts）+摘要助手导出");
+  ok(ds.includes("dutyRow") && ds.includes("dutyRaw"), "L6 expo 巡检卡样式键（对齐 trAuto 视觉）");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

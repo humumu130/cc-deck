@@ -141,6 +141,28 @@
                   clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400);
                 }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
+                // W-UICLEAN2：DUTY_RECEIPT 巡检卡——值守打卡人话化（schema=validateDutyReceipt
+                // 同构：{v,feed_id,actions:[{kind,ids}],blocked,next_trigger}；动词映射对齐
+                // dutyActionKinds=accept/dispatch/board/notify/none）。居中一行制对齐 automsg
+                // （定时巡检注入行）视觉语言——机器打卡降存在感
+                function dutySummaryOf(rawAfterMark) {
+                  let j = null;
+                  try { j = JSON.parse(rawAfterMark); } catch (_) { j = null; } // relay truncate 400 截断兜底
+                  if (!j || typeof j !== "object") return { text: "记录（原文截断）", raw: rawAfterMark };
+                  const verbs = { accept: "收单", dispatch: "派单", board: "板卡", notify: "通知" };
+                  const parts = [];
+                  for (const a of (Array.isArray(j.actions) ? j.actions : [])) {
+                    if (a && verbs[a.kind] && Array.isArray(a.ids) && a.ids.length) parts.push(verbs[a.kind] + " " + a.ids.length);
+                  }
+                  const blocked = Array.isArray(j.blocked) ? j.blocked.length : 0;
+                  if (blocked) parts.push("受阻 " + blocked);
+                  return { text: parts.length ? parts.join(" · ") : "一切正常", raw: rawAfterMark };
+                }
+                function dutyCardHtml(e, ke, src) {
+                  const sum = dutySummaryOf(src.slice("DUTY_RECEIPT ".length));
+                  return '<div class="duty-row" data-x="' + ke + '"><details><summary title="值守巡检打卡 · 点开看原始记录">🛡 巡检' + (e.ts ? " " + fmtHM(e.ts) : "") + " · " + esc(sum.text) + "</summary>"
+                    + '<div class="duty-raw"><code>' + esc(src) + "</code></div></details></div>";
+                }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
                 // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息标记表——与 expo-app/src/auto-msg.ts
                 // 同表副本（两端无共享机制，改清单两处同步）。「【cc-deck 巡检轮】」=用户自配
@@ -2637,7 +2659,7 @@
                       op.title = act;
                       if (el) el.textContent = "";
                     } else {
-                      op.textContent = dockSemanticAction(act) || s.title || "";
+                      op.textContent = dockSemanticAction(act) || "干活中"; /* W-UICLEAN2（1110 实锤①）：s.title fallback 封死——语义摘要空时落通用词，任何 edge 不回落会话名（dock 零会话名铁律） */
                       op.title = act; /* 命令原文降级 title（debug 可达性不丢） */
                       dock.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
                     }
@@ -3040,6 +3062,14 @@
                       (e.ts && !hideTs ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
+                    // W-UICLEAN2（1110 用户实锤②「不应该让用户看到 JSON 内容」）：值守巡检
+                    // DUTY_RECEIPT 裸 JSON 行（PM 每 23 分钟一打卡）→ 人话紧凑卡。识别面=行首
+                    // 标记（与 relay 消费同口径）；协议/转录零改动（纯渲染层）。摘要=actions 动词
+                    // 化（收单/派单/板卡/通知+计数）+blocked 受阻数；全 none+无受阻=「一切正常」；
+                    // JSON 截断（relay truncate 400）解析失败=「记录」+原文可见兜底。<details>
+                    // 原生展开=零 JS 零状态；非 DUTY_RECEIPT 消息零波及（本拦截前置于一切）
+                    const dutySrc = String(e.full ?? e.text ?? "");
+                    if (dutySrc.startsWith("DUTY_RECEIPT ")) return dutyCardHtml(e, ke, dutySrc);
                     const eng = engineMetaOf(s); // W-ENGLM G：消息流头像同链（engine 空按 model 推断，glm 不再落 ✻）
                     // W-AVABG：消息流 AI 头像底色对齐列表引擎品牌色淡彩（UIPOLISH2 件一同纲）——
                     // eng[1] 与列表 engineClass 同源值（同出 ENGINES 表）；已知引擎走 --engine-* token，

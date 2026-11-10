@@ -1309,6 +1309,13 @@
     /* B21 状态坞一行流式：[态图标 12px][摘要 flex:1][走秒][token]——图标承态（旋转=运行 /
        呼吸=等待 / ✓=完成 / ⚠=错误），左缘 2px 态色条、状态词、呼吸点全部退役；
        顶线退役归 B17（底栈唯一横线在 footer） */
+    /* W-UICLEAN2（1110 实锤②）：DUTY_RECEIPT 值守巡检卡——机器打卡人话化（居中一行制，
+       对齐 automsg 定时巡检行视觉；<details> 原生展开=零 JS） */
+    .duty-row { margin: 2px 0 6px; text-align: center; }
+    .duty-row summary { display: inline-block; color: var(--faint); font-size: 11px; line-height: 16px; cursor: pointer; border-radius: 6px; padding: 0 6px; user-select: none; }
+    .duty-row summary:hover { color: var(--dim); background: var(--hover); }
+    .duty-row .duty-raw { margin: 4px auto 0; max-width: 85%; width: fit-content; text-align: left; }
+    .duty-row .duty-raw code { display: block; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, var(--faint) 12%, transparent); color: var(--dim); font: 10.5px/15px var(--mono); white-space: pre-wrap; word-break: break-all; max-height: 30vh; overflow-y: auto; }
     .session-state-dock {display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 16px; color: var(--dim); font: var(--fs-B) var(--mono);}
     .session-state-spin { flex: 0 0 auto; display: inline-grid; place-items: center; width: 14px; height: 14px; color: var(--working); font-size: 12px; line-height: 1; }
     /* W-DOCKFIX（1109 方案 A·桌面 id 域内）：字形语义化——standby 基座 ◌ 空心静态
