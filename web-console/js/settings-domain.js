@@ -2849,6 +2849,20 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       // pair_req 明文帧（relay 校验 code 后回密封 pair_ack；已配对设备发错码也幂等补 ack）。
       // #29（C-P0-1）现行口径：带码帧携 pubkey（码即信任锚，relay 凭码采信随帧公钥密封 ack），
       // 空码信标绝不携带 pubkey。#42 web 侧自报 UA 摘要（relay 存信任清单，管理卡可辨）
+      // W-PAIRLOOP（1110 用户实锤「添加对端源加回自己」）：自环防呆——本机 relay 云身份
+      // 三源兜底（B4 桥快照 relay_dev；老快照无此键=空串 fail-open 不拦，防误伤老 relay/
+      // 离线形态正常配对）。ack.relay_dev 命中本机=码是本机领的（自配自）——拦截建源。
+      function localRelayDevOf() {
+        try {
+          const b = window.__ccDeck005B4;
+          const s = b && b.snapshot;
+          return s && typeof s.relay_dev === "string" ? s.relay_dev : "";
+        } catch (_) { return ""; }
+      }
+      function isSelfPairAck(ackDev, localDev) {
+        return !!(ackDev && localDev && ackDev === localDev);
+      }
+      function isSelfPairCodeHint() { return !!localRelayDevOf(); } // 本机 relay 云身份在场（提示面非拦截面）
       function sendPairReq(ctx, pair, dev) {
         const body = { t: "pair_req", code: pair.pc, name: "web-" + dev.slice(3, 11) };
         if (pair.pc) body.pubkey = ckp.publicKey;
@@ -2889,6 +2903,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             scheduleCloudReconnect(ctx, ctx.pairBackoffMs);
             showToast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图备查");
             console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack，" + Math.round(ctx.pairBackoffMs / 1000) + "s 后自动重试");
+            // W-PAIRLOOP：本机码形态永远等不到 ack（本机不持对端码语义）——文案指路防困惑
+            if (isSelfPairCodeHint()) showToast("一直配不上？请确认码是在另一台电脑领取的（本机的码在本机输入=加回自己）");
             return;
           }
           const pair = ctx.pendingPair || pendingPairOf(ctx.cfg.id);
@@ -3203,6 +3219,18 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           }
           if (target && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
             console.log("[cloud:" + cfg.name + "] pair_ack 来自发现列表之外的 relay（" + inner.relay_dev + "），丢弃");
+            return;
+          }
+          // W-PAIRLOOP 刀 A（自环拦截）：ack 方=本机 relay（码是本机领的）——建此源=加回自己
+          //（1110 实锤：远程源显示本机名+会话全本机）。拒绝建源+清配对态+文案指路对端领码。
+          if (isSelfPairAck(inner.relay_dev, localRelayDevOf())) {
+            clearInterval(ctx.pairTimer);
+            setPendingPair(cfg.id, null);
+            ctx.pendingPair = null;
+            resetCloudPairing(cfg);
+            cloudSetConn("offline", "已拦截：配对码属于本机——请在对端电脑领取", "pair");
+            showToast("已拦截自配：这个码是本机领的（连回来还是本机）。请到另一台电脑的 CC Deck 设置页领取配对码，再在这里输入");
+            console.log("[cloud:" + cfg.name + "] pair_ack 自环拦截（ack=" + inner.relay_dev + " == 本机 relay）——拒建源");
             return;
           }
           cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };
