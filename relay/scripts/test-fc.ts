@@ -187,6 +187,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(/x\.status === "WORKING" && isRealWorking\(x\) && !\/\^\(pm\|leader/.test(web), "A9 web 团队 chip 在跑计数过真判定（任务书断言③：计数只算干活中）");
   ok(/roster\.filter\(\(r\) => r\.status === "WORKING" && \(\(\) => \{ const rs = S\.sessions\.get\(r\.sid\); return rs \? isRealWorking\(rs\) : true; \}\)\(\)\)/.test(web), "A9b 抽屉 roster 计数过真判定（审查 B-P1-2：同屏灯灰计数+1 自相矛盾根除；rs 未同步保守按干活）");
   ok(web.includes('item.status === "working" && item.standby ? "working-standby" : item.status') && web.includes('title="已接单未开工或挂起——无近期工具活动，不占在跑计数（#291 待命）"') && !web.includes('">待开工</span>') && web.includes('item.status === "working" && !item.standby ?'), "A10 web 卡待命渲染三件（灰呼吸点+dot title 承载语义+秒数隐藏；W-STATUSCHIP 1109：『待开工』tag 退役负断言——灯表意不占词）");
+  ok(web.includes('item.pmStandby ? \' title="值守 PM 常驻待命（空闲自动保活 · #287）"\'') && !web.includes('>待命</span>') && !web.includes('tag mini') && web.includes('pmStandby: session.pm_standby === true'), "A10b pmStandby『待命』tag 退役（W-STANDBYKILL 1110 二轮：一轮降档仍嫌大整段杀——#287 语义并入 dot title；负断言锁 tag 文本+类名双零+派生不动锚）");
   ok(css.includes(".status-dot.working-standby") && css.includes("st-standby-breathe"), "A11 CSS 待命灰呼吸（2.4s 慢频——与工作中黄闪 1.5s 双编码区分）");
   ok(css.includes(".lamp-dot.standby") && css.includes(".lamp-dot.working"), "A12 roster lamp-dot 补全套状态色（原仅 flex 无色=灯不可见，随批修复）");
   ok(mobile.includes("const isRealW = (s) => (window.__ccDeck005IsRealWorking") && (mobile.match(/WORKING" && isRealW\(s\)/g) ?? []).length >= 3 && mobile.includes('? "待开工" :'), "A13 mobile.js 第四面（组头计数×2+看板泳道+状态标签——审查 A-P2②/B-P2-3）");

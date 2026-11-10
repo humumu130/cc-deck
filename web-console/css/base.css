@@ -685,7 +685,7 @@
     @keyframes st-shake-once { 20% { transform: translateX(1px); } 45% { transform: translateX(-1px); } 70% { transform: translateX(.5px); } }
     @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
     .tag {display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: var(--fs-C); white-space: nowrap;}
-    .tag.mini { padding: 1px 6px; font-size: var(--fs-D); color: var(--dim); } /* 件十二扩充 A：列表行类型徽章小号 */
+    /* W-STANDBYKILL（1110 二轮）：.tag.mini 随「待命」tag 整段退役——pmStandby 为唯一使用方（grep 实锤），一轮降档仍嫌大，二轮整杀 */
     /* 件十五（2026-10-10 用户反馈）：关于页链接/行高 + 分段控件收缩贴合 */
     .about-link { color: var(--brand-strong); text-decoration: none; }
     .about-link:hover { text-decoration: underline; text-underline-offset: 3px; }
