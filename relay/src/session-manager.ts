@@ -100,6 +100,8 @@ import { createBoardCommands } from "./commands/board-commands.js"; // W-SPLIT-S
 import { createXmsgCommands, type XmsgController, type XmsgTransport } from "./commands/xmsg-commands.js"; // X1 多机编排：密封 xmsg 子系统（mixin 范式）
 import type { EventBus } from "./event-bus.js";
 import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
+// W-ENGSEC：非 claude 引擎统一安全层（危险工具审计+拦截——100% 工程批三）
+import { assessEngineCommand, commandTextFromToolUse, appendEngineToolAudit, modeGuards } from "./engine-guard.js";
 import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
@@ -3063,6 +3065,69 @@ export class SessionManager {
     return this.sessions.get(id)?.logs ?? [];
   }
 
+  // ============ W-ENGSEC 批三：统一安全层（非 claude 引擎危险工具拦截）============
+  // 检测即斩+拒绝语入时间线+审计+通知（等效口径：headless exec 型无中途注入通道——
+  // 实勘定案见 engine-guard.ts 头注）。去抖：同会话同规则 60s 窗一条（防流式/重放
+  // 同命令刷屏审计与通知）。
+  private engSecLastBlock = new Map<object, { rule: string; at: number }>();
+  private engineGuardCheck(
+    target: { agent?: unknown; state: { session_id: string; engine?: string; permission_mode?: string; title?: string } },
+    text: string,
+    meta: { full?: string; tool?: string } | undefined,
+    face: "managed" | "external",
+  ): void {
+    try {
+      const st = target.state;
+      if (!st || st.engine === "claude" || !st.engine) return; // claude=allow-rules+原生审批面；engine 缺席=旧外部 claude 会话
+      if (!modeGuards(st.permission_mode)) return; // bypassPermissions=全放（各引擎现状语义）
+      const cmd = commandTextFromToolUse(text, meta);
+      if (!cmd) return;
+      const v = assessEngineCommand(cmd);
+      if (!v.block && !v.rule) return;
+      const sid = st.session_id;
+      const mode = st.permission_mode || "default";
+      // 白名单放行也记审计（whitelisted 形态可观测）但不再打断
+      if (!v.block) {
+        appendEngineToolAudit(this.cfg.dataDir, { ts: Date.now(), engine: st.engine, session_id: sid, mode, command: cmd.slice(0, 300), rule: v.rule, reason: v.reason, action: "whitelisted" });
+        return;
+      }
+      const last = this.engSecLastBlock.get(target);
+      const deduped = last && last.rule === v.rule && Date.now() - last.at < 60_000;
+      this.engSecLastBlock.set(target, { rule: v.rule, at: Date.now() });
+      // W-ENGSEC-R1 P1-A（PM 口径「拦截不斩回合/降级改道」）：托管面退役 stop() 斩回合
+      //——误拦成本被斩首机制乘数放大（单命令误拦=整回合终止，rm -rf node_modules 类
+      // 高频开发形态每撞必斩）。降级=拒绝语入时间线（模型下轮 resume 读到改道）+审计
+      //+通知；exec 型转录本为事后事件（命令多已执行完），斩对触发命令本体无损益、
+      // 只杀后续合法工作——斩退役为纯增益。能力边界：同回合后续命令不再被阻断（原斩
+      // 面的残余价值），由档位体系与审计可观测性承担。
+      const stopWord = face === "managed" ? "——请改用安全方式完成" : "——外部会话请人工检查终端";
+      const line = "⛔ 已被 CC Deck 安全策略拦截：" + v.reason + "（规则 " + v.rule + " · 档位 " + mode + "）" + stopWord;
+      if (face === "managed") {
+        const entry: LogEntry = { ts: Date.now(), kind: "system", text: line };
+        const managed = target as unknown as { logs: LogEntry[] };
+        managed.logs.push(entry);
+        this.bus.emit(sid, "SESSION_LOG", entry);
+      } else {
+        this.pushExternalLog(sid, "system", line); // system kind 不再触发本评估（无递归）
+      }
+      appendEngineToolAudit(this.cfg.dataDir, {
+        ts: Date.now(), engine: st.engine, session_id: sid, mode, command: cmd.slice(0, 300),
+        rule: v.rule, reason: v.reason, action: face === "managed" ? "blocked" : "notified-only",
+        detail: face,
+      });
+      this.emitChainAudit("engine-tool-blocked", `engine=${st.engine} session=${sid.slice(0, 8)} face=${face} 规则=${v.rule} 档位=${mode}——${v.reason}（${face === "managed" ? "已拒绝+改道语入时间线" : "external 无句柄仅通知"}）`);
+      if (!deduped) {
+        try {
+          this.upsertNotification("system", "engine-tool-blocked", sid + ":" + v.rule, {
+            title: "危险命令已拦截（" + st.engine + "）",
+            body: truncate(`会话 ${sid.slice(0, 8)} 尝试执行被安全策略拦截：${v.reason}。${face === "managed" ? "拒绝语已入时间线，模型下轮将改道（不斩回合）。" : "外部会话无进程句柄，请人工检查终端。"}`, 200),
+            severity: "waiting", group: "attention", actionable: true, sessionId: sid, domain: "session", returnPath: "sessions",
+          });
+        } catch { /* 通知尽力而为 */ }
+      }
+    } catch { /* 安全层绝不炸转录主流程 */ }
+  }
+
   pushExternalLog(
     id: string,
     kind: LogEntry["kind"],
@@ -3092,6 +3157,9 @@ export class SessionManager {
     // 在窗内而 JSON 尾出窗=parse 恒败→尾帧守卫（!endsWith("}")）跳过等下一帧→external
     // 终帧永不来=**静默丢失**（任务书「assistant 不回传」定性不准：链路在、截断断）。
     // full（pushExternalLog options.full）承载全文（F-02 receiptWithResultLine 同源先例）。
+    // W-ENGSEC 批三：external 咽喉同款评估——relay 无外部进程句柄，动作=拦截语入
+    // 时间线+审计（notified-only）+通知（不斩；用户终端自开的 codex/qwen 等引擎面）
+    if (kind === "tool_use") this.engineGuardCheck(s, text, { full: (meta as { full?: string })?.full, tool }, "external");
     const dutyText = typeof (entry as { full?: unknown }).full === "string" && (entry as { full: string }).full
       ? (entry as { full: string }).full
       : typeof (entry as { text?: unknown }).text === "string" ? (entry as { text: string }).text : "";
@@ -3908,6 +3976,10 @@ export class SessionManager {
           // 咽喉（bridge emitTranscriptEntry）同形态：托管 PM 长输出（>400 字正文+末行
           // DUTY_RECEIPT）行头在窗 JSON 尾出窗=parse 恒败静默丢失（R2 只修 external 挂点
           // 漏了本挂点）。full 优先读法与 pushExternalLog 咽喉（R2 主刀）同构成对。
+          // W-ENGSEC 批三：非 claude 引擎危险工具拦截（托管面——转录单点检测即斩：
+          // stop() 终止回合+拦截语入时间线（下轮 resume 模型读到改道）+审计+通知；
+          // claude 面由 allow-rules+原生审批承担零波及；bypassPermissions 档全放）
+          if (kind === "tool_use") this.engineGuardCheck(managed, text, { full: (logMeta as { full?: string }).full, tool: logMeta.tool }, "managed");
           const dutyManagedText = typeof (entry as { full?: unknown }).full === "string" && (entry as { full: string }).full
             ? (entry as { full: string }).full
             : typeof entry.text === "string" ? entry.text : "";

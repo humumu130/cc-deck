@@ -124,6 +124,7 @@
     "test:subagent": "tsx scripts/test-subagent.ts",
     "test:pmseat": "tsx scripts/test-pmseat.ts",
     "test:pmappoint-gap": "tsx scripts/test-pmappoint-gap.ts",
+    "test:engsec": "tsx scripts/test-engsec.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
     "test:pmresume": "tsx scripts/test-pmresume.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",
