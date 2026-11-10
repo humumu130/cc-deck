@@ -1390,7 +1390,7 @@
                 function rememberUnsupported(type, error) {
                   if (/invalid command shape|unknown.?command|unsupported|未知命令|不支持/i.test(error)) state.unsupported.add(type);
                 }
-                async function requestDetail(gid, force = false) {
+                async function requestDetail(gid, force = false, origin = "auto") {
                   if (!state.command || !state.online || state.unsupported.has("COMMAND_PROJECT_DETAIL") || !state.projects?.some((item) => item.id === gid) || state.loads.get(gid) === "loading" || (!force && state.loads.get(gid) === "ready")) return false;
                   const epoch = state.epoch;
                   const projectAtRequest = state.projects.find((item) => item.id === gid);
@@ -1400,15 +1400,50 @@
                   try {
                     const ack = await state.command("COMMAND_PROJECT_DETAIL", { gid });
                     if (epoch !== state.epoch || !state.projects?.some((item) => item.id === gid)) return false;
-                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid); return false; }
+                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid, force, origin); return false; }
                     const result = verdict(ack);
                     if (!result.ok) { rememberUnsupported("COMMAND_PROJECT_DETAIL", result.error); throw new Error(result.error); }
                     if (!detail(gid, ack.data)) throw new Error("项目详情回执缺少匹配的 group / board / receipts");
+                    state.detailRetry = 0; // 成功清零退避档位（下次失败重新从 5s 起）
                     return true;
                   } catch (error) {
-                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) { const raw = String(error?.message || error); state.loads.set(gid, "详情加载失败：" + raw); console.warn("[team] 详情加载失败（原文）:", raw); feedback("详情加载失败，请重试", "error"); render(); } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
+                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) {
+                      const raw = String(error?.message || error);
+                      console.warn("[team] 详情加载失败（原文）:", raw, origin === "auto" ? "（自动刷新，静默退避中）" : "");
+                      // [W-DETAILBUG]（1110 用户实锤三现）弹错误导根治：自动路径失败**不弹横幅**
+                      // （用户没点重试却被告知「请重试」=三现噪音源——PM 派单/收割窗每轮
+                      // PROJECTS_UPDATED/BOARDS_DIGEST 广播都 force 重拉，relay 写窗内同步
+                      // import 占住事件循环时命令 8s 超时成簇）。分档处置：
+                      //   auto（广播/快照/回前台/对账触发）→ 面内静默态+指数退避自愈重试
+                      //（5s/15s/45s 封顶，成功清零），无横幅无「请重试」；
+                      //   manual（head 刷新钮/选卡点击）→ 用户明确期待反馈，横幅保留。
+                      // 超时（null ack）与结构校验失败同档：超时=瞬态（写窗）优先退避重试；
+                      // 结构失败/显式 error 也退避——unsupported 已被 rememberUnsupported 拦
+                      //（后续静默跳过），其余错误重试无望时退避封顶后停（45s×1 即止，不再循环）。
+                      if (origin === "auto") {
+                        state.loads.set(gid, "详情同步中断 · 自动重试中");
+                        scheduleDetailRetry(gid);
+                      } else {
+                        state.loads.set(gid, "详情加载失败：" + raw);
+                        feedback("详情加载失败，请重试", "error");
+                      }
+                      render();
+                    } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
                     return false;
                   }
+                }
+                // [W-DETAILBUG] 自动路径退避重试：指数三档（5s/15s/45s），成功清零；同 gid
+                // 在飞不叠 timer；epoch 翻转/组消失自动作废（requestDetail 前置闸拦）。
+                function scheduleDetailRetry(gid) {
+                  if (state._detailRetryTimers?.has(gid)) return;
+                  state.detailRetry = Math.min((state.detailRetry ?? 0) + 1, 3);
+                  const delay = [5000, 15000, 45000][state.detailRetry - 1] ?? 45000;
+                  state._detailRetryTimers = state._detailRetryTimers || new Map();
+                  const t = setTimeout(() => {
+                    state._detailRetryTimers?.delete(gid);
+                    void requestDetail(gid, true, "auto");
+                  }, delay);
+                  state._detailRetryTimers.set(gid, t);
                 }
                 async function decide(id, approve) {
                   if (typeof approve !== "boolean" || !state.confirms.some((confirm) => confirm.id === id) || !state.command || !state.online || state.flights.has(id) || state.accepted.has(id) || state.unsupported.has("COMMAND_ORG_CONFIRM")) return false;
@@ -1528,6 +1563,8 @@
                 }
                 function bind({ command = null, online = false } = {}) {
                   state.epoch += 1;
+                  if (state._detailRetryTimers) { for (const t of state._detailRetryTimers.values()) clearTimeout(t); state._detailRetryTimers.clear(); }
+                  state.detailRetry = 0;
                   state.command = typeof command === "function" ? command : null;
                   state.online = online === true;
                   state.flights.clear(); state.loads.clear(); state.accepted.clear(); state.unsupported.clear();
@@ -1540,8 +1577,14 @@
                   state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === gid)?.id || null;
                   window.__ccDeck005SlimUi?.markSeen?.(gid); // [t-7e0c6189] 进团队域选中该团队即清未读聚合（设计要点 1）
                   render();
-                  void requestDetail(gid);
+                  clearDetailRetry(gid);
+                  void requestDetail(gid, false, "manual"); // [W-DETAILBUG] 用户点击选卡=手动源（失败保留横幅+清退避立即拉）
                   return true;
+                }
+                // [W-DETAILBUG] 退避 timer 清理（成功/手动重拉/换组时停表——防旧 timer 抢跑叠拉）
+                function clearDetailRetry(gid) {
+                  const t = state._detailRetryTimers?.get(gid);
+                  if (t) { clearTimeout(t); state._detailRetryTimers.delete(gid); }
                 }
                 // ---------- FB4 团队创建表单 ----------
                 // 真表单（团队名/锚点目录/立项档/成员多选+角色模板），提交走
@@ -2401,7 +2444,7 @@
                     if (project) { select(project.dataset.teamProject); return; }
                     const confirm = event.target.closest("[data-team-pick-confirm]");
                     if (confirm) { state.confirmSelected = confirm.dataset.teamPickConfirm; render(); return; }
-                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true);
+                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true, "manual"); // [W-DETAILBUG] 手动源：用户点击，失败保留横幅
                     // [W-TEAMDISSOLVE]：解散入口（选中组开确认弹窗）+已解散区开合
                     if (event.target.closest("[data-team-dissolve]")) {
                       const g = state.projects?.find((x) => x.id === state.selected);
