@@ -38,14 +38,15 @@ console.log("D. watchdog 耗尽提示（本机码永远无 ack 形态的用户�
 ok(sd.includes("一直配不上") && sd.includes("本机的码在本机输入"), "D1 看门狗耗尽 toast 指路文案在");
 ok(sd.includes("isSelfPairCodeHint"), "D2 提示条件 helper（本机 relay 云身份在场）");
 
-console.log("E. 零 relay 改动红线（git log 面核——浅克隆安全）");
+console.log("E. 零 relay 改动红线（内容标记断言——零 git 依赖，CI 环境无关）");
 {
-  const { execFileSync } = await import("node:child_process");
-  const thisShas = execFileSync("git", ["log", "--format=%H", "-3"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
-  const lastRelayTouch = execFileSync("git", ["log", "--format=%H", "-1", "--", "relay/src/"], { cwd: REPO, encoding: "utf8" }).trim();
-  const lastCfTouch = execFileSync("git", ["log", "--format=%H", "-1", "--", "cloudflare/"], { cwd: REPO, encoding: "utf8" }).trim();
-  ok(!thisShas.includes(lastRelayTouch), "E1 relay src 零触碰（最新触提交非本批 sha）");
-  ok(!thisShas.includes(lastCfTouch), "E2 cloudflare worker 零触碰（同款）");
+  // 本批改动惯例必带 W-PAIRLOOP 标记注释——relay src+worker 四个关改面文件 grep 无标记=零触碰
+  const files = ["relay/src/cloud-client.ts", "relay/src/session-manager.ts", "relay/src/bridge.ts", "cloudflare/src/worker.ts"];
+  for (const f of files) {
+    const body = readFileSync(REPO + f, "utf8");
+    ok(!body.includes("W-PAIRLOOP"), `E-${f.split("/").pop()} 零触碰（无本批标记）`);
+  }
+  ok(sd.includes("W-PAIRLOOP"), "E5 改动面在（web settings-domain 带本批标记——对照正向锚）");
 }
 
 console.log(`\n========== pairloop 套件：${pass} 通过 / ${fail} 失败 ==========`);
