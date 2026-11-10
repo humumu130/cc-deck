@@ -148,6 +148,9 @@ ok(css.includes('body[data-source-count="1"] #d-team .queue-card .src-cap { disp
 ok(css.includes(".member-card .member-head .avatar.m-ava .ava-brand img") && !css.includes(".member-card .m-head .avatar.m-ava .ava-crab"), "G4 成员卡头像 CSS 修锚（.m-head→.member-head+ava-brand 同规格）");
 ok(css.includes(".create-x") && css.includes(".create-inline"), "G5 弹窗 v2 皮肤落地");
 ok(td.includes("创建到"), "G6 「创建到」行入弹窗（NewSessionModal 同语义）");
+// ---------- R1 W-AGGRED-R1（1109 审查返修）：P0-1 挂靠链 + P3-2 PM 行 ----------
+ok(td.includes("pop.dataset.teamGid ? true : teamAnchorValidate(pop, { submit: true })"), "R1-1 挂靠态提交跳过锚点校验（P0-1：高级区消隐后 anchor input 不在 DOM，校验恒 false→提交静默 return=挂靠创建链断裂——审查三证；挂靠分支 payload.anchor_dir 零消费跳过安全）");
+ok(td.includes('if (isGid) html += \'<div class="team-pm-row" data-team-pm-row>\''), "R1-2 挂靠态 PM 人选行页脚上方补位（P3-2：高级区整段消隐不再吞 L1 补漏——teamPmRowHtml 复用+模板切换 change 联动照常）");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;
