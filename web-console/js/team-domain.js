@@ -1390,7 +1390,7 @@
                 function rememberUnsupported(type, error) {
                   if (/invalid command shape|unknown.?command|unsupported|未知命令|不支持/i.test(error)) state.unsupported.add(type);
                 }
-                async function requestDetail(gid, force = false) {
+                async function requestDetail(gid, force = false, origin = "auto") {
                   if (!state.command || !state.online || state.unsupported.has("COMMAND_PROJECT_DETAIL") || !state.projects?.some((item) => item.id === gid) || state.loads.get(gid) === "loading" || (!force && state.loads.get(gid) === "ready")) return false;
                   const epoch = state.epoch;
                   const projectAtRequest = state.projects.find((item) => item.id === gid);
@@ -1400,15 +1400,50 @@
                   try {
                     const ack = await state.command("COMMAND_PROJECT_DETAIL", { gid });
                     if (epoch !== state.epoch || !state.projects?.some((item) => item.id === gid)) return false;
-                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid); return false; }
+                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid, force, origin); return false; }
                     const result = verdict(ack);
                     if (!result.ok) { rememberUnsupported("COMMAND_PROJECT_DETAIL", result.error); throw new Error(result.error); }
                     if (!detail(gid, ack.data)) throw new Error("项目详情回执缺少匹配的 group / board / receipts");
+                    state.detailRetry = 0; // 成功清零退避档位（下次失败重新从 5s 起）
                     return true;
                   } catch (error) {
-                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) { const raw = String(error?.message || error); state.loads.set(gid, "详情加载失败：" + raw); console.warn("[team] 详情加载失败（原文）:", raw); feedback("详情加载失败，请重试", "error"); render(); } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
+                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) {
+                      const raw = String(error?.message || error);
+                      console.warn("[team] 详情加载失败（原文）:", raw, origin === "auto" ? "（自动刷新，静默退避中）" : "");
+                      // [W-DETAILBUG]（1110 用户实锤三现）弹错误导根治：自动路径失败**不弹横幅**
+                      // （用户没点重试却被告知「请重试」=三现噪音源——PM 派单/收割窗每轮
+                      // PROJECTS_UPDATED/BOARDS_DIGEST 广播都 force 重拉，relay 写窗内同步
+                      // import 占住事件循环时命令 8s 超时成簇）。分档处置：
+                      //   auto（广播/快照/回前台/对账触发）→ 面内静默态+指数退避自愈重试
+                      //（5s/15s/45s 封顶，成功清零），无横幅无「请重试」；
+                      //   manual（head 刷新钮/选卡点击）→ 用户明确期待反馈，横幅保留。
+                      // 超时（null ack）与结构校验失败同档：超时=瞬态（写窗）优先退避重试；
+                      // 结构失败/显式 error 也退避——unsupported 已被 rememberUnsupported 拦
+                      //（后续静默跳过），其余错误重试无望时退避封顶后停（45s×1 即止，不再循环）。
+                      if (origin === "auto") {
+                        state.loads.set(gid, "详情同步中断 · 自动重试中");
+                        scheduleDetailRetry(gid);
+                      } else {
+                        state.loads.set(gid, "详情加载失败：" + raw);
+                        feedback("详情加载失败，请重试", "error");
+                      }
+                      render();
+                    } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
                     return false;
                   }
+                }
+                // [W-DETAILBUG] 自动路径退避重试：指数三档（5s/15s/45s），成功清零；同 gid
+                // 在飞不叠 timer；epoch 翻转/组消失自动作废（requestDetail 前置闸拦）。
+                function scheduleDetailRetry(gid) {
+                  if (state._detailRetryTimers?.has(gid)) return;
+                  state.detailRetry = Math.min((state.detailRetry ?? 0) + 1, 3);
+                  const delay = [5000, 15000, 45000][state.detailRetry - 1] ?? 45000;
+                  state._detailRetryTimers = state._detailRetryTimers || new Map();
+                  const t = setTimeout(() => {
+                    state._detailRetryTimers?.delete(gid);
+                    void requestDetail(gid, true, "auto");
+                  }, delay);
+                  state._detailRetryTimers.set(gid, t);
                 }
                 async function decide(id, approve) {
                   if (typeof approve !== "boolean" || !state.confirms.some((confirm) => confirm.id === id) || !state.command || !state.online || state.flights.has(id) || state.accepted.has(id) || state.unsupported.has("COMMAND_ORG_CONFIRM")) return false;
@@ -1528,6 +1563,8 @@
                 }
                 function bind({ command = null, online = false } = {}) {
                   state.epoch += 1;
+                  if (state._detailRetryTimers) { for (const t of state._detailRetryTimers.values()) clearTimeout(t); state._detailRetryTimers.clear(); }
+                  state.detailRetry = 0;
                   state.command = typeof command === "function" ? command : null;
                   state.online = online === true;
                   state.flights.clear(); state.loads.clear(); state.accepted.clear(); state.unsupported.clear();
@@ -1540,8 +1577,14 @@
                   state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === gid)?.id || null;
                   window.__ccDeck005SlimUi?.markSeen?.(gid); // [t-7e0c6189] 进团队域选中该团队即清未读聚合（设计要点 1）
                   render();
-                  void requestDetail(gid);
+                  clearDetailRetry(gid);
+                  void requestDetail(gid, false, "manual"); // [W-DETAILBUG] 用户点击选卡=手动源（失败保留横幅+清退避立即拉）
                   return true;
+                }
+                // [W-DETAILBUG] 退避 timer 清理（成功/手动重拉/换组时停表——防旧 timer 抢跑叠拉）
+                function clearDetailRetry(gid) {
+                  const t = state._detailRetryTimers?.get(gid);
+                  if (t) { clearTimeout(t); state._detailRetryTimers.delete(gid); }
                 }
                 // ---------- FB4 团队创建表单 ----------
                 // 真表单（团队名/锚点目录/立项档/成员多选+角色模板），提交走
@@ -1917,143 +1960,6 @@
                   // W-AGGRED-R1（P3-2 审查返修）：挂靠态高级区整段消隐，PM 人选行随之丢失——
                   // 页脚上方补一行（L1 补漏同款形态，teamPmRowHtml 复用+模板切换 change 联动照常）
                   if (isGid) html += '<div class="team-pm-row" data-team-pm-row>' + teamPmRowHtml("pm-led") + "</div>";
-                  html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit><span data-team-submit-label>创建团队</span></button></div>';
-                  pop.innerHTML = html;
-                  pop.dataset.aggDirs = JSON.stringify(pfDirs); // W-AGGFIX：附锚全量 stash（submit 读——原 pfDirs 越域引用根治）
-                  const anchorInput = pop.querySelector("[data-team-field='anchor']");
-                  if (anchorInput) anchorInput.dataset.init = String(anchorInput.value || ""); // 裁决 8：blur 校验跳过「未修改过的初始值」基准
-                  // W-AGGFIX C4：阻断态主钮 disabled（banner 已示因，可点外观不再误导）
-                  const submitGate = pop.querySelector("[data-team-submit]");
-                  if ((!state.online || !state.command) && submitGate) { submitGate.disabled = true; submitGate.title = "命令通道未接入，无法提交"; }
-                  // W-PROJTEAM1 挂靠模式（裁决 11）：gid 走 create+gid 分支（formTeamOnGroup），
-                  // 高级折叠区已整段不渲染（四字段编辑无效问题随区消隐——PROJTEAM1-REVIEW P2-1）
-                  if (isGid) pop.dataset.teamGid = pf.gid;
-                  // W-AGGRED 模式机（C 路 §5/§7）：预填命中>0=chips 形态（勾选池 checked 投影+
-                  // 未勾行入「其他候选 ▾」折叠组——AGGFIX B1 吸收）；否则 list=现行表单流
-                  pop.dataset.teamMode = "list";
-                  if (pf && Array.isArray(pf.members)) {
-                    let hit = 0;
-                    for (const sid of pf.members) {
-                      const box = pop.querySelector('[data-team-member="' + cssEscape(String(sid)) + '"]');
-                      if (box && !box.checked) { box.checked = true; hit++; }
-                    }
-                    if (hit) console.log("[team-create] prefill members 命中 " + hit + "/" + pf.members.length);
-                    if (hit > 0) { pop.dataset.teamMode = "chips"; foldUncheckedCands(pop); }
-                  }
-                  // L3（裁决 12）：chips 模式「＋ 添加成员」并入「其他候选 ▾」行尾（同一「调整成员」
-                  // 心智减一个按钮位）；list 模式保持列表下方原位
-                  if (pop.dataset.teamMode === "chips") {
-                    const tog = pop.querySelector("[data-team-cand-fold]");
-                    const addBtnEl = pop.querySelector("[data-team-add-member]");
-                    if (tog && addBtnEl) {
-                      const line = document.createElement("div");
-                      line.className = "cand-fold-line";
-                      tog.before(line);
-                      line.append(tog, addBtnEl);
-                    }
-                  }
-                  syncTeamSeatCount(pop); // 计数+chips 投影初渲
-                  syncAnchorHint(pop);
-                  back.addEventListener("click", closeTeamCreate);
-                  pop.addEventListener("click", (ev) => {
-                    if (ev.target.closest("[data-team-cancel]") || ev.target.closest("[data-team-close]")) { closeTeamCreate(); return; }
-                    if (ev.target.closest("[data-team-submit]")) { void submitTeamCreate(pop); return; }
-                    if (ev.target.closest("[data-team-add-member]")) { addTeamManualRow(pop); return; }
-                    if (ev.target.closest("[data-manual-remove]")) { ev.target.closest(".team-manual-row")?.remove(); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：移行计数联动
-                    if (ev.target.closest("[data-team-anchor-browse]")) { void pickTeamAnchor(); return; }
-                    // W-AGGRED（裁决 1）：chip × =取消勾选（写回 checkbox 池+dispatch change——
-                    // 席位闸/计数走既有委托链零改动继承）
-                    const chipX = ev.target.closest("[data-chip-x]");
-                    if (chipX) {
-                      const chip = chipX.closest("[data-chip]");
-                      const box = chip ? pop.querySelector('[data-team-member="' + cssEscape(String(chip.dataset.chip || "")) + '"]') : null;
-                      if (box && box.checked) { box.checked = false; box.dispatchEvent(new Event("change", { bubbles: true })); }
-                      return;
-                    }
-                    // W-AGGFIX B1：折叠组展开/收起（▾/▴ 随态）
-                    const foldTog = ev.target.closest("[data-team-cand-fold]");
-                    if (foldTog) {
-                      const fold = foldTog.nextElementSibling;
-                      if (fold) { fold.hidden = !fold.hidden; foldTog.textContent = "其他候选 " + fold.querySelectorAll(".team-cand").length + (fold.hidden ? " ▾" : " ▴"); }
-                      return;
-                    }
-                    // W-AGGFIX C3：批量微操作——全选先展开折叠组（被折叠行也在本桶）再逐勾受 8 席闸
-                    if (ev.target.closest("[data-team-cand-all]")) {
-                      const tog = pop.querySelector("[data-team-cand-fold]");
-                      const fold = tog ? tog.nextElementSibling : null;
-                      if (fold && fold.hidden) tog.click();
-                      for (const box of pop.querySelectorAll("[data-team-member]:not(:checked)")) {
-                        if (teamSeatCount(pop) >= 8) { toast("编制最多 8 席——已选 " + teamSeatCount(pop) + " 个"); break; }
-                        box.checked = true;
-                      }
-                      syncTeamSeatCount(pop);
-                      return;
-                    }
-                    if (ev.target.closest("[data-team-cand-clear]")) {
-                      pop.querySelectorAll("[data-team-member]:checked").forEach((b) => { b.checked = false; });
-                      if (pop.dataset.teamMode === "chips") teamToListMode(pop); // W-AGGRED：清空全部=手动态列表形态（C 路状态机）
-                      syncTeamSeatCount(pop);
-                      return;
-                    }
-                  });
-                  pop.addEventListener("change", (ev) => {
-                    // W-AGGFIX C1：勾选即席位闸（原只在 addTeamManualRow 挂——预填满员后多勾第 9 个
-                    // 提交才被 relay 整单拒=错误迟到）；拦截后回滚勾选+计数反馈
-                    const memberBox = ev.target.closest("[data-team-member]");
-                    if (memberBox && memberBox.checked && teamSeatCount(pop) > 8) {
-                      memberBox.checked = false;
-                      toast("编制最多 8 席——先减员或换非 PM 模板");
-                      syncTeamSeatCount(pop);
-                      return;
-                    }
-                    const tpl = ev.target.closest("[data-team-field='template']");
-                    if (tpl) {
-                      const free = tpl.value === "free";
-                      pop.querySelectorAll(".team-cand-role").forEach((el) => { el.hidden = !free; });
-                      const pmRow = pop.querySelector("[data-team-pm-row]"); // W-AGGRED：PM 人选行随模板联动（L1）
-                      if (pmRow) pmRow.textContent = teamPmRowHtml(tpl.value);
-                      syncTeamSeatCount(pop); // W-AGGFIX C1：pm-led 占 1 席——模板切换计数联动
-                      return;
-                    }
-                    const srcSel = ev.target.closest("[data-team-field='source']"); // #277 ③ 切源：候选重灌+浏览钮/hint 联动
-                    if (srcSel) {
-                      const wrap = pop.querySelector("[data-team-cand-wrap]");
-                      if (wrap) wrap.innerHTML = teamCandListHtml(teamCandsForSource(srcSel.value, teamSourceInfo()));
-                      syncTeamCreateSource(pop);
-                      syncTeamSeatCount(pop); // W-AGGFIX C1：切源重灌=勾选清零，计数归零联动
-                      return;
-                    }
-                    if (memberBox) syncTeamSeatCount(pop); // W-AGGFIX C1/C2：普通勾/去勾——计数+主钮规模随动
-                  });
-                  pop.addEventListener("focusout", (ev) => { // W-TEAMPOPOLISH B3：blur 内联校验（blur 不冒泡，focusout 对偶面）
-                    if (ev.target.closest?.("[data-team-field='name']")) { teamNameValidate(pop); return; }
-                    if (ev.target.closest?.("[data-team-field='anchor']")) { teamAnchorValidate(pop); syncAnchorHint(pop); }
-                  });
-                  pop.addEventListener("input", (ev) => { // W-AGGRED：锚点值变化即时联动态（ⓘ 展开/收起随空值与错误态）
-                    if (ev.target.closest?.("[data-team-field='anchor']")) syncAnchorHint(pop);
-                  });
-                  pop.addEventListener("keydown", (ev) => {
-                    if (ev.key === "Escape") { ev.stopPropagation(); closeTeamCreate(); return; }
-                    if (ev.key === "Enter" && ev.target.tagName === "INPUT" && ev.target.dataset.teamField) { ev.preventDefault(); void submitTeamCreate(pop); }
-                  });
-                  document.body.append(back, pop);
-                  syncTeamCreateSource(pop); // #277 ④：初始浏览钮/hint 态
-                  const name = pop.querySelector("[data-team-field='name']");
-                  if (name) name.focus();
-                }
-                function closeTeamCreate() { document.querySelectorAll("#team-create-pop, [data-team-create-back]").forEach((el) => el.remove()); }
-                async function submitTeamCreate(pop) {
-                  const name = String(pop.querySelector("[data-team-field='name']")?.value ?? "").trim();
-                  const anchor = String(pop.querySelector("[data-team-field='anchor']")?.value ?? "").trim();
-                  const tier = String(pop.querySelector("[data-team-field='tier']")?.value ?? "轻立项");
-                  const template = String(pop.querySelector("[data-team-field='template']")?.value ?? "worker");
-                  // W-TEAMPOPOLISH B3：前置校验走内联（blur 同源函数——错误就近显示在字段上），
-                  // toast 只留传输层失败（下方 command/catch 分支）；重名对照在 blur 已即时暴露，
-                  // 提交时再核一次防串行窗口（列表在弹窗打开期间刷新）
-                  // P2BATCH6 件8（C-P2-2）：短路 → 双跑合并判——旧版 || 短路致锚点目录空值被
-                  // 团队名首错掩盖，用户两次试错才见全貌；两校验各自独立执行（各自标红+行级
-                  // 文案一次全出），提交仍任一不过即拦。
-                  { const okName = teamNameValidate(pop); const okAnchor = pop.dataset.teamGid ? true : teamAnchorValidate(pop, { submit: true }); if (!okAnchor) { const adv = pop.querySelector("details.team-adv"); if (adv) adv.open = true; } if (!okName || !okAnchor) return; } // W-AGGRED：提交全验（裁决 8）+失败展开折叠区就近示错；W-AGGRED-R1（P0-1 审查返修）：挂靠态（teamGid）跳过锚点校验——高级区整段消隐后 anchor input 不在 DOM，校验恒 false→提交静默 return=挂靠创建链断裂（审查三证）；挂靠分支 payload.anchor_dir 零消费（relay formTeamOnGroup 用既有项目锚），跳过安全
                   if (teamSeatCount(pop) > 8) { toast("编制最多 8 席——请先减员"); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：本地硬闸兜底（勾选闸漏网路径防整单被 relay 拒）
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
@@ -2404,7 +2310,7 @@
                     if (project) { select(project.dataset.teamProject); return; }
                     const confirm = event.target.closest("[data-team-pick-confirm]");
                     if (confirm) { state.confirmSelected = confirm.dataset.teamPickConfirm; render(); return; }
-                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true);
+                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true, "manual"); // [W-DETAILBUG] 手动源：用户点击，失败保留横幅
                     // [W-TEAMDISSOLVE]：解散入口（选中组开确认弹窗）+已解散区开合
                     if (event.target.closest("[data-team-dissolve]")) {
                       const g = state.projects?.find((x) => x.id === state.selected);

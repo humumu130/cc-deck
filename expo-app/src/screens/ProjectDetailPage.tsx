@@ -156,7 +156,7 @@ export function ProjectDetailPage({
         {sessions.length ? sessions.slice(0, 8).map((s) => {
           const k = VROW_K[s.status] ?? ["完成", ""];
           const ctx = Number(s.context_limit) > 0
-            ? ` · 上下文 ${Math.max(1, Math.min(999, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100)))}%` : "";
+            ? ` · 上下文 ${Math.max(1, Math.min(100, Math.round((Number(s.context_usage) / Number(s.context_limit)) * 100)))}%` : ""; // W-CTXCLAMP：999→100 与全仓口径对齐（跨端同窗对表——web 侧同批收口）
           return (
             <Pressable key={s.session_id} style={styles.vrow} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
               accessibilityLabel={`会话 ${s.title || s.session_id}，点按打开详情`}

@@ -1396,6 +1396,12 @@ function connectLan(ctx) {
             if (eng && window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(eng);
             return;
           }
+          // W-ENGDIST-A 件③：未安装引擎「一键安装」钮 → 调安装器+行内进度+终态刷新
+          const engInstallBtn = event.target.closest("[data-engine-install]");
+          if (engInstallBtn) {
+            installEngine(engInstallBtn.dataset.engineInstall || "", engInstallBtn);
+            return;
+          }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; } // 件H2：按钮已移除（本行保留兜底——旧 DOM/书签页残留点击不再裸响）
           // 件十五：关于页项目主页/仓库链接——统一走 __ccDeck005OpenUrl（桌面 openExternal /
           // 浏览器直开，既有跨形态打开链）
@@ -1593,13 +1599,15 @@ function connectLan(ctx) {
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
+              // W-ENGDIST-A 件③：未安装+可装引擎（qwen/codex/codebuddy/trae；zcode unsupported 不给）加「一键安装」钮
+              const installBtn = (!ok && !na && e.state === "unavailable" && ENGINE_INSTALLABLE[e.id]) ? `<button class="row-share" data-engine-install="${esc(e.id)}" type="button" title="npm 一键安装（trae 为源码+venv 全链）；进度显示在行内，完成后自动刷新引擎状态">一键安装</button>` : "";
               // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
               // W-ENGINESLIM-R1（A 审 P1·1106 用户令②视觉面）：与新建会话下拉同款——徽章
               //（图标+名称文字）即标签，v8-swtxt 不再并排 label 名称重复（A 审实锤双显）；
               // 引擎名进行 title/aria-label（可访问性不丢）；needs_auth 黄点保留（信号位），
               // 其 title 升「名 · 扫码提示」全量（旧 title 只 auth_hint 丢名）。
               const rowTitle = esc(`${label}${na ? " · 点此扫码登录 · " + oneLine(e.auth_hint || "") : " · " + copy}`);
-              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}"` : ""} title="${rowTitle}" aria-label="${rowTitle}"><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${na ? '<span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd v8-swd-solo">${copy}</div></div>${loginBtn || tag}</div>`;
+              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}"` : ""} title="${rowTitle}" aria-label="${rowTitle}"><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${na ? '<span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd v8-swd-solo">${copy}</div></div>${loginBtn || installBtn || tag}</div>`;
             }).join(""));
           }
           // 件B：已隐藏远程卡恢复行（renderHiddenRemoteLive 挂 window 供 click 委托复渲）
@@ -1837,6 +1845,48 @@ function connectLan(ctx) {
         const j = await r.json();
         if (!j || !j.code) throw new Error("响应缺码");
         return { code: String(j.code), ttlMs: Number(j.expires_in || 0) * 1000 }; // #FB3-TTL：relay expires_in 单位=秒（pairing.ts issue 返回 eff/1000），旧码当毫秒除 60000 恒显「1 分钟内有效」
+      }
+      // W-ENGDIST-A 件③：引擎一键安装（POST 启动+GET 轮询进度→终态行内呈现+刷新引擎态）。
+      // 安装为长任务（npm -g/clone/uv sync 分钟级）——异步态机在 relay 侧，前端 1.2s 轮询；
+      // done 后 refreshAllData() 重连拉新 SNAPSHOT（engine_catalog 随快照刷新——引擎行自动翻绿）。
+      const ENGINE_INSTALLABLE = { "qwen-code": 1, codex: 1, codebuddy: 1, trae: 1 };
+      const engInstallBusy = new Set();
+      async function installEngine(id, btn) {
+        if (engInstallBusy.has(id)) return;
+        engInstallBusy.add(id);
+        const row = btn.closest(".v8-swrow");
+        const desc = row ? row.querySelector(".v8-swd") : null;
+        const origDesc = desc ? desc.textContent : "";
+        const setDesc = (t) => { if (desc) desc.textContent = t; };
+        btn.disabled = true; btn.textContent = "安装中…";
+        try {
+          const t = String((ctx.cfg && ctx.cfg.token) || relayToken || "");
+          if (!t) throw new Error("token 未就绪");
+          const base = shellProbe && localRelayInfo ? "http://127.0.0.1:" + (localRelayInfo.port || 8787) : location.origin;
+          const r = await fetch(base + "/api/engine-install?token=" + encodeURIComponent(t), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ engine: id }), signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.ok) throw new Error(j.error || "http " + r.status);
+          if (!j.started) { setDesc("该引擎正在安装中（另一入口已启动）——下方进度同步"); }
+          // 轮询直至终态（15 分钟帽——clone+uv sync 网络慢场景）
+          const deadline = Date.now() + 15 * 60_000;
+          for (;;) {
+            await new Promise((res) => setTimeout(res, 1200));
+            const g = await fetch(base + "/api/engine-install?token=" + encodeURIComponent(t) + "&engine=" + encodeURIComponent(id)).then((x) => x.json()).catch(() => null);
+            const st = g && g.ok && g.state;
+            if (!st) continue;
+            const tail = (st.log || []).slice(-2).join(" · ");
+            setDesc(`${st.state === "running" ? "⏳ 安装中" : st.state === "done" ? "✓ 安装完成" : "✗ 安装失败"}：${tail || st.summary || ""}`);
+            if (st.state !== "running" || Date.now() > deadline) break;
+          }
+          showToast(`引擎 ${id} 安装流程结束——刷新引擎状态`);
+          refreshAllData();
+        } catch (e) {
+          showToast("安装启动失败：" + (e instanceof Error ? e.message : String(e)));
+          setDesc(origDesc);
+        } finally {
+          engInstallBusy.delete(id);
+          btn.disabled = false; btn.textContent = "一键安装";
+        }
       }
       function pairDeviceRows() {
         const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -2799,6 +2849,20 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       // pair_req 明文帧（relay 校验 code 后回密封 pair_ack；已配对设备发错码也幂等补 ack）。
       // #29（C-P0-1）现行口径：带码帧携 pubkey（码即信任锚，relay 凭码采信随帧公钥密封 ack），
       // 空码信标绝不携带 pubkey。#42 web 侧自报 UA 摘要（relay 存信任清单，管理卡可辨）
+      // W-PAIRLOOP（1110 用户实锤「添加对端源加回自己」）：自环防呆——本机 relay 云身份
+      // 三源兜底（B4 桥快照 relay_dev；老快照无此键=空串 fail-open 不拦，防误伤老 relay/
+      // 离线形态正常配对）。ack.relay_dev 命中本机=码是本机领的（自配自）——拦截建源。
+      function localRelayDevOf() {
+        try {
+          const b = window.__ccDeck005B4;
+          const s = b && b.snapshot;
+          return s && typeof s.relay_dev === "string" ? s.relay_dev : "";
+        } catch (_) { return ""; }
+      }
+      function isSelfPairAck(ackDev, localDev) {
+        return !!(ackDev && localDev && ackDev === localDev);
+      }
+      function isSelfPairCodeHint() { return !!localRelayDevOf(); } // 本机 relay 云身份在场（提示面非拦截面）
       function sendPairReq(ctx, pair, dev) {
         const body = { t: "pair_req", code: pair.pc, name: "web-" + dev.slice(3, 11) };
         if (pair.pc) body.pubkey = ckp.publicKey;
@@ -2839,6 +2903,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             scheduleCloudReconnect(ctx, ctx.pairBackoffMs);
             showToast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图备查");
             console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack，" + Math.round(ctx.pairBackoffMs / 1000) + "s 后自动重试");
+            // W-PAIRLOOP：本机码形态永远等不到 ack（本机不持对端码语义）——文案指路防困惑
+            if (isSelfPairCodeHint()) showToast("一直配不上？请确认码是在另一台电脑领取的（本机的码在本机输入=加回自己）");
             return;
           }
           const pair = ctx.pendingPair || pendingPairOf(ctx.cfg.id);
@@ -3153,6 +3219,18 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           }
           if (target && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
             console.log("[cloud:" + cfg.name + "] pair_ack 来自发现列表之外的 relay（" + inner.relay_dev + "），丢弃");
+            return;
+          }
+          // W-PAIRLOOP 刀 A（自环拦截）：ack 方=本机 relay（码是本机领的）——建此源=加回自己
+          //（1110 实锤：远程源显示本机名+会话全本机）。拒绝建源+清配对态+文案指路对端领码。
+          if (isSelfPairAck(inner.relay_dev, localRelayDevOf())) {
+            clearInterval(ctx.pairTimer);
+            setPendingPair(cfg.id, null);
+            ctx.pendingPair = null;
+            resetCloudPairing(cfg);
+            cloudSetConn("offline", "已拦截：配对码属于本机——请在对端电脑领取", "pair");
+            showToast("已拦截自配：这个码是本机领的（连回来还是本机）。请到另一台电脑的 CC Deck 设置页领取配对码，再在这里输入");
+            console.log("[cloud:" + cfg.name + "] pair_ack 自环拦截（ack=" + inner.relay_dev + " == 本机 relay）——拒建源");
             return;
           }
           cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };

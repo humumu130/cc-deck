@@ -7,6 +7,7 @@ import { detectLanIp } from "./lan-ip.js";
 import { bootMark, bootDone } from "./boot-time.js"; // W-BOOTFAST：listen 打点+boot 分解汇总
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
+import { startEngineInstall, getEngineInstall } from "./engine-install.js"; // W-ENGDIST-A：/api/engine-install 两路由
 import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
 import { recallResolve } from "./recall.js"; // chainrecall MVP：只读链式召回（/api/recall）
 import {
@@ -1281,6 +1282,35 @@ export function startServer(
     // 文件为单一事实源；缺省 taskGuard=false / qNotify=true / restorePoint=false。
     // 鉴权与 CORS 与 /api/pair-code 同款（LAN token + 部署域白名单 + #43 回环豁免）；
     // POST 参数走 query（?taskGuard=1）避免跨源 JSON body 触发预检。
+    // W-ENGDIST-A 件①：引擎一键安装（POST 启动/GET 轮询进度）——npm 三引擎+trae 全链
+    // （含补丁自动应用）；同引擎 running 拒重复启动（409 语义返回现态）。鉴权同 plugin-config。
+    if (url.pathname === "/api/engine-install" && (req.method === "POST" || req.method === "GET")) {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      if (req.method === "GET") {
+        const engine = url.searchParams.get("engine") ?? "";
+        const st = engine ? getEngineInstall(engine) : null;
+        if (!st) { res.writeHead(404, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "无该引擎的安装记录" })); return; }
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, state: st }));
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => { body += c; if (body.length > 4096) req.destroy(); });
+      req.on("end", () => {
+        try {
+          const { engine } = JSON.parse(body || "{}") as { engine?: string };
+          if (!engine) { res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "缺 engine" })); return; }
+          const r = startEngineInstall(String(engine));
+          res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+            .end(JSON.stringify({ ok: true, started: r.started, state: r.state }));
+        } catch (e) {
+          res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+        }
+      });
+      return;
+    }
     if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/plugin-config") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");

@@ -67,7 +67,7 @@
                 // v?X.Y.Z 通道号、b3xxxx 短 id 模式包 <code class="nid">（mono+浅底），标题与摘要共用
                 const monoWrap = (s) => String(s ?? "")
                   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-                  .replace(/(\b[0-9a-f]{6,64}\b|\bv?\d+\.\d+\.\d+(?:-[\w.]+)?\b|\bw-[a-z0-9-]{2,24}\b)/g, '<code class="nid">$1</code>');
+                  .replace(/(\b[0-9a-f]{6,64}\b|\bv?\d+\.\d+\.\d+(?:[-\w.]+)?\b|\bw-[a-z0-9-]{2,24}\b)/g, '<code class="nid">$1</code>'); // W-PATROLFIX P1-2：通道段 [-\w.]+（含连字符）——原 [\w.]+ 停在第二连字符，`v0.7.0-test.97-nova` 被拆成 nid(`v0.7.0-test.97`)+裸文本(`-nova`)，断行恰落在裸连字符处=版本号拦腰断形态根因；整串入 nid 后 nowrap+ellipsis 承载（.nid 三连已有）
                 // 1101 A2 时间单轨：统一 11px 相对时间（≤60min 分钟 / <24h 小时 / 更早 M月D日）
                 // ——正文内联时间退役（旧 sub 拼 relTime 双轨）
                 const notifyRelTime = window.__ccDeck005NotifyRelTime = (ts) => {
@@ -324,13 +324,17 @@
                 }
 
                 let lastCount = -1;
-                function syncCounts(count, earliestTs) {
+                function syncCounts(count, earliestTs, brief) {
                   // W-NOTIFYPOLISH ③A3+B3：头部计数 pill 退役——843 双显口径不一（头部不封顶
                   // vs rail 99+）且与组头计数三处两零差；计数单源=组头 cnt+rail（99+ 封顶）。
                   // 头部腾位改增量信息：最早一条需行动距现在多久（「最早 16 小时前」——
                   // 用户不看数字也能感知积压深度）。
+                  // P2BATCH6 件5（A-P2-13）：追加组摘要段——需行动组长列表占满首屏时，
+                  // 注意/动态/归档三组在滚动区下方「去向不明」；头部一行预告各组条数
+                  //（非零才出段），面板一打开全貌可见。
                   if (headSub) {
-                    const next = earliestTs ? "最早需行动 " + notifyRelTime(earliestTs) : (count ? "" : "无待办");
+                    const briefTxt = brief ? " · " + brief : "";
+                    const next = earliestTs ? "最早需行动 " + notifyRelTime(earliestTs) + briefTxt : (count ? briefTxt.replace(/^ · /, "") : "无待办");
                     if (headSub.textContent !== next) headSub.textContent = next;
                   }
                   if (railBadge) {
@@ -388,11 +392,18 @@
                   if (sig === lastRenderSig && panelBody.firstChild) return; // 数据未变跳帧（含 FX 不重放）
                   lastRenderSig = sig;
                   // FB9 反馈接线：首见且需行动的行——声音短滴 + 桌面通知（各自开关与权限双重门控）
+                  // W-DELIVERQUIET（1109 用户实锤「右下角老是弹」）：dispatch 交付类到达静默——
+                  // 分类键=行 kind 稳定字段（relay upsertNotification("dispatch",…) 桶——勿标题脆
+                  // 匹配）；缺省静默（deliver-pop 开关缺省关，settings 通知卡可开）；信息不丢：
+                  // 通知面板照常累积+未读标+铃铛摆动。其他类（waiting/org-confirm/acceptance/
+                  // system）弹窗行为零触碰。dispatch 与非 dispatch 混批到达时弹首个非 dispatch 行。
                   if (notifySeenInit && window.__ccDeck005NotifyFx) {
                     const fresh = rows.filter((r) => r.isNew && r.active);
-                    if (fresh.length) {
+                    const deliverPop = window.__ccDeck005NotifyFx.deliverPop ? window.__ccDeck005NotifyFx.deliverPop() : false;
+                    const freshLoud = fresh.filter((r) => r.kind !== "dispatch" || deliverPop);
+                    if (freshLoud.length) {
                       if (window.__ccDeck005NotifyFx.soundOn()) window.__ccDeck005NotifyFx.ding();
-                      window.__ccDeck005NotifyFx.desktop(fresh[0].title, fresh[0].body);
+                      window.__ccDeck005NotifyFx.desktop(freshLoud[0].title, freshLoud[0].body);
                     }
                     // B5 铃铛摆动（一次性 420ms；仅面板关时——开着时由 stagger/pop 承担）
                     if (fresh.length && !isOpen()) {
@@ -404,6 +415,7 @@
                   const attentionRows = rows.filter((r) => !r.active && r.unresolved && visible(r));
                   const dynamicRows = rows.filter((r) => !r.unresolved && visible(r));
                   const archivedRows = rows.filter((r) => r.archived && !r.snoozed); // W-INBOX-V1 刀3：已归档分区数据源（账本 handled/dismissed 未 resolved + 本地 ×）
+                  const groupsBrief = [attentionRows.length ? "注意 " + attentionRows.length : "", dynamicRows.length ? "动态 " + dynamicRows.length : "", archivedRows.length ? "归档 " + archivedRows.length : ""].filter(Boolean).join(" · "); // P2BATCH6 件5：非零组摘要（headSub 预告去向）
                   // W-NOTIFYPOLISH ①B1+B6：组内同质聚合（kind+title 同簇——843 重复单实锤形态）。
                   // 代表行=簇内最新（rows 已 ts 降序，首见即最新）；aggN 入 L1 ×N 展开钮；
                   // 时间归聚=代表行时刻即簇最新（同簇同刻的逐行重复时间列随之消解）；
@@ -473,7 +485,7 @@
                       // 头部计数恒停旧值。收口两分支共用尾部（counts/seen/首见标记）
                       for (const r of rows) seenNotifyKeys.add(r.key);
                       notifySeenInit = true;
-                      syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0)); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发 */
+                      syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0), groupsBrief); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发；件5：组摘要随行 */
                       return;
                     }
                     panelBody.replaceChildren(nodesFrom(flatHtml));
@@ -482,7 +494,7 @@
                   }
                   for (const r of rows) seenNotifyKeys.add(r.key);
                   notifySeenInit = true;
-                  syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0)); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发 */
+                  syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0), groupsBrief); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发；件5：组摘要随行 */
                 }
 
                 // #018-W1b 轻动作：COMMAND_NOTIFICATION_ACK{notification_key, action:"handled"}。

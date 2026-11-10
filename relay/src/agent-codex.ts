@@ -151,6 +151,11 @@ export class CodexEventMapper {
   turnTerminal = true;
   /** 已见过的 thread_id（同值幂等；变化=协议异常，保留最新） */
   lastThreadId: string | undefined;
+  /** [W-ENGCODEX-FIX P1-2] 会话级文件变更累计（file_change 事件累计，跨回合单调
+   *  递增——与 agent-adapter claude 路径 this.stats 同语义；每事件即发 onStats） */
+  stats: FileChangeStats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  /** 变更 path 去重集（同文件多回合改=1 个 files_changed，claude 侧同口径） */
+  changedPaths = new Set<string>();
 
   handle(raw: unknown, cb: AgentCallbacks, now: number = Date.now()): void {
     if (!raw || typeof raw !== "object") return;
@@ -193,8 +198,37 @@ export class CodexEventMapper {
             id: it.id,
             full: capDetail(it.aggregated_output ?? ""),
           });
+        } else if (it.type === "reasoning") {
+          // [W-ENGCODEX-FIX P1-3]（1110 深测：reasoning 事件每轮在场而 mapper 零映射=
+          // 思考不进活动舱+UI 思考开关无效）：映射 kind="thinking"——与 claude SDK 路径
+          // 同词（agent-adapter.ts:621 / agent-jsonl.ts:413 G5 先例，web 活动舱既有渲染
+          // 面直接吃）。0.154 实测形状 {type:"reasoning", text:"**Preparing…"}（摘要级，
+          // 非全量思维链——引擎不给全量，映射的是引擎给的全部）。
+          const th = typeof it.text === "string" ? it.text : "";
+          if (th) {
+            cb.onLog("thinking", th.slice(0, 400), { full: th, id: it.id });
+            cb.onStatusChange("WORKING", "思考中");
+          }
+        } else if (it.type === "file_change") {
+          // [W-ENGCODEX-FIX P1-2]（1110 深测：file_change 每轮写文件都在场而 P0 不映射=
+          // stats 恒 0，连坐 session-manager S1 零产出闸把「干活但没写结果行」的 codex
+          // worker 误翻 failed）：映射 stats——0.154 实测形状 {type:"file_change",
+          // changes:[{path,kind:"update"|"add"|"delete"}]}（无行数，lines 计 0 不猜；
+          // files 计数=变更 path 去重累计，status 非 completed 不计——半途变更不进账）。
+          const changes = Array.isArray((it as { changes?: unknown }).changes)
+            ? ((it as { changes: Array<{ path?: unknown; kind?: unknown }> }).changes.filter((c) => c && typeof c.path === "string") as Array<{ path: string; kind?: string }>)
+            : [];
+          if (it.status !== "failed" && changes.length) {
+            for (const c of changes) this.changedPaths.add(c.path);
+            this.stats = { files_changed: this.changedPaths.size, lines_added: 0, lines_deleted: 0 };
+            cb.onStats({ ...this.stats });
+            cb.onLog("tool_result", `文件变更 ${changes.length} 处（${[...new Set(changes.map((c) => c.kind ?? "update"))].join("/")}）：${changes.map((c) => c.path.split("/").pop()).join("、")}`.slice(0, 200), {
+              tool: "command", id: it.id,
+              full: JSON.stringify(changes).slice(0, 400),
+            });
+          }
         }
-        // file_change / reasoning / mcp_tool_call / web_search / todo_list：P0 不映射
+        // mcp_tool_call / web_search / todo_list：仍不映射（无 claude 对位语义面）
         break;
       }
       case "turn.completed": {
@@ -312,6 +346,24 @@ export interface CodexSessionOpts {
   rules?: unknown;
   /** 兼容工厂统一签名：雇员独立家是 CLAUDE_CONFIG_DIR 概念；CODEX_HOME 隔离后置 */
   configHome?: string;
+  /** [W-ENGDIST-B 件三]（1110，ENGCODEX-FIX 审查 P3 备案收口）：思考档位透传——
+   * engine profile `effort` 键（codebuddy 同源词表：minimal/low/medium/high/xhigh/max
+   * 或 快速/均衡/极致 别名），spawn 经 `-c model_reasoning_effort=<v>` 注入
+   *（codex-cli 0.154.0 实测 -c 通道接受该键，turn.completed.usage.reasoning_output_tokens
+   * 字段在场=档位消费可观察面）。缺省 undefined=不传（~/.codex/config.toml 用户级值生效）。 */
+  effort?: string;
+}
+
+/** [W-ENGDIST-B 件三] effort 词表+别名（codebuddy 六档同源——engine profile 单键跨引擎同词表，防两套词漂移） */
+export const CODEX_EFFORTS: readonly string[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+export const CODEX_EFFORT_ALIASES: Record<string, string> = { 快速: "low", 均衡: "high", 极致: "xhigh" };
+
+/** [W-ENGDIST-B 件三] effort 归一纯函数（CI 无 codex 二进制——构造器消费本口，
+ * 词表/别名/fail-fast 语义单点在此）：别名→六档；白名单外 throw（错配置响亮暴露）。 */
+export function normalizeCodexEffort(effort: string): string {
+  const eff = CODEX_EFFORT_ALIASES[effort] ?? effort;
+  if (!CODEX_EFFORTS.includes(eff)) throw new Error(`codex 未知 effort 档位: ${effort}（六档 minimal/low/medium/high/xhigh/max 或 快速/均衡/极致 别名）`);
+  return eff;
 }
 
 export class CodexAgentSession implements AgentLike {
@@ -334,6 +386,9 @@ export class CodexAgentSession implements AgentLike {
   private turnImageDirs = new Set<string>();
   private stopping = false;
   private stderrTail = "";
+  /** [W-ENGDIST-B 件三] 思考档位（构造期归一：别名→六档词表；非法值 fail-fast throw——
+   *  与 codebuddy buildArgs 校验同款防线，防 spawn 带错档静默跑偏） */
+  private readonly effort?: string;
 
   get childPid(): number | undefined {
     return this.pid;
@@ -351,6 +406,7 @@ export class CodexAgentSession implements AgentLike {
     this.cwd = cwd;
     this.cb = cb;
     this.threadId = opts?.resume;
+    if (opts?.effort) this.effort = normalizeCodexEffort(opts.effort); // [W-ENGDIST-B 件三] 归一单点（纯函数——CI 无 codex 二进制可测）
     const bin = resolveCodexCliPath();
     if (!bin) {
       // 同步抛 → execCommand 顶层 catch 兜成 COMMAND_ACK ok:false（Leader 首建口
@@ -448,6 +504,9 @@ export class CodexAgentSession implements AgentLike {
   private execTurn(prompt: string, images: string[] = []): void {
     const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
     if (this.threadId) args.push("resume", this.threadId);
+    // [W-ENGDIST-B 件三] 思考档位透传：-c 配置覆盖通道（0.154.0 实测接受；
+    // turn.completed.usage.reasoning_output_tokens 在场=消费可观察面）
+    if (this.effort) args.push("-c", `model_reasoning_effort=${this.effort}`);
     // #63 附图：已落盘的文件路径。codex-cli 0.154.0 两子命令的 --image 定义不同：
     // exec 是变长 <FILE>...，exec resume 是单值 <FILE>——统一按「重复 flag」拼
     // （--image p1 --image p2），两种形态都合法，避免 resume 多图时游离参数报退出码 2。

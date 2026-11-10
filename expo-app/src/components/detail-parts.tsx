@@ -253,6 +253,24 @@ export function StatRow({ k, v, vc, copy }: { k: string; v: string; vc?: string;
 
 // ---- W-SPLIT-S1D（TranscriptRow 直搬——纯 props 五回调，只搬不改）----
 
+// W-UICLEAN2：DUTY_RECEIPT 巡检摘要（与 web dutySummaryOf 同口径——动词映射对齐 relay
+// dutyActionKinds=accept/dispatch/board/notify/none；全 none+无受阻=一切正常；JSON 截断
+// （relay truncate 400）解析失败=记录兜底）
+export function dutySummaryOf(rawAfterMark: string): { text: string } {
+  let j: unknown = null;
+  try { j = JSON.parse(rawAfterMark); } catch { j = null; }
+  if (!j || typeof j !== "object") return { text: "记录（原文截断）" };
+  const rec = j as { actions?: Array<{ kind?: string; ids?: string[] }>; blocked?: unknown[] };
+  const verbs: Record<string, string> = { accept: "收单", dispatch: "派单", board: "板卡", notify: "通知" };
+  const parts: string[] = [];
+  for (const a of rec.actions ?? []) {
+    if (a && verbs[a.kind ?? ""] && Array.isArray(a.ids) && a.ids.length) parts.push(verbs[a.kind ?? ""] + " " + a.ids.length);
+  }
+  const blocked = Array.isArray(rec.blocked) ? rec.blocked.length : 0;
+  if (blocked) parts.push("受阻 " + blocked);
+  return { text: parts.length ? parts.join(" · ") : "一切正常" };
+}
+
 export function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; sid?: string; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
@@ -325,6 +343,20 @@ export function TranscriptRow({ e, sid, open, onToggle, onContentMenu, onTaskRef
     );
   }
   if (e.kind === "assistant_text") {
+    // W-UICLEAN2（1110 实锤②，与 web session-domain dutyCardHtml 同口径）：值守巡检
+    // DUTY_RECEIPT 裸 JSON 行→人话紧凑卡（🛡 巡检 HH:MM · 摘要），点按展开原始记录兜底
+    const dutySrc = String(e.full ?? e.text ?? "");
+    if (dutySrc.startsWith("DUTY_RECEIPT ")) {
+      const sum = dutySummaryOf(dutySrc.slice("DUTY_RECEIPT ".length));
+      return (
+        <Pressable style={d.dutyRow} onPress={onToggle} accessibilityLabel={`值守巡检 ${sum.text}，点按${open ? "收起" : "展开"}原始记录`}>
+          <Text style={d.dutyT}>🛡 巡检{e.ts ? ` ${fmtHM(e.ts)}` : ""} · {sum.text}</Text>
+          <Collapse open={open}>
+            <Text style={d.dutyRaw} selectable>{dutySrc}</Text>
+          </Collapse>
+        </Pressable>
+      );
+    }
     // W-EXPOFOLD（1103 用户令，与 web cf661d21 同口径）：AI 消息零折叠全展开——恒渲
     // full（缺 full 回落 text；summarizer 契约：未截断 ⇔ text 即全文，回落等价），
     // 「展开全文」二段式退役（open 态残留恒无效，无害兼容旧会话）。工具面/思考过程/

@@ -1568,6 +1568,11 @@ export const CHAIN_AUDIT_ACTIONS = [
   "board-adopt", // boardfix（1103 板面说谎）：重派接卡——题名匹配 backlog 陈卡接续单（note 留痕不另开新卡）
   "board-force-close", // boardfix R3：72h 断链残留强翻（hold/人工重开两道豁免后）——自愈动作入审计流（converge 回调发射）
   "builder-tag-coldstart", // W-ROLE-BUILDER：新建岗 tag 首派无装配观测——探测降级告警不拒收（清熟手走新会话；Builder 策展声明在档）
+  // [W-ENGDIST-A]（t-2b1165a2，1110 用户拍板「别的用户安装之后也是 100%」）：引擎分发面
+  // 三词——安装器结果（done/fail 终态入流）+ trae 补丁自动应用/失败降级（A 路挂点审计）
+  "engine-install",
+  "engine-patch-apply",
+  "engine-patch-fail",
   "board-recon", // [W-BOARDRECON]（1104 第三现；R1 分工=孤儿/滞留/告警——终态收殓归 recon）：三方对账器入审计流
   "deliver-callback", // W-DELIVERCB（用户 1102 拍板）：沃克交付直达——线一线二投递/去重跳过/无目标占坑全入审计流
   "watch-feed", // W-WATCHAGENT（1104 用户令）：巡查员喂料——投递/哑然/滞留水位全入审计流（喂料链可观测面）
@@ -1610,6 +1615,7 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-override-pid-replenished", // 回合拉起 pid 注册边补水 override（CLI 重启换代自愈——刀2）
   "pm-claim-renewed", // 同 sid 24h 内 claim 续任免卡（上次批准即续任授权——刀3）
   "pm-claim-idempotent-incumbent", // W-P2BATCH4 件5：现任同 sid claim 幂等零二卡（ownPending 后第三道防线——审计形态可观测）
+  "engine-tool-blocked", // W-ENGSEC 批三：非 claude 引擎危险工具拦截（检测即斩/外部仅通知——engine-tool-audit.ndjson 同步落账）
   "pm-no-target-streak", // no_pm_target 连续≥2 轮告警卡（3h 静默睡不允许——刀4）
   "pm-override-pid-stale-candidate", // 刀2：pid 死但回合窗内候选保留（可观测不静默）
 ] as const;

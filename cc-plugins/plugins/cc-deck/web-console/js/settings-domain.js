@@ -907,10 +907,17 @@ function connectLan(ctx) {
       };
       // FB9：设置开关键统一账——slug 映射（W-NOVAUI ④：project-rail 键随开关退役删除，
       // rail 项目入口恒显不再可配置）
-      const SETTINGS_TOGGLE_KEYS = { sound: "notify-sound", notify: "desktop-notify", statusline: "status-line" };
+      const SETTINGS_TOGGLE_KEYS = { sound: "notify-sound", notify: "desktop-notify", statusline: "status-line", deliverpop: "deliver-pop" }; /* W-DELIVERQUIET：交付类到达弹窗（缺省关=静默——与族缺省开反向，读经 deliverPopOn） */
       function settingsToggleState(key) {
         const slug = SETTINGS_TOGGLE_KEYS[key] || key;
         try { const v = localStorage.getItem("cc-deck-005-" + slug); return v === null ? true : v !== "0"; } catch (_) { return true; }
+      }
+      // W-DELIVERQUIET（1109 用户实锤「右下角老是弹」）：dispatch 交付类到达 FX（OS 弹窗+短滴）
+      // 缺省静默——高密度收割期「worker 已交付 · 待收割」弹窗轰炸根治；信息不丢（通知面板照常
+      // 累积+未读标+铃铛摆动）。缺省关与 toggle 族缺省开反向：显式 === "1" 才开（勿走
+      // settingsToggleState——它缺省 true 会复活轰炸）。
+      function deliverPopOn() {
+        try { return localStorage.getItem("cc-deck-005-deliver-pop") === "1"; } catch (_) { return false; }
       }
       // 件G：会话卡状态行开关（默认开）——html[data-statusline] 消费（base.css 件G 段）
       try { document.documentElement.setAttribute("data-statusline", settingsToggleState("statusline") ? "on" : "off"); } catch (_) {}
@@ -948,7 +955,7 @@ function connectLan(ctx) {
         if (!("Notification" in window) || Notification.permission !== "granted") return;
         try { new Notification(String(title || "CC Deck"), { body: String(body || "").slice(0, 120), silent: true, tag: "cc-deck-notify" }); } catch (_) {}
       }
-      window.__ccDeck005NotifyFx = { ding: playNotifyDing, desktop: desktopNotifyText, soundOn: () => settingsToggleState("sound") };
+      window.__ccDeck005NotifyFx = { ding: playNotifyDing, desktop: desktopNotifyText, soundOn: () => settingsToggleState("sound"), deliverPop: deliverPopOn };
       // FB10 界面字号：四档（小/标准/大/特大），body 属性 + CSS --ui-scale 落位（W-UIFIX C：
       // 纯排版缩放，zoom 整体缩放退役），localStorage 记忆
       function applyUiScale(scale, announce = false) {
@@ -1226,7 +1233,7 @@ function connectLan(ctx) {
         /* W-SETTINGS3 批2：组尾注释降回灰字内联（视觉清单：全宽橙描边提示框非 V3 语言）；#270 文案精简——与卡内同义注释去重，仅保留卡内一行 */
         safe("六面板静态段", () => {
         body.innerHTML = `
-<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div><div class="s">外观 · 快捷键 · 通知</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号</div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度</div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">空闲置灰</div><select class="idle-dim-select" data-idle-dim-input aria-label="空闲置灰"><option value="15">15 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="-1">永不</option></select></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音</div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知</div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div><div class="s">外观 · 快捷键 · 通知</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号</div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度</div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">空闲置灰</div><select class="idle-dim-select" data-idle-dim-input aria-label="空闲置灰"><option value="15">15 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="-1">永不</option></select></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音</div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知</div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="v8-swrow"><div class="v8-swtxt">交付到达弹窗<div class="v8-swd">worker 交付类到达的右下角系统弹窗与提示音（默认关——面板条目与未读标不受影响）</div></div><button class="toggle-switch${deliverPopOn() ? " active" : ""}" data-settings-toggle="deliverpop" type="button" aria-pressed="${deliverPopOn()}" title="切换交付到达弹窗"></button></div></div>
 <div class="v8-setcard"><h5>会话列表</h5><div class="v8-swrow"><div class="v8-swtxt">会话卡状态行<div class="v8-swd">关闭后卡片只显标题行且高度收小；异常/错误信息仍显示</div></div><button class="toggle-switch${settingsToggleState("statusline") ? " active" : ""}" data-settings-toggle="statusline" type="button" aria-pressed="${settingsToggleState("statusline")}" title="切换会话卡状态行"></button></div><div class="v8-swrow"><div class="v8-swtxt">已隐藏的远程会话卡<div class="v8-swd">删除远程卡时选「仅本机隐藏」的记录（本机不显，源端仍在）</div></div></div><div class="settings-list" data-settings-live="hidden-remote"></div></div>
 <div class="v8-setcard"><h5>维护</h5><div class="v8-swrow"><div class="v8-swtxt">清理退休会话<div class="v8-swd">一键删除已退休成员的会话卡（会话列表归档组一并清空）；路由档案保留，复拉走成员管理</div></div><button class="secondary-btn" type="button" data-retired-purge>清理</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">各引擎接入与登录状态 · 引擎 = 可用于派单干活的 AI 编程工具（Claude/Codex/Trae…）</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><div class="v8-setcard"><h5>徽章配色</h5><div class="v8-escape">自定义各引擎/来源徽章的底色——全端（会话卡/团队域/新建弹窗/详情）同步生效；不设则用默认配色。</div><div class="settings-list" data-settings-live="badge-colors"></div></div></div>
@@ -1362,6 +1369,8 @@ function connectLan(ctx) {
             } else if (key === "statusline") { // 件G：状态行开关——关=两行卡+高度收小；异常态升格不受影响
               document.documentElement.setAttribute("data-statusline", next ? "on" : "off");
               showToast("会话卡状态行已" + (next ? "开启" : "关闭"));
+            } else if (key === "deliverpop") { // W-DELIVERQUIET：交付类到达弹窗（缺省关）
+              showToast("交付到达弹窗已" + (next ? "开启" : "关闭") + " · 通知面板条目不受影响");
             } else {
               showToast("桌面通知已" + (next ? "开启" : "关闭"));
               if (next) void ensureNotifyPermission();
@@ -1385,6 +1394,12 @@ function connectLan(ctx) {
           if (engLoginRow) {
             const eng = engLoginRow.dataset.engineLogin || "";
             if (eng && window.__ccDeck005LoginCard) window.__ccDeck005LoginCard.open(eng);
+            return;
+          }
+          // W-ENGDIST-A 件③：未安装引擎「一键安装」钮 → 调安装器+行内进度+终态刷新
+          const engInstallBtn = event.target.closest("[data-engine-install]");
+          if (engInstallBtn) {
+            installEngine(engInstallBtn.dataset.engineInstall || "", engInstallBtn);
             return;
           }
           if (event.target.closest("[data-settings-add-provider]")) { showToast("provider 接入在 relay 侧配置 · 见组织角色缺省引擎"); return; } // 件H2：按钮已移除（本行保留兜底——旧 DOM/书签页残留点击不再裸响）
@@ -1584,13 +1599,15 @@ function connectLan(ctx) {
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
+              // W-ENGDIST-A 件③：未安装+可装引擎（qwen/codex/codebuddy/trae；zcode unsupported 不给）加「一键安装」钮
+              const installBtn = (!ok && !na && e.state === "unavailable" && ENGINE_INSTALLABLE[e.id]) ? `<button class="row-share" data-engine-install="${esc(e.id)}" type="button" title="npm 一键安装（trae 为源码+venv 全链）；进度显示在行内，完成后自动刷新引擎状态">一键安装</button>` : "";
               // W-SETTINGS3 批2：引擎行 v8-swrow 行式化（V3 swrow：徽标左+label/描述+态右）
               // W-ENGINESLIM-R1（A 审 P1·1106 用户令②视觉面）：与新建会话下拉同款——徽章
               //（图标+名称文字）即标签，v8-swtxt 不再并排 label 名称重复（A 审实锤双显）；
               // 引擎名进行 title/aria-label（可访问性不丢）；needs_auth 黄点保留（信号位），
               // 其 title 升「名 · 扫码提示」全量（旧 title 只 auth_hint 丢名）。
               const rowTitle = esc(`${label}${na ? " · 点此扫码登录 · " + oneLine(e.auth_hint || "") : " · " + copy}`);
-              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}"` : ""} title="${rowTitle}" aria-label="${rowTitle}"><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${na ? '<span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd v8-swd-solo">${copy}</div></div>${loginBtn || tag}</div>`;
+              return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}"` : ""} title="${rowTitle}" aria-label="${rowTitle}"><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${na ? '<span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd v8-swd-solo">${copy}</div></div>${loginBtn || installBtn || tag}</div>`;
             }).join(""));
           }
           // 件B：已隐藏远程卡恢复行（renderHiddenRemoteLive 挂 window 供 click 委托复渲）
@@ -1828,6 +1845,48 @@ function connectLan(ctx) {
         const j = await r.json();
         if (!j || !j.code) throw new Error("响应缺码");
         return { code: String(j.code), ttlMs: Number(j.expires_in || 0) * 1000 }; // #FB3-TTL：relay expires_in 单位=秒（pairing.ts issue 返回 eff/1000），旧码当毫秒除 60000 恒显「1 分钟内有效」
+      }
+      // W-ENGDIST-A 件③：引擎一键安装（POST 启动+GET 轮询进度→终态行内呈现+刷新引擎态）。
+      // 安装为长任务（npm -g/clone/uv sync 分钟级）——异步态机在 relay 侧，前端 1.2s 轮询；
+      // done 后 refreshAllData() 重连拉新 SNAPSHOT（engine_catalog 随快照刷新——引擎行自动翻绿）。
+      const ENGINE_INSTALLABLE = { "qwen-code": 1, codex: 1, codebuddy: 1, trae: 1 };
+      const engInstallBusy = new Set();
+      async function installEngine(id, btn) {
+        if (engInstallBusy.has(id)) return;
+        engInstallBusy.add(id);
+        const row = btn.closest(".v8-swrow");
+        const desc = row ? row.querySelector(".v8-swd") : null;
+        const origDesc = desc ? desc.textContent : "";
+        const setDesc = (t) => { if (desc) desc.textContent = t; };
+        btn.disabled = true; btn.textContent = "安装中…";
+        try {
+          const t = String((ctx.cfg && ctx.cfg.token) || relayToken || "");
+          if (!t) throw new Error("token 未就绪");
+          const base = shellProbe && localRelayInfo ? "http://127.0.0.1:" + (localRelayInfo.port || 8787) : location.origin;
+          const r = await fetch(base + "/api/engine-install?token=" + encodeURIComponent(t), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ engine: id }), signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.ok) throw new Error(j.error || "http " + r.status);
+          if (!j.started) { setDesc("该引擎正在安装中（另一入口已启动）——下方进度同步"); }
+          // 轮询直至终态（15 分钟帽——clone+uv sync 网络慢场景）
+          const deadline = Date.now() + 15 * 60_000;
+          for (;;) {
+            await new Promise((res) => setTimeout(res, 1200));
+            const g = await fetch(base + "/api/engine-install?token=" + encodeURIComponent(t) + "&engine=" + encodeURIComponent(id)).then((x) => x.json()).catch(() => null);
+            const st = g && g.ok && g.state;
+            if (!st) continue;
+            const tail = (st.log || []).slice(-2).join(" · ");
+            setDesc(`${st.state === "running" ? "⏳ 安装中" : st.state === "done" ? "✓ 安装完成" : "✗ 安装失败"}：${tail || st.summary || ""}`);
+            if (st.state !== "running" || Date.now() > deadline) break;
+          }
+          showToast(`引擎 ${id} 安装流程结束——刷新引擎状态`);
+          refreshAllData();
+        } catch (e) {
+          showToast("安装启动失败：" + (e instanceof Error ? e.message : String(e)));
+          setDesc(origDesc);
+        } finally {
+          engInstallBusy.delete(id);
+          btn.disabled = false; btn.textContent = "一键安装";
+        }
       }
       function pairDeviceRows() {
         const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

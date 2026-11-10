@@ -141,6 +141,28 @@
                   clearTimeout(b2Toast._t); b2Toast._t = setTimeout(() => t.classList.remove("show"), ms || 2400);
                 }
                 function svgUse(name) { return '<svg class="icon-inline" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>'; }
+                // W-UICLEAN2：DUTY_RECEIPT 巡检卡——值守打卡人话化（schema=validateDutyReceipt
+                // 同构：{v,feed_id,actions:[{kind,ids}],blocked,next_trigger}；动词映射对齐
+                // dutyActionKinds=accept/dispatch/board/notify/none）。居中一行制对齐 automsg
+                // （定时巡检注入行）视觉语言——机器打卡降存在感
+                function dutySummaryOf(rawAfterMark) {
+                  let j = null;
+                  try { j = JSON.parse(rawAfterMark); } catch (_) { j = null; } // relay truncate 400 截断兜底
+                  if (!j || typeof j !== "object") return { text: "记录（原文截断）", raw: rawAfterMark };
+                  const verbs = { accept: "收单", dispatch: "派单", board: "板卡", notify: "通知" };
+                  const parts = [];
+                  for (const a of (Array.isArray(j.actions) ? j.actions : [])) {
+                    if (a && verbs[a.kind] && Array.isArray(a.ids) && a.ids.length) parts.push(verbs[a.kind] + " " + a.ids.length);
+                  }
+                  const blocked = Array.isArray(j.blocked) ? j.blocked.length : 0;
+                  if (blocked) parts.push("受阻 " + blocked);
+                  return { text: parts.length ? parts.join(" · ") : "一切正常", raw: rawAfterMark };
+                }
+                function dutyCardHtml(e, ke, src) {
+                  const sum = dutySummaryOf(src.slice("DUTY_RECEIPT ".length));
+                  return '<div class="duty-row" data-x="' + ke + '"><details><summary title="值守巡检打卡 · 点开看原始记录">🛡 巡检' + (e.ts ? " " + fmtHM(e.ts) : "") + " · " + esc(sum.text) + "</summary>"
+                    + '<div class="duty-raw"><code>' + esc(src) + "</code></div></details></div>";
+                }
                 function msgRoleOf(kind) { return kind === "user_message" ? "user" : kind === "assistant_text" ? "ai-text" : kind === "thinking" ? "ai-think" : kind === "tool_use" ? "ai-tool" : kind === "tool_result" ? "ai-result" : "ai-sys"; }
                 // W-AUTOMSG #194（用户 1021 反馈）：自动注入消息标记表——与 expo-app/src/auto-msg.ts
                 // 同表副本（两端无共享机制，改清单两处同步）。「【cc-deck 巡检轮】」=用户自配
@@ -883,7 +905,7 @@
                 // UI 反馈批 1029 件D：消息流 URL 可开——document 级统一接管（#d-session 域与手机屏
                 // #m-* 全覆盖）。语义：修饰键（Ctrl/⌘）点击=显式打开；触屏（hover:none/pointer:coarse）
                 // 直接点按打开；无修饰键桌面/浏览器不接管（桌面壳由 INIT_SCRIPT capture 兜底转系统
-                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint", "relay_source"]; // W-SRC2 #134（本批①）：增量 SESSION_UPDATED 透传 relay_source——SNAPSHOT 打标被后到无标增量覆写时自愈（relay 恒注入后此键恒在场，等值覆写零副作用）
+                const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint", "relay_source", "activity_capabilities"]; // W-SRC2 #134（本批①）：增量 SESSION_UPDATED 透传 relay_source——SNAPSHOT 打标被后到无标增量覆写时自愈（relay 恒注入后此键恒在场，等值覆写零副作用）
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -1402,7 +1424,7 @@
                 const b2SrcCap = (item) => item.source && item.source !== b2SelfSourceName()
                   ? '<span class="src-cap" title="来自 ' + item.source + '" style="background:' + b2SourceColor(item.source) + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + item.source + "</span>"
                   : "";
-                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"' + (item.standby ? ' title="已接单未开工或挂起——无近期工具活动，不占在跑计数（#291 待命）"' : "") + '></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.pmStandby ? '<span class="tag mini" title="值守 PM 常驻待命（空闲自动保活 · #287）">待命</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
+                  return '<div class="queue-card' + (item.selected ? " selected" : "") + (item.idle ? " idle" : "") + '" data-st="' + item.status + '" data-session-card="' + item.id + '"><span class="srow-ava" style="--srow-ava-c:' + b2AvaColor(item) + '">' + avaBrandHtmlOf(item) + '<i class="status-dot ' + (item.status === "working" && item.standby ? "working-standby" : item.status) + '"' + (item.standby ? ' title="已接单未开工或挂起——无近期工具活动，不占在跑计数（#291 待命）"' : item.pmStandby ? ' title="值守 PM 常驻待命（空闲自动保活 · #287）"' : "") + /* W-STANDBYKILL（1110 用户实锤二轮）：「待命」tag 整段退役（一轮 #125 .tag.mini 降档仍嫌大）——#287 区分语义并入 status-dot title 悬停（「待开工」同刀）；standby(须 working) 与 pmStandby(须非 working) 按构造互斥，无双叠加分支 */ '></i></span><span class="srow-main"><span class="srow-r1"><strong title="' + item.title + '">' + item.title + "</strong>" + (item.time ? '<time class="srow-time">' + item.time + "</time>" : "") + '<button type="button" class="srow-more" aria-label="会话操作菜单" title="更多操作">⋯</button><button type="button" class="srow-pin' + (item.pinned ? " on" : "") + '" aria-label="' + (item.pinned ? "取消置顶" : "置顶") + '" title="' + (item.pinned ? "取消置顶" : "置顶") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-pin"></use></svg></button><button type="button" class="srow-close" aria-label="删除会话" title="删除会话"><svg class="icon-inline" aria-hidden="true"><use href="#icon-x"></use></svg></button></span><span class="srow-r2">' + (item.bg ? '<i class="srow-live-dot"></i><span class="tag bg-live-tag" title="后台子 Agent 在跑">⑂' + item.bg + "</span>" : "") + (item.awaitUser ? '<span class="tag awaitu-flag" title="该会话在等你输入/拍板（审批/作答）——处理后自动复位">等你拍板</span>' : "") + (item.status === "done" && item.queuedDispatch > 0 ? '<span class="tag dispatched-flag" title="该会话所属组有 ' + item.queuedDispatch + ' 个派单排队等待处理">已派单 · 等待处理</span>' : "") + (item.retiredTag ? '<span class="tag retired-tag" title="' + item.retiredTag.title + '">' + item.retiredTag.label + '</span>' : "") + '<span class="srow-r2-t" title="' + item.summary + '">' + (item.summaryShort || item.summary) + "</span>" + (item.status === "working" && !item.standby ? '<span class="srow-sec" data-work-sec="' + (item.workSecs || 0) + '">' + (item.workSecs || 0) + "s</span>" : "") + "</span>" + ((item.teams && item.teams.length) || item.source ? '<span class="srow-r3">' + b2SrcCap(item) + '<span class="r3-spring"></span>' + (item.cwdTail && !item.teamRole ? '<span class="cwd-cap">' + '<svg class="cwd-ico" viewBox="0 0 16 16" aria-hidden="true"><path class="tab" d="M1.5 3.2c0-.66.52-1.2 1.16-1.2h3.2c.34 0 .66.15.88.4l.9 1.02h5.2c.64 0 1.16.54 1.16 1.2v.36H1.5v-.36z"/><path d="M1.06 5.4h13.88c.55 0 .95.51.83 1.05l-1.1 6.28c-.1.56-.58.97-1.14.97H2.47c-.56 0-1.04-.4-1.14-.97L.23 6.45C.11 5.91.51 5.4 1.06 5.4z"/></svg>' + esc(item.cwdTail) + "</span>" : "") + teamChipsOf(item) + "</span>" : "") + "</span>" + (item.tagClass === "action" || item.tagClass === "danger" ? '<button type="button" class="srow-cta">处理</button>' : "") + "</div>";                }
                 // [W-RETIRED] 退休成员会话判定（renderMyList 主列表排除/归档组收集、筛选计数三处共用）——
                 // 名单来自 SNAPSHOT.retired_session_ids / RETIRED_SESSIONS_UPDATED 帧（relay 判定源=
                 // org 两本账：非 archived 组路由在册而编制外）。null=旧 relay 零过滤兼容
@@ -2488,6 +2510,22 @@
                     return;
                   }
                   cap.hidden = false;
+                  // [W-ENGCODEX-FIX P1-1]（1110 深测：codex headless 无审批/权限运行时面
+                  // ——setPermissionMode no-op、面板切换「成功」但引擎侧无动作=误导）：
+                  // 无审批能力引擎的托管会话显示只读胶囊+人话说明，与外部会话同形态不硬闯。
+                  // 判定=capabilities.approval（relay 经 SESSION_ACTIVITY/UPDATED 的
+                  // capabilities 位下发——agent-codex 恒 false 声明；claude/带远程决议通道
+                  // 的引擎 true 不受影响；缺键=旧 relay 宽容放行不倒退）
+                  const noApproval = s.engine && s.activity_capabilities && s.activity_capabilities.approval === false;
+                  if (noApproval) {
+                    cap.disabled = false;
+                    const curA = s.permission_mode || "default";
+                    const modeA = PERM_MODES.find((m) => m.key === curA);
+                    if (txt) txt.textContent = modeA ? modeA.zh : curA;
+                    cap.title = "该引擎（" + String(s.engine) + "）不支持运行时权限切换——权限由引擎自身沙盒配置决定（codex=config.toml sandbox），此处仅回显（点击查看说明）";
+                    cap.dataset.permReadonly = "1";
+                    return;
+                  }
                   cap.disabled = false;
                   const cur = s.permission_mode || "default";
                   const mode = PERM_MODES.find((m) => m.key === cur);
@@ -2501,6 +2539,7 @@
                   const s = curSession();
                   if (!anchor || !s || !canCmd(s)) return;
                   if (s.external) { b2Toast("CLI 会话的权限模式在本机 CLI 里定（启动参数），这里不能切换"); return; } // W-UIPOLISH4 件四：只读胶囊点击给反馈，不静默
+                  if (s.engine && s.activity_capabilities && s.activity_capabilities.approval === false) { b2Toast("该引擎不支持运行时权限切换（由引擎沙盒配置决定），这里仅回显"); return; } // [W-ENGCODEX-FIX P1-1]
                   const menu = document.createElement("div");
                   menu.id = "b2-perm-menu";
                   menu.className = "model-menu"; // 与模型菜单同壳样式（独立 id 防互误伤）
@@ -2620,7 +2659,7 @@
                       op.title = act;
                       if (el) el.textContent = "";
                     } else {
-                      op.textContent = dockSemanticAction(act) || s.title || "";
+                      op.textContent = dockSemanticAction(act) || "干活中"; /* W-UICLEAN2（1110 实锤①）：s.title fallback 封死——语义摘要空时落通用词，任何 edge 不回落会话名（dock 零会话名铁律） */
                       op.title = act; /* 命令原文降级 title（debug 可达性不丢） */
                       dock.dataset.turnStarted = String(s.turn_started_at || s.updated_at || Date.now());
                     }
@@ -3023,6 +3062,14 @@
                       (e.ts && !hideTs ? '<div class="mt">' + fmtHM(e.ts) + "</div>" : "") + "</div>";
                   }
                   if (role === "ai-text") {
+                    // W-UICLEAN2（1110 用户实锤②「不应该让用户看到 JSON 内容」）：值守巡检
+                    // DUTY_RECEIPT 裸 JSON 行（PM 每 23 分钟一打卡）→ 人话紧凑卡。识别面=行首
+                    // 标记（与 relay 消费同口径）；协议/转录零改动（纯渲染层）。摘要=actions 动词
+                    // 化（收单/派单/板卡/通知+计数）+blocked 受阻数；全 none+无受阻=「一切正常」；
+                    // JSON 截断（relay truncate 400）解析失败=「记录」+原文可见兜底。<details>
+                    // 原生展开=零 JS 零状态；非 DUTY_RECEIPT 消息零波及（本拦截前置于一切）
+                    const dutySrc = String(e.full ?? e.text ?? "");
+                    if (dutySrc.startsWith("DUTY_RECEIPT ")) return dutyCardHtml(e, ke, dutySrc);
                     const eng = engineMetaOf(s); // W-ENGLM G：消息流头像同链（engine 空按 model 推断，glm 不再落 ✻）
                     // W-AVABG：消息流 AI 头像底色对齐列表引擎品牌色淡彩（UIPOLISH2 件一同纲）——
                     // eng[1] 与列表 engineClass 同源值（同出 ENGINES 表）；已知引擎走 --engine-* token，

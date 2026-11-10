@@ -1,12 +1,22 @@
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentCallbacks } from "./agent-adapter.js";
 import { JsonProcessAgentSession, mapJsonlActivity, preflightEngine, type EngineConfig, type EngineSpawnOptions, type JsonlActivityOptions, type MappedStatusDock, type PreflightResult } from "./agent-jsonl.js";
+import { ensureTraeServerToolPatch, traeFixedCli } from "./engine-install.js";
 
 export const TRAE_CAPABILITIES = {
   resume: false,
   reinjection: true,
   approval: false,
   images: false,
-  usage: false,
+  // [W-ENGDIST-B 件二]（1110 上游源码实勘）：usage=true——上游非流式（anthropic_client
+  // messages.create 无 stream），stdout 是 rich console 人读文本零 usage；但**轨迹文件**
+  // 每步 interaction.response.usage 完整四键（input/output/cache_creation/cache_read，
+  // trajectory_recorder.py:103-117 源码实证）。收割面=CLI `-t <file>` 指定轨迹路径
+  // （每回合新进程=同路径覆写=本回合全量）+回合收口读文件聚合 → onUsage（回合聚合
+  // 量，session-manager 累计语义同源）+onContext（末次调用 input 面=水位）。
+  usage: true,
   todos: false,
   artifacts: false,
   streaming: false,
@@ -23,31 +33,166 @@ export const TRAE_PENDING_SMOKE = [
   "--help/版本确认 JSON 或 JSONL 输出开关",
   "非交互/自动批准、provider/model 参数与退出码",
   "原生 session/resume 能力（第一期固定不启用）",
-] as const;
+] as const; /* [W-ENGDIST-B 件二] usage 冒烟项已清（上游源码实勘+轨迹收割接线；resume 项维持——确未启用） */
 
 export function mapTraeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities" | "profileId"> = {}): MappedStatusDock {
   // #42 收口：档位钉死 trae（structured=false），批量/流式两面同源，调用方不可覆盖
   return mapJsonlActivity(raw, { ...options, capabilities: TRAE_ACTIVITY_CAPABILITIES, profileId: "trae" });
 }
 
+/** trae config 权威位（W-ENGREST-FIX 1109 深测 P1 修）：CCR_TRAE_CONFIG 显式优先，缺省
+ * ~/.trae-agent/trae_config.yaml。背景：trae-cli `--config-file` 缺省值是 **cwd 相对**
+ * trae_config.yaml（server/trae_agent/cli.py:139 default="trae_config.yaml"）——relay 会话
+ * cwd 各异=每会话都得有 config 才能跑，生产不可用；恒注入本权威位。engine-auth 的 trae
+ * 探测位与此同源（改一处两消费面同动）。 */
+export function traeConfigPath(): string {
+  return process.env.CCR_TRAE_CONFIG?.trim() || join(homedir(), ".trae-agent", "trae_config.yaml");
+}
+
+/** 首次引导模板（api_key 留空值——engine-auth 探测按「api_key 非空」判 ready，模板态
+ * 判 needs_auth 引导用户填写；占位文字会被探针误判 ready，故用空串+注释指路）。 */
+const TRAE_CONFIG_TEMPLATE = `# trae-agent 配置（cc-deck 首次引导生成）——trae-agent 无登录命令，认证=本文件 YAML。
+# 填好 api_key / base_url 后即可使用；也可设 CCR_TRAE_CONFIG 指向你已有的配置文件。
+# models 节 8 字段全量必填（缺字段报 TypeError）；完整说明见 github.com/bytedance/trae-agent。
+model_providers:
+  anthropic:
+    api_key: ""
+    # ↑ 填你的 API key（sk- 开头的密钥串），保留引号去掉也可
+    provider: anthropic
+    base_url: ""
+    # ↑ 填 API 地址（https:// 开头完整地址）
+models:
+  trae_agent_model:
+    model_provider: anthropic
+    model: claude-sonnet-4-5
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1
+    top_k: 0
+    max_retries: 3
+    parallel_tool_calls: true
+agents:
+  trae_agent:
+    enable_lakeview: false
+    model: trae_agent_model
+    max_steps: 10
+    tools:
+      - bash
+      - str_replace_based_edit_tool
+      - sequentialthinking
+      - task_done
+`;
+
+/** 全局缺省位无 config 时生成注释模板（首次引导）。护栏：CCR_TRAE_CONFIG 显式位不代写
+ * （用户明指路径，拼写错应让 trae 自身报「Config file not found」暴露，代写会掩盖）；
+ * CCR_STUB_MODE 在场=适配器测试桩环境，不碰真实 home（test-engine-adapters 活构
+ * TraeAgentSession，无此护栏单测会在每台开发机写 ~/.trae-agent/）。幂等：在场即跳过。 */
+function ensureTraeConfigTemplate(): void {
+  if (process.env.CCR_TRAE_CONFIG?.trim() || process.env.CCR_STUB_MODE) return;
+  const p = traeConfigPath();
+  try {
+    if (existsSync(p)) return;
+    mkdirSync(join(homedir(), ".trae-agent"), { recursive: true });
+    writeFileSync(p, TRAE_CONFIG_TEMPLATE, "utf-8");
+  } catch { /* 生成失败不阻断 spawn——trae 会以缺 config 的明确报错暴露 */ }
+}
+
 export interface TraeSessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
   command?: string;
 }
 
+/** W-ENGDIST-A 件④（勘察 §五.6 顺刀定案）：缺省 command 解析链——显式 opts > CCR_TRAE_PATH
+ * （用户 env 意图最优先）> **固定位探测**（~/.cc-deck/engines/trae-agent/.venv/bin/trae-cli
+ * 可执行即用——一键安装器落位，wrapper /tmp 中转退役：buildArgs 恒注入 --config-file 后
+ * wrapper 的 config 使命已被产品侧取代）> PATH 名兜底。 */
+function traeCommandDefault(): string {
+  const env = process.env.CCR_TRAE_PATH?.trim();
+  if (env) return env;
+  try {
+    accessSync(traeFixedCli(), constants.X_OK);
+    return traeFixedCli();
+  } catch { /* 固定位未装（一键安装前常态）——回落 PATH */ }
+  return "trae-cli";
+}
+
 export class TraeAgentSession extends JsonProcessAgentSession {
+  /** [W-ENGDIST-B 件二] 本会话轨迹文件（每回合经 -t 覆写——回合收口读取聚合 usage） */
+  private readonly trajPath: string;
+
   constructor(opts: TraeSessionOptions) {
     // profileId 钉死 trae 档（structured=false）：纯文本 stdout 行一律正文（#42）
-    super({ ...opts, label: "trae", command: opts.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", profileId: "trae" });
+    // [W-ENGDIST-B 件二] usage 收割：包装 cb.onTurnEnd——收口时读轨迹文件（CLI 进程
+    // 已退出=文件落盘完成），把本回合各 interaction 的 usage 聚合成回合量发
+    // onUsage（session-manager 累计语义），末次调用的 input+cache 面发 onContext
+    //（水位 per-call 口径）。失败/文件缺席=静默跳过（usage 尽力而为不阻断收口）。
+    // [W-ENGDIST-A 并集解] command 解析随批一升级：traeCommandDefault()（固定位优先）。
+    const trajPath = join(tmpdir(), `trae-traj-${randomTraeId()}.json`);
+    super({
+      ...opts,
+      label: "trae",
+      command: opts.command ?? traeCommandDefault(),
+      profileId: "trae",
+      cb: {
+        ...opts.cb,
+        onTurnEnd: (ok, detail, ms) => {
+          try { harvestTraeUsage(trajPath, opts.cb); } catch { /* 轨迹缺席/坏档：usage 尽力而为 */ }
+          opts.cb.onTurnEnd(ok, detail, ms);
+        },
+      },
+    });
+    this.trajPath = trajPath;
   }
 
   protected buildArgs(prompt: string): string[] {
     // 官方仓库 README 已确认：trae-cli run "<task>"；工作目录由 spawn cwd 提供。
-    return ["run", prompt];
+    // W-ENGREST-FIX（1109 深测 P1）：恒带 --config-file 权威位（缺省 cwd 相对=生产不可用，
+    // 见 traeConfigPath 头注）；缺省位无文件时先生成模板引导。
+    // [W-ENGDIST-B 件二]：-t 指定本会话轨迹路径（缺省 cwd 相对 trajectories/ 会散落
+    // 用户项目目录且路径不可预测——tmpdir 会话级路径双收：不污染项目+收口可读）。
+    ensureTraeConfigTemplate();
+    // W-ENGDIST-A 件②（勘察 A 路定案）：spawn 前补丁自动应用——检测锚=补丁 MARKER 在场性
+    // （零子进程），missing 才跑 python3 脚本（trae 升级覆盖源文件→MARKER 消失→重放）；
+    // 失败降级=告警审计行不阻断对话面（同 ensureTraeConfigTemplate 哲学）。
+    ensureTraeServerToolPatch(this.opts.command);
+    return ["run", prompt, "--config-file", traeConfigPath(), "-t", this.trajPath];
   }
 }
 
+/** 会话级轨迹文件名随机段（防同机并行会话同路径互覆）。 */
+function randomTraeId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** [W-ENGDIST-B 件二] 轨迹 usage 收割纯函数（可单测）：读轨迹 JSON，聚合本回合
+ * interactions[].response.usage 四键为回合量发 cb.onUsage；末次 interaction 的
+ * input+cache 面发 cb.onContext（水位）。文件缺席/坏档/零 interaction=零回调。 */
+export function harvestTraeUsage(trajPath: string, cb: AgentCallbacks): { input: number; output: number } | null {
+  let raw: string;
+  try { raw = readFileSync(trajPath, "utf-8"); } catch { return null; }
+  let doc: { interactions?: Array<{ response?: { usage?: Record<string, unknown> } }> };
+  try { doc = JSON.parse(raw) as typeof doc; } catch { return null; }
+  const inters = Array.isArray(doc?.interactions) ? doc.interactions : [];
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  let input = 0, output = 0, cacheRead = 0, cacheCreate = 0, lastCtx = 0;
+  let seen = false;
+  for (const it of inters) {
+    const u = it?.response?.usage;
+    if (!u || typeof u !== "object") continue;
+    seen = true;
+    input += num(u.input_tokens);
+    output += num(u.output_tokens);
+    cacheRead += num(u.cache_read_input_tokens);
+    cacheCreate += num(u.cache_creation_input_tokens);
+    lastCtx = num(u.input_tokens) + cacheRead + cacheCreate; // 末次调用窗口占用（水位口径）
+  }
+  if (!seen) return null;
+  cb.onUsage({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheCreate });
+  if (lastCtx > 0) cb.onContext?.(lastCtx);
+  return { input, output };
+}
+
 export function preflightTrae(config?: Partial<EngineConfig>): PreflightResult {
-  return preflightEngine({ command: config?.command ?? process.env.CCR_TRAE_PATH ?? "trae-cli", provider: config?.provider });
+  return preflightEngine({ command: config?.command ?? traeCommandDefault(), provider: config?.provider });
 }
 
 export function createTraeAgent(opts: Omit<TraeSessionOptions, "cb"> & { cb: AgentCallbacks }): TraeAgentSession {

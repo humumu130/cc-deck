@@ -54,9 +54,8 @@ const CODEX_LOGGED_IN = mkScript("codex-logged-in", "Logged in using ChatGPT");
 const CB_AUTH_REQUIRED = mkScript("cb-auth-required", "Authentication required. Please use /login command to sign in to your account");
 const CB_HEALTHY = mkScript("cb-healthy", "Signed in as tester@example.com (Plus)");
 // #102 批 B：trae 探针命令改版 fixture（v2 实测三形态：Not logged in / 已登录 / 1.0 空输出）
-const TRAE_NOT_LOGGED = mkScript("trae-not-logged", "Not logged in");
-const TRAE_HEALTHY = mkScript("trae-healthy", "Logged in as tester (Free)");
-const TRAE_EMPTY = mkScript("trae-empty", "");
+// W-ENGREST-FIX：trae 探针改 config 文件判定后，login-status 输出桩三件退役
+//（真 trae-agent CLI 无 login 子命令——旧桩模拟的输出面在生产不存在）
 
 // ---------- env 九键保存/清场/恢复（零生产触达） ----------
 const ENV_KEYS = ["CCR_CODEX_PATH", "CCR_CODEBUDDY_PATH", "CCR_TRAE_PATH", "CODEX_HOME", "OPENAI_API_KEY",
@@ -153,26 +152,52 @@ try {
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
   assert(r.state === "ready", "P3c qwen env key 在场 → ready（候选 env 路径）");
   delete process.env.QWEN_API_KEY;
-  // #102 批 B 实测修正（Leader 追加要求）：trae 凭据不在 ~/.trae/.credentials.json
-  // 等候选路径（v2 实测存 ~/.trae/cli/*.sqlite），文件候选恒 miss 长期误报——
-  // 改与 codex 同款探针命令文本匹配（trae-cli login status 实测「Not logged in」
-  // rc=0；1.0 输出空 fail-open ready）
-  mkdirSync(join(HOME, ".trae"), { recursive: true });
-  writeFileSync(join(HOME, ".trae", ".credentials.json"), "{}");
-  process.env.CCR_TRAE_PATH = TRAE_HEALTHY;
+  // W-ENGREST-FIX（1109 对版 0.27.1）：settings 选型位 security.auth.selectedType → ready
+  //（顶层 authType 不是读取位——validateNonInteractiveAuth 实测「No auth type is selected」）
+  writeFileSync(join(HOME, ".qwen", "settings.json"), JSON.stringify({ security: { auth: { selectedType: "anthropic" } } }));
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "ready", "P3c' qwen settings security.auth.selectedType → ready（0.27.1 权威选型位）");
+  writeFileSync(join(HOME, ".qwen", "settings.json"), JSON.stringify({ authType: "anthropic" }));
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "needs_auth", "P3c'' qwen 顶层 authType 键不算选型（非读取位——旧形态误配不虚报 ready）");
+  rmSync(join(HOME, ".qwen", "settings.json"));
+  // env 组合面（上游 getAuthTypeFromEnv 逐字对版：组合才选型，单键走宽松尾路）
+  process.env.ANTHROPIC_API_KEY = "ak-1";
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "ready", "P3c''' qwen ANTHROPIC_API_KEY 单键 → ready（宽松尾路，spawn 可试）");
+  process.env.ANTHROPIC_BASE_URL = "http://x";
+  process.env.ANTHROPIC_MODEL = "m1";
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "ready", "P3c'''' qwen anthropic 三键组合 → ready（上游组合制选型面）");
+  delete process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_BASE_URL; delete process.env.ANTHROPIC_MODEL;
+  process.env.OPENAI_API_KEY = "ok-1";
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "ready", "P3c''''' qwen OPENAI_API_KEY 单键 → ready（W-ENGREST-FIX 新增 openai 面候选）");
+  delete process.env.OPENAI_API_KEY;
+  // W-ENGREST-FIX（1109 对版）：trae 认证=YAML config（真 CLI 无 login 子命令）——
+  // 探测=config 存在+api_key 非空（CCR_TRAE_CONFIG 显式位 || ~/.trae-agent/ 全局位，
+  // 与 agent-trae traeConfigPath 同源）；模板态（api_key 空串）判 needs_auth 引导填写
+  const TRAE_CFG = join(BIN, "trae_config.yaml");
+  process.env.CCR_TRAE_CONFIG = TRAE_CFG;
   r = probeEngineAuth("trae", { homeDir: HOME });
-  assert(r.state === "ready", "P3d trae login status 已登录输出 → ready（#102 批 B 实测改探针命令）");
-  process.env.CCR_TRAE_PATH = TRAE_NOT_LOGGED;
+  assert(r.state === "needs_auth" && (r.auth_hint ?? "").includes("trae_config.yaml"), "P3d trae config 缺席 → needs_auth+YAML 指路（真 CLI 无登录命令）");
+  writeFileSync(TRAE_CFG, 'model_providers:\n  anthropic:\n    api_key: ""\n');
   r = probeEngineAuth("trae", { homeDir: HOME });
-  assert(r.state === "needs_auth" && (r.auth_hint ?? "").length > 0, "P3e trae Not logged in 输出 → needs_auth+hint（v2 traex 实测输出）");
-  process.env.CCR_TRAE_PATH = TRAE_EMPTY;
+  assert(r.state === "needs_auth", "P3e trae config 在场但 api_key 空值 → needs_auth（首启模板态不算已认证）");
+  writeFileSync(TRAE_CFG, '# 示例注释：api_key: sk-xxx\nmodel_providers:\n  anthropic:\n    api_key: ""\n');
   r = probeEngineAuth("trae", { homeDir: HOME });
-  assert(r.state === "ready", "P3e' trae 1.0 空输出 fail-open → ready（1.0 已 limited maintenance，取舍备案）");
-  process.env.CCR_TRAE_PATH = join(BIN, "no-such-trae");
+  assert(r.state === "needs_auth", "P3e' trae 注释行示例字面量不被误命中（模板注释坑回归锚——注释非凭据）");
+  writeFileSync(TRAE_CFG, 'model_providers:\n  anthropic:\n    api_key: sk-real\n    base_url: https://api.example.com\n');
   r = probeEngineAuth("trae", { homeDir: HOME });
-  assert(r.state === "ready", "P3e'' trae 探针故障 fail-open → ready");
-  rmSync(join(HOME, ".trae", ".credentials.json"));
-  delete process.env.CCR_TRAE_PATH;
+  assert(r.state === "ready", "P3e' trae config api_key 非空 → ready（CCR_TRAE_CONFIG 显式位）");
+  delete process.env.CCR_TRAE_CONFIG;
+  mkdirSync(join(HOME, ".trae-agent"), { recursive: true });
+  writeFileSync(join(HOME, ".trae-agent", "trae_config.yaml"), 'model_providers:\n  anthropic:\n    api_key: sk-global\n');
+  r = probeEngineAuth("trae", { homeDir: HOME });
+  assert(r.state === "ready", "P3e'' trae 全局位 ~/.trae-agent/trae_config.yaml 有 key → ready（缺省权威位）");
+  rmSync(join(HOME, ".trae-agent", "trae_config.yaml"));
+  r = probeEngineAuth("trae", { homeDir: HOME });
+  assert(r.state === "needs_auth", "P3e''' trae 全局位清场 → needs_auth（文件判定非探针故障，不适用 fail-open）");
   r = probeEngineAuth("claude", { homeDir: HOME });
   assert(r.state === "ready", "P3f claude 恒 ready（relay 进程即 SDK 免检）");
   r = probeEngineAuth("zcode", { homeDir: HOME });
