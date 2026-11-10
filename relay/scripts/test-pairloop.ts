@@ -41,7 +41,13 @@ ok(sd.includes("isSelfPairCodeHint"), "D2 提示条件 helper（本机 relay 云
 console.log("E. 零 relay 改动红线（git 面核——本批 diff 仅 web+本测试）");
 {
   const { execFileSync } = await import("node:child_process");
-  const changed = execFileSync("git", ["diff", "--name-only", "origin/dev"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
+  // CI shallow checkout 可能无 origin/dev ref——回落 HEAD~1（本批单笔 vs 基线）同语义
+  let changed: string[] = [];
+  try {
+    changed = execFileSync("git", ["diff", "--name-only", "origin/dev"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
+  } catch {
+    changed = execFileSync("git", ["diff", "--name-only", "HEAD~1"], { cwd: REPO, encoding: "utf8" }).split("\n").filter(Boolean);
+  }
   const relaySrc = changed.filter((f) => f.startsWith("relay/src/") || f.startsWith("cloudflare/"));
   ok(relaySrc.length === 0, `E1 relay src+worker 零触碰（实=${relaySrc.join(",") || "无"}）`);
   ok(changed.includes("web-console/js/settings-domain.js"), "E2 改动面=web settings-domain（刀 A 落点）");
