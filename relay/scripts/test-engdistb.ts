@@ -94,7 +94,7 @@ async function main(): Promise<void> {
       const h = trae.harvestTraeUsage(traj, { onUsage: (u: unknown) => cbCalls.usage.push(u), onContext: (n: number) => cbCalls.context.push(n) } as never);
       const u = cbCalls.usage.at(-1) as { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
       assert(h?.input === 300 && u.input_tokens === 300 && u.output_tokens === 30 && u.cache_read_input_tokens === 20 && u.cache_creation_input_tokens === 10, "B4 聚合本回合全 interactions（input 300/output 30/cache 20+10——session-manager 累计语义同源）");
-      assert(cbCalls.context.at(-1) === 200 + 20 + 10, "B5 onContext=末次调用窗口占用（200+cache20+10=水位口径）");
+      assert(cbCalls.context.at(-1) === 200 + 15 + 10, "B5 onContext=末次调用自身 input+cache 面（200+15+10=225 per-call 口径——回合累计 cache 重复计前文=水位高估，W-P2TAIL 修 engdistb-review P2）");
       assert(trae.harvestTraeUsage(join(root, "absent.json"), { onUsage: () => {} } as never) === null, "B6 缺档零回调（尽力而为不炸）");
       const bad = join(root, "bad.json");
       writeFileSync(bad, "{not json", "utf-8");
