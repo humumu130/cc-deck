@@ -847,7 +847,7 @@ export interface RetiredSessionsPayload {
 // 组名/模式）。无账条目（历史退休/记账前事件）cause 缺席=端上回落「离席」泛词
 export interface RetiredEntry {
   session_id: string;
-  cause?: "manual" | "idle-trim" | "group-disband";
+  cause?: "manual" | "idle-trim" | "group-disband" | "dispatch-sweep";
   since?: number;
   detail?: string;
 }
@@ -1619,5 +1619,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-no-target-streak", // no_pm_target 连续≥2 轮告警卡（3h 静默睡不允许——刀4）
   "pm-override-pid-stale-candidate", // 刀2：pid 死但回合窗内候选保留（可观测不静默）
   "drainfix-dead-close", // W-DRAINFIX（1111 断档死锁治本）：周期 sweep 断档悬账收口（open 单 worker 判活=dead → failed 收口回 backlog，排队单随排水接续）
+  "dispatch-sweep", // W-GATEPROBE（1111 断档死锁治本 delta）：断档 holder 席位回收（external/无 wrapper 形态 member 除名腾编制）/回收失败——僵尸看门狗不管的形态在这里出编制
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];
