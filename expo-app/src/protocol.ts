@@ -1129,12 +1129,18 @@ export function pairErrNote(raw: string | null, fails: number): string {
  * 误判；起手窗误显待命分钟级自纠）。窗口 15min 对齐 relay sweepWorkingIdle hooked
  * 窗（900s）。与 web 端 session-domain isRealWorking 逐句同源，测试锚互锁
  */
-export function isRealWorking(s: { status?: string; last_tool_use_at?: number } | null | undefined, now: number = Date.now()): boolean {
+export function isRealWorking(s: { status?: string; last_tool_use_at?: number; updated_at?: number } | null | undefined, now: number = Date.now()): boolean {
   if (!s || s.status !== "WORKING") return false;
   const FRESH_MS = 15 * 60 * 1000; // 对齐 relay sweepWorkingIdle hooked 窗（900s）——长工具段不误判（审查 291-A P2-1）
   const t = s.last_tool_use_at;
   const at = typeof now === "number" ? now : Date.now();
   if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
   if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
+  // W-ALIVELAMP（1111）：长工具执行期第二判据——WORKING+updated_at 心跳新鲜（≤5min，
+  // W-SEATALIVE 回合感知心跳持续刷）=真干活；挂起/回合间 idle 心跳停不亮（291 语义保持）。
+  // 与 web 端 session-domain isRealWorking 逐句同源，测试锚互锁。
+  const HB_MS = 5 * 60 * 1000;
+  const u = s.updated_at;
+  if (typeof u === "number" && u > 0 && at - u <= HB_MS) return true;
   return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
 }
