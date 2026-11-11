@@ -1,5 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
+  HookCallbackMatcher,
+  HookEvent,
   PermissionResult,
   PermissionUpdate,
   Query,
@@ -379,6 +381,40 @@ export interface AgentLike {
   // 可选：CLI 子进程 pid——#7 看门狗的进程树 CPU 采样与杀树用；假 agent/非进程
   // 实现（云通道等）没有，看门狗采不到就退化为"纯时间窗判定"（不杀，只放弃）
   readonly childPid?: number;
+  // W-BOARDV2（1111 用户令「黑板」）：worker 黑板事件上报口——session-manager 在会话
+  // 登记（sid 落定）后回接 setWorkerBoard；SDK 钩子在回调就位前触发的事件先进
+  // 早到缓冲，回接时补投。假 agent/非托管实现无此口=零黑板事件（宽容惯例）
+  setWorkerBoard?(cb: (event: string, detail?: string) => void): void;
+}
+
+// W-BOARDV2（1111 用户令「黑板」）：worker 黑板事件 SDK 钩子组——托管 worker 会话由
+// relay 在 spawn 时经 SDK query() options.hooks **编程式注入**（不经 settings 文件、
+// 不经 CLI 参数面：钩子注册权在宿主进程，worker 模型侧无从摘除=最不可绕的注入位）。
+// 事件映射（黑板词表 org-schema.ts DISPATCH_EVENTS）：
+//   SessionStart → worker-ack（接单：会话起来看到任务书）
+//   PostToolUse  → worker-start（开工：首次工具活动；去重在 session-manager 侧单点）
+//   Stop         → worker-milestone（回合心跳：每回合结束登记，90s 节流同前）
+//   TaskCompleted→ worker-done（真交付申报：TaskUpdate 标 completed——回执+PR 纪律的
+//                  机器可观测时刻；relay 收口 done 时与此对账=「done 说真话」）
+// 全部钩子非干预语义（返回 {} 不决策不阻断）、5s 超时自断、异常吞掉——黑板是观测面，
+// 绝不阻断回合主路径。旧 CLI 不认 hooks 选项时按 SDK 契约忽略（黑板缺事件=降级可容，
+// 派发侧事件不受影响——那些是 relay 自己写的）。
+export function buildWorkerBoardHooks(report: (event: string, detail?: string) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const mk = (handler: (input: { tool_name?: string; task_subject?: string }) => void): HookCallbackMatcher["hooks"][number] =>
+    async (input) => {
+      try {
+        handler(input as { tool_name?: string; task_subject?: string });
+      } catch {
+        /* 黑板观测面吞错——绝不阻断回合 */
+      }
+      return {};
+    };
+  return {
+    SessionStart: [{ hooks: [mk(() => { report("worker-ack"); })], timeout: 5 }],
+    PostToolUse: [{ hooks: [mk((input) => { report("worker-start", input?.tool_name ? String(input.tool_name) : undefined); })], timeout: 5 }],
+    Stop: [{ hooks: [mk(() => { report("worker-milestone"); })], timeout: 5 }],
+    TaskCompleted: [{ hooks: [mk((input) => { report("worker-done", input?.task_subject ? String(input.task_subject) : undefined); })], timeout: 5 }],
+  };
 }
 
 // 单个 Agent 会话 = 一次 query() streaming 调用。
@@ -434,6 +470,38 @@ export class AgentSession {
   // #112：resume 形态标记（init 清空残留账本用，见 case "system"）
   private readonly resumed: boolean;
   private q: Query;
+  // W-BOARDV2：worker 黑板事件上报口（session-manager 在 sid 落定后经 setWorkerBoard
+  // 回接）；回调就位前触发的钩子事件进早到缓冲（SessionStart 可能在登记前到达——
+  // CLI init 竞速窗），回接时按序补投。缓冲上限 16（异常风暴防膨胀，丢最旧）
+  private workerBoardCb: ((event: string, detail?: string) => void) | undefined;
+  private workerBoardEarly: Array<[event: string, detail?: string]> = [];
+
+  /** W-BOARDV2：session-manager 回接黑板上报口（sid 已落定，事件直投）。 */
+  setWorkerBoard(cb: (event: string, detail?: string) => void): void {
+    this.workerBoardCb = cb;
+    const early = this.workerBoardEarly;
+    this.workerBoardEarly = [];
+    for (const [event, detail] of early) {
+      try {
+        cb(event, detail);
+      } catch {
+        /* 上报口异常吞掉（观测面纪律） */
+      }
+    }
+  }
+
+  /** 钩子→上报口单点：回调缺位=早到缓冲（防 init 竞速丢 worker-ack），异常吞掉。 */
+  private reportWorkerBoard(event: string, detail?: string): void {
+    if (this.workerBoardCb) {
+      try {
+        this.workerBoardCb(event, detail);
+      } catch {
+        /* 观测面异常不反噬回合 */
+      }
+      return;
+    }
+    if (this.workerBoardEarly.length < 16) this.workerBoardEarly.push([event, detail]);
+  }
 
   constructor(
     readonly cwd: string,
@@ -456,6 +524,10 @@ export class AgentSession {
       // plugins（维持现状零波及）；非空 = 显式 local 插件注入（toSdkPlugins 映射）。
       // 仅 Claude 引擎消费本参数（CodexAgentSession/registered engines 构造器不认）。
       workerPlugins?: string[];
+      // W-BOARDV2：true=本会话挂 worker 黑板 SDK 钩子（SessionStart/PostToolUse/Stop/
+      // TaskCompleted 四事件，见 buildWorkerBoardHooks）。回调本体由 session-manager 在
+      // sid 落定后经 setWorkerBoard 回接（早到事件进缓冲补投）；不回接=黑板事件静默丢弃
+      workerBoard?: boolean;
     },
   ) {
     this.rules = opts?.rules;
@@ -499,6 +571,9 @@ export class AgentSession {
         // W-KWP2 件一：雇员插件通路（显式 local 路径，skipMcpDiscovery 见 toSdkPlugins
         // 注释）。空/undefined 不传 = SDK 默认行为不变（B1 前现状）
         ...(opts?.workerPlugins?.length ? { plugins: toSdkPlugins(opts.workerPlugins) } : {}),
+        // W-BOARDV2：worker 黑板 SDK 钩子（编程式注入——宿主注册权，worker 侧不可摘）。
+        // 回调经 this.reportWorkerBoard 晚绑定（setWorkerBoard 回接前先进早到缓冲）
+        ...(opts?.workerBoard ? { hooks: buildWorkerBoardHooks((event, detail) => this.reportWorkerBoard(event, detail)) } : {}),
         ...(opts?.resume ? { resume: opts.resume } : {}),
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
@@ -543,7 +618,22 @@ export class AgentSession {
         },
       },
     });
+    // W-BOARDV2（反方审查 P1 处置）：钩子活性自检——hooks_applied=false（老 CLI 不认
+    // 编程式钩子）打 stderr 降级日志，「钩子死」与「真跑路」在观测面可辨。仅挂了钩子的
+    // 会话发起控制请求（Leader/用户会话零开销）；失败/无响应静默（同降级语义）。
+    if (opts?.workerBoard) this.checkHooksApplied();
     void this.pump();
+  }
+
+  /** W-BOARDV2：hooks_applied 自检（fire-and-forget，绝不阻断会话主路径）。 */
+  private checkHooksApplied(): void {
+    void this.q.initializationResult().then((r) => {
+      const rr = r as unknown as { result?: { hooks_applied?: boolean }; hooks_applied?: boolean };
+      const flag = rr?.result?.hooks_applied ?? rr?.hooks_applied;
+      if (flag === false) {
+        process.stderr.write(`[boardv2:${this.id.slice(0, 8)}] hooks_applied=false（CLI 不认编程式钩子）——worker 侧黑板事件降级缺席（派发侧事件不受影响）\n`);
+      }
+    }).catch(() => { /* 老 CLI 无此控制请求——静默同降级 */ });
   }
 
   private async pump(): Promise<void> {

@@ -35,6 +35,26 @@ export const FAILURE_REASONS = ["network_error", "timeout", "tool_crash", "model
 // 有 PR 但 CI 状态未明（缺省兜底）。relay 不主动查 GitHub（快照值语义）
 export const PR_STATES = ["open", "merged", "ci_green", "ci_red", "ci_unknown"] as const;
 
+// W-BOARDV2（1111 用户令「黑板」）：黑板事件词表——dispatch-log.ndjson 单表扩事件，
+// 状态词表（DISPATCH_STATUSES 六态）不动：事件行复用合法 status（worker 侧事件恒
+// running=施工中语义，派发侧 pre-dispatch 事件恒 dispatched 短窗被同 id 真行立即覆盖），
+// event 字段承载细分生命周期。消费方=board-projection（看板读时投影）+leader-board
+// （PM 查询）+closeOpenDispatches 对账（done 说真话）。派发侧四态（queued/seat-scan/
+// reused/spawned）=1111 用户追加①（派发决策全程可回放：假性触顶/排队死锁的病根
+// 「这段无痕」）；worker 侧四态=接单/开工/心跳/真交付；user-override=手动改板事件
+// （投影后写赢——单一事实源不破）。
+export const DISPATCH_EVENTS = [
+  "dispatch-queued",     // 派发侧：入队（判定原因在 receipt——全局帽/编制帽/无活席）
+  "dispatch-seat-scan",  // 派发侧：选席扫描（候选名单+逐跳过原因+落席决策）
+  "dispatch-reused",     // 派发侧：复用在编熟手（值在 target=承接席）
+  "dispatch-spawned",    // 派发侧：真启动新会话（spawn-pending→承接后）
+  "worker-ack",          // worker：接单（会话起来看到任务书——SDK SessionStart 钩子）
+  "worker-start",        // worker：开工（首次工具活动——SDK PostToolUse 钩子首拍）
+  "worker-milestone",    // worker：回合心跳（SDK Stop 钩子，relay 侧 90s 节流）
+  "worker-done",         // worker：真交付申报（TaskCompleted 钩子——回执+PR 后才算）
+  "user-override",       // 用户：手动改板（org board move 族写入；投影时后写赢）
+] as const;
+
 // ---------- 基础校验原语 ----------
 
 type Dict = Record<string, unknown>;
@@ -181,6 +201,8 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   pr_state: { type: "enum", enumTable: PR_STATES }, // prchip：PR 状态快照（词表 PR_STATES）
   exclude_sessions: { type: "string-array" }, // W-REVEXCL（1109 二现治本）：选席排除集（审查单防派回实施者本人）——派单受理时落 dispatched 行（CLI --exclude/--review-of → payload → dispatchWorker；可审计：审后可查该单排除了谁）
   no_pr: { type: "boolean" }, // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
+  event: { type: "enum", enumTable: DISPATCH_EVENTS }, // W-BOARDV2（1111 用户令）：黑板事件词表（词表 DISPATCH_EVENTS 本文件权威）——行仍带合法 status，event 承载细分生命周期（看板投影/PM 查询数据底座；旧行缺省 undefined=无事件面，宽容）
+  abnormal_done: { type: "boolean" }, // W-BOARDV2「done 说真话」：relay 收口 done 时同 id 无 worker-done 申报（worker 半途跑路/静默收工——1111 实锤形态）即落此标。纯观测标：leader-board/看板投影消费（「异常完成」角标），不改状态语义。与 receipt_missing（回执内容观测）分立：本标=交付申报缺席
 };
 
 // ---------- reducer 门面 ----------
