@@ -214,6 +214,11 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(css.includes(".fzone .wtab.on::after") && css.includes(".fz-code") && css.includes(".fz-resizer") && css.includes(".workspace-main"), "F7 CSS（mock b.html 同构：brand 顶条/行号双列/拖宽柄/行容器让位）");
   ok(web.includes("function loadAvContent") && web.includes("av-md"), "F8 av 模态管线保留（批一改道不拆——下载/定位钮链不破，批二处置）；md 渲染消息同款复用零分叉");
   ok(html.includes("data-fzone-toggle") && fz.includes('document.addEventListener("click"') && fz.includes("[data-fzone-toggle]") && fz.includes("classList.toggle(\"on\", on)") && css.includes("@media (max-width: 1199px)") && css.includes(".workspace-main > .fzone") && fz.includes("空 · 点消息里的文件"), "F9 常驻开关钮（收起后唯一再展开入口+on 态回显）+窄窗浮层（<1200 右缘覆盖零挤压——mock 风险条批一解）+空态提示卡");
+
+  // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============
+  ok(fz.includes("function tabId(sid, path)") && fz.includes('state.tabs.push({ id, path: p, sid: String(sid) })') && fz.includes("load(t.id, pane, t.sid, t.path)") && !fz.includes("state.sid = sid"), "F10 tab 会话作用域（P2-①：复合 id sid+path 跨会话同名路径不串台/tab 自带 sid/retry 取 tab sid 真路径——负向锚=全局 state.sid 覆写旧串不得回归）");
+  ok(fz.includes("function resetForSession") && fz.includes("if (s === state.lastSid) return;") && fz.includes("resetForSession,") && web.includes("ccDeckFzone.resetForSession(sid)") && web.includes("ccDeckFzone.resetForSession(s.session_id)") && web.split("resetForSession(").length >= 3, "F10b 切会话清空双挂点（选中链 MO+slimOpenSession 成员卡直开——lastSid 幂等守卫，开合态不动）");
+  ok(web.includes("el.dataset.fzUrl") && web.includes("window.__ccDeck005FzoneUnload") && fz.includes("window.__ccDeck005FzoneUnload") && !web.includes('let fzObjUrl = ""'), "F11 图片 blob per-tab 槽（P2-②：双图并存互不 revoke，关 tab/切会话经 unload 挂口回收——负向锚=单槽旧串不得回归）");
 }
 
 console.log(`\n§P-§A：${pass} ok / ${fail} FAIL`);

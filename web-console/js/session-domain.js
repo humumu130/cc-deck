@@ -1700,6 +1700,7 @@
                   if (S.selected === s.session_id) return;
                   if (S.selected) inputDrafts.set(S.selected, UI.input.value); // #B3-4 同款：切走存草稿
                   S.selected = s.session_id;
+                  if (window.ccDeckFzone && window.ccDeckFzone.resetForSession) window.ccDeckFzone.resetForSession(s.session_id); // W-FZONE-B1-R1 P2-①：成员卡直开=切会话，同款清空工作区 tab
                   S.forceScroll = true;
                   UI.input.value = inputDrafts.get(s.session_id) ?? "";
                   S.staged = [];
@@ -4122,7 +4123,8 @@
                 // 代码=行号+轻量高亮、图片=blob 适应宽+点击原尺寸）；>2MB 文本头部截断+提示（任务书）。
                 // 失败态=tab 内错误卡+重试钮（data-fz-retry 由 fzone.js 委托接管——detailbug 先例：
                 // 手动点击才弹错，加载失败不 toast 轰炸）。el.isConnected 守卫=关掉的 tab 弃置回包。
-                let fzObjUrl = "";
+                // 图片 blob=per-tab 槽（W-FZONE-B1-R1 修审 P2-②：单槽互踩——开第二张图不再 revoke
+                // 第一张；url 挂 el.dataset.fzUrl，关 tab/切会话经 __ccDeck005FzoneUnload 挂口回收）
                 // sheet 桶的文本安全子集（W-P2TAIL 修 fzone-b1-review-a P2）——桶内其余
                 // xlsx/xls/numbers/plist/db/sqlite 为二进制档，落兜底卡防 UTF-8 乱码墙
                 const SHEET_TEXT_EXT = new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"]);
@@ -4142,9 +4144,11 @@
                     if (!el.isConnected) return; // tab 已关，弃置回包
                     const bytes = artifactBytes(res);
                     if (asImg) {
-                      if (fzObjUrl) URL.revokeObjectURL(fzObjUrl);
-                      fzObjUrl = URL.createObjectURL(new Blob([bytes], { type: res.mime || "image/" + ext }));
-                      el.innerHTML = '<div class="fz-imgwrap"><img class="fz-img" src="' + fzObjUrl + '" alt="预览 ' + esc(name) + '" title="点击切换 原尺寸 ↔ 适应宽度"></div>';
+                      const prevUrl = el.dataset.fzUrl || "";
+                      if (prevUrl) { try { URL.revokeObjectURL(prevUrl); } catch (_) {} } // 仅回收本 pane 旧图（重试/重载同 pane 场景——他 pane 的 url 不碰）
+                      const url = URL.createObjectURL(new Blob([bytes], { type: res.mime || "image/" + ext }));
+                      el.dataset.fzUrl = url;
+                      el.innerHTML = '<div class="fz-imgwrap"><img class="fz-img" src="' + url + '" alt="预览 ' + esc(name) + '" title="点击切换 原尺寸 ↔ 适应宽度"></div>';
                       const img = el.querySelector(".fz-img");
                       if (img) img.addEventListener("click", () => img.classList.toggle("full"));
                     } else {
@@ -4188,6 +4192,7 @@
                   return null;
                 }
                 window.__ccDeck005FzoneLoad = loadFzoneContent; // fzone.js 内容加载挂口
+                window.__ccDeck005FzoneUnload = (el) => { const u = el && el.dataset ? el.dataset.fzUrl : ""; if (u) { try { URL.revokeObjectURL(u); } catch (_) {} try { delete el.dataset.fzUrl; } catch (_) {} } }; // P2-②：fzone.js 关 tab/切会话清空时回收 per-tab blob url
                 window.__ccDeck005ArtIconHtml = artIconHtml; // tab 图标（六类同源）
                 window.__ccDeck005MdRender = mdHtml; // md 渲染单口导出（消息/工作区/探针三面同源——mobile.js 跨域面同族先例）
                 window.__ccDeck005FzoneOpenByToken = (t) => { const p = frefResolvePath(t); if (p) openFzoneTab(p); }; // 工作区面板内 .fpath 点击路由
@@ -5170,6 +5175,7 @@
                     if (sid !== S.selected) {
                       if (S.selected) inputDrafts.set(S.selected, UI.input.value); // #B3-4 切走存草稿
                       S.selected = sid;
+                      if (window.ccDeckFzone && window.ccDeckFzone.resetForSession) window.ccDeckFzone.resetForSession(sid); // W-FZONE-B1-R1 P2-①：切会话清空工作区 tab（防跨会话同名路径静默串台）
                       S.forceScroll = true;
                       histLoad(sid);
                       UI.input.value = inputDrafts.get(sid) ?? ""; // #B3-4 切回恢复（未输入过清空，防串会话）

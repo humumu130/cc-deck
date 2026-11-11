@@ -45,6 +45,7 @@ const FIX = {
   "reports/w-p2batch4.md": { mime: "text/markdown", b64: b64(MD_DOC) },
   "src/engine-guard.ts": { mime: "text/plain", b64: b64(TS_DOC) },
   "assets/disk-report.png": { mime: "image/png", b64: PNG_1PX },
+  "assets/hero-shot.png": { mime: "image/png", b64: PNG_1PX }, // W-FZONE-B1-R1 P2-②：第二张图（双图并存断言夹具）
 };
 const FIX_JSON = JSON.stringify(FIX);
 const now = Date.now();
@@ -52,6 +53,7 @@ const sess = { session_id: "fz-demo", title: "文件工作区演示", status: "D
   { path: "reports/w-p2batch4.md", size: 500, last_at: now - 60e3, first_at: now - 120e3, op: "create", exists: true },
   { path: "src/engine-guard.ts", size: 300, last_at: now - 90e3, first_at: now - 120e3, op: "create", exists: true },
   { path: "assets/disk-report.png", size: 100, last_at: now - 45e3, first_at: now - 120e3, op: "create", exists: true },
+  { path: "assets/hero-shot.png", size: 100, last_at: now - 44e3, first_at: now - 120e3, op: "create", exists: true },
   { path: "reports/gone.md", size: 10, last_at: now - 30e3, first_at: now - 120e3, op: "create", exists: true },
 ] };
 const snap = { type: "SNAPSHOT", payload: { relay_name: "本机 relay", token_valid: true, homedir: "/Users/u", sessions: [sess], notifications: [], pending_user_actions: [], org_confirms: [], acceptances: [], projects: [], receipts: [] } };
@@ -84,7 +86,7 @@ await wait(1000);
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail++; console.log(`  ✗ ${m}`); } };
-const fzState = `(() => { const z = document.getElementById("fzone"); if (!z) return null; return { hidden: z.hidden, tabs: window.ccDeckFzone ? window.ccDeckFzone.tabs() : [], active: (z.querySelector(".wtab.on .fname")||{}).textContent || "", w: z.getBoundingClientRect().width, md: !!z.querySelector(".fz-md .md-h1"), code: !!z.querySelector(".fz-code .fz-code-n"), kw: !!z.querySelector(".fz-code .s-kw"), img: ((z.querySelector(".fz-img")||{}).src||"").slice(0,10), fb: (z.querySelector(".fz-fb span:nth-child(2)")||{}).textContent || "", ghost: !!z.querySelector("[data-fz-empty]") }; })()`;
+const fzState = `(() => { const z = document.getElementById("fzone"); if (!z) return null; return { hidden: z.hidden, tabs: window.ccDeckFzone ? window.ccDeckFzone.tabs() : [], active: (z.querySelector(".wtab.on .fname")||{}).textContent || "", w: z.getBoundingClientRect().width, md: !!z.querySelector(".fz-md .md-h1"), code: !!z.querySelector(".fz-code .fz-code-n"), kw: !!z.querySelector(".fz-code .s-kw"), img: ((z.querySelector(".fz-img")||{}).src||"").slice(0,10), urls: [...z.querySelectorAll("[data-fz-pane]")].map((p) => p.dataset.fzUrl || ""), fb: (z.querySelector(".fz-fb span:nth-child(2)")||{}).textContent || "", ghost: !!z.querySelector("[data-fz-empty]") }; })()`;
 const fzRead = async () => JSON.parse(await ev(`JSON.stringify(${fzState})`));
 // 重试点击：headless 双环境（CDP 注帧+断网单源）下首次点击落在页面 settle 窗内会被吞——
 // 贴真实用户语义（无反馈就再点一次），断言只校验终态
@@ -146,36 +148,43 @@ ok(s4.active === "engine-guard.ts", "点 tab 切换激活");
 const s5 = await clickRow('.art-row[data-path="assets/disk-report.png"]', (t) => t.tabs.length >= 3);
 ok(s5.tabs.length === 3 && s5.active === "disk-report.png" && s5.img.startsWith("blob:"), "三 tab 并存+图片 blob 加载（file:// 页 blob:null 前缀同义）");
 
+// ⑤b 双图并存（W-FZONE-B1-R1 P2-②）：开第二张图 → 两图 pane 各持独立 blob url（单槽互踩已修）
+const s5b = await clickRow('.art-row[data-path="assets/hero-shot.png"]', (t) => t.tabs.length >= 4);
+ok(s5b.tabs.length === 4 && s5b.urls.filter(Boolean).length === 2 && new Set(s5b.urls.filter(Boolean)).size === 2, "双图并存 per-tab blob 槽：两图 pane 各持独立 url（开第二张不再 revoke 第一张）");
+ok(await ev(`(() => { const a = [...document.querySelectorAll("#fzone .fz-img")]; return a.length === 2 && a.every((i) => i.complete && i.naturalWidth > 0); })()`), "双图均加载成功（naturalWidth>0，首图未被中途撤销）");
+
 await shot("fz-3-img-dark");
 
 // ⑥ 中键关闭 png tab（spec 交互流）
 await ev(`(() => { const t = document.querySelector('#fzone [data-fz-tab][title="assets/disk-report.png"]'); t.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 1 })); })()`);
 await wait(400);
 const s6 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(s6.tabs.length === 2 && !s6.tabs.includes("assets/disk-report.png"), "中键关闭 png tab（剩 2）");
+ok(s6.tabs.length === 3 && !s6.tabs.includes("assets/disk-report.png"), "中键关闭 png tab（剩 3）");
 
 // ⑦ 消息文本路径 token：登记面命中=开/聚焦工作区；未登记=复制兜底零动作
 await ev(`(() => { const cp = document.querySelector("#session-body .conversation-pane"); const b = document.createElement("div"); b.className = "md-p"; b.innerHTML = '已改 <span class="fpath" data-p="src/engine-guard.ts">src/engine-guard.ts</span> 与 <span class="fpath" data-p="/etc/hosts">/etc/hosts</span>'; cp.appendChild(b); })()`);
 await ev(`document.querySelector('#session-body .fpath[data-p="src/engine-guard.ts"]').click()`); await wait(400);
 const s7 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(s7.tabs.length === 2 && s7.active === "engine-guard.ts", "入口②登记命中：消息路径 token 点击=聚焦工作区 tab");
+ok(s7.tabs.length === 3 && s7.active === "engine-guard.ts", "入口②登记命中：消息路径 token 点击=聚焦工作区 tab");
 
 await ev(`document.querySelector('#session-body .fpath[data-p="/etc/hosts"]').click()`); await wait(400);
 const s8 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(s8.tabs.length === 2, "入口②未登记路径零动作（/etc/hosts 不开 tab，复制兜底）");
+ok(s8.tabs.length === 3, "入口②未登记路径零动作（/etc/hosts 不开 tab，复制兜底）");
 
 // ⑧ 眼睛钮改道（data-af-view → 工作区 tab，不再 av 模态）
 await ev(`document.querySelector('.art-row[data-path="reports/w-p2batch4.md"] [data-af-view]').click()`);
 await wait(400);
 const noAv = await ev(`!document.getElementById("av-backdrop")`);
 const s9 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(noAv && s9.tabs.length === 2 && s9.active === "w-p2batch4.md", "眼睛钮=工作区 tab（av 模态 backdrop 未弹出）");
+ok(noAv && s9.tabs.length === 3 && s9.active === "w-p2batch4.md", "眼睛钮=工作区 tab（av 模态 backdrop 未弹出）");
 
 
 // ⑨ 逐个关闭：中键关到最后 → 面板自动收起+开合记忆
 await ev(`(() => { const t = document.querySelector('#fzone [data-fz-tab][title="src/engine-guard.ts"]'); t.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 1 })); })()`);
 await wait(300);
 await ev(`(() => { const t = document.querySelector('#fzone [data-fz-tab][title="reports/w-p2batch4.md"]'); t.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 1 })); })()`);
+await wait(300);
+await ev(`(() => { const t = document.querySelector('#fzone [data-fz-tab][title="assets/hero-shot.png"]'); t.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 1 })); })()`);
 await wait(500);
 const s10 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 const mem = await ev(`localStorage.getItem("ccd_fzone_open")`);
@@ -194,6 +203,14 @@ const hasRetry = await ev(`!!document.querySelector('#fzone [data-fz-retry]')`);
 const hasRz = await ev(`!!document.querySelector('#fzone [data-fz-resize]')`);
 ok(s12.tabs.length === 1 && hasRetry && (s12.fb || "").includes("拉取失败"), `失败态=tab 内错误卡+重试钮（「${(s12.fb || "").slice(0, 30)}」）`);
 ok(hasRz, "拖宽柄在场（38% 起可拖）");
+
+// ⑪b 切会话清空（W-FZONE-B1-R1 P2-①）：resetForSession 异 sid → tab 全清+开合态不动+空态卡回归；同 sid 重入幂等
+const hidB = await ev(`document.getElementById("fzone").hidden`);
+await ev(`window.ccDeckFzone.resetForSession("fz-other")`); await wait(250);
+const s12b = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+await ev(`window.ccDeckFzone.resetForSession("fz-other")`); await wait(150);
+const s12c = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+ok(s12b.tabs.length === 0 && s12b.hidden === hidB && s12b.ghost && s12c.tabs.length === 0, "切会话清空：resetForSession 异 sid 清空全部 tab（开合态不动+空态卡回归；同 sid 重入幂等零动作）");
 
 // ⑫ 亮色主题：md 预览对照（重试 gone.md 无妨——再点 md 行看亮色 md 渲染）
 await ev(`(() => { const b = document.querySelector('[data-theme-toggle]'); if (b) b.click(); })()`);
