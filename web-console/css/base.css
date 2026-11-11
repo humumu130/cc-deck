@@ -756,10 +756,15 @@
     .segment-bar .faint, .metric b, .mobile-summary b { font-variant-numeric: tabular-nums; }
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 22px; }
-    /* ═══ W-FZONE-B1（1111 拍板 B · 批一）：文件工作区——设计规格=fzone-mocks/b.html（token 同源） ═══ */
-    .workspace-main { flex: 1; min-height: 0; display: flex; } /* 会话体｜工作区 行容器（工作区开=阅读列让位收缩） */
-    .workspace-main > .workspace-body { flex: 1; min-width: 0; }
-    .fzone { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; width: 38%; min-width: 280px; border-left: 1px solid var(--line-strong); background: var(--surface1); }
+    /* ═══ W-FZONE-R3（1111 用户军令三）：文件工作区窗口级分栏——布局规格=WorkBuddy asar 逆向规格书
+       （project-detail-page-CSK2DXmS.css 同构：__body 行容器/__main 会话列/__detail-sash 4px 柄/__detail-panel 定宽面板；
+       旧 workspace-main 行容器（分栏藏在会话详情容器内）退役——详见回执 w-fzone-r3.md 段A） ═══ */
+    .session-split { flex: 1; min-height: 0; display: flex; overflow: hidden; } /* =WorkBuddy __body{flex:1;min-height:0;display:flex;overflow:hidden} */
+    .session-split > .workspace { flex: 1; min-width: 0; } /* =WorkBuddy __main{flex:1;min-width:0}——整个会话面板（head/标签行/消息/输入框）作单列 */
+    .fz-sash { cursor: col-resize; z-index: 10; flex-shrink: 0; width: 4px; position: relative; } /* =WorkBuddy __detail-sash{cursor:col-resize;z-index:10;flex-shrink:0;width:4px;position:relative} */
+    .fz-sash:hover, .fz-sash.dragging { background: color-mix(in srgb, var(--brand, #EC9A73) 60%, transparent); } /* =__detail-sash:hover 品牌色 60% */
+    .fz-sash[hidden] { display: none; }
+    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: var(--surface1); overflow: hidden; } /* =WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]——localStorage 记忆沿用） */
     .fzone[hidden] { display: none; }
     .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
 
@@ -811,12 +816,11 @@
     .fzone .fz-imgwrap { display: flex; justify-content: center; padding: 4px 0; }
     .fzone .fz-img { max-width: 100%; cursor: zoom-in; border-radius: 6px; }
     .fzone .fz-img.full { max-width: none; width: auto; cursor: zoom-out; } /* 点击放大=原尺寸滚动（适应宽 ↔ 100%） */
-    .fzone .fz-resizer { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
-    .fzone .fz-resizer:hover, .fzone .fz-resizer:active { background: color-mix(in srgb, var(--brand) 30%, transparent); }
-    /* 窄窗 <1200（mock b.html 风险条「右栏挤压对话列」批一最小解）：工作区改浮层覆盖右缘——对话列零挤压；z-index 压 dock 之上（dock 6? 实勘 session-state-dock z 低于此即可） */
+    /* 窄窗 <1200（批一风险条沿用，R3 锚改 session-split）：工作区改浮层覆盖右缘——会话列零挤压；sash 隐藏（=WorkBuddy is-mobile：__detail-sash display:none+面板 absolute 覆盖） */
     @media (max-width: 1199px) {
-      .workspace-main { position: relative; }
-      .workspace-main > .fzone { position: absolute; top: 0; right: 0; bottom: 0; z-index: 7; box-shadow: -14px 0 30px rgba(0,0,0,.28); }
+      .session-split { position: relative; }
+      .session-split > .fzone { position: absolute; top: 0; right: 0; bottom: 0; z-index: 7; box-shadow: -14px 0 30px rgba(0,0,0,.28); }
+      .session-split > .fz-sash { display: none; }
     }
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }

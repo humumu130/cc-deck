@@ -123,7 +123,7 @@ const s1 = await (async () => {
 })();
 ok(!s1.hidden && s1.tabs.length === 1 && s1.active === "w-p2batch4.md", "点行开 tab：1 tab 激活 w-p2batch4.md");
 ok(s1.md, "md 预览=mdHtml 同款（.md-h1 渲染锚在场）");
-ok(Math.abs(s1.w / 1440 - 0.38) < 0.03, `缺省宽=38%（实测 ${(s1.w / 1440 * 100).toFixed(1)}%）`);
+ok(s1.w === 440, `缺省宽=440px（WorkBuddy useState(440) 同构；实测 ${s1.w}px——R3 旧 38% 口径退役）`);
 ok(!s1.ghost, "空态提示卡随首 tab 开启退场（display:flex 压 [hidden] 坑已修）");
 
 await shot("fz-1-md-dark");
@@ -200,9 +200,9 @@ await shot("fz-4-empty-dark");
 await clickRow('.art-row[data-path="reports/gone.md"]', (t) => t.tabs.length >= 1);
 const s12 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 const hasRetry = await ev(`!!document.querySelector('#fzone [data-fz-retry]')`);
-const hasRz = await ev(`!!document.querySelector('#fzone [data-fz-resize]')`);
+const hasRz = await ev(`!!document.querySelector('#d-session .fz-sash[data-fz-resize]')`);
 ok(s12.tabs.length === 1 && hasRetry && (s12.fb || "").includes("拉取失败"), `失败态=tab 内错误卡+重试钮（「${(s12.fb || "").slice(0, 30)}」）`);
-ok(hasRz, "拖宽柄在场（38% 起可拖）");
+ok(hasRz, "拖宽柄在场（R3：窗口级 4px sash，440 起可拖 clamp[340,800]——WorkBuddy 同构）");
 
 // ⑪b 切会话清空（W-FZONE-B1-R1 P2-①）：resetForSession 异 sid → tab 全清+开合态不动+空态卡回归；同 sid 重入幂等
 const hidB = await ev(`document.getElementById("fzone").hidden`);
