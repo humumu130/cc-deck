@@ -393,10 +393,20 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                   const on = engineSel === e.id;
                   const accent = ENGINE_ACCENT[e.id] ?? c.faint;
                   const badge = ENGINE_BADGE[e.state];
+                  // W-ZCODE-C（1111 拍板 C）：zcode 产品化标注——副文案给产品口径短句
+                  //（a11y label 带完整口径），且不可选行不显示能力短语（旧 capsText 会给
+                  // unsupported 行落「基础执行」=误导——不可选还描述能力）。
+                  // 复评触发器：官方 npm 分发出现时复评（同源副本：web 两文件 ZCODE_NOTE 同步改）。
+                  const ZCODE_NOTE = "无官方 npm 分发 · CLI 已开源（zai-org/ZCode），社区包未经供应链审计暂不接入 · GLM 用户可走 claude 别名桥接 · 官方 npm 分发出现时复评";
+                  const isZcodeBlocked = e.id === "zcode" && !!block && !loginRow;
                   const caps = e.capabilities;
-                  const capsText = caps
-                    ? [caps.resume ? "可恢复" : null, caps.approval ? "审批交互" : null, caps.artifacts ? "输出物" : null].filter(Boolean).join(" · ") || ENGINE_PHRASES.basicExec
-                    : null;
+                  const capsText = isZcodeBlocked
+                    ? "无官方 npm 分发 · 开源可自装（见桌面端说明）"
+                    : block && !loginRow
+                      ? null // 不可选行不描述能力（W-ZCODE-C 顺刀：泛化修正——unsupported/unavailable 灰置行同理）
+                      : caps
+                        ? [caps.resume ? "可恢复" : null, caps.approval ? "审批交互" : null, caps.artifacts ? "输出物" : null].filter(Boolean).join(" · ") || ENGINE_PHRASES.basicExec
+                        : null;
                   // enginemobile（t-fe213f37 病灶①⑥⑦）：状态收敛为**单一徽章**（胶囊底色三
                   // 态+视觉短词）——删名称旁状态裸拼（engState）与第二警示行（engBlockT
                   // 「不可选：CLI 未在 PATH 探测到」术语直出）；完整原因仅保留在 a11y
@@ -407,7 +417,7 @@ export default function NewSessionModal({ visible, presetCwd, onClose }: { visib
                       <Pressable
                         style={[m.engRow, on && m.engRowOn, block && !loginRow ? { opacity: 0.5 } : null]}
                         disabled={!!block && !loginRow}
-                        accessibilityLabel={`引擎 ${engineLabelOf(e)}，${ENGINE_STATE_LABEL[e.state]}${block && !loginRow ? `，不可选：${block}` : ""}`}
+                        accessibilityLabel={`引擎 ${engineLabelOf(e)}，${ENGINE_STATE_LABEL[e.state]}${isZcodeBlocked ? `，${ZCODE_NOTE}` : block && !loginRow ? `，不可选：${block}` : ""}`}
                         onPress={() => {
                           if (loginRow) { // 未登录 → 登录卡（ENGINE_LOGIN start 幂等；卡就绪后回来选它）
                             store.engineLogin(e.id, "start", (r) => { if (!r.ok && r.err) setErr(r.err); });

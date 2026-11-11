@@ -1585,6 +1585,10 @@ function connectLan(ctx) {
           }
           const provLive = section.querySelector('[data-settings-live="provider"]');
           if (provLive) {
+            // W-ZCODE-C（1111 拍板 C）：zcode 产品化标注——短句升格+完整口径进 title。
+            //（同源常量副本：session-domain.js ZCODE_NOTE + expo NewSessionModal——三处同步改）。
+            // 复评触发器：官方 npm 分发出现时复评（届时撤本特判+engine-catalog unsupported 分支）。
+            const ZCODE_NOTE = "无官方 npm 分发 · CLI 已开源（zai-org/ZCode），社区包未经供应链审计暂不接入 · GLM 用户可走 claude 别名桥接 · 官方 npm 分发出现时复评";
             if (!catalog) liveSetHtml(provLive, '<div class="v8-escape">该 relay 未下发引擎目录（旧版本）· 引擎状态不可用。</div>'); /* W-SETTINGS3 批2：空态蓝描边 banner 退役，回 V3 灰字内联说明 */
             else liveSetHtml(provLive, catalog.map((e) => {
               if (!e || typeof e.id !== "string") return "";
@@ -1595,7 +1599,7 @@ function connectLan(ctx) {
                 ? (Array.isArray(e.models) && e.models.length ? `已接 · ${e.models.length} 个模型` : "已接 · 使用引擎默认模型")
                 : na
                   ? esc(oneLine(e.auth_hint || "请先完成引擎登录"))
-                  : (e.state === "unsupported" ? "未接入" : "未安装"); // W-ENGINESLIM（1106 用户令）：二字短标——与新建会话下拉 engineStateText 同口径；安装指引退役（面板过度信息）
+                  : (e.id === "zcode" ? "未接入 · 无官方分发" : e.state === "unsupported" ? "未接入" : "未安装"); // W-ENGINESLIM（1106 用户令）：二字短标——与新建会话下拉 engineStateText 同口径；W-ZCODE-C：zcode 升产品短句
               const tag = ok ? '<span class="tag done">已接</span>' : na ? '<span class="tag authn">未登录</span>' : e.state === "unsupported" ? '<span class="tag">未接入</span>' : '<span class="tag">待装</span>';
               // #102 批 B：未登录行加「立即登录」钮（点行同效）——弹登录卡扫码即登录
               const loginBtn = na ? `<button class="row-share" data-engine-login="${esc(e.id)}" type="button" title="拉起登录面板，扫码完成登录">立即登录</button>` : "";
@@ -1606,7 +1610,7 @@ function connectLan(ctx) {
               //（图标+名称文字）即标签，v8-swtxt 不再并排 label 名称重复（A 审实锤双显）；
               // 引擎名进行 title/aria-label（可访问性不丢）；needs_auth 黄点保留（信号位），
               // 其 title 升「名 · 扫码提示」全量（旧 title 只 auth_hint 丢名）。
-              const rowTitle = esc(`${label}${na ? " · 点此扫码登录 · " + oneLine(e.auth_hint || "") : " · " + copy}`);
+              const rowTitle = esc(`${label}${na ? " · 点此扫码登录 · " + oneLine(e.auth_hint || "") : " · " + copy}${!ok && !na && e.id === "zcode" ? " · " + ZCODE_NOTE : ""}`); // W-ZCODE-C：zcode 完整口径入 title（面板短句后唯一查询口——同 naTitle 链口径）
               return `<div class="v8-swrow engine-row${ok ? "" : " engine-off"}"${na ? ` data-engine-login="${esc(e.id)}"` : ""} title="${rowTitle}" aria-label="${rowTitle}"><span class="v8-swico engine-badge ${ENGINE_BADGE[e.id] || ""}">${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, ENGINE_SHORT[e.id] || e.id) : ""}${esc(ENGINE_SHORT[e.id] || e.id)}</span><div class="v8-swtxt">${na ? '<span class="eng-auth-dot" aria-hidden="true"></span>' : ""}<div class="v8-swd v8-swd-solo">${copy}</div></div>${loginBtn || installBtn || tag}</div>`;
             }).join(""));
           }
