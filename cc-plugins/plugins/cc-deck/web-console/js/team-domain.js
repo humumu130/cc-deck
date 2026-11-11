@@ -50,7 +50,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined, boardFreshAt: new Map(), _freshLastAt: 0 }; /* boardfresh（1104 用户令·板面说谎第三现）：boardFreshAt=per-gid 板数据最近落地时刻（detail ack/SNAPSHOT.boards/BOARD_UPDATED 三写点）；_freshLastAt=强刷节流（5s） */ // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), projections: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined, boardFreshAt: new Map(), _freshLastAt: 0 }; /* boardfresh（1104 用户令·板面说谎第三现）：boardFreshAt=per-gid 板数据最近落地时刻（detail ack/SNAPSHOT.boards/BOARD_UPDATED 三写点）；_freshLastAt=强刷节流（5s） */ // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -371,6 +371,25 @@
                   if (isDone && task.dispatch_id && missingReceiptIds(project.id).has(task.dispatch_id)) {
                     clineBits.push('<span class="cline-miss" title="收口 done 但回执无「结果：」行（worker 静默收工）——请抽查该单交付">⚠ 无回执</span>');
                   }
+                  // W-BOARDV2：黑板投影 chip——异常完成⚠（worker-done 申报缺席）/已申报交付✓/
+                  // 当前黑板事件与停留时长（查表即真相的卡面表达）
+                  {
+                    const bp = task.__proj;
+                    if (bp) {
+                      if (bp.abnormal_done) {
+                        clineBits.push('<span class="cline-miss" title="relay 收口 done 但 worker-done 申报缺席（半途跑路/静默收工）——交付存疑，请抽查">⚠ 异常完成</span>');
+                      } else if (bp.worker_done_at) {
+                        clineBits.push('<span class="tchip" title="worker 已申报交付（黑板 worker-done ' + shortTime(bp.worker_done_at) + '）——待审查收割">✓ 已申报交付</span>');
+                      }
+                      if (!isDone && bp.last_event && bp.last_event_ts) {
+                        const evLabels = { "dispatch-queued": "排队", "dispatch-seat-scan": "选席扫描", "dispatch-reused": "复用熟手", "dispatch-spawned": "新建会话", "worker-ack": "接单", "worker-start": "开工", "worker-milestone": "施工心跳", "worker-done": "申报交付", "user-override": "手动改板" };
+                        const evName = evLabels[bp.last_event] || (String(bp.last_event).indexOf("board:") === 0 ? "" : String(bp.last_event));
+                        const ageS = Math.max(0, Math.round((Number(bp.age_ms) || 0) / 1000));
+                        const ageTxt = ageS < 90 ? ageS + "s" : ageS < 5400 ? Math.round(ageS / 60) + "m" : ageS < 172800 ? Math.round(ageS / 3600) + "h" : Math.round(ageS / 86400) + "d";
+                        if (evName) clineBits.push('<span title="黑板事件 ' + escape(evName) + ' · 当前态停留 ' + escape(ageTxt) + '">' + escape(evName) + " · " + escape(ageTxt) + "</span>");
+                      }
+                    }
+                  }
                   const selfCheck = taskSelfCheck(task);
                   const selfCheckLabel = selfCheck ? "AI 自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
                   const selfCheckHtml = selfCheck ? '<span class="task-verify" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span>" : "";
@@ -467,7 +486,21 @@
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
-                  const tasks = entities(board?.entries);
+                  // W-BOARDV2（1111 定调「看板=查表投影」）：投影泳道覆盖——relay 随帧/detail
+                  // 带 projection 时，卡位以 dispatch-log 黑板事件链的读时投影为准（legacy
+                  // 卡位=兼容副本仅回落；投影缺席=旧 relay/读失败，整段旁路零破坏）。
+                  const projByCard = (() => {
+                    const pj = state.projections.get(project?.id);
+                    return pj && Array.isArray(pj.cards) ? new Map(pj.cards.map((c) => [c.entry_id, c])) : null;
+                  })();
+                  const tasks0 = entities(board?.entries);
+                  const tasks = projByCard
+                    ? tasks0.map((t) => {
+                        const c = projByCard.get(t.id);
+                        if (!c || !c.lane) return t;
+                        return Object.assign({}, t, { status: c.lane, __proj: c });
+                      })
+                    : tasks0;
                   const loading = state.loads.get(project?.id);
                   // W-NOVAFIX B5：空态分档——projectsEmpty 见域顶定义（render/boardMarkup 共用）
                   // W3P-P2-4：加载/空态互斥——board 已载（含空）不再出顶部空态条（五泳道
@@ -1390,7 +1423,7 @@
                 function rememberUnsupported(type, error) {
                   if (/invalid command shape|unknown.?command|unsupported|未知命令|不支持/i.test(error)) state.unsupported.add(type);
                 }
-                async function requestDetail(gid, force = false) {
+                async function requestDetail(gid, force = false, origin = "auto") {
                   if (!state.command || !state.online || state.unsupported.has("COMMAND_PROJECT_DETAIL") || !state.projects?.some((item) => item.id === gid) || state.loads.get(gid) === "loading" || (!force && state.loads.get(gid) === "ready")) return false;
                   const epoch = state.epoch;
                   const projectAtRequest = state.projects.find((item) => item.id === gid);
@@ -1400,15 +1433,52 @@
                   try {
                     const ack = await state.command("COMMAND_PROJECT_DETAIL", { gid });
                     if (epoch !== state.epoch || !state.projects?.some((item) => item.id === gid)) return false;
-                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid); return false; }
+                    if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid, force, origin); return false; }
                     const result = verdict(ack);
                     if (!result.ok) { rememberUnsupported("COMMAND_PROJECT_DETAIL", result.error); throw new Error(result.error); }
+                    // W-BOARDV2（1111 定调「查表即真相」）：detail 随带投影——黑板事件链读时投影泳道落地
+                    if (ack.data && ack.data.projection && Array.isArray(ack.data.projection.cards)) state.projections.set(gid, ack.data.projection);
                     if (!detail(gid, ack.data)) throw new Error("项目详情回执缺少匹配的 group / board / receipts");
+                    state.detailRetry = 0; // 成功清零退避档位（下次失败重新从 5s 起）
                     return true;
                   } catch (error) {
-                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) { const raw = String(error?.message || error); state.loads.set(gid, "详情加载失败：" + raw); console.warn("[team] 详情加载失败（原文）:", raw); feedback("详情加载失败，请重试", "error"); render(); } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
+                    if (epoch === state.epoch && state.projects?.some((item) => item.id === gid)) {
+                      const raw = String(error?.message || error);
+                      console.warn("[team] 详情加载失败（原文）:", raw, origin === "auto" ? "（自动刷新，静默退避中）" : "");
+                      // [W-DETAILBUG]（1110 用户实锤三现）弹错误导根治：自动路径失败**不弹横幅**
+                      // （用户没点重试却被告知「请重试」=三现噪音源——PM 派单/收割窗每轮
+                      // PROJECTS_UPDATED/BOARDS_DIGEST 广播都 force 重拉，relay 写窗内同步
+                      // import 占住事件循环时命令 8s 超时成簇）。分档处置：
+                      //   auto（广播/快照/回前台/对账触发）→ 面内静默态+指数退避自愈重试
+                      //（5s/15s/45s 封顶，成功清零），无横幅无「请重试」；
+                      //   manual（head 刷新钮/选卡点击）→ 用户明确期待反馈，横幅保留。
+                      // 超时（null ack）与结构校验失败同档：超时=瞬态（写窗）优先退避重试；
+                      // 结构失败/显式 error 也退避——unsupported 已被 rememberUnsupported 拦
+                      //（后续静默跳过），其余错误重试无望时退避封顶后停（45s×1 即止，不再循环）。
+                      if (origin === "auto") {
+                        state.loads.set(gid, "详情同步中断 · 自动重试中");
+                        scheduleDetailRetry(gid);
+                      } else {
+                        state.loads.set(gid, "详情加载失败：" + raw);
+                        feedback("详情加载失败，请重试", "error");
+                      }
+                      render();
+                    } /* W3P-P2-5：人话文案+错误级样式（内部术语进 console 不上 UI） */
                     return false;
                   }
+                }
+                // [W-DETAILBUG] 自动路径退避重试：指数三档（5s/15s/45s），成功清零；同 gid
+                // 在飞不叠 timer；epoch 翻转/组消失自动作废（requestDetail 前置闸拦）。
+                function scheduleDetailRetry(gid) {
+                  if (state._detailRetryTimers?.has(gid)) return;
+                  state.detailRetry = Math.min((state.detailRetry ?? 0) + 1, 3);
+                  const delay = [5000, 15000, 45000][state.detailRetry - 1] ?? 45000;
+                  state._detailRetryTimers = state._detailRetryTimers || new Map();
+                  const t = setTimeout(() => {
+                    state._detailRetryTimers?.delete(gid);
+                    void requestDetail(gid, true, "auto");
+                  }, delay);
+                  state._detailRetryTimers.set(gid, t);
                 }
                 async function decide(id, approve) {
                   if (typeof approve !== "boolean" || !state.confirms.some((confirm) => confirm.id === id) || !state.command || !state.online || state.flights.has(id) || state.accepted.has(id) || state.unsupported.has("COMMAND_ORG_CONFIRM")) return false;
@@ -1491,7 +1561,7 @@
                   if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(mergePartition(state.confirms, payload.pending, context && context.relayName, confirmKeyOf)); render(); return true; }
                   // #283 同理：board 全量形态（board.gid+entries 在场）即权威覆盖，delta
                   // 并载不影响（本 case 只取 board.entries 全量）；gid 门控=并集含该组
-                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); state.boardFreshAt.set(payload.gid, Date.now()); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); /* W-BOARDV2：帧随带投影（查表即真相——黑板事件链读时投影） */ if (payload.projection && Array.isArray(payload.projection.cards)) state.projections.set(payload.gid, payload.projection); state.boardFreshAt.set(payload.gid, Date.now()); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
                   // boardfresh 治本：板摘要对账（resume 快路径补发——瞬态板变更断连窗补不到的根治）。
                   // 失配 gid → requestDetail force 重拉（既有通道）；缺席 gid 本地保留（板组可能已删，
                   // 下次 SNAPSHOT 清）。公式=ws-server fnv1a 同式（`${id}:${status}` 有序 join 后 FNV-1a 32）
@@ -1528,6 +1598,8 @@
                 }
                 function bind({ command = null, online = false } = {}) {
                   state.epoch += 1;
+                  if (state._detailRetryTimers) { for (const t of state._detailRetryTimers.values()) clearTimeout(t); state._detailRetryTimers.clear(); }
+                  state.detailRetry = 0;
                   state.command = typeof command === "function" ? command : null;
                   state.online = online === true;
                   state.flights.clear(); state.loads.clear(); state.accepted.clear(); state.unsupported.clear();
@@ -1540,8 +1612,14 @@
                   state.confirmSelected = state.confirms.find((confirm) => confirm.payload?.gid === gid)?.id || null;
                   window.__ccDeck005SlimUi?.markSeen?.(gid); // [t-7e0c6189] 进团队域选中该团队即清未读聚合（设计要点 1）
                   render();
-                  void requestDetail(gid);
+                  clearDetailRetry(gid);
+                  void requestDetail(gid, false, "manual"); // [W-DETAILBUG] 用户点击选卡=手动源（失败保留横幅+清退避立即拉）
                   return true;
+                }
+                // [W-DETAILBUG] 退避 timer 清理（成功/手动重拉/换组时停表——防旧 timer 抢跑叠拉）
+                function clearDetailRetry(gid) {
+                  const t = state._detailRetryTimers?.get(gid);
+                  if (t) { clearTimeout(t); state._detailRetryTimers.delete(gid); }
                 }
                 // ---------- FB4 团队创建表单 ----------
                 // 真表单（团队名/锚点目录/立项档/成员多选+角色模板），提交走
@@ -1914,6 +1992,9 @@
                   if (!state.online || !state.command) html += banner("命令通道未接入，无法提交创建。");
                   html += '<datalist id="team-role-list">' + TEAM_ROLE_PRESETS.map((r) => '<option value="' + escape(r) + '"></option>').join("") + "</datalist>";
                   if (defCands.length) html += '<button type="button" class="team-add-btn" data-team-add-member>＋ 添加成员</button>';
+                  // W-AGGRED-R1（P3-2 审查返修）：挂靠态高级区整段消隐，PM 人选行随之丢失——
+                  // 页脚上方补一行（L1 补漏同款形态，teamPmRowHtml 复用+模板切换 change 联动照常）
+                  if (isGid) html += '<div class="team-pm-row" data-team-pm-row>' + teamPmRowHtml("pm-led") + "</div>";
                   html += '<div class="create-actions"><button class="secondary-btn" type="button" data-team-cancel>取消</button><button class="primary-btn" type="button" data-team-submit><span data-team-submit-label>创建团队</span></button></div>';
                   pop.innerHTML = html;
                   pop.dataset.aggDirs = JSON.stringify(pfDirs); // W-AGGFIX：附锚全量 stash（submit 读——原 pfDirs 越域引用根治）
@@ -2050,7 +2131,7 @@
                   // P2BATCH6 件8（C-P2-2）：短路 → 双跑合并判——旧版 || 短路致锚点目录空值被
                   // 团队名首错掩盖，用户两次试错才见全貌；两校验各自独立执行（各自标红+行级
                   // 文案一次全出），提交仍任一不过即拦。
-                  { const okName = teamNameValidate(pop); const okAnchor = teamAnchorValidate(pop, { submit: true }); if (!okAnchor) { const adv = pop.querySelector("details.team-adv"); if (adv) adv.open = true; } if (!okName || !okAnchor) return; } // W-AGGRED：提交全验（裁决 8）+失败展开折叠区就近示错
+                  { const okName = teamNameValidate(pop); const okAnchor = pop.dataset.teamGid ? true : teamAnchorValidate(pop, { submit: true }); if (!okAnchor) { const adv = pop.querySelector("details.team-adv"); if (adv) adv.open = true; } if (!okName || !okAnchor) return; } // W-AGGRED：提交全验（裁决 8）+失败展开折叠区就近示错；W-AGGRED-R1（P0-1 审查返修）：挂靠态（teamGid）跳过锚点校验——高级区整段消隐后 anchor input 不在 DOM，校验恒 false→提交静默 return=挂靠创建链断裂（审查三证）；挂靠分支 payload.anchor_dir 零消费（relay formTeamOnGroup 用既有项目锚），跳过安全
                   if (teamSeatCount(pop) > 8) { toast("编制最多 8 席——请先减员"); syncTeamSeatCount(pop); return; } // W-AGGFIX C1：本地硬闸兜底（勾选闸漏网路径防整单被 relay 拒）
                   const headcount = [...pop.querySelectorAll("[data-team-member]")].filter((el) => el.checked).map((el) => {
                     const sid = el.dataset.teamMember;
@@ -2401,7 +2482,7 @@
                     if (project) { select(project.dataset.teamProject); return; }
                     const confirm = event.target.closest("[data-team-pick-confirm]");
                     if (confirm) { state.confirmSelected = confirm.dataset.teamPickConfirm; render(); return; }
-                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true);
+                    if (event.target.closest("[data-team-refresh]") && state.selected) void requestDetail(state.selected, true, "manual"); // [W-DETAILBUG] 手动源：用户点击，失败保留横幅
                     // [W-TEAMDISSOLVE]：解散入口（选中组开确认弹窗）+已解散区开合
                     if (event.target.closest("[data-team-dissolve]")) {
                       const g = state.projects?.find((x) => x.id === state.selected);

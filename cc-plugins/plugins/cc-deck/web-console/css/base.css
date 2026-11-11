@@ -756,6 +756,48 @@
     .segment-bar .faint, .metric b, .mobile-summary b { font-variant-numeric: tabular-nums; }
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 22px; }
+    /* ═══ W-FZONE-B1（1111 拍板 B · 批一）：文件工作区——设计规格=fzone-mocks/b.html（token 同源） ═══ */
+    .workspace-main { flex: 1; min-height: 0; display: flex; } /* 会话体｜工作区 行容器（工作区开=阅读列让位收缩） */
+    .workspace-main > .workspace-body { flex: 1; min-width: 0; }
+    .fzone { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; width: 38%; min-width: 280px; border-left: 1px solid var(--line-strong); background: var(--surface1); }
+    .fzone[hidden] { display: none; }
+    .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
+    .fzone .fz-tool { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-E); color: var(--dim); border: 1px solid var(--line-strong); background: transparent; border-radius: 7px; padding: 2px 9px; cursor: pointer; }
+    .fzone .fz-tool:hover { color: var(--text-strong); border-color: var(--faint); }
+    .fzone .fz-spring { flex: 1; }
+    .fzone .fz-state { font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); }
+    .fzone .ws-tabs { display: flex; align-items: stretch; background: var(--rail); border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; scrollbar-width: thin; } /* 溢出滚动（任务书） */
+    .fzone .wtab { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px 7px 11px; font-size: var(--fs-D); color: var(--dim); border: 0; border-right: 1px solid var(--line); background: transparent; cursor: pointer; position: relative; white-space: nowrap; max-width: 175px; }
+    .fzone .wtab .fic { display: inline-flex; flex: none; }
+    .fzone .wtab .fname { overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: var(--fs-E); }
+    .fzone .wtab .x { width: 17px; height: 17px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--faint); font-size: 11px; visibility: hidden; flex: none; }
+    .fzone .wtab:hover .x { visibility: visible; }
+    .fzone .wtab .x:hover { background: var(--surface2); color: var(--error); }
+    .fzone .wtab.on { background: var(--surface1); color: var(--text-strong); }
+    .fzone .wtab.on::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--brand); } /* active=brand 顶条（mock） */
+    .fzone .fz-tabs-empty { padding: 8px 12px; color: var(--faint); font-size: var(--fs-E); font-family: var(--mono); }
+    .fzone .fz-body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+    .fzone .fz-body > [hidden] { display: none !important; } /* [hidden] 兜底：display 承载类（fz-fb/fz-load）不得压过隐藏语义（CDP 截图实锤过） */
+    .fzone .fz-pane { min-height: 100%; padding: 12px 14px; }
+    .fzone .fz-load { display: flex; align-items: center; justify-content: center; min-height: 120px; color: var(--faint); font-size: var(--fs-D); }
+    .fzone .fz-fb { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 34px 16px; color: var(--dim); font-size: var(--fs-D); text-align: center; }
+    .fzone .fz-fb-ico { font-size: 20px; color: var(--error); }
+    .fzone .fz-md { font-size: var(--fs-B); color: var(--text); line-height: 1.65; } /* md 预览=消息渲染同款（mdHtml 输出 .md-* 类全局复用） */
+    .fzone .fz-capnote { margin: -2px -2px 10px; padding: 6px 10px; border: 1px dashed var(--warn); border-radius: 7px; color: var(--warn); font-size: var(--fs-E); }
+    .fzone .fz-code { display: grid; grid-template-columns: 3.2em 1fr; font-family: var(--mono); font-size: var(--fs-C); line-height: 1.6; } /* 行号槽+代码槽双列（pre 不换行保对齐） */
+    .fzone .fz-code pre { margin: 0; white-space: pre; overflow: visible; }
+    .fzone .fz-code .fz-code-n { text-align: right; padding-right: 9px; color: var(--faint); user-select: none; border-right: 1px solid var(--line); }
+    .fzone .fz-code .fz-code-c { padding-left: 10px; color: var(--text); overflow-x: auto; }
+    .fzone .fz-imgwrap { display: flex; justify-content: center; padding: 4px 0; }
+    .fzone .fz-img { max-width: 100%; cursor: zoom-in; border-radius: 6px; }
+    .fzone .fz-img.full { max-width: none; width: auto; cursor: zoom-out; } /* 点击放大=原尺寸滚动（适应宽 ↔ 100%） */
+    .fzone .fz-resizer { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
+    .fzone .fz-resizer:hover, .fzone .fz-resizer:active { background: color-mix(in srgb, var(--brand) 30%, transparent); }
+    /* 窄窗 <1200（mock b.html 风险条「右栏挤压对话列」批一最小解）：工作区改浮层覆盖右缘——对话列零挤压；z-index 压 dock 之上（dock 6? 实勘 session-state-dock z 低于此即可） */
+    @media (max-width: 1199px) {
+      .workspace-main { position: relative; }
+      .workspace-main > .fzone { position: absolute; top: 0; right: 0; bottom: 0; z-index: 7; box-shadow: -14px 0 30px rgba(0,0,0,.28); }
+    }
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
     /* #195 件六⑦：会话域 footer 与消息区同色一体（分隔线/独立底退役）+ 左右 22px 与消息列对齐
@@ -1309,6 +1351,13 @@
     /* B21 状态坞一行流式：[态图标 12px][摘要 flex:1][走秒][token]——图标承态（旋转=运行 /
        呼吸=等待 / ✓=完成 / ⚠=错误），左缘 2px 态色条、状态词、呼吸点全部退役；
        顶线退役归 B17（底栈唯一横线在 footer） */
+    /* W-UICLEAN2（1110 实锤②）：DUTY_RECEIPT 值守巡检卡——机器打卡人话化（居中一行制，
+       对齐 automsg 定时巡检行视觉；<details> 原生展开=零 JS） */
+    .duty-row { margin: 2px 0 6px; text-align: center; }
+    .duty-row summary { display: inline-block; color: var(--faint); font-size: 11px; line-height: 16px; cursor: pointer; border-radius: 6px; padding: 0 6px; user-select: none; }
+    .duty-row summary:hover { color: var(--dim); background: var(--hover); }
+    .duty-row .duty-raw { margin: 4px auto 0; max-width: 85%; width: fit-content; text-align: left; }
+    .duty-row .duty-raw code { display: block; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, var(--faint) 12%, transparent); color: var(--dim); font: 10.5px/15px var(--mono); white-space: pre-wrap; word-break: break-all; max-height: 30vh; overflow-y: auto; }
     .session-state-dock {display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 16px; color: var(--dim); font: var(--fs-B) var(--mono);}
     .session-state-spin { flex: 0 0 auto; display: inline-grid; place-items: center; width: 14px; height: 14px; color: var(--working); font-size: 12px; line-height: 1; }
     /* W-DOCKFIX（1109 方案 A·桌面 id 域内）：字形语义化——standby 基座 ◌ 空心静态

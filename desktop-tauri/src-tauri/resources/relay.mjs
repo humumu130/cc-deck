@@ -14134,7 +14134,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir28, hostname as hostname2, tmpdir as tmpdir6 } from "node:os";
 import { join as join72, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync40, openSync as openSync9, readFileSync as readFileSync62, rmSync as rmSync12, existsSync as existsSync49, readdirSync as readdirSync24, statSync as statSync24 } from "node:fs";
+import { writeFileSync as writeFileSync40, openSync as openSync9, readFileSync as readFileSync62, rmSync as rmSync12, existsSync as existsSync49, readdirSync as readdirSync24, statSync as statSync25 } from "node:fs";
 import { execSync as execSync2 } from "node:child_process";
 import { spawn as spawn8, execFileSync as execFileSync8 } from "node:child_process";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
@@ -15544,7 +15544,7 @@ function buildSnapshotLogs(sessions, budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES, p
 }
 
 // src/session-manager.ts
-import { appendFileSync as appendFileSync9, closeSync as closeSync5, existsSync as existsSync40, mkdirSync as mkdirSync29, openSync as openSync5, readFileSync as readFileSync50, readdirSync as readdirSync16, readSync as readSync4, realpathSync as realpathSync3, rmSync as rmSync9, statSync as statSync16, writeFileSync as writeFileSync31 } from "node:fs";
+import { appendFileSync as appendFileSync9, closeSync as closeSync5, existsSync as existsSync40, mkdirSync as mkdirSync29, openSync as openSync5, readFileSync as readFileSync50, readdirSync as readdirSync16, readSync as readSync4, realpathSync as realpathSync3, rmSync as rmSync9, statSync as statSync17, writeFileSync as writeFileSync31 } from "node:fs";
 
 // src/fs-safe.ts
 import { appendFileSync, closeSync, existsSync as existsSync5, openSync, readSync, renameSync as renameSync3, statSync as statSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync5 } from "node:fs";
@@ -15848,7 +15848,7 @@ function serveArtifact(name, res) {
 }
 
 // src/org.ts
-import { readFileSync as readFileSync14, writeFileSync as writeFileSync8, existsSync as existsSync15, mkdirSync as mkdirSync8, rmSync, chmodSync } from "node:fs";
+import { readFileSync as readFileSync14, writeFileSync as writeFileSync8, existsSync as existsSync15, mkdirSync as mkdirSync8, rmSync, chmodSync, statSync as statSync8 } from "node:fs";
 import { homedir as homedir7 } from "node:os";
 import { dirname as dirname5, join as join18 } from "node:path";
 
@@ -15988,6 +15988,26 @@ var DISPATCH_TIERS = ["\u54A8\u8BE2", "\u968F\u624B\u529E", "\u8F7B\u7ACB\u9879"
 var BOARD_PRIORITIES = ["P0", "P1", "P2"];
 var FAILURE_REASONS = ["network_error", "timeout", "tool_crash", "model_overload", "logic_error", "cancelled", "zero_output"];
 var PR_STATES = ["open", "merged", "ci_green", "ci_red", "ci_unknown"];
+var DISPATCH_EVENTS = [
+  "dispatch-queued",
+  // 派发侧：入队（判定原因在 receipt——全局帽/编制帽/无活席）
+  "dispatch-seat-scan",
+  // 派发侧：选席扫描（候选名单+逐跳过原因+落席决策）
+  "dispatch-reused",
+  // 派发侧：复用在编熟手（值在 target=承接席）
+  "dispatch-spawned",
+  // 派发侧：真启动新会话（spawn-pending→承接后）
+  "worker-ack",
+  // worker：接单（会话起来看到任务书——SDK SessionStart 钩子）
+  "worker-start",
+  // worker：开工（首次工具活动——SDK PostToolUse 钩子首拍）
+  "worker-milestone",
+  // worker：回合心跳（SDK Stop 钩子，relay 侧 90s 节流）
+  "worker-done",
+  // worker：真交付申报（TaskCompleted 钩子——回执+PR 后才算）
+  "user-override"
+  // 用户：手动改板（org board move 族写入；投影时后写赢）
+];
 var isStr = (v) => typeof v === "string";
 var isNum = (v) => typeof v === "number" && Number.isFinite(v);
 var isBool = (v) => typeof v === "boolean";
@@ -16134,8 +16154,12 @@ var DISPATCH_ENTRY_SCHEMA = {
   // prchip：PR 状态快照（词表 PR_STATES）
   exclude_sessions: { type: "string-array" },
   // W-REVEXCL（1109 二现治本）：选席排除集（审查单防派回实施者本人）——派单受理时落 dispatched 行（CLI --exclude/--review-of → payload → dispatchWorker；可审计：审后可查该单排除了谁）
-  no_pr: { type: "boolean" }
+  no_pr: { type: "boolean" },
   // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
+  event: { type: "enum", enumTable: DISPATCH_EVENTS },
+  // W-BOARDV2（1111 用户令）：黑板事件词表（词表 DISPATCH_EVENTS 本文件权威）——行仍带合法 status，event 承载细分生命周期（看板投影/PM 查询数据底座；旧行缺省 undefined=无事件面，宽容）
+  abnormal_done: { type: "boolean" }
+  // W-BOARDV2「done 说真话」：relay 收口 done 时同 id 无 worker-done 申报（worker 半途跑路/静默收工——1111 实锤形态）即落此标。纯观测标：leader-board/看板投影消费（「异常完成」角标），不改状态语义。与 receipt_missing（回执内容观测）分立：本标=交付申报缺席
 };
 function applyOrgChange(kind, payload) {
   if (!isObj(payload)) return { ok: false, error: "\u8F7D\u8377\u5FC5\u987B\u662F\u5BF9\u8C61" };
@@ -16641,6 +16665,44 @@ function readDispatchLogFile(dir, max = 500) {
   }
   const all = [...byId.values()];
   return all.length <= max ? all : all.slice(all.length - max);
+}
+var rawLogCacheByWindow = /* @__PURE__ */ new Map();
+function readDispatchLogRaw(dir, window2 = 2e3) {
+  const p = dispatchLogPath(dir);
+  let sig = "absent";
+  try {
+    const st2 = statSync8(p);
+    sig = `${dir ?? ""}|${st2.size}:${st2.mtimeMs}`;
+  } catch {
+    return [];
+  }
+  const hit = rawLogCacheByWindow.get(window2);
+  if (hit && hit.sig === sig) return hit.rows;
+  const lines = readFileSync14(p, "utf-8").split("\n");
+  const slice = window2 > 0 && lines.length > window2 ? lines.slice(-window2) : lines;
+  const rows = [];
+  for (const line of slice) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const e = JSON.parse(t);
+      if (typeof e.id === "string" && e.id && typeof e.status === "string") rows.push(e);
+    } catch {
+    }
+  }
+  rawLogCacheByWindow.set(window2, { sig, rows });
+  if (rawLogCacheByWindow.size > 4) {
+    const firstKey = rawLogCacheByWindow.keys().next().value;
+    if (firstKey !== void 0) rawLogCacheByWindow.delete(firstKey);
+  }
+  return rows;
+}
+function hasDispatchEvent(id2, event, dir) {
+  const rows = readDispatchLogRaw(dir, 2e4);
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].id === id2 && rows[i].event === event) return true;
+  }
+  return false;
 }
 var ORG_CLI_TEMPLATE = `#!/bin/bash
 # \u77E9\u9635\u5F0F\u56E2\u961F\u5206\u8BCA CLI\uFF08#26 M2\uFF0C\u8BBE\u8BA1\u7A3F docs/v8-team-matrix.html v3.1 \xA74\uFF09\uFF1A
@@ -17367,726 +17429,22 @@ function shouldLessonBackfill(row) {
   return (row.kind === "research" || row.kind === "review") && typeof row.summary === "string" && row.summary.trim().length > 0 && typeof row.gid === "string" && row.gid.length > 0;
 }
 
-// src/board-recon.ts
-function chainBaseSlug(key) {
-  let s = String(key || "");
-  for (let i = 0; i < 3; i++) s = s.replace(/-(r\d+|review\d*|audit\d*)$/, "");
-  return s;
-}
-function findContCard(entries, title) {
-  const t = String(title || "").trim();
-  if (!/(?:^|\s)续跑(?:\s|$)/.test(t)) return null;
-  const raw = harvestKeyOf(t);
-  if (!raw.startsWith("w-")) return null;
-  const base = chainBaseSlug(raw);
-  let baseHit = null;
-  for (const e of entries) {
-    const k3 = harvestKeyOf(String(e.text || ""));
-    if (!k3.startsWith("w-")) continue;
-    if (k3 === raw) return e.id;
-    if (baseHit === null && chainBaseSlug(k3) === base) baseHit = e.id;
-  }
-  return baseHit;
-}
-function harvestKeyOf(text) {
-  const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
-  if (m) return `w-${m[1].toLowerCase()}`;
-  return String(text || "").replace(/\s+/g, "").slice(0, 10).toLowerCase();
-}
-var STALE_MS_DEFAULT = 4 * 36e5;
-var ORPHAN_GRACE_MS = 45 * 6e4;
-var OWNER_ACTIVE_WINDOW_MS = 20 * 6e4;
-var ORPHAN_DEAD_REASONS = /(success|用户(终断|停止|结束)|completed|cancelled|canceled)/i;
-function reconcileBoardCards(input) {
-  const now = input.now ?? Date.now();
-  const staleMs = input.staleMs ?? (Number(process.env.CCR_BOARDRECON_STALE_MS) || STALE_MS_DEFAULT);
-  const live = /* @__PURE__ */ new Map();
-  for (const s of input.sessions) {
-    if (s.session_id && !s.done_reason) live.set(s.session_id, s);
-  }
-  const running = /* @__PURE__ */ new Set();
-  for (const r of input.dispatchLog) {
-    if (r.id && (r.status === "running" || r.status === "dispatched" || r.status === "queued")) running.add(r.id);
-  }
-  const prevFlagged = input.previouslyFlagged ?? /* @__PURE__ */ new Set();
-  const flagNow = input.flaggedNow ?? /* @__PURE__ */ new Set();
-  const actions = [];
-  let claimedCards = 0;
-  let workingSessions = 0;
-  for (const s of input.sessions) {
-    if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
-  }
-  const fallbackKeyCounts = /* @__PURE__ */ new Map();
-  for (const { board: fb2 } of input.boards) {
-    for (const ent of fb2.entries) {
-      const k3 = harvestKeyOf(String(ent.text || ""));
-      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
-    }
-  }
-  for (const { gid, board } of input.boards) {
-    const submittedByKey = /* @__PURE__ */ new Map();
-    if (input.harvest) {
-      for (const e of board.entries) {
-        if (e.status !== "submitted") continue;
-        const key = harvestKeyOf(String(e.text || ""));
-        (submittedByKey.get(key) ?? submittedByKey.set(key, []).get(key)).push(e.id);
-      }
-      for (const [key, ids] of submittedByKey) {
-        if (ids.length >= 2) {
-          actions.push({ gid, entryId: ids[0], text: key, reason: "duplicate-card", detail: `\u540C\u6587\u672C submitted \u53CC\u5361 \xD7${ids.length}\uFF08${ids.join(",")}\uFF09\u2014\u2014\u7591\u4F3C\u91CD\u590D\u6D3E\u5355\u5EFA\u5361\uFF0C\u786E\u8BA4\u540E\u5408\u5E76/\u5220\u4E00\u5F20`, toBacklog: false, advisory: true });
-        }
-      }
-    }
-    for (const e of board.entries) {
-      if (e.status === "submitted" && input.harvest) {
-        const harvestStaleMs = input.harvestStaleMs ?? (Number(process.env.CCR_BOARDRECON_HARVEST_STALE_MS) || 2 * 36e5);
-        const updated2 = Number(e.updated_at || e.ts || 0);
-        if (now - updated2 > harvestStaleMs) {
-          const key = harvestKeyOf(String(e.text || ""));
-          if (key && !(!key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1)) {
-            const ev2 = input.harvest;
-            const ledgerHit = ev2.doneLedger.get(key);
-            const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
-            const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
-            const receiptOk = ev2.receiptSlugs.has(key);
-            const weakHits = [ledgerOk && "\u53F0\u8D26 done+\u56DE\u6267", receiptOk && "\u56DE\u6267\u5C3E\u884C\u5408\u89C4"].filter(Boolean);
-            const hits2 = [devHit && "dev log \u547D\u4E2D", ...weakHits].filter(Boolean);
-            const dupCount = submittedByKey.get(key)?.length ?? 1;
-            if (devHit && dupCount === 1) {
-              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted \u9648\u5316 ${Math.round((now - updated2) / 36e5)}h\uFF0C\u6536\u5272\u8BC1\u636E\uFF1A${hits2.join(" + ")}\uFF08\u542B dev log=\u771F\u6536\u5272\uFF09\u2014\u2014\u5DF2\u6536\u5272\u672A\u7FFB\uFF0C\u7FFB done\uFF08boardrecon auto\uFF09`, toBacklog: false, toDone: true });
-            } else if (devHit && dupCount >= 2) {
-              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `dev log \u547D\u4E2D\u4F46\u540C\u952E ${dupCount} \u5361\u5E76\u5B58\u2014\u2014\u591A\u4E49\u4E0D\u81EA\u52A8\u7FFB\uFF0C\u4EBA\u5DE5\u786E\u8BA4\u540E\u5355\u952E\u7FFB\u5361`, toBacklog: false, advisory: true });
-            } else if (!devHit && weakHits.length >= 1 && dupCount === 1) {
-              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `\u4EA4\u4ED8/\u6536\u8D27\u8BC1\u636E\u5728\uFF08${weakHits.join(" + ")}\uFF09\u4F46 dev log \u672A\u547D\u4E2D\u2014\u2014\u9648\u5316\u5728\u5BA1\u8BF7\u4EBA\u5DE5\u6838\uFF08\u5728\u5BA1\u8FD4\u4FEE/\u672A squash \u5747\u6B64\u5F62\u6001\uFF0C\u4E0D\u81EA\u52A8\u7FFB\uFF09`, toBacklog: false, advisory: true });
-            }
-          }
-        }
-        continue;
-      }
-      if (e.status !== "claimed") continue;
-      claimedCards++;
-      const updated = Number(e.updated_at || e.ts || 0);
-      const age = now - updated;
-      if (e.owner_session && !live.has(e.owner_session)) {
-        const ownerSes = input.sessions.find((x) => x.session_id === e.owner_session);
-        const deadCert = !!(ownerSes?.done_reason && ORPHAN_DEAD_REASONS.test(ownerSes.done_reason));
-        const ledgerRunning = !!(e.dispatch_id && running.has(e.dispatch_id));
-        const recentActive = !!ownerSes?.last_active_at && now - ownerSes.last_active_at < OWNER_ACTIVE_WINDOW_MS;
-        const inGrace = age < ORPHAN_GRACE_MS;
-        if (!deadCert || ledgerRunning || recentActive || inGrace) {
-          continue;
-        }
-        flagNow.add(e.id);
-        if (!prevFlagged.has(e.id)) {
-          continue;
-        }
-        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "orphan-session", detail: `owner ${String(e.owner_session).slice(0, 8)} \u5224\u6B7B\u7ECF\u65C1\u8BC1\u805A\u5408\uFF08\u767D\u540D\u5355${deadCert ? "\u547D\u4E2D" : "\u5916\u7EC8\u6001/\u4E0D\u5728\u518C"}+\u53F0\u8D26\u65E0 running${ledgerRunning ? "" : "\u2713"}+\u8FD1\u7A97\u65E0\u6D3B\u52A8${recentActive ? "" : "\u2713"}+\u9F84 ${Math.round(age / 6e4)}min \u8FC7\u5BBD\u9650${inGrace ? "" : "\u2713"}\uFF0C\u4E24\u62CD\u786E\u8BA4\uFF09`, toBacklog: true });
-        continue;
-      }
-      if (age > staleMs) {
-        const ownerLive = live.get(e.owner_session || "");
-        const active = !!ownerLive && (ownerLive.status === "WORKING" || ownerLive.status === "WAITING");
-        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "stale-no-progress", detail: `claimed \u6EDE\u7559 ${Math.round(age / 36e5)}h \u65E0\u8FDB\u5C55\uFF08\u9608\u503C ${Math.round(staleMs / 36e5)}h${active ? "\uFF1Bowner \u6D3B\u8DC3\u4E2D\u2014\u2014\u53EA\u63D0\u9192\u4E0D\u5F52\u4F4D" : ""}\uFF09`, toBacklog: !active, advisory: active });
-      }
-    }
-  }
-  let mismatch = null;
-  if (claimedCards - workingSessions > 1) {
-    mismatch = `\u8FDB\u884C\u4E2D\u5361 ${claimedCards} > \u5DE5\u4F5C\u4E2D\u4F1A\u8BDD ${workingSessions}\uFF08\u6B63\u5DEE ${claimedCards - workingSessions}\u2014\u2014\u5B64\u513F\u5019\u9009\u89C1\u5BF9\u8D26\u6E05\u5355\uFF09`;
-  }
-  return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
-}
-function zombieTtlMs() {
-  const raw = process.env.CCR_BOARD_ZOMBIE_TTL_H;
-  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
-  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
-  return Number.isFinite(n) && n > 0 ? n * 36e5 : 6 * 36e5;
-}
-var ZOMBIE_NOTE_MARK = "[boardtruth5 \u50F5\u5C38\u5361\u544A\u8B66";
-function zombieInvariantScan(input) {
-  const now = input.now ?? Date.now();
-  const ttl = input.ttlMs ?? zombieTtlMs();
-  const skip = input.skipEntryIds ?? /* @__PURE__ */ new Set();
-  const fallbackKeyCounts = /* @__PURE__ */ new Map();
-  for (const { board: fb2 } of input.boards) {
-    for (const ent of fb2.entries) {
-      const k3 = harvestKeyOf(String(ent.text || ""));
-      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
-    }
-  }
-  const actions = [];
-  if (!Number.isFinite(ttl)) return { actions };
-  for (const { gid, board } of input.boards) {
-    for (const e of board.entries) {
-      if (e.status !== "claimed" && e.status !== "submitted" && !(e.status === "backlog" && e.dispatch_id)) continue;
-      if (skip.has(e.id)) continue;
-      if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue;
-      const updated = Number(e.updated_at || e.ts || 0);
-      if (!updated) continue;
-      const ageMs = now - updated;
-      if (ageMs <= ttl) continue;
-      const key = harvestKeyOf(String(e.text || ""));
-      if (!key || !key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1) continue;
-      const ev2 = input.harvest;
-      const ledgerHit = ev2.doneLedger.get(key);
-      const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
-      const receiptOk = ev2.receiptSlugs.has(key);
-      const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
-      const evidence = ledgerOk ? "ledger-done" : receiptOk ? "receipt-line" : devHit ? "dev-log" : null;
-      actions.push({ gid, entryId: e.id, text: String(e.text || ""), status: e.status, ageMs, evidence });
-    }
-  }
-  return { actions };
-}
-function reconHeartbeatLine(mode, judged, flipped, zombies, zDone, zAlarm) {
-  return `alive mode=${mode} \u5BF9\u8D26\u5224\u5B9A ${judged}\uFF08\u7FFB/\u5F52 ${flipped}\uFF09\xB7 \u50F5\u5C38\u9762 ${zombies}\uFF08\u5F3A\u7FFB ${zDone}/\u544A\u8B66 ${zAlarm}\uFF09`;
-}
-
-// src/board-truth.ts
-var branchBaseOf = (branch) => {
-  let b = String(branch || "").trim().toLowerCase().replace(/^(feat|fix|build|diag)\//, "");
-  for (; ; ) {
-    const next = b.replace(/-?r\d+$/, "");
-    if (next === b || !next) return b || next;
-    b = next;
-  }
-};
-var titleBaseWord = (title) => String(title || "").toLowerCase().replace(/[\s\-—]+/g, "");
-function supersededChainPrs(openPrs, mergedBranch, mergedNumber, mergedAt) {
-  const base = branchBaseOf(String(mergedBranch || ""));
-  if (!base) return [];
-  const slugWord = base;
-  const mergedAtMs = mergedAt === void 0 || mergedAt === null || mergedAt === "" ? void 0 : new Date(mergedAt).getTime();
-  return openPrs.filter((pr2) => {
-    if (!pr2 || typeof pr2.number !== "number") return false;
-    if (pr2.number === mergedNumber) return false;
-    if (mergedAtMs !== void 0 && !Number.isNaN(mergedAtMs)) {
-      const createdMs = pr2.createdAt === void 0 || pr2.createdAt === null || pr2.createdAt === "" ? void 0 : new Date(pr2.createdAt).getTime();
-      if (createdMs !== void 0 && !Number.isNaN(createdMs) && !(mergedAtMs > createdMs)) return false;
-    }
-    const prBase = branchBaseOf(String(pr2.headRefName || ""));
-    if (prBase !== base) return false;
-    if (String(pr2.headRefName || "").trim().toLowerCase() === String(mergedBranch || "").trim().toLowerCase()) return true;
-    return titleBaseWord(pr2.title).includes(slugWord);
-  });
-}
-function unclaimedStaleDispatches(rows, now = Date.now(), ttlMs = unclaimedTtlMs()) {
-  const last = /* @__PURE__ */ new Map();
-  for (const r of rows) {
-    if (r && typeof r.id === "string" && r.id) last.set(r.id, r);
-  }
-  const out = [];
-  for (const r of last.values()) {
-    if (r.status !== "queued" && r.status !== "dispatched") continue;
-    const ts2 = Number(r.ts) || 0;
-    if (!ts2) continue;
-    if (now - ts2 > ttlMs) out.push(r);
-  }
-  return out;
-}
-function unclaimedTtlMs() {
-  const raw = process.env.CCR_UNCLAIMED_TTL_H;
-  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
-  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
-  return Number.isFinite(n) && n > 0 ? n * 36e5 : 6 * 36e5;
-}
-function prStaleBoardActions(boards, prs) {
-  const byUrl = new Map(prs.map((p) => [String(p.url || ""), { st: String(p.state || "").toLowerCase(), n: Number(p.number) || 0 }]));
-  const actions = [];
-  for (const { gid, entries } of boards) {
-    for (const e of entries) {
-      if (e.status !== "submitted" && e.status !== "ready_to_install") continue;
-      const url = String(e.pr_url || "");
-      if (!url.startsWith("https://")) continue;
-      const t = byUrl.get(url);
-      if (!t || !t.st) continue;
-      if (t.st === "merged") {
-        actions.push({ gid, entryId: e.id, reason: "pr-merged-missed", detail: `\u5361 ${e.id} \u5BA1\u67E5\u4E2D\u4F46 PR #${t.n} \u5DF2 merged\uFF08merged \u4E8B\u4EF6\u4E22\u5931\u5F62\u6001\uFF09\u2014\u2014\u5BF9\u8D26\u515C\u5E95\u7FFB done` });
-      } else if (t.st === "closed") {
-        actions.push({ gid, entryId: e.id, reason: "pr-closed-stale", detail: `\u5361 ${e.id} \u5BA1\u67E5\u4E2D\u4F46 PR #${t.n} \u5DF2\u5173\u95ED\uFF08\u975E merged\u2014\u2014\u88AB\u62D2/\u624B\u52A8\u5173\uFF09\u2014\u2014\u7FFB\u56DE backlog \u6807\u9648` });
-      }
-    }
-  }
-  return actions;
-}
-
-// src/duty-feed.ts
-import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, statSync as statSync8 } from "node:fs";
-import { join as join21 } from "node:path";
-function dutyActivityWindowMin() {
-  const v = Number(process.env.CCR_DUTY_ACTIVITY_MIN);
-  return Number.isFinite(v) && v >= 1 ? v : 15;
-}
-var _eventsTailCache = /* @__PURE__ */ new Map();
-function lastFrameAtFromEvents(dataDir3, sessionId, tailBytes = 2 * 1024 * 1024) {
-  if (!sessionId) return null;
-  const p = join21(dataDir3, "events.ndjson");
-  let raw = "";
-  try {
-    const st2 = statSync8(p);
-    const hit = _eventsTailCache.get(p);
-    if (hit && hit.mtimeMs === st2.mtimeMs && hit.size === st2.size && Date.now() - hit.at < 6e4) {
-      raw = hit.raw;
-    } else {
-      const fd2 = openSync3(p, "r");
-      try {
-        const len = Math.min(st2.size, tailBytes);
-        const buf = Buffer.alloc(len);
-        const n = readSync2(fd2, buf, 0, len, Math.max(0, st2.size - len));
-        raw = buf.subarray(0, n).toString("utf-8");
-      } finally {
-        closeSync3(fd2);
-      }
-      _eventsTailCache.set(p, { mtimeMs: st2.mtimeMs, size: st2.size, raw, at: Date.now() });
-    }
-  } catch {
-    return null;
-  }
-  let best = null;
-  for (const line of raw.split("\n")) {
-    if (!line.includes(sessionId)) continue;
-    try {
-      const e = JSON.parse(line);
-      if (e.session_id !== sessionId || typeof e.ts !== "number") continue;
-      if (best === null || e.ts > best) best = e.ts;
-    } catch {
-    }
-  }
-  return best;
-}
-function sessionActiveByEvents(dataDir3, sessionId, now = Date.now(), windowMin = dutyActivityWindowMin()) {
-  const at = lastFrameAtFromEvents(dataDir3, sessionId);
-  return at !== null && now - at <= windowMin * 6e4;
-}
-function dutyFeedLogPath(dir) {
-  return join21(dir ?? orgDir(), "duty-feed.ndjson");
-}
-function appendDutyFeedLog(row) {
-  try {
-    appendJournal(dutyFeedLogPath(), row);
-  } catch {
-  }
-}
-function lastRealUserMessageAt(dataDir3, sessionId, tailBytes = 2 * 1024 * 1024) {
-  if (!sessionId) return null;
-  const p = join21(dataDir3, "events.ndjson");
-  let raw = "";
-  try {
-    const st2 = statSync8(p);
-    const fd2 = openSync3(p, "r");
-    try {
-      const len = Math.min(st2.size, tailBytes);
-      const buf = Buffer.alloc(len);
-      const n = readSync2(fd2, buf, 0, len, Math.max(0, st2.size - len));
-      raw = buf.subarray(0, n).toString("utf-8");
-    } finally {
-      closeSync3(fd2);
-    }
-  } catch {
-    return null;
-  }
-  let best = null;
-  for (const line of raw.split("\n")) {
-    if (!line.includes(sessionId) || !line.includes("user_message")) continue;
-    try {
-      const e = JSON.parse(line);
-      if (e.session_id !== sessionId || typeof e.ts !== "number") continue;
-      if (e.payload?.kind !== "user_message" || typeof e.payload.text !== "string") continue;
-      if (e.payload.text.startsWith("[\u503C\u5B88\u5582\u6D3B]")) continue;
-      if (best === null || e.ts > best) best = e.ts;
-    } catch {
-    }
-  }
-  return best;
-}
-function dutyUserActiveMin() {
-  const v = Number(process.env.CCR_DUTY_USER_ACTIVE_MIN);
-  return Number.isFinite(v) && v >= 1 ? v : 10;
-}
-function dutyNoProgressDelayMs(streak) {
-  const table = [5, 15, 30, 60];
-  const i = Math.min(Math.max(streak, 1), table.length) - 1;
-  return table[i] * 6e4;
-}
-
-// src/harvest.ts
-import { execFileSync } from "node:child_process";
-import { existsSync as existsSync16, readdirSync as readdirSync7, readFileSync as readFileSync17, statSync as statSync9 } from "node:fs";
-import { homedir as homedir8 } from "node:os";
-import { join as join22 } from "node:path";
-function dataDir() {
-  return process.env.CCR_DATA_DIR || join22(homedir8(), ".cc-deck", "data");
-}
-function locateDispatch(id2) {
-  let ledger = null;
-  const lp2 = join22(dataDir(), "leader-dispatches.ndjson");
-  if (existsSync16(lp2)) {
-    try {
-      for (const line of readFileSync17(lp2, "utf-8").split("\n")) {
-        const t = line.trim();
-        if (!t) continue;
-        try {
-          const row = JSON.parse(t);
-          if (row && row.id === id2) ledger = row;
-        } catch {
-        }
-      }
-    } catch {
-    }
-  }
-  const logEntry = readDispatchLog().find((x) => x.id === id2) ?? null;
-  return { ledger, logEntry };
-}
-function hasSection(receiptText, sec) {
-  return new RegExp(`^[ \\t\\-\\*#> ]*${sec}`, "m").test(receiptText);
-}
-function git(worktree, args) {
-  try {
-    return { ok: true, out: execFileSync("git", ["-C", worktree, ...args], { timeout: 5e3, encoding: "utf-8" }) };
-  } catch {
-    return { ok: false, out: "" };
-  }
-}
-function harvestCheck(input, opts = {}) {
-  if (opts.relaySource === void 0) {
-    try {
-      opts.relaySource = readFileSync17(join22(dataDir(), "relay-name"), "utf-8").trim() || "\u672C\u673A relay";
-    } catch {
-      opts.relaySource = "\u672C\u673A relay";
-    }
-  }
-  const base_result = {
-    ok: false,
-    dispatch_id: "",
-    title: "",
-    session_id: "",
-    ledger_status: "",
-    checks: [],
-    squash_plan: [],
-    fails: 0,
-    stages: [],
-    ...opts.relaySource ? { relay_source: opts.relaySource } : {}
-  };
-  const did = typeof input.dispatch_id === "string" ? input.dispatch_id.trim() : "";
-  if (!did) return { ...base_result, error: "dispatch_id \u5FC5\u586B" };
-  const { ledger, logEntry } = locateDispatch(did);
-  const title = String(ledger?.title ?? logEntry?.title ?? "");
-  const sid = String(ledger?.session_id ?? logEntry?.session_id ?? "");
-  const dlStatus = String(logEntry?.status ?? "");
-  const receipt = typeof input.receipt === "string" && input.receipt.trim() ? input.receipt.trim() : String(ledger?.receipt ?? "");
-  const worktree = typeof input.worktree === "string" && input.worktree.trim() ? input.worktree.trim() : String(ledger?.worktree ?? "");
-  const branch = typeof input.branch === "string" && input.branch.trim() ? input.branch.trim() : String(ledger?.branch ?? "");
-  let base = typeof input.base === "string" && input.base.trim() ? input.base.trim() : String(ledger?.base_sha ?? ledger?.base_ref ?? "");
-  if (!ledger && !logEntry && (!receipt || !branch)) {
-    return { ...base_result, dispatch_id: did, error: `\u4E24\u672C\u8D26\u90FD\u65E0 dispatch_id=${did.slice(0, 8)} \u7684\u8BB0\u5F55\uFF08\u8D26\u5916\u5355\u987B\u5E26 receipt+branch \u624B\u5DE5\u6307\u8DEF\uFF09` };
-  }
-  const checks = [];
-  const squash_plan = [];
-  let fails = 0;
-  let receiptText = "";
-  if (!receipt) {
-    checks.push({ gate: "receipt", pass: false, detail: "\u56DE\u6267\u8DEF\u5F84\u672A\u77E5\uFF08\u8D26\u65E0\u8BB0\u5F55\u4E14\u672A\u624B\u5DE5\u6307\u5B9A\uFF09" });
-    fails++;
-  } else if (!existsSync16(receipt)) {
-    checks.push({ gate: "receipt", pass: false, detail: "\u56DE\u6267\u6587\u4EF6\u4E0D\u5B58\u5728\uFF08worker \u672A\u4EA4\uFF1F\u6838\u5BF9\u4EFB\u52A1\u4E66\u56DE\u6267\u8DEF\u5F84\u7EA6\u5B9A\uFF09" });
-    fails++;
-  } else {
-    let bytes = 0;
-    try {
-      bytes = statSync9(receipt).size;
-    } catch {
-    }
-    try {
-      receiptText = readFileSync17(receipt, "utf-8");
-    } catch {
-    }
-    checks.push({ gate: "receipt", pass: true, detail: `\u56DE\u6267\u5B58\u5728\uFF08${bytes} \u5B57\u8282\uFF09` });
-    const missing = ["\u6839\u56E0", "\u81EA\u6D4B", "\u9A8C\u6536\u70B9"].filter((sec) => !hasSection(receiptText, sec));
-    checks.push({
-      gate: "sections",
-      pass: missing.length === 0,
-      detail: missing.length === 0 ? "\u5FC5\u9700\u8282\u300C\u6839\u56E0/\u81EA\u6D4B/\u9A8C\u6536\u70B9\u300D\u5168\u5728" : `\u5FC5\u9700\u8282\u7F3A\uFF1A${missing.map((m) => `\u300C${m}\u300D`).join(" ")}\uFF08W-DISPATCHX \u56DE\u6267\u683C\u5F0F\uFF09`
-    });
-    if (missing.length) fails++;
-    const tailLines = receiptText.split("\n").filter((l) => /^[ \t]*结果：/.test(l));
-    const tailOk = tailLines.length > 0 && tailLines[tailLines.length - 1].includes("\u6539\u52A8\u6587\u4EF6");
-    checks.push({
-      gate: "tail",
-      pass: tailOk,
-      detail: tailOk ? "\u5C3E\u884C\u7ED3\u679C\u6458\u8981\u5728" : "\u5C3E\u884C\u7ED3\u679C\u6458\u8981\u7F3A\uFF08\u56FA\u5B9A\u683C\u5F0F\uFF1A\u7ED3\u679C\uFF1A<\u4E00\u884C>\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A<\u5217\u8868\u6216\u65E0>\uFF09"
-    });
-    if (!tailOk) fails++;
-  }
-  let mainRepo = "";
-  if (worktree && existsSync16(worktree)) {
-    let logLines = [];
-    const baseOk = base ? git(worktree, ["rev-parse", "--verify", "--quiet", base]).ok : false;
-    if (baseOk) {
-      logLines = git(worktree, ["log", "--oneline", `${base}..HEAD`]).out.split("\n").filter((l) => l.trim());
-    } else {
-      logLines = git(worktree, ["log", "--oneline", "-10"]).out.split("\n").filter((l) => l.trim());
-      base = "";
-    }
-    if (logLines.length > 0) {
-      checks.push({
-        gate: "commits",
-        pass: true,
-        detail: `\u65B0\u63D0\u4EA4 ${logLines.length} \u7B14${base ? `\uFF08\u81EA\u57FA\u7EBF ${base.slice(0, 8)}\uFF09` : "\uFF08\u57FA\u7EBF\u4E0D\u53EF\u89E3\u6790\uFF0C\u9000\u6700\u8FD1 10 \u6761\uFF09"}`,
-        log: logLines.slice(0, 20)
-      });
-    } else {
-      checks.push({ gate: "commits", pass: false, detail: "\u57FA\u7EBF\u540E\u65E0\u65B0\u63D0\u4EA4\uFF08worker \u672A commit\uFF1F\uFF09" });
-      fails++;
-    }
-    const dirtyOut = git(worktree, ["status", "--porcelain"]).out;
-    const dirtyN = dirtyOut.split("\n").filter((l) => l.trim()).length;
-    checks.push({
-      gate: "dirty",
-      pass: dirtyN === 0,
-      detail: dirtyN === 0 ? "\u65E0\u672A\u63D0\u4EA4\u6539\u52A8" : `\u672A\u63D0\u4EA4\u6539\u52A8 ${dirtyN} \u5904\uFF08squash \u524D\u9700\u5148\u6536\u53E3\uFF09`
-    });
-    if (dirtyN > 0) fails++;
-    const gd2 = git(worktree, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).out.trim();
-    if (gd2) mainRepo = gd2.replace(/\/\.git$/, "") || gd2;
-    const head = git(worktree, ["rev-parse", "--short", "HEAD"]).out.trim();
-    void head;
-  } else if (worktree) {
-    checks.push({ gate: "commits", pass: false, detail: `worktree \u4E0D\u5B58\u5728\uFF1A${worktree}\uFF08\u5DF2\u88AB\u6E05\u7406\uFF1F\u5206\u652F\u4ECD\u5728\u4E3B\u4ED3\u53EF\u67E5\uFF09` });
-    checks.push({ gate: "dirty", pass: true, detail: "worktree \u7F3A\u5E2D\uFF0Cdirty \u95F8\u8DF3\u8FC7" });
-    fails++;
-  } else {
-    checks.push({ gate: "commits", pass: true, detail: "\u65E0 worktree \u8BB0\u5F55\u2014\u2014\u968F\u624B\u529E/\u8D26\u5916\u5355\uFF0C\u5206\u652F\u8D26\u8DF3\u8FC7" });
-    checks.push({ gate: "dirty", pass: true, detail: "\u65E0 worktree\uFF0Cdirty \u95F8\u8DF3\u8FC7" });
-  }
-  squash_plan.push(
-    ...branch ? [`git -C ${worktree || "<worktree>"} add -A && git -C ${worktree || "<worktree>"} commit -m "[\u6B63\u7ECF\u7ACB\u9879] ${title || "<\u6807\u9898>"}"`] : [],
-    `cd ${mainRepo || "<\u4E3B\u4ED3>"} && git merge --squash ${branch || "<\u5206\u652F>"} && git commit   # \u4FE1\u606F\u5E26 #NN\uFF0Cbody \u5217\u9010\u6761\u6E05\u5355`,
-    ...worktree ? [`git worktree remove ${worktree} && git branch -D ${branch || "<\u5206\u652F>"}`] : []
-  );
-  const acc = acceptanceHint(did, title);
-  checks.push({
-    gate: "acceptance",
-    pass: acc.state === "ok",
-    severity: "warning",
-    detail: acc.detail
-  });
-  return {
-    ...base_result,
-    ok: true,
-    dispatch_id: did,
-    title,
-    session_id: sid,
-    ledger_status: dlStatus,
-    ...logEntry?.receipt ? { ledger_receipt: logEntry.receipt } : {},
-    checks,
-    squash_plan,
-    fails,
-    stages: stagesOf(did)
-  };
-}
-function acceptanceHint(did, title) {
-  try {
-    const artDir = process.env.CCR_ARTIFACTS_DIR || join22(homedir8(), ".cc-deck", "artifacts");
-    if (existsSync16(artDir)) {
-      const hits2 = readdirSafe(artDir).filter((n) => /^acceptance/i.test(n));
-      if (hits2.length > 0) return { state: "ok", detail: `\u9A8C\u6536\u5355\u5728\u518C\uFF08${hits2.length} \u4EFD\uFF0C\u56DE\u586B\u72B6\u6001\u4EE5\u5355\u636E\u4E3A\u51C6\uFF09` };
-    }
-    return { state: "missing", detail: "\u67E5\u65E0\u9A8C\u6536\u5355\uFF08\u94C1\u5F8B 7\uFF1A\u51FA\u5305\u5FC5\u5E26\u9A8C\u6536\u5355\u2014\u2014\u88C5\u673A\u9A8C\u8BC1\u6279\u6B21\u5148\u51FA\u5355\uFF09" };
-  } catch {
-    return { state: "ok", detail: "\u9A8C\u6536\u5355\u72B6\u6001\u672A\u77E5\uFF08artifacts \u76EE\u5F55\u4E0D\u53EF\u8BFB\uFF0C\u4E0D\u62E6\u6536\u5272\uFF09" };
-  }
-}
-function readdirSafe(dir) {
-  try {
-    return readdirSync7(dir);
-  } catch {
-    return [];
-  }
-}
-function stagesOf(did) {
-  try {
-    const p = join22(orgDir(), "dispatch-log.ndjson");
-    if (!existsSync16(p)) return [];
-    const out = [];
-    for (const line of readFileSync17(p, "utf-8").split("\n")) {
-      const t = line.trim();
-      if (!t) continue;
-      try {
-        const row = JSON.parse(t);
-        if (row && row.id === did && typeof row.stage === "string") {
-          out.push({ stage: row.stage, ts: typeof row.ts === "number" ? row.ts : 0, ...row.stage_detail ? { detail: row.stage_detail } : {} });
-        }
-      } catch {
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-// src/drill.ts
-import { execFileSync as execFileSync2 } from "node:child_process";
-import { mkdirSync as mkdirSync9, mkdtempSync, rmSync as rmSync2, writeFileSync as writeFileSync9, readFileSync as readFileSync18, existsSync as existsSync17 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join as join23 } from "node:path";
-var DRILL_MARK = true;
-function gateManifestPairing(version, manifestJson) {
-  try {
-    const manifest = JSON.parse(manifestJson);
-    if (manifest.version === version) return { ok: true, detail: `\u6E05\u5355\u914D\u5BF9 \u2713\uFF08${version}\uFF09` };
-    return { ok: false, detail: `\u6E05\u5355\u914D\u5BF9\u9519\u4F4D\uFF1A\u6E05\u5355 ${manifest.version} \u2260 \u672C\u6B21 ${version}` };
-  } catch (e) {
-    return { ok: false, detail: `\u6E05\u5355\u4E0D\u53EF\u89E3\u6790: ${e instanceof Error ? e.message : String(e)}` };
-  }
-}
-var DRILL_WATCH_FILES = [
-  "relay/src/org.ts",
-  "relay/src/harvest.ts",
-  "relay/src/drill.ts",
-  "relay/src/patrol.ts",
-  "relay/src/projects.ts"
-];
-function lastDrillTime(dataDir3) {
-  try {
-    return Number(JSON.parse(readFileSync18(join23(dataDir3, "drill-last.json"), "utf-8")).ts) || 0;
-  } catch {
-    return 0;
-  }
-}
-function drillDue(mainRepo, dataDir3) {
-  try {
-    if (!existsSync17(join23(mainRepo, ".git"))) return false;
-    const out = execFileSync2("git", ["-C", mainRepo, "log", "-1", "--format=%ct", "--", ...DRILL_WATCH_FILES], { encoding: "utf-8", timeout: 5e3 }).trim();
-    const latest = Math.max(0, ...out.split("\n").map((l) => Number(l.trim()) * 1e3).filter((n) => Number.isFinite(n)));
-    return latest > lastDrillTime(dataDir3);
-  } catch {
-    return false;
-  }
-}
-function runDrill(dataDir3) {
-  const t03 = Date.now();
-  const runId = `drill-${t03.toString(36)}`;
-  const hops = [];
-  const hop = (name, fn) => {
-    const s = Date.now();
-    try {
-      const detail = fn();
-      hops.push({ hop: name, ok: true, ms: Date.now() - s, ...detail ? { detail } : {} });
-      appendJournal(join23(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: name, ok: true, ms: Date.now() - s, ...detail ? { detail } : {} });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      hops.push({ hop: name, ok: false, ms: Date.now() - s, detail: msg });
-      appendJournal(join23(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: name, ok: false, ms: Date.now() - s, detail: msg });
-      throw e;
-    }
-  };
-  const drillId = `dp-drill-${t03.toString(36)}`;
-  const tmp = mkdtempSync(join23(tmpdir(), "cc-deck-drill-"));
-  let failed;
-  try {
-    hop("dispatch", () => {
-      const ok2 = appendDispatch({ ts: Date.now(), id: drillId, tier: "\u8F7B\u7ACB\u9879", target: "drill-worker", status: "dispatched", session_id: "drill-sess", title: "\u94FE\u8DEF\u6F14\u7EC3\u5047\u4EFB\u52A1", drill: DRILL_MARK });
-      if (!ok2) throw new Error("drill \u6D3E\u5355\u884C\u5199\u4E0D\u8FDB\u53F0\u8D26");
-      const raw = readFileSync18(join23(orgDir(), "dispatch-log.ndjson"), "utf-8");
-      const row = raw.split("\n").map((l) => {
-        try {
-          return JSON.parse(l);
-        } catch {
-          return null;
-        }
-      }).filter((x) => x && x.id === drillId).pop();
-      if (!row || row.drill !== true) throw new Error("drill \u6D3E\u5355\u884C\u8BFB\u56DE\u65E0\u6807\u8BB0");
-      return "\u53F0\u8D26\u884C\u843D\u76D8+drill \u6807\u8BB0\u8BFB\u56DE\uFF08ndjson \u539F\u6587\uFF09";
-    });
-    hop("worker-claim", () => {
-      const ok2 = appendDispatch({ ts: Date.now(), id: drillId, tier: "\u8F7B\u7ACB\u9879", target: "drill-worker", status: "running", session_id: "drill-sess", title: "\u94FE\u8DEF\u6F14\u7EC3\u5047\u4EFB\u52A1", drill: DRILL_MARK });
-      if (!ok2) throw new Error("running \u884C\u5199\u4E0D\u8FDB");
-      return "\u627F\u63A5\u6210\u529F";
-    });
-    const receiptPath = join23(tmp, "receipt-drill.md");
-    hop("receipt", () => {
-      writeFileSync9(receiptPath, "## \u6839\u56E0\ndrill\n## \u81EA\u6D4B\ndrill \u5168\u7EFF\n## \u9A8C\u6536\u70B9\ndrill\n\n\u7ED3\u679C\uFF1A\u6F14\u7EC3\u5B8C\u6210\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A\u65E0\n", "utf-8");
-      if (!existsSync17(receiptPath)) throw new Error("\u56DE\u6267\u6587\u4EF6\u672A\u843D");
-      return "\u5408\u6210\u56DE\u6267\u843D\u4E34\u65F6\u76EE\u5F55";
-    });
-    const wt2 = join23(tmp, "wt");
-    const g2 = (a) => execFileSync2("git", ["-C", wt2, ...a], { encoding: "utf-8" });
-    hop("harvest", () => {
-      mkdirGit(wt2);
-      g2(["init", "-q"]);
-      g2(["config", "user.email", "d@d"]);
-      g2(["config", "user.name", "d"]);
-      writeFileSync9(join23(wt2, "f.txt"), "1");
-      g2(["add", "-A"]);
-      g2(["commit", "-qm", "base"]);
-      const base = g2(["rev-parse", "HEAD"]).trim();
-      writeFileSync9(join23(wt2, "g.txt"), "2");
-      g2(["add", "-A"]);
-      g2(["commit", "-qm", "[\u6B63\u7ECF\u7ACB\u9879] drill \u63D0\u4EA4"]);
-      const r = harvestCheck({ dispatch_id: drillId, receipt: receiptPath, worktree: wt2, branch: "fix/drill", base });
-      if (!r.ok) throw new Error(r.error ?? "harvest-check \u5931\u8D25");
-      if (r.fails !== 0) throw new Error(`\u673A\u5668\u95F8 ${r.fails} \u9879 \u2717\uFF08${r.checks.filter((c) => !c.pass && c.severity !== "warning").map((c) => c.gate).join(",")}\uFF09`);
-      return "harvest \u5168\u95F8\u7EFF";
-    });
-    hop("release-gate", () => {
-      const ver = `0.0.0-drill.${t03}`;
-      const manifest = JSON.stringify({ version: ver });
-      const ok2 = gateManifestPairing(ver, manifest);
-      if (!ok2.ok) throw new Error(ok2.detail);
-      const mismatch = gateManifestPairing(ver + "-x", manifest);
-      if (mismatch.ok) throw new Error("\u9519\u914D\u5E94\u62D2\uFF08\u95F8\u7075\u654F\u5EA6\u4E22\u5931\uFF09");
-      return `\u914D\u5BF9\u95F8\u6A21\u62DF \u2713\uFF08\u6B63\u4F8B\u8FC7/\u9519\u914D\u62D2\uFF0C\u5230\u51FA\u5305\u524D\u4E00\u6B65\u4E3A\u6B62\uFF09`;
-    });
-    hop("acceptance-close", () => {
-      const ok2 = appendDispatch({ ts: Date.now(), id: drillId, tier: "\u8F7B\u7ACB\u9879", target: "drill-worker", status: "done", session_id: "drill-sess", title: "\u94FE\u8DEF\u6F14\u7EC3\u5047\u4EFB\u52A1", receipt: "drill \u95ED\u73AF", drill: DRILL_MARK });
-      if (!ok2) throw new Error("\u7EC8\u6001\u884C\u5199\u4E0D\u8FDB");
-      const rows = readFileSync18(join23(orgDir(), "dispatch-log.ndjson"), "utf-8").split("\n").map((l) => {
-        try {
-          return JSON.parse(l);
-        } catch {
-          return null;
-        }
-      }).filter((x) => x && x.id === drillId);
-      if (!rows.length || rows[rows.length - 1].status !== "done") throw new Error("\u53F0\u8D26\u6536\u655B\u5931\u8D25\uFF08\u672B\u884C\u975E\u7EC8\u6001\uFF09");
-      return "\u53F0\u8D26\u6536\u655B done";
-    });
-  } catch (e) {
-    failed = hops.find((h) => !h.ok)?.hop ?? "unknown";
-  } finally {
-    try {
-      rmSync2(tmp, { recursive: true, force: true });
-    } catch {
-    }
-  }
-  try {
-    writeFileSync9(join23(dataDir3, "drill-last.json"), JSON.stringify({ ts: Date.now(), run_id: runId, ok: !failed }));
-  } catch {
-  }
-  const duration = Date.now() - t03;
-  appendJournal(join23(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: "summary", ok: !failed, ms: duration, ...failed ? { detail: `\u65AD\u70B9\uFF1A${failed}` } : {} });
-  return { ok: !failed, run_id: runId, hops, ...failed ? { failed_hop: failed } : {}, duration_ms: duration };
-}
-function mkdirGit(dir) {
-  mkdirSync9(dir, { recursive: true });
-}
-
 // src/projects.ts
-import { appendFileSync as appendFileSync2, copyFileSync, existsSync as existsSync19, mkdirSync as mkdirSync11, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync3, statSync as statSync10, writeFileSync as writeFileSync11 } from "node:fs";
+import { appendFileSync as appendFileSync2, copyFileSync, existsSync as existsSync17, mkdirSync as mkdirSync10, readFileSync as readFileSync18, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync9, writeFileSync as writeFileSync10 } from "node:fs";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { join as join25, posix, win32 } from "node:path";
+import { join as join22, posix, win32 } from "node:path";
 
 // src/routing.ts
-import { existsSync as existsSync18, mkdirSync as mkdirSync10, readFileSync as readFileSync19, writeFileSync as writeFileSync10 } from "node:fs";
-import { join as join24 } from "node:path";
+import { existsSync as existsSync16, mkdirSync as mkdirSync9, readFileSync as readFileSync17, writeFileSync as writeFileSync9 } from "node:fs";
+import { join as join21 } from "node:path";
 function routingPath(dir) {
-  return join24(dir ?? orgDir(), "routing.json");
+  return join21(dir ?? orgDir(), "routing.json");
 }
 function load(dir) {
   const p = routingPath(dir);
-  if (!existsSync18(p)) return { entries: [] };
+  if (!existsSync16(p)) return { entries: [] };
   try {
-    const raw = JSON.parse(readFileSync19(p, "utf-8"));
+    const raw = JSON.parse(readFileSync17(p, "utf-8"));
     if (Array.isArray(raw?.entries)) return raw;
   } catch {
   }
@@ -18095,8 +17453,8 @@ function load(dir) {
 function save(s, dir) {
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync10(d2, { recursive: true });
-    writeFileSync10(routingPath(d2), JSON.stringify(s, null, 2) + "\n", "utf-8");
+    mkdirSync9(d2, { recursive: true });
+    writeFileSync9(routingPath(d2), JSON.stringify(s, null, 2) + "\n", "utf-8");
     return true;
   } catch (e) {
     console.warn(`[routing] \u8DEF\u7531\u8868\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
@@ -18169,21 +17527,21 @@ function markTeamDissolved(id2, dir) {
   });
 }
 function projectsFilePath(dir) {
-  return join25(dir ?? orgDir(), "projects.json");
+  return join22(dir ?? orgDir(), "projects.json");
 }
 function boardsDirPath(dir) {
-  return join25(dir ?? orgDir(), "boards");
+  return join22(dir ?? orgDir(), "boards");
 }
 function boardFilePath(gid, dir) {
-  return join25(boardsDirPath(dir), `${gid}.json`);
+  return join22(boardsDirPath(dir), `${gid}.json`);
 }
 function confirmsFilePath(dir) {
-  return join25(dir ?? orgDir(), "confirms.json");
+  return join22(dir ?? orgDir(), "confirms.json");
 }
 var projectsReadOnly = false;
 function readProjectsFileJson(dir) {
   try {
-    const raw = JSON.parse(readFileSync20(projectsFilePath(dir), "utf-8"));
+    const raw = JSON.parse(readFileSync18(projectsFilePath(dir), "utf-8"));
     projectsReadOnly = false;
     return {
       groups: Array.isArray(raw.groups) ? raw.groups : [],
@@ -18205,7 +17563,7 @@ function readProjectsFileJson(dir) {
 }
 function readConfirmsJson2(dir) {
   try {
-    const raw = JSON.parse(readFileSync20(confirmsFilePath(dir), "utf-8"));
+    const raw = JSON.parse(readFileSync18(confirmsFilePath(dir), "utf-8"));
     return Array.isArray(raw.confirms) ? raw.confirms : [];
   } catch {
     return [];
@@ -18215,7 +17573,7 @@ function readProjectsFile(dir) {
   return viaReadMode("group", {
     json: () => {
       try {
-        const raw = JSON.parse(readFileSync20(projectsFilePath(dir), "utf-8"));
+        const raw = JSON.parse(readFileSync18(projectsFilePath(dir), "utf-8"));
         projectsReadOnly = false;
         return {
           groups: Array.isArray(raw.groups) ? raw.groups : [],
@@ -18243,7 +17601,7 @@ function readProjectsFile(dir) {
 function recoverProjectsFromJournal(dir) {
   try {
     const d2 = dir ?? orgDir();
-    const snap = lastGoodJournalSnapshot(join25(d2, "projects-journal.ndjson"));
+    const snap = lastGoodJournalSnapshot(join22(d2, "projects-journal.ndjson"));
     if (!snap || typeof snap !== "object") return null;
     const cand = snap;
     if (!Array.isArray(cand.groups)) return null;
@@ -18261,7 +17619,7 @@ function writeProjectsFile(f, dir) {
     return false;
   }
   const d2 = dir ?? orgDir();
-  appendJournal(join25(d2, "projects-journal.ndjson"), {
+  appendJournal(join22(d2, "projects-journal.ndjson"), {
     ts: Date.now(),
     kind: "projects",
     groups_n: Array.isArray(f.groups) ? f.groups.length : -1,
@@ -18641,7 +17999,7 @@ function migrateBoardStatuses(gid, board, dir) {
   if (moved === 0) return board;
   try {
     const p = boardFilePath(gid, dir);
-    if (existsSync19(p)) copyFileSync(p, `${p}.pre-d18.json`);
+    if (existsSync17(p)) copyFileSync(p, `${p}.pre-d18.json`);
     saveBoardFile(board, dir, { action: "migrate", entry_id: "*", next: { status: `${moved} \u6761\u4E09\u6001\u2192\u4E94\u6001` } });
   } catch {
   }
@@ -18663,7 +18021,7 @@ function migratePlanningCards(gid, board, dir) {
   if (moved === 0) return board;
   try {
     const p = boardFilePath(gid, dir);
-    if (existsSync19(p)) copyFileSync(p, `${p}.pre-planlane.json`);
+    if (existsSync17(p)) copyFileSync(p, `${p}.pre-planlane.json`);
     saveBoardFile(board, dir, { action: "migrate-planlane", entry_id: "*", next: { status: `${moved} \u6761 [\u89C4\u5212] \u524D\u7F00 backlog\u2192planned` } });
   } catch {
   }
@@ -18697,7 +18055,7 @@ function normalizeTransitionsShape(gid, board, dir) {
 }
 function loadBoardFile(gid, dir) {
   try {
-    const raw = JSON.parse(readFileSync20(boardFilePath(gid, dir), "utf-8"));
+    const raw = JSON.parse(readFileSync18(boardFilePath(gid, dir), "utf-8"));
     return normalizeTransitionsShape(gid, migratePlanningCards(gid, migrateBoardStatuses(gid, {
       gid,
       entries: Array.isArray(raw.entries) ? raw.entries : [],
@@ -18718,11 +18076,11 @@ function loadBoardOrEmpty(gid, dir) {
 var BOARD_JOURNAL_MAX_BYTES = 5 * 1024 * 1024;
 function appendBoardJournal(gid, rec, d2) {
   try {
-    const p = join25(d2, "boards-journal.ndjson");
+    const p = join22(d2, "boards-journal.ndjson");
     try {
-      if (statSync10(p).size > BOARD_JOURNAL_MAX_BYTES) {
+      if (statSync9(p).size > BOARD_JOURNAL_MAX_BYTES) {
         try {
-          rmSync3(`${p}.1`, { force: true });
+          rmSync2(`${p}.1`, { force: true });
         } catch {
         }
         renameSync4(p, `${p}.1`);
@@ -18741,8 +18099,8 @@ function saveBoardFile(b, dir, jr) {
   const d2 = dir ?? orgDir();
   appendBoardJournal(b.gid, jr ?? { action: "save" }, d2);
   try {
-    mkdirSync11(boardsDirPath(d2), { recursive: true });
-    writeFileSync11(boardFilePath(b.gid, d2), JSON.stringify(b, null, 2) + "\n", "utf-8");
+    mkdirSync10(boardsDirPath(d2), { recursive: true });
+    writeFileSync10(boardFilePath(b.gid, d2), JSON.stringify(b, null, 2) + "\n", "utf-8");
     return true;
   } catch (e) {
     console.warn(`[projects] \u677F\u5199\u5165\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
@@ -19076,7 +18434,7 @@ function readConfirms(dir) {
   return viaReadMode("confirm", {
     json: () => {
       try {
-        const raw = JSON.parse(readFileSync20(confirmsFilePath(dir), "utf-8"));
+        const raw = JSON.parse(readFileSync18(confirmsFilePath(dir), "utf-8"));
         return Array.isArray(raw.confirms) ? raw.confirms : [];
       } catch {
         return [];
@@ -19089,7 +18447,7 @@ function readConfirms(dir) {
 function writeConfirms(list, dir) {
   try {
     const d2 = dir ?? orgDir();
-    mkdirSync11(d2, { recursive: true });
+    mkdirSync10(d2, { recursive: true });
     const pending2 = list.filter((c) => c.status === "pending");
     const decided = list.filter((c) => c.status !== "pending").slice(-200);
     const ok2 = atomicWriteJson(confirmsFilePath(d2), JSON.stringify({ confirms: [...pending2, ...decided] }, null, 2) + "\n");
@@ -19169,10 +18527,10 @@ function projectClaudeMdSeed(name) {
 }
 function ensureProjectClaudeMd(anchorDir, name) {
   try {
-    const p = join25(anchorDir, "CLAUDE.md");
-    if (existsSync19(p)) return "exists";
-    mkdirSync11(anchorDir, { recursive: true });
-    writeFileSync11(p, projectClaudeMdSeed(name), "utf-8");
+    const p = join22(anchorDir, "CLAUDE.md");
+    if (existsSync17(p)) return "exists";
+    mkdirSync10(anchorDir, { recursive: true });
+    writeFileSync10(p, projectClaudeMdSeed(name), "utf-8");
     return "created";
   } catch (e) {
     console.warn(`[projects] \u9879\u76EE CLAUDE.md \u79CD\u5B50\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
@@ -19231,8 +18589,8 @@ var RETIRED_LEDGER = "retired-entries.jsonl";
 function appendRetiredEvent(ev2, dir) {
   const d2 = dir ?? orgDir();
   try {
-    mkdirSync11(d2, { recursive: true });
-    appendJournal(join25(d2, RETIRED_LEDGER), { ...ev2 });
+    mkdirSync10(d2, { recursive: true });
+    appendJournal(join22(d2, RETIRED_LEDGER), { ...ev2 });
   } catch {
   }
 }
@@ -19240,7 +18598,7 @@ function listRetiredEvents(dir) {
   const d2 = dir ?? orgDir();
   const out = [];
   try {
-    const raw = readFileSync20(join25(d2, RETIRED_LEDGER), "utf-8");
+    const raw = readFileSync18(join22(d2, RETIRED_LEDGER), "utf-8");
     for (const line of raw.split("\n")) {
       const t = line.trim();
       if (!t) continue;
@@ -19255,6 +18613,914 @@ function listRetiredEvents(dir) {
   } catch {
   }
   return out;
+}
+
+// src/board-projection.ts
+function eventLane(event) {
+  switch (event) {
+    case "worker-done":
+      return "submitted";
+    // 真交付申报→待审（1111 生命周期映射）
+    case "worker-ack":
+    case "worker-start":
+    case "worker-milestone":
+      return "claimed";
+    // 接单/开工/心跳→进行中
+    case "dispatch-queued":
+      return "backlog";
+    // 入队→待办（排队 chip 由 last_event 辨）
+    case "user-override":
+      return null;
+    // 泳道由行 status=目标板态承载（写侧约定），见归并循环
+    case "dispatch-seat-scan":
+    case "dispatch-reused":
+    case "dispatch-spawned":
+      return null;
+    // 派发过程事件：不改泳道（dispatched 行自身已定 claimed）
+    default:
+      return null;
+  }
+}
+function statusLane(status) {
+  switch (status) {
+    case "queued":
+      return "backlog";
+    case "dispatched":
+    case "running":
+      return "claimed";
+    case "done":
+      return "submitted";
+    case "failed":
+      return "backlog";
+    // 打回（chip 由 last_event 辨「失败」）
+    case "in_review":
+      return "submitted";
+    default:
+      return null;
+  }
+}
+function boardLane(status) {
+  switch (status) {
+    case "planned":
+    case "backlog":
+    case "claimed":
+    case "submitted":
+    case "ready_to_install":
+    case "done":
+      return status;
+    default:
+      return "backlog";
+  }
+}
+var projectionCache = /* @__PURE__ */ new Map();
+function freshAges(p) {
+  const now = Date.now();
+  return {
+    ...p,
+    generated_at: now,
+    cards: p.cards.map((c) => ({ ...c, age_ms: Math.max(0, now - c.last_event_ts) }))
+  };
+}
+function projectBoard(gid) {
+  const board = loadBoardFile(gid);
+  const entries = board?.entries ?? [];
+  let rows = [];
+  try {
+    rows = readDispatchLogRaw(void 0, 2e4);
+  } catch {
+    rows = [];
+  }
+  const boardSig = `${entries.length}:${board?.updated_at ?? 0}`;
+  const lastRow = rows[rows.length - 1];
+  const sig = `${rows.length}:${lastRow ? `${lastRow.id}:${lastRow.ts}` : "-"}|${boardSig}`;
+  const cached2 = projectionCache.get(gid);
+  if (cached2 && cached2.sig === sig) return freshAges(cached2.projection);
+  const now = Date.now();
+  const byDispatch = /* @__PURE__ */ new Map();
+  const overridesByCard = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    if (r.event === "user-override") {
+      const m = /^card:([^:]+):(.+)$/.exec(r.target ?? "");
+      if (m && m[1] === gid) {
+        const arr2 = overridesByCard.get(m[2]) ?? [];
+        arr2.push(r);
+        overridesByCard.set(m[2], arr2);
+      }
+      continue;
+    }
+    const arr = byDispatch.get(r.id) ?? [];
+    arr.push(r);
+    byDispatch.set(r.id, arr);
+  }
+  const cards = entries.map((entry) => {
+    const lifecycle = [];
+    const drows = entry.dispatch_id ? byDispatch.get(entry.dispatch_id) ?? [] : [];
+    for (const r of drows) {
+      lifecycle.push({
+        ts: typeof r.ts === "number" ? r.ts : 0,
+        event: r.event ?? "",
+        status: r.status,
+        kind: "dispatch",
+        ...r.receipt ? { detail: String(r.receipt).slice(0, 120) } : r.stage ? { detail: r.stage } : {}
+      });
+    }
+    const trans = entry.transitions ?? [];
+    const skipFirst = trans.length > 0 && (trans[0].ts ?? 0) <= (entry.ts ?? 0) + 5e3;
+    for (let i = skipFirst ? 1 : 0; i < trans.length; i++) {
+      const t = trans[i];
+      lifecycle.push({ ts: t.ts, event: "", status: t.status, kind: "transition" });
+    }
+    for (const o of overridesByCard.get(entry.id) ?? []) {
+      lifecycle.push({
+        ts: typeof o.ts === "number" ? o.ts : 0,
+        event: "user-override",
+        // 写侧约定（session-manager board-move 写入口）：override 行 status 恒 "done"
+        //（六态合法终态值——schema 写严格），目标泳道在 stage=custom.board-<lane>
+        status: (o.stage ?? "").replace(/^custom\.board-/, "") || "backlog",
+        kind: "override",
+        ...o.receipt ? { detail: String(o.receipt).slice(0, 120) } : {}
+      });
+    }
+    lifecycle.push({ ts: entry.updated_at ?? entry.ts ?? 0, event: "", status: entry.status, kind: "base" });
+    lifecycle.sort((a, b) => a.ts - b.ts);
+    let lane = boardLane(entry.status);
+    let lastEvent = `board:${entry.status}`;
+    let lastTs2 = entry.updated_at ?? entry.ts ?? now;
+    for (const row of lifecycle) {
+      const isBase = row.kind === "base";
+      const applicable = isBase ? row.ts > lastTs2 : row.ts >= lastTs2;
+      if (!applicable) continue;
+      let candidate;
+      let label;
+      if (row.event === "user-override") {
+        candidate = boardLane(row.status);
+        label = `user-override\u2192${row.status}`;
+      } else if (row.event) {
+        candidate = eventLane(row.event) ?? statusLane(row.status);
+        label = row.event;
+      } else if (row.kind === "dispatch") {
+        candidate = statusLane(row.status);
+        label = `dispatch:${row.status}`;
+      } else {
+        candidate = boardLane(row.status);
+        label = `board:${row.status}`;
+      }
+      if (candidate) {
+        const changed = candidate !== lane;
+        lane = candidate;
+        lastTs2 = row.ts;
+        if (row.event) lastEvent = label;
+        else if (changed && !isBase) lastEvent = label;
+      }
+    }
+    {
+      const evRows = lifecycle.filter((r) => r.event && r.event !== "user-override");
+      if (evRows.length) {
+        const lastEv = evRows[evRows.length - 1];
+        const implied = eventLane(lastEv.event) ?? statusLane(lastEv.status);
+        if (implied === lane) lastEvent = lastEv.event;
+      }
+    }
+    const doneRows = drows.filter((r) => r.status === "done");
+    const lastDone = doneRows[doneRows.length - 1];
+    const workerDoneRows = drows.filter((r) => r.event === "worker-done");
+    const lastWorkerDone = workerDoneRows[workerDoneRows.length - 1];
+    return {
+      entry_id: entry.id,
+      text: entry.text,
+      ...entry.priority ? { priority: entry.priority } : {},
+      base_status: entry.status,
+      lane,
+      last_event: lastEvent,
+      last_event_ts: lastTs2,
+      age_ms: Math.max(0, now - lastTs2),
+      ...entry.dispatch_id ? { dispatch_id: entry.dispatch_id } : {},
+      // 出参下采样（审查 A-P2 ⑨）：帧随带 lifecycle 全量会随心跳卡膨胀（90s 节流下
+      // 长单数百行×每帧）——归并判定已在上全量跑完，出参截尾 40 行（最近真相）；
+      // 全链回放走 leader-board/原始台账（append-only 审计面恒全量）
+      lifecycle: lifecycle.length > 40 ? lifecycle.slice(-40) : lifecycle,
+      ...lastWorkerDone ? { worker_done_at: lastWorkerDone.ts, ...lastWorkerDone.receipt ? { worker_done_detail: String(lastWorkerDone.receipt).slice(0, 120) } : {} } : {},
+      ...lastDone?.abnormal_done === true ? { abnormal_done: true } : {},
+      ...lastDone?.receipt ? { receipt: String(lastDone.receipt).slice(0, 120) } : {},
+      ...lastDone?.receipt_gate === true ? { receipt_gate: true } : {}
+    };
+  });
+  const projection = {
+    gid,
+    generated_at: now,
+    source: "dispatch-log-projection",
+    cards
+  };
+  projectionCache.set(gid, { sig, projection });
+  if (projectionCache.size > 64) {
+    const firstKey = projectionCache.keys().next().value;
+    if (firstKey !== void 0) projectionCache.delete(firstKey);
+  }
+  return freshAges(projection);
+}
+
+// src/board-recon.ts
+function chainBaseSlug(key) {
+  let s = String(key || "");
+  for (let i = 0; i < 3; i++) s = s.replace(/-(r\d+|review\d*|audit\d*)$/, "");
+  return s;
+}
+function findContCard(entries, title) {
+  const t = String(title || "").trim();
+  if (!/(?:^|\s)续跑(?:\s|$)/.test(t)) return null;
+  const raw = harvestKeyOf(t);
+  if (!raw.startsWith("w-")) return null;
+  const base = chainBaseSlug(raw);
+  let baseHit = null;
+  for (const e of entries) {
+    const k3 = harvestKeyOf(String(e.text || ""));
+    if (!k3.startsWith("w-")) continue;
+    if (k3 === raw) return e.id;
+    if (baseHit === null && chainBaseSlug(k3) === base) baseHit = e.id;
+  }
+  return baseHit;
+}
+function harvestKeyOf(text) {
+  const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
+  if (m) return `w-${m[1].toLowerCase()}`;
+  return String(text || "").replace(/\s+/g, "").slice(0, 10).toLowerCase();
+}
+var STALE_MS_DEFAULT = 4 * 36e5;
+var ORPHAN_GRACE_MS = 45 * 6e4;
+var OWNER_ACTIVE_WINDOW_MS = 20 * 6e4;
+var ORPHAN_DEAD_REASONS = /(success|用户(终断|停止|结束)|completed|cancelled|canceled)/i;
+function reconcileBoardCards(input) {
+  const now = input.now ?? Date.now();
+  const staleMs = input.staleMs ?? (Number(process.env.CCR_BOARDRECON_STALE_MS) || STALE_MS_DEFAULT);
+  const live = /* @__PURE__ */ new Map();
+  for (const s of input.sessions) {
+    if (s.session_id && !s.done_reason) live.set(s.session_id, s);
+  }
+  const running = /* @__PURE__ */ new Set();
+  for (const r of input.dispatchLog) {
+    if (r.id && (r.status === "running" || r.status === "dispatched" || r.status === "queued")) running.add(r.id);
+  }
+  const prevFlagged = input.previouslyFlagged ?? /* @__PURE__ */ new Set();
+  const flagNow = input.flaggedNow ?? /* @__PURE__ */ new Set();
+  const actions = [];
+  let claimedCards = 0;
+  let workingSessions = 0;
+  for (const s of input.sessions) {
+    if (s.session_id && !s.done_reason && (s.status === "WORKING" || s.status === "WAITING")) workingSessions++;
+  }
+  const fallbackKeyCounts = /* @__PURE__ */ new Map();
+  for (const { board: fb2 } of input.boards) {
+    for (const ent of fb2.entries) {
+      const k3 = harvestKeyOf(String(ent.text || ""));
+      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
+    }
+  }
+  for (const { gid, board } of input.boards) {
+    const submittedByKey = /* @__PURE__ */ new Map();
+    if (input.harvest) {
+      for (const e of board.entries) {
+        if (e.status !== "submitted") continue;
+        const key = harvestKeyOf(String(e.text || ""));
+        (submittedByKey.get(key) ?? submittedByKey.set(key, []).get(key)).push(e.id);
+      }
+      for (const [key, ids] of submittedByKey) {
+        if (ids.length >= 2) {
+          actions.push({ gid, entryId: ids[0], text: key, reason: "duplicate-card", detail: `\u540C\u6587\u672C submitted \u53CC\u5361 \xD7${ids.length}\uFF08${ids.join(",")}\uFF09\u2014\u2014\u7591\u4F3C\u91CD\u590D\u6D3E\u5355\u5EFA\u5361\uFF0C\u786E\u8BA4\u540E\u5408\u5E76/\u5220\u4E00\u5F20`, toBacklog: false, advisory: true });
+        }
+      }
+    }
+    for (const e of board.entries) {
+      if (e.status === "submitted" && input.harvest) {
+        const harvestStaleMs = input.harvestStaleMs ?? (Number(process.env.CCR_BOARDRECON_HARVEST_STALE_MS) || 2 * 36e5);
+        const updated2 = Number(e.updated_at || e.ts || 0);
+        if (now - updated2 > harvestStaleMs) {
+          const key = harvestKeyOf(String(e.text || ""));
+          if (key && !(!key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1)) {
+            const ev2 = input.harvest;
+            const ledgerHit = ev2.doneLedger.get(key);
+            const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
+            const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
+            const receiptOk = ev2.receiptSlugs.has(key);
+            const weakHits = [ledgerOk && "\u53F0\u8D26 done+\u56DE\u6267", receiptOk && "\u56DE\u6267\u5C3E\u884C\u5408\u89C4"].filter(Boolean);
+            const hits2 = [devHit && "dev log \u547D\u4E2D", ...weakHits].filter(Boolean);
+            const dupCount = submittedByKey.get(key)?.length ?? 1;
+            if (devHit && dupCount === 1) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `submitted \u9648\u5316 ${Math.round((now - updated2) / 36e5)}h\uFF0C\u6536\u5272\u8BC1\u636E\uFF1A${hits2.join(" + ")}\uFF08\u542B dev log=\u771F\u6536\u5272\uFF09\u2014\u2014\u5DF2\u6536\u5272\u672A\u7FFB\uFF0C\u7FFB done\uFF08boardrecon auto\uFF09`, toBacklog: false, toDone: true });
+            } else if (devHit && dupCount >= 2) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `dev log \u547D\u4E2D\u4F46\u540C\u952E ${dupCount} \u5361\u5E76\u5B58\u2014\u2014\u591A\u4E49\u4E0D\u81EA\u52A8\u7FFB\uFF0C\u4EBA\u5DE5\u786E\u8BA4\u540E\u5355\u952E\u7FFB\u5361`, toBacklog: false, advisory: true });
+            } else if (!devHit && weakHits.length >= 1 && dupCount === 1) {
+              actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "harvested-unflipped", detail: `\u4EA4\u4ED8/\u6536\u8D27\u8BC1\u636E\u5728\uFF08${weakHits.join(" + ")}\uFF09\u4F46 dev log \u672A\u547D\u4E2D\u2014\u2014\u9648\u5316\u5728\u5BA1\u8BF7\u4EBA\u5DE5\u6838\uFF08\u5728\u5BA1\u8FD4\u4FEE/\u672A squash \u5747\u6B64\u5F62\u6001\uFF0C\u4E0D\u81EA\u52A8\u7FFB\uFF09`, toBacklog: false, advisory: true });
+            }
+          }
+        }
+        continue;
+      }
+      if (e.status !== "claimed") continue;
+      claimedCards++;
+      const updated = Number(e.updated_at || e.ts || 0);
+      const age = now - updated;
+      if (e.owner_session && !live.has(e.owner_session)) {
+        const ownerSes = input.sessions.find((x) => x.session_id === e.owner_session);
+        const deadCert = !!(ownerSes?.done_reason && ORPHAN_DEAD_REASONS.test(ownerSes.done_reason));
+        const ledgerRunning = !!(e.dispatch_id && running.has(e.dispatch_id));
+        const recentActive = !!ownerSes?.last_active_at && now - ownerSes.last_active_at < OWNER_ACTIVE_WINDOW_MS;
+        const inGrace = age < ORPHAN_GRACE_MS;
+        if (!deadCert || ledgerRunning || recentActive || inGrace) {
+          continue;
+        }
+        flagNow.add(e.id);
+        if (!prevFlagged.has(e.id)) {
+          continue;
+        }
+        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "orphan-session", detail: `owner ${String(e.owner_session).slice(0, 8)} \u5224\u6B7B\u7ECF\u65C1\u8BC1\u805A\u5408\uFF08\u767D\u540D\u5355${deadCert ? "\u547D\u4E2D" : "\u5916\u7EC8\u6001/\u4E0D\u5728\u518C"}+\u53F0\u8D26\u65E0 running${ledgerRunning ? "" : "\u2713"}+\u8FD1\u7A97\u65E0\u6D3B\u52A8${recentActive ? "" : "\u2713"}+\u9F84 ${Math.round(age / 6e4)}min \u8FC7\u5BBD\u9650${inGrace ? "" : "\u2713"}\uFF0C\u4E24\u62CD\u786E\u8BA4\uFF09`, toBacklog: true });
+        continue;
+      }
+      if (age > staleMs) {
+        const ownerLive = live.get(e.owner_session || "");
+        const active = !!ownerLive && (ownerLive.status === "WORKING" || ownerLive.status === "WAITING");
+        actions.push({ gid, entryId: e.id, text: String(e.text || "").slice(0, 40), reason: "stale-no-progress", detail: `claimed \u6EDE\u7559 ${Math.round(age / 36e5)}h \u65E0\u8FDB\u5C55\uFF08\u9608\u503C ${Math.round(staleMs / 36e5)}h${active ? "\uFF1Bowner \u6D3B\u8DC3\u4E2D\u2014\u2014\u53EA\u63D0\u9192\u4E0D\u5F52\u4F4D" : ""}\uFF09`, toBacklog: !active, advisory: active });
+      }
+    }
+  }
+  let mismatch = null;
+  if (claimedCards - workingSessions > 1) {
+    mismatch = `\u8FDB\u884C\u4E2D\u5361 ${claimedCards} > \u5DE5\u4F5C\u4E2D\u4F1A\u8BDD ${workingSessions}\uFF08\u6B63\u5DEE ${claimedCards - workingSessions}\u2014\u2014\u5B64\u513F\u5019\u9009\u89C1\u5BF9\u8D26\u6E05\u5355\uFF09`;
+  }
+  return { actions, workingSessions, claimedCards, mismatch, flaggedNow: flagNow };
+}
+function zombieTtlMs() {
+  const raw = process.env.CCR_BOARD_ZOMBIE_TTL_H;
+  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
+  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
+  return Number.isFinite(n) && n > 0 ? n * 36e5 : 6 * 36e5;
+}
+var ZOMBIE_NOTE_MARK = "[boardtruth5 \u50F5\u5C38\u5361\u544A\u8B66";
+function zombieInvariantScan(input) {
+  const now = input.now ?? Date.now();
+  const ttl = input.ttlMs ?? zombieTtlMs();
+  const skip = input.skipEntryIds ?? /* @__PURE__ */ new Set();
+  const fallbackKeyCounts = /* @__PURE__ */ new Map();
+  for (const { board: fb2 } of input.boards) {
+    for (const ent of fb2.entries) {
+      const k3 = harvestKeyOf(String(ent.text || ""));
+      if (k3 && !k3.startsWith("w-")) fallbackKeyCounts.set(k3, (fallbackKeyCounts.get(k3) ?? 0) + 1);
+    }
+  }
+  const actions = [];
+  if (!Number.isFinite(ttl)) return { actions };
+  for (const { gid, board } of input.boards) {
+    for (const e of board.entries) {
+      if (e.status !== "claimed" && e.status !== "submitted" && !(e.status === "backlog" && e.dispatch_id)) continue;
+      if (skip.has(e.id)) continue;
+      if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue;
+      const updated = Number(e.updated_at || e.ts || 0);
+      if (!updated) continue;
+      const ageMs = now - updated;
+      if (ageMs <= ttl) continue;
+      const key = harvestKeyOf(String(e.text || ""));
+      if (!key || !key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1) continue;
+      const ev2 = input.harvest;
+      const ledgerHit = ev2.doneLedger.get(key);
+      const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
+      const receiptOk = ev2.receiptSlugs.has(key);
+      const devHit = key.startsWith("w-") ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev2.devLogText) : ev2.devLogText.toLowerCase().includes(key);
+      const evidence = ledgerOk ? "ledger-done" : receiptOk ? "receipt-line" : devHit ? "dev-log" : null;
+      actions.push({ gid, entryId: e.id, text: String(e.text || ""), status: e.status, ageMs, evidence });
+    }
+  }
+  return { actions };
+}
+function reconHeartbeatLine(mode, judged, flipped, zombies, zDone, zAlarm) {
+  return `alive mode=${mode} \u5BF9\u8D26\u5224\u5B9A ${judged}\uFF08\u7FFB/\u5F52 ${flipped}\uFF09\xB7 \u50F5\u5C38\u9762 ${zombies}\uFF08\u5F3A\u7FFB ${zDone}/\u544A\u8B66 ${zAlarm}\uFF09`;
+}
+
+// src/board-truth.ts
+var branchBaseOf = (branch) => {
+  let b = String(branch || "").trim().toLowerCase().replace(/^(feat|fix|build|diag)\//, "");
+  for (; ; ) {
+    const next = b.replace(/-?r\d+$/, "");
+    if (next === b || !next) return b || next;
+    b = next;
+  }
+};
+var titleBaseWord = (title) => String(title || "").toLowerCase().replace(/[\s\-—]+/g, "");
+function supersededChainPrs(openPrs, mergedBranch, mergedNumber, mergedAt) {
+  const base = branchBaseOf(String(mergedBranch || ""));
+  if (!base) return [];
+  const slugWord = base;
+  const mergedAtMs = mergedAt === void 0 || mergedAt === null || mergedAt === "" ? void 0 : new Date(mergedAt).getTime();
+  return openPrs.filter((pr2) => {
+    if (!pr2 || typeof pr2.number !== "number") return false;
+    if (pr2.number === mergedNumber) return false;
+    if (mergedAtMs !== void 0 && !Number.isNaN(mergedAtMs)) {
+      const createdMs = pr2.createdAt === void 0 || pr2.createdAt === null || pr2.createdAt === "" ? void 0 : new Date(pr2.createdAt).getTime();
+      if (createdMs !== void 0 && !Number.isNaN(createdMs) && !(mergedAtMs > createdMs)) return false;
+    }
+    const prBase = branchBaseOf(String(pr2.headRefName || ""));
+    if (prBase !== base) return false;
+    if (String(pr2.headRefName || "").trim().toLowerCase() === String(mergedBranch || "").trim().toLowerCase()) return true;
+    return titleBaseWord(pr2.title).includes(slugWord);
+  });
+}
+function unclaimedStaleDispatches(rows, now = Date.now(), ttlMs = unclaimedTtlMs()) {
+  const last = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    if (r && typeof r.id === "string" && r.id) last.set(r.id, r);
+  }
+  const out = [];
+  for (const r of last.values()) {
+    if (r.status !== "queued" && r.status !== "dispatched") continue;
+    const ts2 = Number(r.ts) || 0;
+    if (!ts2) continue;
+    if (now - ts2 > ttlMs) out.push(r);
+  }
+  return out;
+}
+function unclaimedTtlMs() {
+  const raw = process.env.CCR_UNCLAIMED_TTL_H;
+  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
+  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
+  return Number.isFinite(n) && n > 0 ? n * 36e5 : 6 * 36e5;
+}
+function prStaleBoardActions(boards, prs) {
+  const byUrl = new Map(prs.map((p) => [String(p.url || ""), { st: String(p.state || "").toLowerCase(), n: Number(p.number) || 0 }]));
+  const actions = [];
+  for (const { gid, entries } of boards) {
+    for (const e of entries) {
+      if (e.status !== "submitted" && e.status !== "ready_to_install") continue;
+      const url = String(e.pr_url || "");
+      if (!url.startsWith("https://")) continue;
+      const t = byUrl.get(url);
+      if (!t || !t.st) continue;
+      if (t.st === "merged") {
+        actions.push({ gid, entryId: e.id, reason: "pr-merged-missed", detail: `\u5361 ${e.id} \u5BA1\u67E5\u4E2D\u4F46 PR #${t.n} \u5DF2 merged\uFF08merged \u4E8B\u4EF6\u4E22\u5931\u5F62\u6001\uFF09\u2014\u2014\u5BF9\u8D26\u515C\u5E95\u7FFB done` });
+      } else if (t.st === "closed") {
+        actions.push({ gid, entryId: e.id, reason: "pr-closed-stale", detail: `\u5361 ${e.id} \u5BA1\u67E5\u4E2D\u4F46 PR #${t.n} \u5DF2\u5173\u95ED\uFF08\u975E merged\u2014\u2014\u88AB\u62D2/\u624B\u52A8\u5173\uFF09\u2014\u2014\u7FFB\u56DE backlog \u6807\u9648` });
+      }
+    }
+  }
+  return actions;
+}
+
+// src/duty-feed.ts
+import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, statSync as statSync10 } from "node:fs";
+import { join as join23 } from "node:path";
+function dutyActivityWindowMin() {
+  const v = Number(process.env.CCR_DUTY_ACTIVITY_MIN);
+  return Number.isFinite(v) && v >= 1 ? v : 15;
+}
+var _eventsTailCache = /* @__PURE__ */ new Map();
+function lastFrameAtFromEvents(dataDir3, sessionId, tailBytes = 2 * 1024 * 1024) {
+  if (!sessionId) return null;
+  const p = join23(dataDir3, "events.ndjson");
+  let raw = "";
+  try {
+    const st2 = statSync10(p);
+    const hit = _eventsTailCache.get(p);
+    if (hit && hit.mtimeMs === st2.mtimeMs && hit.size === st2.size && Date.now() - hit.at < 6e4) {
+      raw = hit.raw;
+    } else {
+      const fd2 = openSync3(p, "r");
+      try {
+        const len = Math.min(st2.size, tailBytes);
+        const buf = Buffer.alloc(len);
+        const n = readSync2(fd2, buf, 0, len, Math.max(0, st2.size - len));
+        raw = buf.subarray(0, n).toString("utf-8");
+      } finally {
+        closeSync3(fd2);
+      }
+      _eventsTailCache.set(p, { mtimeMs: st2.mtimeMs, size: st2.size, raw, at: Date.now() });
+    }
+  } catch {
+    return null;
+  }
+  let best = null;
+  for (const line of raw.split("\n")) {
+    if (!line.includes(sessionId)) continue;
+    try {
+      const e = JSON.parse(line);
+      if (e.session_id !== sessionId || typeof e.ts !== "number") continue;
+      if (best === null || e.ts > best) best = e.ts;
+    } catch {
+    }
+  }
+  return best;
+}
+function sessionActiveByEvents(dataDir3, sessionId, now = Date.now(), windowMin = dutyActivityWindowMin()) {
+  const at = lastFrameAtFromEvents(dataDir3, sessionId);
+  return at !== null && now - at <= windowMin * 6e4;
+}
+function dutyFeedLogPath(dir) {
+  return join23(dir ?? orgDir(), "duty-feed.ndjson");
+}
+function appendDutyFeedLog(row) {
+  try {
+    appendJournal(dutyFeedLogPath(), row);
+  } catch {
+  }
+}
+function lastRealUserMessageAt(dataDir3, sessionId, tailBytes = 2 * 1024 * 1024) {
+  if (!sessionId) return null;
+  const p = join23(dataDir3, "events.ndjson");
+  let raw = "";
+  try {
+    const st2 = statSync10(p);
+    const fd2 = openSync3(p, "r");
+    try {
+      const len = Math.min(st2.size, tailBytes);
+      const buf = Buffer.alloc(len);
+      const n = readSync2(fd2, buf, 0, len, Math.max(0, st2.size - len));
+      raw = buf.subarray(0, n).toString("utf-8");
+    } finally {
+      closeSync3(fd2);
+    }
+  } catch {
+    return null;
+  }
+  let best = null;
+  for (const line of raw.split("\n")) {
+    if (!line.includes(sessionId) || !line.includes("user_message")) continue;
+    try {
+      const e = JSON.parse(line);
+      if (e.session_id !== sessionId || typeof e.ts !== "number") continue;
+      if (e.payload?.kind !== "user_message" || typeof e.payload.text !== "string") continue;
+      if (e.payload.text.startsWith("[\u503C\u5B88\u5582\u6D3B]")) continue;
+      if (best === null || e.ts > best) best = e.ts;
+    } catch {
+    }
+  }
+  return best;
+}
+function dutyUserActiveMin() {
+  const v = Number(process.env.CCR_DUTY_USER_ACTIVE_MIN);
+  return Number.isFinite(v) && v >= 1 ? v : 10;
+}
+function dutyNoProgressDelayMs(streak) {
+  const table = [5, 15, 30, 60];
+  const i = Math.min(Math.max(streak, 1), table.length) - 1;
+  return table[i] * 6e4;
+}
+
+// src/harvest.ts
+import { execFileSync } from "node:child_process";
+import { existsSync as existsSync18, readdirSync as readdirSync7, readFileSync as readFileSync19, statSync as statSync11 } from "node:fs";
+import { homedir as homedir8 } from "node:os";
+import { join as join24 } from "node:path";
+function dataDir() {
+  return process.env.CCR_DATA_DIR || join24(homedir8(), ".cc-deck", "data");
+}
+function locateDispatch(id2) {
+  let ledger = null;
+  const lp2 = join24(dataDir(), "leader-dispatches.ndjson");
+  if (existsSync18(lp2)) {
+    try {
+      for (const line of readFileSync19(lp2, "utf-8").split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          const row = JSON.parse(t);
+          if (row && row.id === id2) ledger = row;
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+  const logEntry = readDispatchLog().find((x) => x.id === id2) ?? null;
+  return { ledger, logEntry };
+}
+function hasSection(receiptText, sec) {
+  return new RegExp(`^[ \\t\\-\\*#> ]*${sec}`, "m").test(receiptText);
+}
+function git(worktree, args) {
+  try {
+    return { ok: true, out: execFileSync("git", ["-C", worktree, ...args], { timeout: 5e3, encoding: "utf-8" }) };
+  } catch {
+    return { ok: false, out: "" };
+  }
+}
+function harvestCheck(input, opts = {}) {
+  if (opts.relaySource === void 0) {
+    try {
+      opts.relaySource = readFileSync19(join24(dataDir(), "relay-name"), "utf-8").trim() || "\u672C\u673A relay";
+    } catch {
+      opts.relaySource = "\u672C\u673A relay";
+    }
+  }
+  const base_result = {
+    ok: false,
+    dispatch_id: "",
+    title: "",
+    session_id: "",
+    ledger_status: "",
+    checks: [],
+    squash_plan: [],
+    fails: 0,
+    stages: [],
+    ...opts.relaySource ? { relay_source: opts.relaySource } : {}
+  };
+  const did = typeof input.dispatch_id === "string" ? input.dispatch_id.trim() : "";
+  if (!did) return { ...base_result, error: "dispatch_id \u5FC5\u586B" };
+  const { ledger, logEntry } = locateDispatch(did);
+  const title = String(ledger?.title ?? logEntry?.title ?? "");
+  const sid = String(ledger?.session_id ?? logEntry?.session_id ?? "");
+  const dlStatus = String(logEntry?.status ?? "");
+  const receipt = typeof input.receipt === "string" && input.receipt.trim() ? input.receipt.trim() : String(ledger?.receipt ?? "");
+  const worktree = typeof input.worktree === "string" && input.worktree.trim() ? input.worktree.trim() : String(ledger?.worktree ?? "");
+  const branch = typeof input.branch === "string" && input.branch.trim() ? input.branch.trim() : String(ledger?.branch ?? "");
+  let base = typeof input.base === "string" && input.base.trim() ? input.base.trim() : String(ledger?.base_sha ?? ledger?.base_ref ?? "");
+  if (!ledger && !logEntry && (!receipt || !branch)) {
+    return { ...base_result, dispatch_id: did, error: `\u4E24\u672C\u8D26\u90FD\u65E0 dispatch_id=${did.slice(0, 8)} \u7684\u8BB0\u5F55\uFF08\u8D26\u5916\u5355\u987B\u5E26 receipt+branch \u624B\u5DE5\u6307\u8DEF\uFF09` };
+  }
+  const checks = [];
+  const squash_plan = [];
+  let fails = 0;
+  let receiptText = "";
+  if (!receipt) {
+    checks.push({ gate: "receipt", pass: false, detail: "\u56DE\u6267\u8DEF\u5F84\u672A\u77E5\uFF08\u8D26\u65E0\u8BB0\u5F55\u4E14\u672A\u624B\u5DE5\u6307\u5B9A\uFF09" });
+    fails++;
+  } else if (!existsSync18(receipt)) {
+    checks.push({ gate: "receipt", pass: false, detail: "\u56DE\u6267\u6587\u4EF6\u4E0D\u5B58\u5728\uFF08worker \u672A\u4EA4\uFF1F\u6838\u5BF9\u4EFB\u52A1\u4E66\u56DE\u6267\u8DEF\u5F84\u7EA6\u5B9A\uFF09" });
+    fails++;
+  } else {
+    let bytes = 0;
+    try {
+      bytes = statSync11(receipt).size;
+    } catch {
+    }
+    try {
+      receiptText = readFileSync19(receipt, "utf-8");
+    } catch {
+    }
+    checks.push({ gate: "receipt", pass: true, detail: `\u56DE\u6267\u5B58\u5728\uFF08${bytes} \u5B57\u8282\uFF09` });
+    const missing = ["\u6839\u56E0", "\u81EA\u6D4B", "\u9A8C\u6536\u70B9"].filter((sec) => !hasSection(receiptText, sec));
+    checks.push({
+      gate: "sections",
+      pass: missing.length === 0,
+      detail: missing.length === 0 ? "\u5FC5\u9700\u8282\u300C\u6839\u56E0/\u81EA\u6D4B/\u9A8C\u6536\u70B9\u300D\u5168\u5728" : `\u5FC5\u9700\u8282\u7F3A\uFF1A${missing.map((m) => `\u300C${m}\u300D`).join(" ")}\uFF08W-DISPATCHX \u56DE\u6267\u683C\u5F0F\uFF09`
+    });
+    if (missing.length) fails++;
+    const tailLines = receiptText.split("\n").filter((l) => /^[ \t]*结果：/.test(l));
+    const tailOk = tailLines.length > 0 && tailLines[tailLines.length - 1].includes("\u6539\u52A8\u6587\u4EF6");
+    checks.push({
+      gate: "tail",
+      pass: tailOk,
+      detail: tailOk ? "\u5C3E\u884C\u7ED3\u679C\u6458\u8981\u5728" : "\u5C3E\u884C\u7ED3\u679C\u6458\u8981\u7F3A\uFF08\u56FA\u5B9A\u683C\u5F0F\uFF1A\u7ED3\u679C\uFF1A<\u4E00\u884C>\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A<\u5217\u8868\u6216\u65E0>\uFF09"
+    });
+    if (!tailOk) fails++;
+  }
+  let mainRepo = "";
+  if (worktree && existsSync18(worktree)) {
+    let logLines = [];
+    const baseOk = base ? git(worktree, ["rev-parse", "--verify", "--quiet", base]).ok : false;
+    if (baseOk) {
+      logLines = git(worktree, ["log", "--oneline", `${base}..HEAD`]).out.split("\n").filter((l) => l.trim());
+    } else {
+      logLines = git(worktree, ["log", "--oneline", "-10"]).out.split("\n").filter((l) => l.trim());
+      base = "";
+    }
+    if (logLines.length > 0) {
+      checks.push({
+        gate: "commits",
+        pass: true,
+        detail: `\u65B0\u63D0\u4EA4 ${logLines.length} \u7B14${base ? `\uFF08\u81EA\u57FA\u7EBF ${base.slice(0, 8)}\uFF09` : "\uFF08\u57FA\u7EBF\u4E0D\u53EF\u89E3\u6790\uFF0C\u9000\u6700\u8FD1 10 \u6761\uFF09"}`,
+        log: logLines.slice(0, 20)
+      });
+    } else {
+      checks.push({ gate: "commits", pass: false, detail: "\u57FA\u7EBF\u540E\u65E0\u65B0\u63D0\u4EA4\uFF08worker \u672A commit\uFF1F\uFF09" });
+      fails++;
+    }
+    const dirtyOut = git(worktree, ["status", "--porcelain"]).out;
+    const dirtyN = dirtyOut.split("\n").filter((l) => l.trim()).length;
+    checks.push({
+      gate: "dirty",
+      pass: dirtyN === 0,
+      detail: dirtyN === 0 ? "\u65E0\u672A\u63D0\u4EA4\u6539\u52A8" : `\u672A\u63D0\u4EA4\u6539\u52A8 ${dirtyN} \u5904\uFF08squash \u524D\u9700\u5148\u6536\u53E3\uFF09`
+    });
+    if (dirtyN > 0) fails++;
+    const gd2 = git(worktree, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).out.trim();
+    if (gd2) mainRepo = gd2.replace(/\/\.git$/, "") || gd2;
+    const head = git(worktree, ["rev-parse", "--short", "HEAD"]).out.trim();
+    void head;
+  } else if (worktree) {
+    checks.push({ gate: "commits", pass: false, detail: `worktree \u4E0D\u5B58\u5728\uFF1A${worktree}\uFF08\u5DF2\u88AB\u6E05\u7406\uFF1F\u5206\u652F\u4ECD\u5728\u4E3B\u4ED3\u53EF\u67E5\uFF09` });
+    checks.push({ gate: "dirty", pass: true, detail: "worktree \u7F3A\u5E2D\uFF0Cdirty \u95F8\u8DF3\u8FC7" });
+    fails++;
+  } else {
+    checks.push({ gate: "commits", pass: true, detail: "\u65E0 worktree \u8BB0\u5F55\u2014\u2014\u968F\u624B\u529E/\u8D26\u5916\u5355\uFF0C\u5206\u652F\u8D26\u8DF3\u8FC7" });
+    checks.push({ gate: "dirty", pass: true, detail: "\u65E0 worktree\uFF0Cdirty \u95F8\u8DF3\u8FC7" });
+  }
+  squash_plan.push(
+    ...branch ? [`git -C ${worktree || "<worktree>"} add -A && git -C ${worktree || "<worktree>"} commit -m "[\u6B63\u7ECF\u7ACB\u9879] ${title || "<\u6807\u9898>"}"`] : [],
+    `cd ${mainRepo || "<\u4E3B\u4ED3>"} && git merge --squash ${branch || "<\u5206\u652F>"} && git commit   # \u4FE1\u606F\u5E26 #NN\uFF0Cbody \u5217\u9010\u6761\u6E05\u5355`,
+    ...worktree ? [`git worktree remove ${worktree} && git branch -D ${branch || "<\u5206\u652F>"}`] : []
+  );
+  const acc = acceptanceHint(did, title);
+  checks.push({
+    gate: "acceptance",
+    pass: acc.state === "ok",
+    severity: "warning",
+    detail: acc.detail
+  });
+  return {
+    ...base_result,
+    ok: true,
+    dispatch_id: did,
+    title,
+    session_id: sid,
+    ledger_status: dlStatus,
+    ...logEntry?.receipt ? { ledger_receipt: logEntry.receipt } : {},
+    checks,
+    squash_plan,
+    fails,
+    stages: stagesOf(did)
+  };
+}
+function acceptanceHint(did, title) {
+  try {
+    const artDir = process.env.CCR_ARTIFACTS_DIR || join24(homedir8(), ".cc-deck", "artifacts");
+    if (existsSync18(artDir)) {
+      const hits2 = readdirSafe(artDir).filter((n) => /^acceptance/i.test(n));
+      if (hits2.length > 0) return { state: "ok", detail: `\u9A8C\u6536\u5355\u5728\u518C\uFF08${hits2.length} \u4EFD\uFF0C\u56DE\u586B\u72B6\u6001\u4EE5\u5355\u636E\u4E3A\u51C6\uFF09` };
+    }
+    return { state: "missing", detail: "\u67E5\u65E0\u9A8C\u6536\u5355\uFF08\u94C1\u5F8B 7\uFF1A\u51FA\u5305\u5FC5\u5E26\u9A8C\u6536\u5355\u2014\u2014\u88C5\u673A\u9A8C\u8BC1\u6279\u6B21\u5148\u51FA\u5355\uFF09" };
+  } catch {
+    return { state: "ok", detail: "\u9A8C\u6536\u5355\u72B6\u6001\u672A\u77E5\uFF08artifacts \u76EE\u5F55\u4E0D\u53EF\u8BFB\uFF0C\u4E0D\u62E6\u6536\u5272\uFF09" };
+  }
+}
+function readdirSafe(dir) {
+  try {
+    return readdirSync7(dir);
+  } catch {
+    return [];
+  }
+}
+function stagesOf(did) {
+  try {
+    const p = join24(orgDir(), "dispatch-log.ndjson");
+    if (!existsSync18(p)) return [];
+    const out = [];
+    for (const line of readFileSync19(p, "utf-8").split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const row = JSON.parse(t);
+        if (row && row.id === did && typeof row.stage === "string") {
+          out.push({ stage: row.stage, ts: typeof row.ts === "number" ? row.ts : 0, ...row.stage_detail ? { detail: row.stage_detail } : {} });
+        }
+      } catch {
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// src/drill.ts
+import { execFileSync as execFileSync2 } from "node:child_process";
+import { mkdirSync as mkdirSync11, mkdtempSync, rmSync as rmSync3, writeFileSync as writeFileSync11, readFileSync as readFileSync20, existsSync as existsSync19 } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as join25 } from "node:path";
+var DRILL_MARK = true;
+function gateManifestPairing(version, manifestJson) {
+  try {
+    const manifest = JSON.parse(manifestJson);
+    if (manifest.version === version) return { ok: true, detail: `\u6E05\u5355\u914D\u5BF9 \u2713\uFF08${version}\uFF09` };
+    return { ok: false, detail: `\u6E05\u5355\u914D\u5BF9\u9519\u4F4D\uFF1A\u6E05\u5355 ${manifest.version} \u2260 \u672C\u6B21 ${version}` };
+  } catch (e) {
+    return { ok: false, detail: `\u6E05\u5355\u4E0D\u53EF\u89E3\u6790: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+var DRILL_WATCH_FILES = [
+  "relay/src/org.ts",
+  "relay/src/harvest.ts",
+  "relay/src/drill.ts",
+  "relay/src/patrol.ts",
+  "relay/src/projects.ts"
+];
+function lastDrillTime(dataDir3) {
+  try {
+    return Number(JSON.parse(readFileSync20(join25(dataDir3, "drill-last.json"), "utf-8")).ts) || 0;
+  } catch {
+    return 0;
+  }
+}
+function drillDue(mainRepo, dataDir3) {
+  try {
+    if (!existsSync19(join25(mainRepo, ".git"))) return false;
+    const out = execFileSync2("git", ["-C", mainRepo, "log", "-1", "--format=%ct", "--", ...DRILL_WATCH_FILES], { encoding: "utf-8", timeout: 5e3 }).trim();
+    const latest = Math.max(0, ...out.split("\n").map((l) => Number(l.trim()) * 1e3).filter((n) => Number.isFinite(n)));
+    return latest > lastDrillTime(dataDir3);
+  } catch {
+    return false;
+  }
+}
+function runDrill(dataDir3) {
+  const t03 = Date.now();
+  const runId = `drill-${t03.toString(36)}`;
+  const hops = [];
+  const hop = (name, fn) => {
+    const s = Date.now();
+    try {
+      const detail = fn();
+      hops.push({ hop: name, ok: true, ms: Date.now() - s, ...detail ? { detail } : {} });
+      appendJournal(join25(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: name, ok: true, ms: Date.now() - s, ...detail ? { detail } : {} });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      hops.push({ hop: name, ok: false, ms: Date.now() - s, detail: msg });
+      appendJournal(join25(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: name, ok: false, ms: Date.now() - s, detail: msg });
+      throw e;
+    }
+  };
+  const drillId = `dp-drill-${t03.toString(36)}`;
+  const tmp = mkdtempSync(join25(tmpdir(), "cc-deck-drill-"));
+  let failed;
+  try {
+    hop("dispatch", () => {
+      const ok2 = appendDispatch({ ts: Date.now(), id: drillId, tier: "\u8F7B\u7ACB\u9879", target: "drill-worker", status: "dispatched", session_id: "drill-sess", title: "\u94FE\u8DEF\u6F14\u7EC3\u5047\u4EFB\u52A1", drill: DRILL_MARK });
+      if (!ok2) throw new Error("drill \u6D3E\u5355\u884C\u5199\u4E0D\u8FDB\u53F0\u8D26");
+      const raw = readFileSync20(join25(orgDir(), "dispatch-log.ndjson"), "utf-8");
+      const row = raw.split("\n").map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      }).filter((x) => x && x.id === drillId).pop();
+      if (!row || row.drill !== true) throw new Error("drill \u6D3E\u5355\u884C\u8BFB\u56DE\u65E0\u6807\u8BB0");
+      return "\u53F0\u8D26\u884C\u843D\u76D8+drill \u6807\u8BB0\u8BFB\u56DE\uFF08ndjson \u539F\u6587\uFF09";
+    });
+    hop("worker-claim", () => {
+      const ok2 = appendDispatch({ ts: Date.now(), id: drillId, tier: "\u8F7B\u7ACB\u9879", target: "drill-worker", status: "running", session_id: "drill-sess", title: "\u94FE\u8DEF\u6F14\u7EC3\u5047\u4EFB\u52A1", drill: DRILL_MARK });
+      if (!ok2) throw new Error("running \u884C\u5199\u4E0D\u8FDB");
+      return "\u627F\u63A5\u6210\u529F";
+    });
+    const receiptPath = join25(tmp, "receipt-drill.md");
+    hop("receipt", () => {
+      writeFileSync11(receiptPath, "## \u6839\u56E0\ndrill\n## \u81EA\u6D4B\ndrill \u5168\u7EFF\n## \u9A8C\u6536\u70B9\ndrill\n\n\u7ED3\u679C\uFF1A\u6F14\u7EC3\u5B8C\u6210\uFF5C\u6539\u52A8\u6587\u4EF6\uFF1A\u65E0\n", "utf-8");
+      if (!existsSync19(receiptPath)) throw new Error("\u56DE\u6267\u6587\u4EF6\u672A\u843D");
+      return "\u5408\u6210\u56DE\u6267\u843D\u4E34\u65F6\u76EE\u5F55";
+    });
+    const wt2 = join25(tmp, "wt");
+    const g2 = (a) => execFileSync2("git", ["-C", wt2, ...a], { encoding: "utf-8" });
+    hop("harvest", () => {
+      mkdirGit(wt2);
+      g2(["init", "-q"]);
+      g2(["config", "user.email", "d@d"]);
+      g2(["config", "user.name", "d"]);
+      writeFileSync11(join25(wt2, "f.txt"), "1");
+      g2(["add", "-A"]);
+      g2(["commit", "-qm", "base"]);
+      const base = g2(["rev-parse", "HEAD"]).trim();
+      writeFileSync11(join25(wt2, "g.txt"), "2");
+      g2(["add", "-A"]);
+      g2(["commit", "-qm", "[\u6B63\u7ECF\u7ACB\u9879] drill \u63D0\u4EA4"]);
+      const r = harvestCheck({ dispatch_id: drillId, receipt: receiptPath, worktree: wt2, branch: "fix/drill", base });
+      if (!r.ok) throw new Error(r.error ?? "harvest-check \u5931\u8D25");
+      if (r.fails !== 0) throw new Error(`\u673A\u5668\u95F8 ${r.fails} \u9879 \u2717\uFF08${r.checks.filter((c) => !c.pass && c.severity !== "warning").map((c) => c.gate).join(",")}\uFF09`);
+      return "harvest \u5168\u95F8\u7EFF";
+    });
+    hop("release-gate", () => {
+      const ver = `0.0.0-drill.${t03}`;
+      const manifest = JSON.stringify({ version: ver });
+      const ok2 = gateManifestPairing(ver, manifest);
+      if (!ok2.ok) throw new Error(ok2.detail);
+      const mismatch = gateManifestPairing(ver + "-x", manifest);
+      if (mismatch.ok) throw new Error("\u9519\u914D\u5E94\u62D2\uFF08\u95F8\u7075\u654F\u5EA6\u4E22\u5931\uFF09");
+      return `\u914D\u5BF9\u95F8\u6A21\u62DF \u2713\uFF08\u6B63\u4F8B\u8FC7/\u9519\u914D\u62D2\uFF0C\u5230\u51FA\u5305\u524D\u4E00\u6B65\u4E3A\u6B62\uFF09`;
+    });
+    hop("acceptance-close", () => {
+      const ok2 = appendDispatch({ ts: Date.now(), id: drillId, tier: "\u8F7B\u7ACB\u9879", target: "drill-worker", status: "done", session_id: "drill-sess", title: "\u94FE\u8DEF\u6F14\u7EC3\u5047\u4EFB\u52A1", receipt: "drill \u95ED\u73AF", drill: DRILL_MARK });
+      if (!ok2) throw new Error("\u7EC8\u6001\u884C\u5199\u4E0D\u8FDB");
+      const rows = readFileSync20(join25(orgDir(), "dispatch-log.ndjson"), "utf-8").split("\n").map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      }).filter((x) => x && x.id === drillId);
+      if (!rows.length || rows[rows.length - 1].status !== "done") throw new Error("\u53F0\u8D26\u6536\u655B\u5931\u8D25\uFF08\u672B\u884C\u975E\u7EC8\u6001\uFF09");
+      return "\u53F0\u8D26\u6536\u655B done";
+    });
+  } catch (e) {
+    failed = hops.find((h) => !h.ok)?.hop ?? "unknown";
+  } finally {
+    try {
+      rmSync3(tmp, { recursive: true, force: true });
+    } catch {
+    }
+  }
+  try {
+    writeFileSync11(join25(dataDir3, "drill-last.json"), JSON.stringify({ ts: Date.now(), run_id: runId, ok: !failed }));
+  } catch {
+  }
+  const duration = Date.now() - t03;
+  appendJournal(join25(dataDir3, "drill-log.ndjson"), { ts: Date.now(), run_id: runId, hop: "summary", ok: !failed, ms: duration, ...failed ? { detail: `\u65AD\u70B9\uFF1A${failed}` } : {} });
+  return { ok: !failed, run_id: runId, hops, ...failed ? { failed_hop: failed } : {}, duration_ms: duration };
+}
+function mkdirGit(dir) {
+  mkdirSync11(dir, { recursive: true });
 }
 
 // src/auto-tiers.ts
@@ -50971,6 +51237,29 @@ function watermarkFromUsage(u) {
   if (!u || typeof u.input_tokens !== "number") return 0;
   return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
 }
+function buildWorkerBoardHooks(report) {
+  const mk2 = (handler) => async (input) => {
+    try {
+      handler(input);
+    } catch {
+    }
+    return {};
+  };
+  return {
+    SessionStart: [{ hooks: [mk2(() => {
+      report("worker-ack");
+    })], timeout: 5 }],
+    PostToolUse: [{ hooks: [mk2((input) => {
+      report("worker-start", input?.tool_name ? String(input.tool_name) : void 0);
+    })], timeout: 5 }],
+    Stop: [{ hooks: [mk2(() => {
+      report("worker-milestone");
+    })], timeout: 5 }],
+    TaskCompleted: [{ hooks: [mk2((input) => {
+      report("worker-done", input?.task_subject ? String(input.task_subject) : void 0);
+    })], timeout: 5 }]
+  };
+}
 var AgentSession = class {
   constructor(cwd, model, cb2, initialPrompt, opts) {
     this.cwd = cwd;
@@ -51015,6 +51304,9 @@ var AgentSession = class {
         // W-KWP2 件一：雇员插件通路（显式 local 路径，skipMcpDiscovery 见 toSdkPlugins
         // 注释）。空/undefined 不传 = SDK 默认行为不变（B1 前现状）
         ...opts?.workerPlugins?.length ? { plugins: toSdkPlugins(opts.workerPlugins) } : {},
+        // W-BOARDV2：worker 黑板 SDK 钩子（编程式注入——宿主注册权，worker 侧不可摘）。
+        // 回调经 this.reportWorkerBoard 晚绑定（setWorkerBoard 回接前先进早到缓冲）
+        ...opts?.workerBoard ? { hooks: buildWorkerBoardHooks((event, detail) => this.reportWorkerBoard(event, detail)) } : {},
         ...opts?.resume ? { resume: opts.resume } : {},
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
@@ -51056,6 +51348,7 @@ var AgentSession = class {
         }
       }
     });
+    if (opts?.workerBoard) this.checkHooksApplied();
     void this.pump();
   }
   cwd;
@@ -51110,6 +51403,46 @@ var AgentSession = class {
   // #112：resume 形态标记（init 清空残留账本用，见 case "system"）
   resumed;
   q;
+  // W-BOARDV2：worker 黑板事件上报口（session-manager 在 sid 落定后经 setWorkerBoard
+  // 回接）；回调就位前触发的钩子事件进早到缓冲（SessionStart 可能在登记前到达——
+  // CLI init 竞速窗），回接时按序补投。缓冲上限 16（异常风暴防膨胀，丢最旧）
+  workerBoardCb;
+  workerBoardEarly = [];
+  /** W-BOARDV2：session-manager 回接黑板上报口（sid 已落定，事件直投）。 */
+  setWorkerBoard(cb2) {
+    this.workerBoardCb = cb2;
+    const early = this.workerBoardEarly;
+    this.workerBoardEarly = [];
+    for (const [event, detail] of early) {
+      try {
+        cb2(event, detail);
+      } catch {
+      }
+    }
+  }
+  /** 钩子→上报口单点：回调缺位=早到缓冲（防 init 竞速丢 worker-ack），异常吞掉。 */
+  reportWorkerBoard(event, detail) {
+    if (this.workerBoardCb) {
+      try {
+        this.workerBoardCb(event, detail);
+      } catch {
+      }
+      return;
+    }
+    if (this.workerBoardEarly.length < 16) this.workerBoardEarly.push([event, detail]);
+  }
+  /** W-BOARDV2：hooks_applied 自检（fire-and-forget，绝不阻断会话主路径）。 */
+  checkHooksApplied() {
+    void this.q.initializationResult().then((r) => {
+      const rr2 = r;
+      const flag = rr2?.result?.hooks_applied ?? rr2?.hooks_applied;
+      if (flag === false) {
+        process.stderr.write(`[boardv2:${this.id.slice(0, 8)}] hooks_applied=false\uFF08CLI \u4E0D\u8BA4\u7F16\u7A0B\u5F0F\u94A9\u5B50\uFF09\u2014\u2014worker \u4FA7\u9ED1\u677F\u4E8B\u4EF6\u964D\u7EA7\u7F3A\u5E2D\uFF08\u6D3E\u53D1\u4FA7\u4E8B\u4EF6\u4E0D\u53D7\u5F71\u54CD\uFF09
+`);
+      }
+    }).catch(() => {
+    });
+  }
   async pump() {
     try {
       for await (const msg of this.q) this.handleMessage(msg);
@@ -53887,7 +54220,7 @@ function transitionLegal(cur, next, by) {
 }
 
 // src/task-store.ts
-import { readdirSync as readdirSync11, readFileSync as readFileSync35, statSync as statSync12 } from "node:fs";
+import { readdirSync as readdirSync11, readFileSync as readFileSync35, statSync as statSync13 } from "node:fs";
 import { homedir as homedir16 } from "node:os";
 import path3 from "node:path";
 function readTaskStoreTodos(cliSessionId, base) {
@@ -53910,7 +54243,7 @@ function readTaskStoreTodos(cliSessionId, base) {
       const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
       const parsed = Number(t.id);
       const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync12(fp2).mtimeMs, ...activeForm });
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync13(fp2).mtimeMs, ...activeForm });
     } catch {
     }
   }
@@ -54246,7 +54579,7 @@ function pmKeepaliveEligible(p) {
 }
 
 // src/link-quality.ts
-import { appendFileSync as appendFileSync6, existsSync as existsSync27, mkdirSync as mkdirSync20, readFileSync as readFileSync36, renameSync as renameSync8, rmSync as rmSync5, statSync as statSync13 } from "node:fs";
+import { appendFileSync as appendFileSync6, existsSync as existsSync27, mkdirSync as mkdirSync20, readFileSync as readFileSync36, renameSync as renameSync8, rmSync as rmSync5, statSync as statSync14 } from "node:fs";
 import { join as join44 } from "node:path";
 var LINK_SRC_OK = /* @__PURE__ */ new Set(["web-lan", "web-cloud", "rn"]);
 var LINK_KIND_OK = /* @__PURE__ */ new Set(["drop", "reconnect", "connect", "retry-fail"]);
@@ -54315,7 +54648,7 @@ function appendLinkEvent(dataDir3, row) {
   try {
     mkdirSync20(dataDir3, { recursive: true });
     try {
-      if (existsSync27(p) && statSync13(p).size > LINK_LOG_MAX_BYTES) {
+      if (existsSync27(p) && statSync14(p).size > LINK_LOG_MAX_BYTES) {
         try {
           rmSync5(`${p}.1`, { force: true });
         } catch {
@@ -54576,7 +54909,7 @@ function createCloudCommands(mgr2) {
 }
 
 // src/commands/board-commands.ts
-import { statSync as statSync14, readFileSync as readFileSync37 } from "node:fs";
+import { statSync as statSync15, readFileSync as readFileSync37 } from "node:fs";
 import { resolve as resolve8 } from "node:path";
 function createBoardCommands(mgr2) {
   return {
@@ -54633,7 +54966,7 @@ function createBoardCommands(mgr2) {
       }
       let st2;
       try {
-        st2 = statSync14(hit.path);
+        st2 = statSync15(hit.path);
       } catch {
         return { command_id: cmd.command_id, ok: false, error: imgHit ? "\u56FE\u7247\u5DF2\u8FC7\u671F\uFF08\u4E34\u65F6\u9644\u4EF6\u5B9A\u671F\u6E05\u626B\uFF09" : "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
       }
@@ -56129,7 +56462,7 @@ function escalateClaimed(now, dir) {
 }
 
 // src/experience.ts
-import { existsSync as existsSync33, mkdirSync as mkdirSync23, readFileSync as readFileSync44, readdirSync as readdirSync14, renameSync as renameSync12, writeFileSync as writeFileSync24, appendFileSync as appendFileSync8, statSync as statSync15 } from "node:fs";
+import { existsSync as existsSync33, mkdirSync as mkdirSync23, readFileSync as readFileSync44, readdirSync as readdirSync14, renameSync as renameSync12, writeFileSync as writeFileSync24, appendFileSync as appendFileSync8, statSync as statSync16 } from "node:fs";
 import { randomUUID as randomUUID10 } from "node:crypto";
 import { dirname as dirname11, join as join53 } from "node:path";
 var EXPERIENCE_KINDS = ["pitfall", "practice", "preference", "fact", "term"];
@@ -56694,7 +57027,7 @@ function startExperienceGc(dir) {
         const p = experiencePath(dir);
         let sizeBytes = 0;
         try {
-          sizeBytes = statSync15(p).size;
+          sizeBytes = statSync16(p).size;
         } catch {
         }
         const activeCount = listExperience({ status: "active" }, dir).length;
@@ -58359,7 +58692,7 @@ function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const isUsableDir = (p) => {
     if (!p) return false;
     try {
-      return statSync16(p).isDirectory();
+      return statSync17(p).isDirectory();
     } catch {
       return false;
     }
@@ -58576,7 +58909,7 @@ function transcriptHasAssistant(cwd, sdkId, configHome) {
 }
 function transcriptBytesFor(cwd, sdkId, configHome) {
   try {
-    return statSync16(transcriptPathFor(cwd, sdkId, configHome)).size;
+    return statSync17(transcriptPathFor(cwd, sdkId, configHome)).size;
   } catch {
     return void 0;
   }
@@ -58607,7 +58940,7 @@ var SNAPSHOT_LOGS_LAN = {
   budgetBytes: SNAPSHOT_LOGS_BUDGET_BYTES_LAN2,
   perSessionCap: SNAPSHOT_LOGS_PER_SESSION_LAN
 };
-var SessionManager = class {
+var SessionManager = class _SessionManager {
   constructor(bus2, cfg2) {
     this.bus = bus2;
     bootMark("ctor-enter");
@@ -58755,6 +59088,20 @@ var SessionManager = class {
   drainReentrant = false;
   // P0 headcount 裁剪节拍（boot 首轮 + 每 6h；startHeadcountTrim 起，CCR_ORG_TRIM_HOURS=0 关定时）
   trimTimer = null;
+  // W-DRAINFIX（1111 用户实锤断档死锁）：排水周期兜底节拍（boot 首拍 + 每 CCR_DISPATCH_SWEEP_MIN
+  // 缺省 5min；startDispatchSweep 起，CCR_NO_DISPATCH_SWEEP=1 全停）——drain 原六触发点全是
+  // 事件边，编制全闲+队列挂单=零事件永哑火，sweep 补「事件+周期」双触发
+  dispatchSweepTimer = null;
+  // W-DRAINFIX-R1（审查 P1 返修）：断档嫌疑两轮确认账——单拍帧龄判死会误伤「回合内
+  // >30min 静默长命令」的活 worker（zombieWatchdog R3-P2-a② 同款实锤形态：误收口+
+  // PM 重派=双写）。首拍只记账，确认窗（CCR_SEAT_TURN_GAP_MIN，缺省 30min）后仍
+  // dead 才收口——活 worker 期间任一帧/进度即翻 alive 清嫌疑；bar 与看门狗两轮确认
+  //（15min 嫌疑+30min 确认+1h 节拍）同量级，且动作更轻（不 retire 不 kill）。
+  drainfixDeadSuspects = /* @__PURE__ */ new Map();
+  // W-DRAINFIX-R1（审查 P3）：触顶回队退避账（gid → 下次 sweep 可试排时刻）——真触顶
+  // 组每拍重放=queued 台账行+PM 时间线 5min 一刷；重派回队（试排前后该组队列深度
+  // 不减）即退避 15min。事件边排水不受影响（收口/除名即时接续），sweep 只是兜底拍。
+  dispatchSweepBackoff = /* @__PURE__ */ new Map();
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   cfg;
   /** #212 允许并记住：规则存储单例（Bridge / AgentSession / HTTP API 三方共用同一份） */
@@ -58824,7 +59171,13 @@ provider=${opts.provider ?? "default"}` : void 0,
     const withRules = {
       ...restOpts,
       rules: this.allowRules,
-      ...opts?.employee ? { workerPlugins: listWorkerPluginPaths() } : {}
+      ...opts?.employee ? { workerPlugins: listWorkerPluginPaths() } : {},
+      // W-BOARDV2（审查 A-P0 修正）：钩子接线单点——雇员会话 spawn 即挂黑板 SDK 钩子
+      //（此前五 spawn 点无一传 workerBoard，钩子从未注册=worker 事件生产恒零，测试
+      // 直打 workerBoardEvent/buildWorkerBoardHooks 纯函数结构性发现不了）。newAgent
+      // 是全部 spawn 点的唯一漏斗（create/resume/fresh/revive 都经此），在此按 employee
+      // 打闸=单点接线；回调本体仍由 spawn 点 setWorkerBoard 回接（sid 落定后）。
+      ...opts?.employee ? { workerBoard: true } : {}
     };
     return this.agentFactory ? this.agentFactory(cwd, model, cb2, initialPrompt, withRules) : new AgentSession(cwd, model, cb2, initialPrompt, withRules);
   }
@@ -60195,7 +60548,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     let size;
     let exists = true;
     try {
-      size = statSync16(p).size;
+      size = statSync17(p).size;
     } catch {
       exists = false;
     }
@@ -60270,7 +60623,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       unverified = snapshot.unverified === true;
     } else {
       try {
-        size = statSync16(p).size;
+        size = statSync17(p).size;
       } catch {
         exists = false;
       }
@@ -60401,7 +60754,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       let size;
       let exists = true;
       try {
-        size = statSync16(a.path).size;
+        size = statSync17(a.path).size;
       } catch {
         exists = false;
       }
@@ -60457,7 +60810,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       for (const name of readdirSync16(dir)) {
         if (!/^(w-|review-w-).+\.md$/.test(name)) continue;
         try {
-          cur.set(name, statSync16(join60(dir, name)).mtimeMs);
+          cur.set(name, statSync17(join60(dir, name)).mtimeMs);
         } catch {
         }
       }
@@ -60488,7 +60841,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       let size;
       let exists = true;
       try {
-        size = statSync16(e.path).size;
+        size = statSync17(e.path).size;
       } catch {
         exists = false;
       }
@@ -61103,6 +61456,10 @@ provider=${opts.provider ?? "default"}` : void 0,
     managed.agent = agent;
     managed.state.session_id = agent.id;
     this.sessions.set(agent.id, managed);
+    if (managed.state.employee && agent.setWorkerBoard) {
+      const boardSid = managed.state.session_id;
+      agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
     this.bus.emit(managed.state.session_id, "SESSION_CREATED", {
       cwd,
       initial_prompt: prompt,
@@ -61661,6 +62018,10 @@ provider=${opts.provider ?? "default"}` : void 0,
         // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT——钩子自环闸放行）
       });
       s.agent = agent2;
+      if (s.state.employee && agent2.setWorkerBoard) {
+        const boardSid = s.state.session_id;
+        agent2.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+      }
       this.transition(s.state.session_id, "WORKING", "resume");
       s.state.action_summary = "\u91CD\u65B0\u6CE8\u5165\u4E0A\u4E0B\u6587";
       s.state.last_error = void 0;
@@ -61741,6 +62102,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       throw e;
     }
     s.agent = agent;
+    if (s.state.employee && agent.setWorkerBoard) {
+      const boardSid = s.state.session_id;
+      agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
     this.transition(s.state.session_id, "WORKING", "resume");
     s.state.historical = false;
     s.state.saved = void 0;
@@ -61807,6 +62172,10 @@ provider=${opts.provider ?? "default"}` : void 0,
             ...s.state.engine ? { engine: s.state.engine } : {}
           }
         );
+        if (s.state.employee && s.agent?.setWorkerBoard) {
+          const boardSid = s.state.session_id;
+          s.agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+        }
         this.pushExternalLog(
           s.state.session_id,
           "system",
@@ -61954,6 +62323,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       throw e;
     }
     s.agent = agent;
+    if (s.state.employee && agent.setWorkerBoard) {
+      const boardSid = s.state.session_id;
+      agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
     this.transition(s.state.session_id, "WORKING", "revive");
     s.state.turn_started_at = Date.now();
     s.state.action_summary = "\u6062\u590D\u4E2D";
@@ -62258,6 +62631,61 @@ provider=${opts.provider ?? "default"}` : void 0,
     q2.push(e);
     this.openDispatches.set(key, q2);
   }
+  // ---------- W-BOARDV2 worker 黑板事件（1111 用户令「hooks 强制保证 worker 必更新」） ----------
+  // 心跳节流窗（毫秒）：worker-milestone 每回合 fires（SDK Stop 钩子），长会话高频
+  // 回合会刷账——90s 窗内同席合并。ack/start/done 不节流（每单一次，去重按单 id）。
+  static WORKER_BOARD_THROTTLE_MS = 9e4;
+  /** worker-milestone 节流账（sid→上次落账 ts）。 */
+  workerBoardMilestoneAt = /* @__PURE__ */ new Map();
+  /** 每单一次性事件去重账（sid:event→dispatch id；同单同类事件只落一行）。 */
+  workerBoardSeen = /* @__PURE__ */ new Map();
+  /**
+   * worker 黑板事件落账（SDK 钩子上报口——agent-adapter.buildWorkerBoardHooks 四事件）。
+   * 解席→解单（openDispatches 内存账=权威；无在途单=非派单会话/已收口，静默忽略），
+   * 行形态对齐既有段链（同 id 追加行、status 恒 running=施工中语义——黑板事件不改
+   * 六态状态机，event 字段承载细分生命周期，读侧收敛末行赢语义零破坏）。
+   * 返回 true=已落账（测试/观测面用）。
+   */
+  workerBoardEvent(sid, event, detail) {
+    const VALID = ["worker-ack", "worker-start", "worker-milestone", "worker-done"];
+    if (!VALID.includes(event)) return false;
+    const open3 = this.openDispatches.get(sid);
+    if (!open3 || open3.length === 0) return false;
+    const e = open3[open3.length - 1];
+    if (event !== "worker-milestone") {
+      const seenKey = `${sid}:${event}`;
+      if (this.workerBoardSeen.get(seenKey) === e.id) return false;
+      this.workerBoardSeen.set(seenKey, e.id);
+      if (this.workerBoardSeen.size > 400) {
+        const keys = [...this.workerBoardSeen.keys()].slice(0, 200);
+        for (const k3 of keys) this.workerBoardSeen.delete(k3);
+      }
+    } else {
+      const last = this.workerBoardMilestoneAt.get(sid) ?? 0;
+      if (Date.now() - last < _SessionManager.WORKER_BOARD_THROTTLE_MS) return false;
+      this.workerBoardMilestoneAt.set(sid, Date.now());
+      if (this.workerBoardMilestoneAt.size > 400) {
+        const cut = Date.now() - 6e5;
+        for (const [k3, v] of this.workerBoardMilestoneAt) if (v < cut) this.workerBoardMilestoneAt.delete(k3);
+      }
+    }
+    const ok2 = appendDispatch({
+      ts: Date.now(),
+      id: e.id,
+      tier: e.tier,
+      target: sid,
+      status: "running",
+      // 黑板事件行恒 running（施工中语义）——六态状态机零破坏
+      event,
+      receipt: detail ? truncate2(detail, 160) : void 0,
+      session_id: sid,
+      ...e.anchor ? { project_anchor: e.anchor } : {},
+      ...e.actor ? { actor: e.actor } : {},
+      ...e.generation !== void 0 ? { generation: e.generation } : {}
+    });
+    if (ok2) console.log(`[boardv2] worker-event ${event} dispatch=${e.id.slice(0, 8)} sid=${sid.slice(0, 12)}`);
+    return ok2;
+  }
   /** W-BOARDTRUTH 刀1：同链 PR 收割即闭（第三现治本——异步 gh 链，绝不阻塞 pr-report 主面）。
    * 判定=board-truth.supersededChainPrs 纯函数（同链基族+title 基族词双保险——宁可漏关
    * 不可错关，#29/#6 长挂 PR 防线）；gh 不在/代理死/网络断=降级审计（boardtruth-pr-close-
@@ -62462,6 +62890,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       const titleSeg = taskHit?.text ? ` ${truncate2(taskHit.text, 40)}` : "";
       const refReceipt = taskRef ? `[task_ref:${taskRef}]${titleSeg} ${receipt}${boardDriftNote}` : `${receipt}${boardDriftNote}`;
       const receiptGateBlocked = !boardTo && status === "done" && e.gid && !this.receiptTailLineOk(e.receiptPath);
+      const engineSupportsBoard = !e.engine || e.engine === "claude";
+      const workerDoneSeen = status === "done" && engineSupportsBoard && !opts?.interrupted ? hasDispatchEvent(e.id, "worker-done") : true;
       appendDispatch({
         ts: Date.now(),
         id: e.id,
@@ -62476,6 +62906,8 @@ provider=${opts.provider ?? "default"}` : void 0,
         ...receiptGateBlocked ? { receipt_gate: true } : {},
         // W-SMIMPL ②：回执契约标记透传（done 无「结果：」行=账面闭环内容空，纯观测）
         ...opts?.receiptMissing && status === "done" ? { receipt_missing: true } : {},
+        // W-BOARDV2「done 说真话」：worker-done 申报缺席（异常完成——观测标，见上）
+        ...status === "done" && !workerDoneSeen ? { abnormal_done: true } : {},
         // S1 零产出闸（relfix-s）：显式 failure_reason 优先（org.appendDispatch 咽喉只在
         // 未带值时跑文本分类器——显式带值=结构判定直达，防「零产出闸」前缀误落 logic_error）
         ...opts?.failureReason ? { failure_reason: opts.failureReason } : {},
@@ -62707,7 +63139,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   cliPidFromEventsTail(sid) {
     try {
       const p = join60(this.cfg.dataDir, "events.ndjson");
-      const size = statSync16(p).size;
+      const size = statSync17(p).size;
       const fd2 = openSync5(p, "r");
       try {
         const len = Math.min(size, 2097152);
@@ -62768,7 +63200,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
         }
       }
-      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD" });
+      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD", event: void 0 });
       if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} },
@@ -63895,7 +64327,7 @@ ${lines.join("\n")}
         const p = join60(dir, `${s.id}.json`);
         let mtime = 0;
         try {
-          mtime = statSync16(p).mtimeMs;
+          mtime = statSync17(p).mtimeMs;
         } catch {
         }
         const reviewed = reviewedSet.has(s.id) || shortPrefixes.size > 0 && [...shortPrefixes].some((k3) => s.id.startsWith(k3));
@@ -65178,6 +65610,21 @@ ${lines.join("\n")}
             const st2 = str2("status");
             if (!BOARD_ENTRY_STATUSES.includes(st2)) return { ok: false, error: `status \u5FC5\u987B\u662F ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str2("entry_id"), st2);
+            if (m.ok) {
+              const okw = appendDispatch({
+                ts: Date.now(),
+                id: `ovr-${randomUUID13()}`,
+                tier: "\u968F\u624B\u529E",
+                target: `card:${gid}:${str2("entry_id")}`,
+                status: "done",
+                event: "user-override",
+                stage: `custom.board-${st2}`,
+                receipt: truncate2(`\u624B\u52A8\u6539\u677F\uFF1A${str2("entry_id")} \u2192 ${st2}${str2("note") ? `\uFF08${str2("note")}\uFF09` : ""}`, 200),
+                session_id: "",
+                actor: "user"
+              });
+              if (!okw) console.warn(`[boardv2] user-override \u4E8B\u4EF6\u843D\u8D26\u5931\u8D25\uFF08\u677F\u9762\u5DF2\u52A8\uFF0C\u6295\u5F71\u56DE\u843D transitions \u6E90\uFF09gid=${gid} entry=${str2("entry_id")}`);
+            }
             if (m.ok && (st2 === "submitted" || st2 === "ready_to_install")) this.feedPM("board-change");
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op2 === "del") {
@@ -65519,10 +65966,17 @@ ${lines.join("\n")}
               parked: s?.state.org_parked === g2.id
             };
           });
+          const projection = (() => {
+            try {
+              return projectBoard(g2.id);
+            } catch {
+              return void 0;
+            }
+          })();
           return { ok: true, data: { group: g2, board: (() => {
             const b = loadBoard(g2.id);
             return b.lessons?.length ? { ...b, lessons: [] } : b;
-          })(), receipts, pool, cap: headcountCapOf(g2), workers: genericWorkerCount(g2.headcount), queued: this.queueDepth(g2.id), dispatch_queue: this.dispatchQueueItems.filter((x) => x.input.gid === g2.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g2.id, title: x.input.title || "" })) } };
+          })(), receipts, pool, cap: headcountCapOf(g2), workers: genericWorkerCount(g2.headcount), queued: this.queueDepth(g2.id), dispatch_queue: this.dispatchQueueItems.filter((x) => x.input.gid === g2.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g2.id, title: x.input.title || "" })), ...projection ? { projection } : {} } };
         }
         // ---------- #92 W-NOTIFY2 D：派发回执链时间线一处可查（只读；org chain [id前缀] [条数]） ----------
         // 四态 = 台账行 dispatched(派单)→running(收帧/承接)→done|failed+receipt(回执)
@@ -66040,11 +66494,19 @@ ${lines.join("\n")}
     const prev = this.lastBoardBroadcast.get(gid) ?? null;
     const outBoard = board.lessons?.length ? { ...board, lessons: [] } : board;
     this.lastBoardBroadcast.set(gid, outBoard);
+    const projection = (() => {
+      try {
+        return projectBoard(gid);
+      } catch {
+        return void 0;
+      }
+    })();
     if (!prev) {
       const lessonIds = (board.lessons ?? []).map((l) => l.id);
       this.bus.emitTransient("BOARD_UPDATED", {
         gid,
         board: outBoard,
+        ...projection ? { projection } : {},
         // 首发清缓存 delta：lesson id 全列 removes（有缓存端清空、无缓存端 no-op）
         ...lessonIds.length ? {
           entity_refs: lessonIds,
@@ -66060,6 +66522,7 @@ ${lines.join("\n")}
     this.bus.emitTransient("BOARD_UPDATED", {
       gid,
       board: outBoard,
+      ...projection ? { projection } : {},
       // P3-4：refs=提示性定位索引，端上以 delta 本体为准；当前不含 lessons.removes
       //（lessons append-only 恒空），未来若引入删边须并入 refs。
       entity_refs: [
@@ -66259,7 +66722,7 @@ ${lines.join("\n")}
       this.dispatchQueueItems = [...this.dispatchQueueItems, item];
       if (!saveDispatchQueue(this.dispatchQueueItems)) console.warn("[dispatch-queue] \u5168\u5C40\u5E3D\u6392\u961F\u843D\u76D8\u5931\u8D25\uFF08\u5185\u5B58\u961F\u5217\u6709\u6548\uFF0C\u91CD\u542F\u8BE5\u5355\u4E22\u5931\uFF09");
       const titleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
-      appendDispatch({ ts: Date.now(), id: dispatchId2, tier: "\u6B63\u7ECF\u7ACB\u9879", target: "cap-queue", status: "queued", receipt: truncate2(`${titleSeg}\u5168\u5C40\u5E76\u53D1\u89E6\u9876\uFF08${this.activeManagedCount()}/${cap}\uFF09\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u4F4D\uFF08429 \u9650\u6D41\u6CBB\u7406\uFF09`, 200), session_id: "", project_anchor: input.anchor, ...input.actor ? { actor: input.actor } : {}, trigger_key: dispatchTriggerKey(input) });
+      appendDispatch({ ts: Date.now(), id: dispatchId2, tier: "\u6B63\u7ECF\u7ACB\u9879", target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate2(`${titleSeg}\u5168\u5C40\u5E76\u53D1\u89E6\u9876\uFF08${this.activeManagedCount()}/${cap}\uFF09\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u4F4D\uFF08429 \u9650\u6D41\u6CBB\u7406\uFF09`, 200), session_id: "", project_anchor: input.anchor, ...input.actor ? { actor: input.actor } : {}, trigger_key: dispatchTriggerKey(input) });
       this.emitChainAudit("worker-cap", `\u5168\u5C40\u5E76\u53D1\u95F8\uFF1A${this.activeManagedCount()}/${cap} \u89E6\u9876\uFF0C\u5355 ${dispatchId2.slice(0, 8)} \u6392\u961F\uFF08\u961F\u5217 ${this.dispatchQueueItems.length}\uFF09`);
       console.log(`[dispatch] worker-cap queued id=${dispatchId2.slice(0, 8)} pos=${this.dispatchQueueItems.length}\uFF08${this.activeManagedCount()}/${cap}\uFF09`);
       return { ok: true, dispatch_id: dispatchId2, session_id: "", queued: true };
@@ -66300,7 +66763,7 @@ ${lines.join("\n")}
     };
     let anchorSt;
     try {
-      anchorSt = statSync16(anchor, { throwIfNoEntry: false });
+      anchorSt = statSync17(anchor, { throwIfNoEntry: false });
     } catch (e) {
       return { ok: false, error: `\u951A\u76EE\u5F55\u65E0\u6CD5\u8BBF\u95EE: ${anchor}\uFF08${e instanceof Error ? e.message : String(e)}\uFF09\u2014\u2014\u8BF7\u6838\u5BF9\u8DEF\u5F84\u6743\u9650` };
     }
@@ -66353,7 +66816,11 @@ ${lines.join("\n")}
     }
     const reviewBlock = input.review_only === true ? this.reviewOnlyBlock() : void 0;
     const excludeSet = input.exclude_sessions?.length ? new Set(input.exclude_sessions) : null;
+    const seatScan = [];
     let pv = input.target_sid ? { sid: input.target_sid, tagHit: false } : input.gid ? this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor, excludeSet) : null;
+    if (input.target_sid) seatScan.push(`\u5B9A\u5E2D:${input.target_sid.slice(0, 8)}`);
+    else if (pv) seatScan.push(`\u719F\u624B\u547D\u4E2D:${pv.sid.slice(0, 8)}${pv.tagHit ? "(\u6807\u7B7E)" : ""}`);
+    else if (input.gid) seatScan.push("\u65E0\u719F\u624B\u547D\u4E2D");
     let veteran = pv?.sid ?? null;
     if (input.target_sid) {
       const t = input.target_sid;
@@ -66373,14 +66840,17 @@ ${lines.join("\n")}
     if (input.gid && !veteran) {
       const revived = this.tryReviveVeteran(input.gid, role, anchor);
       if (revived) {
+        seatScan.push(`\u590D\u62C9\u91CD\u9009:${revived.slice(0, 8)}`);
         pv = this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor, excludeSet);
         veteran = pv?.sid ?? null;
+        if (veteran) seatScan.push(`\u590D\u62C9\u540E\u547D\u4E2D:${veteran.slice(0, 8)}`);
       }
     }
     const veteranTagHit = pv?.tagHit ?? false;
     if (veteran && (planned.engine || planned.model || planned.provider)) {
       const veteranState = this.require(veteran).state;
       if (planned.engine && veteranState.engine !== planned.engine || planned.model && veteranState.model !== planned.model || planned.provider && veteranState.engine_provider !== planned.provider) {
+        seatScan.push(`\u5F15\u64CE\u5931\u914D\u6E05\u5E2D:${veteran.slice(0, 8)}`);
         veteran = null;
       }
     }
@@ -66391,6 +66861,7 @@ ${lines.join("\n")}
         if (input.skills.every((sk2) => seededTags.has(String(sk2).trim().toLowerCase()))) {
           console.warn(`[role-builder] \u65B0\u5EFA\u5C97 tag \u51B7\u542F\u52A8\uFF1Askills=[${input.skills.join(",")}] \u5168\u4E3A Builder \u7B56\u5C55 tag \u4E14\u65E0\u88C5\u914D\u89C2\u6D4B\u2014\u2014\u63A2\u6D4B\u964D\u7EA7\u544A\u8B66\uFF08\u6E05\u719F\u624B\u8D70\u65B0\u4F1A\u8BDD\uFF0C\u4E0D\u62D2\u6536\uFF09`);
           this.emitChainAudit("builder-tag-coldstart", `\u65B0\u5EFA\u5C97 tag \u9996\u6D3E\u65E0\u89C2\u6D4B\uFF1Askills=[${input.skills.join(",")}]\uFF08Builder \u7B56\u5C55\u58F0\u660E\u5728\u6863\uFF0C\u6E05\u719F\u624B\u8D70\u65B0\u4F1A\u8BDD\u2014\u2014\u63A2\u6D4B\u964D\u7EA7\u4E0D\u62D2\u6536\uFF09`);
+          seatScan.push(`Builder tag \u51B7\u542F\u52A8\u6E05\u5E2D:${veteran.slice(0, 8)}`);
           veteran = null;
         } else {
           const last = this.assemblyProbeNegative.get(veteran) ?? 0;
@@ -66409,6 +66880,7 @@ ${lines.join("\n")}
           const msg = `\u88C5\u914D\u7F3A\u9879\u964D\u7EA7\uFF1Askills=[${input.skills.join(",")}] \u5728\u719F\u624B\u88C5\u914D\u6E05\u5355\uFF08${truncate2(hay, 90)}\uFF09\u96F6\u547D\u4E2D`;
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate2(msg, 200), session_id: veteran, ...input.gid ? { project_anchor: anchor } : {}, ...engineFields });
           console.log(`[dispatch] probe-degrade id=${dispatchId.slice(0, 8)} veteran=${veteran.slice(0, 8)} skills=[${input.skills.join(",")}]`);
+          seatScan.push(`\u88C5\u914D\u7F3A\u9879\u964D\u7EA7:${veteran.slice(0, 8)}`);
           veteran = null;
         }
       }
@@ -66422,13 +66894,16 @@ ${lines.join("\n")}
         } catch {
         }
         const g12 = findGroup(input.gid);
+        seatScan.push(`\u7F16\u5236\u89E6\u9876:${genericWorkerCount(g12?.headcount ?? g0.headcount)}/${headcountCapOf(g12 ?? g0)}\uFF08trim \u540E\uFF09`);
         if (g12 && g12.status === "active" && genericWorkerCount(g12.headcount) >= headcountCapOf(g12)) {
           const reuse = this.pickIdleRosterWorker(g12, role, planned, input.worktree, excludeSet);
           if (reuse) {
             veteran = reuse;
             capReuse = true;
+            seatScan.push(`\u89E6\u9876\u590D\u7528\u7A7A\u95F2\u5E2D:${reuse.slice(0, 8)}`);
             this.pushExternalLog(reuse, "system", `\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g12.headcount)}/${headcountCapOf(g12)}\uFF09\uFF0C\u672C\u5355\u590D\u7528\u7A7A\u95F2 worker\uFF08\u975E\u65B0\u5EFA\uFF09`);
           } else if (this.groupHasLiveWorker(g12)) {
+            seatScan.push("\u65E0\u7A7A\u95F2\u53EF\u590D\u7528\u2192\u6392\u961F");
             return this.enqueueCapDispatch(input, g12, tier, anchor, actor, engineFields);
           } else {
             const names = g12.headcount.slice(0, 4).map((h) => (h.session_id || "").slice(0, 8)).join(" ");
@@ -66577,11 +67052,20 @@ ${lines.join("\n")}
         return void 0;
       }
     })();
+    const emitSeatScanRow = () => {
+      if (seatScan.length === 0) return;
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "seat-scan", status: "dispatched", event: "dispatch-seat-scan", receipt: truncate2(`\u9009\u5E2D\u626B\u63CF\uFF1A${seatScan.join("\uFF1B")}`, 200), session_id: "", actor });
+    };
     if (veteran) {
+      seatScan.push(capReuse ? `\u843D\u5E2D:\u89E6\u9876\u590D\u7528 ${veteran.slice(0, 8)}` : `\u843D\u5E2D:\u590D\u7528\u719F\u624B ${veteran.slice(0, 8)}`);
+      emitSeatScanRow();
       const clash = withStorageTx(void 0, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+          const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", event: "dispatch-reused", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+          if (!okd) {
+            appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate2("dispatched \u884C\u843D\u8D26\u88AB\u62D2\uFF08\u951A\u5E42\u7B49/\u5199\u4E25\u683C\uFF09\u2014\u2014\u672C\u5355\u672A\u6D3E\u53D1\uFF08\u626B\u63CF\u884C\u8865\u507F\u6536\u53E3\uFF0CW-BOARDV2\uFF09", 200), session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields, generation: dispatchGeneration });
+          }
           return null;
         }
         return c;
@@ -66592,7 +67076,12 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId };
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+      seatScan.push("\u843D\u5E2D:\u65B0\u5EFA\u4F1A\u8BDD\uFF08spawn\uFF09");
+      emitSeatScanRow();
+      const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", event: "dispatch-spawned", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+      if (!okd) {
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate2("dispatched \u884C\u843D\u8D26\u88AB\u62D2\uFF08\u951A\u5E42\u7B49/\u5199\u4E25\u683C\uFF09\u2014\u2014\u672C\u5355\u672A\u6D3E\u53D1\uFF08\u626B\u63CF\u884C\u8865\u507F\u6536\u53E3\uFF0CW-BOARDV2\uFF09", 200), session_id: "", project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields, generation: dispatchGeneration });
+      }
     }
     archiveDispatchPrompt(dispatchId, dispatchPrompt, { tier, ...input.title ? { title: input.title } : {}, ...veteran ? { target: veteran } : {} });
     console.log(`[dispatch] dispatched id=${dispatchId.slice(0, 8)} target=${veteran ? `veteran:${veteran.slice(0, 14)}` : capReuse ? "cap-reuse" : "new-session"} actor=${actor}`);
@@ -67233,7 +67722,7 @@ ${out}`;
       console.warn("[dispatch-queue] \u6392\u961F\u843D\u76D8\u5931\u8D25\uFF08\u5185\u5B58\u961F\u5217\u6709\u6548\uFF0C\u91CD\u542F\u8BE5\u5355\u4E22\u5931\uFF09");
     }
     const queuedTitleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
-    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate2(`${queuedTitleSeg}\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, trigger_key: dispatchTriggerKey(input) });
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate2(`${queuedTitleSeg}\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, trigger_key: dispatchTriggerKey(input) });
     console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g2.id} actor=${actor} title=${queuedTitleSeg}`);
     this.pushExternalLog(this.leaderId ?? "", "system", `\u6D3E\u5355\u6392\u961F\uFF1A${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}\uFF08\u7F16\u5236 ${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)} \u89E6\u9876\u4E14\u5168\u5FD9\uFF0C\u961F\u5217\u4F4D\u7F6E ${this.dispatchQueueItems.length}\uFF09`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
@@ -67295,6 +67784,108 @@ ${out}`;
     } finally {
       this.drainReentrant = false;
     }
+  }
+  // ── W-DRAINFIX（1111 用户实锤，PM 定谳）：派发队列排水死锁治本——编制空周期兜底 ──
+  // 病灶：drainDispatchQueue 全部触发点都是事件边（回合收口 :5463/:5470、成员除名
+  // :8920/:8977/:9000/:9119、重启回灌 reloadDispatchQueue）——编制全闲且无收口事件时
+  // 零事件=排水永哑火：最后 worker 断档死亡（无完成事件）且队列有单 → 排队单永不被
+  // 接（1111 实锤：fzone-b1 断档→B1R 入队→15 编制全闲，PM 手动清队绕过）。
+  // 治本=「等事件」补成「事件+周期」双触发，sweep 一拍两条件：
+  //   A 队列非空 → 按队列内 gid 键控逐组 drainDispatchQueue(gid)（reloadDispatchQueue
+  //     同款迭代）——drain 既有语义全保持（drainReentrant 断环/终态闸弃单/队首回插/
+  //     触顶回队 enqueueCapDispatch 自判编制位），sweep 只补「有空位却没人 drain」的
+  //     空转态，不新增判定分支。注意 drain("") 只排无 gid 桶（对带 gid 单全盲——下方
+  //     实测实锤），不能拿它当全局排水用；
+  //   B open 单挂着但对应 worker 断档 → SEATALIVE 复合判活 pmOverrideLiveness=dead
+  //     （pid 活=活绝不动——对齐 closeHungDispatchRows 活 worker 误伤守卫；pid 死/无
+  //     pid 且帧龄超回合间隙 TTL=dead）**两轮确认后**按僵尸看门狗同款口径
+  //     closeOpenDispatches 收口悬账（failed + 板回 backlog——断档者的单不丢，PM/收割
+  //     链可重派）。alive/between-turns（回合间隙守位，SEATALIVE 刀1 语义）一律不动；
+  //     不 retire 成员不 kill 进程——那是僵尸看门狗（managed+agent+1h 节拍两轮确认）
+  //     的辖区，sweep 只收悬账且动作可逆（板卡回 backlog 重派即恢复）。**边界如实**
+  //     （W-DRAINFIX-R1 审查 P2）：触顶全忙组 B 收口后同拍排水仍会回队（席位的忙判定
+  //     看 status 不看 open 行——WORKING-死席的编制位回收归看门狗/#200③，sweep 不越
+  //     权），让位（retire/真实收口）后既有排水挂点即接续——「永不被接」死锁已除，
+  //     窄形态延迟解锁（≤看门狗节拍）。
+  /** W-DRAINFIX 周期兜底一拍（public=测试/巡检观测面可直调）。返回统计：
+   * triggered=本拍有动作（排水或收口），deadClosed=断档悬账收口行数。 */
+  sweepDispatchQueueOnce(now = Date.now()) {
+    let deadClosed = 0;
+    const confirmMs = (Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30) * 6e4;
+    for (const [sid, rows] of [...this.openDispatches]) {
+      if (!rows.length) {
+        this.drainfixDeadSuspects.delete(sid);
+        continue;
+      }
+      const s = this.sessions.get(sid);
+      const verdict = this.pmOverrideLiveness({ cli_pid: s?.state.cli_pid ?? 0, session_id: sid });
+      if (verdict !== "dead") {
+        this.drainfixDeadSuspects.delete(sid);
+        continue;
+      }
+      const first = this.drainfixDeadSuspects.get(sid);
+      if (first === void 0 || now - first < confirmMs) {
+        if (first === void 0) this.drainfixDeadSuspects.set(sid, now);
+        continue;
+      }
+      this.drainfixDeadSuspects.delete(sid);
+      const count = rows.length;
+      const gids = [...new Set(rows.map((r) => r.gid).filter((x) => !!x))];
+      const at = lastFrameAtFromEvents(this.cfg.dataDir, sid);
+      const ageText = at === null ? "\u65E0\u5E27" : `\u5E27\u9F84 ${Math.round((now - at) / 6e4)}min`;
+      try {
+        this.closeOpenDispatches(sid, "failed", `\u65AD\u6863\u515C\u5E95\uFF08\u5468\u671F sweep \u4E24\u8F6E\u786E\u8BA4\uFF09\uFF1Aworker \u5224\u6D3B=dead\uFF08${ageText}\uFF0C\u8D85\u56DE\u5408\u95F4\u9699\u7A97\u4E14\u8DE8\u786E\u8BA4\u7A97\u4ECD\u65E0\u5E27\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD\u6536\u53E3\u2014\u2014\u677F\u5361\u56DE backlog \u53EF\u91CD\u6D3E`, true, false, void 0, "backlog");
+        deadClosed += count;
+        this.emitChainAudit("drainfix-dead-close", `\u65AD\u6863\u60AC\u8D26\u6536\u53E3\uFF08\u4E24\u8F6E\u786E\u8BA4\uFF09\uFF1A\u4F1A\u8BDD ${sid.slice(0, 12)} ${count} \u5F20 open \u5355\uFF08\u7EC4 ${gids.map((g2) => g2.slice(0, 8)).join(",") || "\u65E0"}\uFF09\u5224\u6D3B=dead\uFF08${ageText}\uFF0C\u786E\u8BA4\u7A97 ${Math.round(confirmMs / 6e4)}min \u8DE8\u8D8A\uFF09\u2014\u2014failed \u6536\u53E3\u56DE backlog\uFF0C\u6392\u961F\u5355\u968F\u6392\u6C34\u63A5\u7EED`);
+      } catch (e) {
+        console.warn(`[drainfix] \u65AD\u6863\u60AC\u8D26\u6536\u53E3\u5931\u8D25 sid=${sid.slice(0, 12)}\uFF08\u91CD\u65B0\u8BA1\u5ACC\u7591\uFF0C\u4E0B\u8F6E sweep \u518D\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    for (const sid of [...this.drainfixDeadSuspects.keys()]) {
+      if (!(this.openDispatches.get(sid)?.length ?? 0)) this.drainfixDeadSuspects.delete(sid);
+    }
+    const triggered = this.dispatchQueueItems.length > 0 || deadClosed > 0;
+    if (triggered) {
+      const gids = new Set(this.dispatchQueueItems.map((x) => x.input.gid ?? ""));
+      const noBucket = gids.delete("");
+      if (noBucket || !gids.size || deadClosed > 0) gids.add("");
+      for (const g2 of gids) {
+        if (g2 && now < (this.dispatchSweepBackoff.get(g2) ?? 0)) continue;
+        const depth = (gidKey) => this.dispatchQueueItems.filter((x) => x.input.gid === gidKey).length;
+        const before = g2 ? depth(g2) : 0;
+        try {
+          this.drainDispatchQueue(g2);
+        } catch {
+        }
+        if (g2 && depth(g2) >= before && before > 0) this.dispatchSweepBackoff.set(g2, now + 15 * 6e4);
+      }
+    }
+    return { triggered, deadClosed };
+  }
+  // 节拍注册（index.ts boot 挂）：间隔与判活窗协调——判活 dead bar=CCR_SEAT_TURN_GAP_MIN
+  //（缺省 30min）≫ sweep 间隔（缺省 5min），断档检测延迟≈TTL+一拍。间隔
+  // CCR_DISPATCH_SWEEP_MIN（分钟，缺省 5；显式 0=全关——boot 首拍也不跑）；
+  // CCR_NO_DISPATCH_SWEEP=1 全停（测试/沙盒缝，与 CCR_NO_HEADCOUNT_TRIM 同范式）。
+  // boot 首拍即扫（startStaleScan 同款范式——reloadDispatchQueue 只按队列内 gid 键控
+  // 排，首拍兜无 gid 桶与启动竞态窗）。
+  startDispatchSweep() {
+    if (process.env.CCR_NO_DISPATCH_SWEEP === "1") return;
+    if (this.dispatchSweepTimer) return;
+    const rawStr = process.env.CCR_DISPATCH_SWEEP_MIN;
+    if (rawStr === "0") return;
+    const raw = Number(rawStr);
+    const ms = Number.isFinite(raw) && raw > 0 ? raw * 6e4 : 5 * 6e4;
+    try {
+      this.sweepDispatchQueueOnce();
+    } catch {
+    }
+    this.dispatchSweepTimer = setInterval(() => {
+      try {
+        this.sweepDispatchQueueOnce();
+      } catch {
+      }
+    }, ms);
+    this.dispatchSweepTimer.unref?.();
   }
   // 排队水位（内存权威；面板可见性——组详情/cap-set 回显）
   // W-RESTARTDESIGN 案一 A：全账快照写穿（unacked+熔断三字段）——四写点统一走此口。
@@ -68609,12 +69200,12 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID15 } from "node:crypto";
-import { readFileSync as readFileSync58, writeFileSync as writeFileSync36, mkdirSync as mkdirSync34, existsSync as existsSync45, readdirSync as readdirSync22, statSync as statSync22 } from "node:fs";
+import { readFileSync as readFileSync58, writeFileSync as writeFileSync36, mkdirSync as mkdirSync34, existsSync as existsSync45, readdirSync as readdirSync22, statSync as statSync23 } from "node:fs";
 import { join as join68, dirname as dirname17, sep as sep8 } from "node:path";
 import { homedir as homedir24, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/recall.ts
-import { closeSync as closeSync6, openSync as openSync6, readFileSync as readFileSync51, readdirSync as readdirSync17, readSync as readSync5, statSync as statSync17 } from "node:fs";
+import { closeSync as closeSync6, openSync as openSync6, readFileSync as readFileSync51, readdirSync as readdirSync17, readSync as readSync5, statSync as statSync18 } from "node:fs";
 import { join as join61 } from "node:path";
 var RECALL_KINDS = ["session", "card", "dispatch", "receipt"];
 var RECALL_DISPATCH_MAX = 5e4;
@@ -68637,7 +69228,7 @@ function receiptFileNameOf(id2) {
 function readHead(path6, cap = 262144) {
   let fd2 = null;
   try {
-    const size = statSync17(path6).size;
+    const size = statSync18(path6).size;
     fd2 = openSync6(path6, "r");
     const buf = Buffer.alloc(Math.min(size, cap));
     const n = readSync5(fd2, buf, 0, buf.length, 0);
@@ -68780,7 +69371,7 @@ function resolveDispatch(id2, ctx) {
   if (slug) {
     const f = `w-${slug}.md`;
     try {
-      statSync17(join61(artifactsDir(), f));
+      statSync18(join61(artifactsDir(), f));
       related.push(refOfReceipt(f));
     } catch {
     }
@@ -68791,7 +69382,7 @@ function resolveReceipt(id2, ctx) {
   const f = receiptFileNameOf(id2);
   if (!f) return null;
   try {
-    statSync17(join61(artifactsDir(), f));
+    statSync18(join61(artifactsDir(), f));
   } catch {
     return null;
   }
@@ -68815,7 +69406,7 @@ function detectKind(id2, ctx) {
   const f = receiptFileNameOf(id2);
   if (f) {
     try {
-      statSync17(join61(artifactsDir(), f));
+      statSync18(join61(artifactsDir(), f));
       return "receipt";
     } catch {
     }
@@ -68848,7 +69439,7 @@ function recallResolve(id2, opts) {
 }
 
 // src/design-docs.ts
-import { readFileSync as readFileSync52, readdirSync as readdirSync18, statSync as statSync18 } from "node:fs";
+import { readFileSync as readFileSync52, readdirSync as readdirSync18, statSync as statSync19 } from "node:fs";
 import { join as join62, resolve as resolve10, sep as sep7 } from "node:path";
 var DESIGN_DIR_SEGMENTS = ["docs", "system-design"];
 function designDir(webRoot) {
@@ -68868,7 +69459,7 @@ function dirFingerprint(dir) {
     for (const name of entries.sort()) {
       const p = join62(d2, name);
       try {
-        const st2 = statSync18(p);
+        const st2 = statSync19(p);
         parts.push(`${name}:${st2.mtimeMs}:${st2.size}:${st2.isDirectory()}`);
         if (st2.isDirectory() && depth < 1) walk(p, depth + 1);
       } catch {
@@ -68908,7 +69499,7 @@ function listDesignDocs(webRoot) {
     for (const name of readdirSync18(root).sort()) {
       const p = join62(root, name);
       try {
-        if (statSync18(p).isDirectory()) groups.push({ dir: p, group: name });
+        if (statSync19(p).isDirectory()) groups.push({ dir: p, group: name });
       } catch {
       }
     }
@@ -69240,7 +69831,7 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID14 } from "node:crypto";
-import { closeSync as closeSync8, openSync as openSync8, readSync as readSync7, readFileSync as readFileSync57, readdirSync as readdirSync21, statSync as statSync21, writeFileSync as writeFileSync35, existsSync as existsSync44 } from "node:fs";
+import { closeSync as closeSync8, openSync as openSync8, readSync as readSync7, readFileSync as readFileSync57, readdirSync as readdirSync21, statSync as statSync22, writeFileSync as writeFileSync35, existsSync as existsSync44 } from "node:fs";
 import { homedir as homedir23 } from "node:os";
 import path5 from "node:path";
 
@@ -69867,7 +70458,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
 }
 
 // src/session-title.ts
-import { readdirSync as readdirSync19, statSync as statSync19 } from "node:fs";
+import { readdirSync as readdirSync19, statSync as statSync20 } from "node:fs";
 import { homedir as homedir22 } from "node:os";
 import { join as join66 } from "node:path";
 function titleFromLine(line) {
@@ -69907,7 +70498,7 @@ function resolveSessionTitleFile(opts) {
   const dir = join66(opts.home ?? homedir22(), ".claude", "projects", encodedProjectDir(opts.cwd));
   const direct = join66(dir, `${opts.sessionId}.jsonl`);
   try {
-    if (statSync19(direct).isFile()) return direct;
+    if (statSync20(direct).isFile()) return direct;
   } catch {
   }
   let entries;
@@ -69921,7 +70512,7 @@ function resolveSessionTitleFile(opts) {
     if (!f.endsWith(".jsonl")) continue;
     const p = join66(dir, f);
     try {
-      const m = statSync19(p).mtimeMs;
+      const m = statSync20(p).mtimeMs;
       if (!best || m > best.m) best = { p, m };
     } catch {
     }
@@ -69931,7 +70522,7 @@ function resolveSessionTitleFile(opts) {
 
 // src/engine-rollouts.ts
 import { execFileSync as execFileSync6 } from "node:child_process";
-import { closeSync as closeSync7, openSync as openSync7, readFileSync as readFileSync56, readdirSync as readdirSync20, readSync as readSync6, renameSync as renameSync18, statSync as statSync20, writeFileSync as writeFileSync34 } from "node:fs";
+import { closeSync as closeSync7, openSync as openSync7, readFileSync as readFileSync56, readdirSync as readdirSync20, readSync as readSync6, renameSync as renameSync18, statSync as statSync21, writeFileSync as writeFileSync34 } from "node:fs";
 import { basename as basename6, join as join67, relative as relative3 } from "node:path";
 var commandPatternOf = (name) => new RegExp(`(?:^|\\s|/)${name}(?:\\.exe)?(?:\\s|$)`, "i");
 var ENGINE_SCAN_SPECS = [
@@ -70186,7 +70777,7 @@ var RolloutScanner = class {
       let size = 0;
       let mtime = now;
       try {
-        const stat2 = statSync20(filePath);
+        const stat2 = statSync21(filePath);
         size = stat2.size;
         mtime = Math.round(stat2.mtimeMs);
       } catch {
@@ -70929,7 +71520,7 @@ var Bridge = class _Bridge {
           let mtime;
           let fileSize = 0;
           try {
-            const st2 = statSync21(p);
+            const st2 = statSync22(p);
             mtime = st2.mtimeMs;
             fileSize = st2.size;
           } catch {
@@ -70959,7 +71550,7 @@ var Bridge = class _Bridge {
           this.orphanProbe.delete(p);
           let orphanAt = Date.now();
           try {
-            orphanAt = statSync21(p).mtimeMs;
+            orphanAt = statSync22(p).mtimeMs;
           } catch {
           }
           this.mgr.ensureExternal(id2, cwd, "", sid, transcriptFirstTs(p), { updatedAt: orphanAt });
@@ -70983,7 +71574,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync8(p, "r");
-      const size = statSync21(p).size;
+      const size = statSync22(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
       readSync7(fd2, buf, 0, len, size - len);
@@ -71067,7 +71658,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync8(p, "r");
-      const size = statSync21(p).size;
+      const size = statSync22(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -71476,7 +72067,7 @@ var Bridge = class _Bridge {
   //（utf8 行扫 + 类型词预过滤）——中段标题由 pushAssistantTexts 增量链跟随，两窗兜底。
   scanTranscriptTitles(p) {
     try {
-      const size = statSync21(p).size;
+      const size = statSync22(p).size;
       const buf = Buffer.alloc(Math.min(size, 96 * 1024));
       const fd2 = openSync8(p, "r");
       try {
@@ -72744,7 +73335,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const fstat = statSync21(transcriptPath);
+      const fstat = statSync22(transcriptPath);
       const size = fstat.size;
       const fileMtime = Math.round(fstat.mtimeMs);
       const prev = this.transcriptOffsets.get(id2);
@@ -73124,7 +73715,7 @@ var Bridge = class _Bridge {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
-      const size = statSync21(path6).size;
+      const size = statSync22(path6).size;
       const fd2 = openSync8(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -73184,7 +73775,7 @@ var Bridge = class _Bridge {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync21(path6).size;
+      const size = statSync22(path6).size;
       const fd2 = openSync8(path6, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
@@ -73733,7 +74324,7 @@ var Bridge = class _Bridge {
   subagentActivity(file) {
     let st2;
     try {
-      st2 = statSync21(file);
+      st2 = statSync22(file);
     } catch {
       return null;
     }
@@ -73826,7 +74417,7 @@ var Bridge = class _Bridge {
         const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
         const aliveKey = `${s.session_id}:${cur.id}`;
         try {
-          const sz2 = statSync21(agentFile).size;
+          const sz2 = statSync22(agentFile).size;
           if (this.subagentFileSize.get(aliveKey) !== sz2) {
             this.subagentFileSize.set(aliveKey, sz2);
             this.subagentAlive.set(aliveKey, Date.now());
@@ -74373,7 +74964,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.9";
+  const verRelay = "0.7.1-test.10";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -74410,7 +75001,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     const file = mobileDir + rel;
     let isFile = false;
     try {
-      isFile = statSync22(file).isFile();
+      isFile = statSync23(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -74431,7 +75022,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     let isFile = false;
     try {
-      isFile = statSync22(file).isFile();
+      isFile = statSync23(file).isFile();
     } catch {
     }
     if (!isFile) {
@@ -74807,6 +75398,24 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, artifacts: listArtifacts() }));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/board-projection") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      const gid = (url.searchParams.get("gid") ?? "").trim();
+      if (!gid) {
+        res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "\u7F3A gid \u53C2\u6570\uFF08?gid=<\u7EC4id>&token=\u2026\uFF09" }));
+        return;
+      }
+      try {
+        const projection = projectBoard(gid);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, projection }));
+      } catch (e) {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), projection: { gid, generated_at: 0, source: "dispatch-log-projection", cards: [] } }));
+      }
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/recall") {
@@ -75669,7 +76278,7 @@ var connectionCounter = 0;
 // src/patrol.ts
 import { statfsSync, writeFileSync as writeFileSync37, readFileSync as readFileSync59, readdirSync as readdirSync23, existsSync as existsSync46, rmSync as rmSync11 } from "node:fs";
 import { join as join69 } from "node:path";
-import { statSync as statSync23 } from "node:fs";
+import { statSync as statSync24 } from "node:fs";
 import { execFileSync as execFileSync7 } from "node:child_process";
 import { homedir as homedir25 } from "node:os";
 var WORKER_STALE_MIN = 40;
@@ -76103,7 +76712,7 @@ var PatrolModule = class {
           if (!/^receipt|^acceptance/i.test(n)) continue;
           const full = join69(d2, n);
           try {
-            const st2 = statSync23(full);
+            const st2 = statSync24(full);
             if (st2.isFile() && st2.mtimeMs < cutoff) candidates.push({ name: n, ageH: Math.round((now - st2.mtimeMs) / 36e5) });
           } catch {
           }
@@ -76166,7 +76775,7 @@ var PatrolModule = class {
     }
     try {
       const hb2 = join69(this.opts.dataDir, "recon-heartbeat.json");
-      const st2 = statSync23(hb2);
+      const st2 = statSync24(hb2);
       if (Date.now() - st2.mtimeMs > 70 * 6e4) this.push("recon-stalled", `\u4E09\u8D26\u5BF9\u8D26\u5FC3\u8DF3\u505C\u8DF3 ${Math.round((Date.now() - st2.mtimeMs) / 6e4)}min\uFF08PM turn-report \u4E0E patrol \u53CC\u89E6\u53D1\u5747\u672A\u8DD1\uFF09`);
       else this.resolve("recon-stalled");
     } catch {
@@ -77964,7 +78573,7 @@ function sweepTmpImages(dir) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join72(dir, f);
       try {
-        if (Date.now() - statSync24(p).mtimeMs > 7 * 864e5) rmSync12(p, { force: true });
+        if (Date.now() - statSync25(p).mtimeMs > 7 * 864e5) rmSync12(p, { force: true });
       } catch {
       }
     }
@@ -78168,6 +78777,7 @@ void (async () => {
   } catch (e) {
     console.warn(`[dispatch-queue] \u91CD\u542F\u56DE\u704C\u5931\u8D25\uFF08\u961F\u5217\u6309\u7A7A\u5904\u7406\uFF09: ${e instanceof Error ? e.message : String(e)}`);
   }
+  mgr.startDispatchSweep();
   try {
     const n = mgr.recoverPendingReceiptChecks();
     if (n > 0) console.log(`[receipt-gate] boot \u8865\u8DD1 ${n} \u4E2A\u5230\u671F\u56DE\u6267\u6838\u5BF9`);
