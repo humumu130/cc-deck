@@ -14,6 +14,10 @@
   const tabsEl = root.querySelector("[data-fz-tabs]");
   const bodyEl = root.querySelector("[data-fz-body]");
   const state = { tabs: [], active: null, seq: 0, lastSid: null }; // W-FZONE-B1-R1 P2-①：sid 单值移除（tab 各带 sid），lastSid=切会话清空幂等守卫
+  // W-FZONE-R2：per-sid 暂存表（切会话 tab 保留——见 resetForSession 注释块）+pane 跨会话保活表
+  const stash = new Map(); // sid → { tabs, active }
+  const panes = new Map(); // tabId → pane 元素（detach 不销毁；LRU 淘汰/close 时才 unload）
+  const STASH_MAX = 8;
   const loadFn = () => (typeof window.__ccDeck005FzoneLoad === "function" ? window.__ccDeck005FzoneLoad : null);
   const iconHtml = (name) => (typeof window.__ccDeck005ArtIconHtml === "function" ? window.__ccDeck005ArtIconHtml(name) : "");
 
@@ -85,6 +89,7 @@
     pane.dataset.fzPane = id;
     pane.innerHTML = '<div class="fz-load">拉取中…</div>';
     bodyEl.appendChild(pane);
+    panes.set(id, pane); // W-FZONE-R2：pane 登记入跨会话保活表（detach/stash 恢复链一致）
     state.tabs.push({ id, path: p, sid: String(sid) }); // P2-①：tab 自带 sid（retry 不再依赖全局单值）
     state.active = id;
     setOpen(true, false);
@@ -107,6 +112,7 @@
     pane.dataset.fzPane = id;
     pane.innerHTML = '<div class="fz-load">拉取中…</div>';
     bodyEl.appendChild(pane);
+    panes.set(id, pane); // W-FZONE-R2：同 open——pane 保活登记
     state.tabs.push({ id, path: p, sid: String(sid), fresh: true });
     if (!state.active) state.active = id; // 面板空态首 tab：自然成为 active（无焦点可抢）
     renderAll(); // 面板收着也渲染（hidden 容器内零视觉；展开即见）
@@ -131,22 +137,63 @@
     state.tabs.splice(i, 1);
     const pane = bodyEl.querySelector('[data-fz-pane="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
     if (pane) { unloadPane(pane); pane.remove(); }
+    panes.delete(id); // W-FZONE-R2：关 tab 即真释放（保活表同步清——不占 stash 额度）
     if (state.active === id) state.active = state.tabs[Math.min(i, state.tabs.length - 1)]?.id ?? null;
     if (!state.tabs.length) { setOpen(false, true); state.active = null; renderAll(); return; }
     renderAll();
   }
-  // 切会话清空（W-FZONE-B1-R1 P2-① 必修——双审路B B1：旧 tab 跨会话残留+retry 全局 sid 会静默
-  // 载入错误会话的同名路径内容）。lastSid 幂等守卫：同 sid 重入零动作（选中链 MO/slimOpenSession
-  // 双挂点安全）。开合态不动（OPEN_KEY 语义不变），清后面板留空态提示卡；按会话分组隔离=批二。
+  // 切会话暂存/恢复（W-FZONE-R2，1111 用户实锤「按 WorkBuddy 的开发」：右侧分栏常驻——
+  // 切会话工作区不消失，tab 内容按会话隔离保留）。前身=B1-R1 P2-①「切会话清空」（防跨会话
+  // 串台+retry 错拉）；R2 升格为 per-sid 暂存：切走=快照（tabs+active+pane DOM detach 保活——
+  // blob/iframe 零重载），切回=原样恢复。防串台语义不降级：恢复的 tab 各带原 sid（retry 仍
+  // 用 tab.sid——复合 id 天然不串）。lastSid 幂等守卫沿用（同 sid 重入零动作）。
+  // stash LRU 上限 8 会话：超出淘汰最旧（unloadPane 释放 blob/iframe——防长会话漂移内存膨胀）。
+  // 树抽屉不暂存（数据源随会话失效，切回按需重开）；开合态不动（OPEN_KEY 全局语义不变）。
+  function detachPanes() { [...bodyEl.querySelectorAll("[data-fz-pane]")].forEach((p) => { panes.set(p.dataset.fzPane, p); p.remove(); }); }
+  function restorePanes(sid) {
+    const keep = new Set(state.tabs.map((t) => t.id));
+    for (const t of state.tabs) {
+      const p = panes.get(t.id);
+      if (p) bodyEl.appendChild(p); // 原 pane 原样回挂（内容/blob 保活零重拉）
+      else { // 兜底重建（stash 淘汰过的会话 tab 仍在 tabs 快照里=只重建壳重载内容）
+        const np = document.createElement("div");
+        np.className = "fz-pane";
+        np.dataset.fzPane = t.id;
+        np.innerHTML = '<div class="fz-load">拉取中…</div>';
+        bodyEl.appendChild(np);
+        load(t.id, np, t.sid, t.path);
+      }
+    }
+    for (const [id, p] of panes) if (!keep.has(id) && !p.isConnected) { panes.delete(id); } // 目标会话不引用的 pane 留 stash（属其他会话快照）
+  }
+  function stashEvict() {
+    while (stash.size > STASH_MAX) {
+      const oldest = stash.keys().next().value; // Map 插入序=LRU（恢复命中时重插见下）
+      const snap = stash.get(oldest);
+      stash.delete(oldest);
+      for (const t of snap.tabs) { const p = panes.get(t.id); if (p && !p.isConnected) { unloadPane(p); panes.delete(t.id); } } // 淘汰会话的离场 pane 真释放
+    }
+  }
   function resetForSession(sid) {
     const s = String(sid || "");
     if (s === state.lastSid) return;
+    if (state.lastSid && state.tabs.length) {
+      stash.delete(state.lastSid); // LRU 触顶：重插刷新热度
+      stash.set(state.lastSid, { tabs: state.tabs, active: state.active });
+      stashEvict();
+    }
     state.lastSid = s;
-    closeTree(); // 树抽屉随会话清空（数据源已随会话切换失效）
-    [...bodyEl.querySelectorAll("[data-fz-pane]")].forEach(unloadPane);
-    bodyEl.innerHTML = "";
-    state.tabs = [];
-    state.active = null;
+    closeTree(); // 树抽屉随会话清空（数据源已随会话切换失效；不暂存）
+    detachPanes();
+    const snap = stash.get(s);
+    if (snap) {
+      state.tabs = snap.tabs;
+      state.active = snap.active;
+      restorePanes(s);
+    } else {
+      state.tabs = [];
+      state.active = null;
+    }
     renderAll();
   }
   function retry(id) {

@@ -217,7 +217,10 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============
   ok(fz.includes("function tabId(sid, path)") && fz.includes('state.tabs.push({ id, path: p, sid: String(sid) })') && fz.includes("load(t.id, pane, t.sid, t.path)") && !fz.includes("state.sid = sid"), "F10 tab 会话作用域（P2-①：复合 id sid+path 跨会话同名路径不串台/tab 自带 sid/retry 取 tab sid 真路径——负向锚=全局 state.sid 覆写旧串不得回归）");
-  ok(fz.includes("function resetForSession") && fz.includes("if (s === state.lastSid) return;") && fz.includes("resetForSession,") && web.includes("ccDeckFzone.resetForSession(sid)") && web.includes("ccDeckFzone.resetForSession(s.session_id)") && web.split("resetForSession(").length >= 3, "F10b 切会话清空双挂点（选中链 MO+slimOpenSession 成员卡直开——lastSid 幂等守卫，开合态不动）");
+  // W-FZONE-R2（1111 用户实锤「按 WorkBuddy」）：F10b 语义升格——切会话从「清空」到「per-sid 暂存恢复」
+  //（右侧分栏常驻：切走快照（pane detach 保活）切回原样恢复；防串台不降级=tab 各带原 sid）。
+  ok(fz.includes("function resetForSession") && fz.includes("if (s === state.lastSid) return;") && fz.includes("resetForSession,") && web.includes("ccDeckFzone.resetForSession(sid)") && web.includes("ccDeckFzone.resetForSession(s.session_id)") && web.split("resetForSession(").length >= 3, "F10b 切会话挂点双挂（选中链 MO+slimOpenSession 成员卡直开——lastSid 幂等守卫，开合态不动）");
+  ok(fz.includes("const stash = new Map()") && fz.includes("detachPanes") && fz.includes("restorePanes") && fz.includes("STASH_MAX = 8") && fz.includes("stashEvict"), "F10c R2 暂存恢复链（stash Map+pane detach 保活+LRU 淘汰 8 会话——切回原样恢复零重载）");
   ok(web.includes("el.dataset.fzUrl") && web.includes("window.__ccDeck005FzoneUnload") && fz.includes("window.__ccDeck005FzoneUnload") && !web.includes('let fzObjUrl = ""'), "F11 图片 blob per-tab 槽（P2-②：双图并存互不 revoke，关 tab/切会话经 unload 挂口回收——负向锚=单槽旧串不得回归）");
 
   // ============ F-B2. W-FZONE-B2 文件工作区批二（格式矩阵+自动推 tab+空间树+P3 随批） ============
