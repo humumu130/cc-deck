@@ -9,7 +9,7 @@
 //   挤掉）与 pinned-sessions.json（applyPinned 双向静默清理失联条目）——锚是常驻身份的唯一权威。
 // - 台账必须独立文件同步追加（复刻 history.appendLine）：EventBus 持久化路径在启动时被
 //   compactEvents+rewriteFile 整文件重写，走事件流会破坏 append-only 审计语义。
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
@@ -656,6 +656,17 @@ export interface DispatchEntry {
   /** W-REVEXCL：选席排除集（审查单防派回实施者）——dispatched 行落盘（schema 镜像 org-schema.ts） */
   exclude_sessions?: string[];
   no_pr?: boolean;
+  /** W-BOARDV2（1111 用户令「黑板」）：黑板事件词表（org-schema.ts DISPATCH_EVENTS 权威）——
+   *  行仍带合法 status（六态不动），event 承载细分生命周期：派发侧 queued/seat-scan/
+   *  reused/spawned + worker 侧 ack/start/milestone/done + user-override。消费方=
+   *  board-projection（看板读时投影）/leader-board（PM 查询）/closeOpenDispatches
+   *  对账（done 说真话）。旧行缺省 undefined=无事件面（读宽容惯例）。 */
+  event?: string;
+  /** W-BOARDV2「done 说真话」：relay 收口 done 而同 id 无 worker-done 申报
+   *  （worker 半途跑路/静默收工——1111 实锤）即落此标。纯观测：leader-board/
+   *  看板投影「异常完成」角标消费，不改状态语义。与 receipt_missing 分立
+   *  （missing=回执内容观测，本标=交付申报缺席）。 */
+  abnormal_done?: boolean;
 }
 
 // S3-P4 组锚豁免谓词（relfix-s 续作）：org 底座 import projects 会环（projects →
@@ -821,6 +832,71 @@ export function readDispatchLogFile(dir?: string, max = 500): DispatchEntry[] {
   }
   const all = [...byId.values()];
   return all.length <= max ? all : all.slice(all.length - max);
+}
+
+// W-BOARDV2（1111 用户令「黑板」）：**原始行读口**——同 id 全部行按文件序返回（不收敛）。
+// readDispatchLog/readDispatchLogFile 都是「同 id 末行赢」收敛视图，黑板事件链
+//（dispatch-seat-scan→dispatched→worker-ack→worker-milestone→worker-done→done）被
+// 收敛掉只剩末行——看板投影（board-projection.ts 每卡生命周期时间线）与 PM 查询
+//（leader-board 全程回放）需要全部行。性能兜底（1111 架构定调：表尾窗口）：默认只
+// 读文件尾 window 行（缺省 2000）——生产账数万行，全量读每帧投影不可接受；事件链
+// 天然按 id 段内聚在尾部（活跃单的事件必在其 dispatched 行之后的窗口内），陈年
+// 已终态单的窗口外历史不影响在途投影。返回顺序=文件序（时间升序，同 ts 写序即真相）。
+// 尾窗原始行 stat 缓存（W-BOARDV2 性能兜底）：看板投影/emitBoard 每帧都可能调
+// readDispatchLogRaw——文件未变（size+mtime 指纹）直接回上次解析结果，parse O(窗口)
+// 只在真追加后跑一次。缓存按 window 分槽（投影 2000/对账 20000 两档并存防单槽
+// 抖动互逐——两种调用窗交替时单槽会每读必重 parse），最多 4 槽防膨胀。
+interface RawLogCache {
+  sig: string;
+  rows: DispatchEntry[];
+}
+const rawLogCacheByWindow = new Map<number, RawLogCache>();
+
+export function readDispatchLogRaw(dir?: string, window = 2000): DispatchEntry[] {
+  const p = dispatchLogPath(dir);
+  let sig = "absent";
+  try {
+    const st = statSync(p);
+    // 指纹含 dir（审查 A-P2 ⑥）：缓存键只有 window，dir 不入指纹则同进程两个 org
+    // 目录 size+mtime 相撞即串账（测试态多夹具现实风险）
+    sig = `${dir ?? ""}|${st.size}:${st.mtimeMs}`;
+  } catch {
+    return [];
+  }
+  const hit = rawLogCacheByWindow.get(window);
+  if (hit && hit.sig === sig) return hit.rows;
+  const lines = readFileSync(p, "utf-8").split("\n");
+  const slice = window > 0 && lines.length > window ? lines.slice(-window) : lines;
+  const rows: DispatchEntry[] = [];
+  for (const line of slice) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const e = JSON.parse(t) as DispatchEntry;
+      if (typeof e.id === "string" && e.id && typeof e.status === "string") rows.push(e);
+    } catch {
+      // 损坏行跳过（读宽容惯例，readDispatchLogFile 同款）
+    }
+  }
+  rawLogCacheByWindow.set(window, { sig, rows });
+  if (rawLogCacheByWindow.size > 4) {
+    const firstKey = rawLogCacheByWindow.keys().next().value;
+    if (firstKey !== undefined) rawLogCacheByWindow.delete(firstKey);
+  }
+  return rows;
+}
+
+// W-BOARDV2「done 说真话」对账原语：closeOpenDispatches 收口 done 前查同 id 是否有
+// worker-done 申报（缺席=worker 半途跑路/静默收工→收口行落 abnormal_done:true）。
+// 对账窗=20000（对齐 convergeBoardsWithDispatchLog 读窗）：大并发突发下 worker-done
+// 与收口之间可能隔数千行他单事件，2000 窗会误标 abnormal（假阳性）——对账面宁可
+// 多读不多错。倒扫早退：命中即真；扫穿窗口未命中=缺席。
+export function hasDispatchEvent(id: string, event: string, dir?: string): boolean {
+  const rows = readDispatchLogRaw(dir, 20_000);
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].id === id && rows[i].event === event) return true;
+  }
+  return false;
 }
 
 // ---------- #26 M2 分诊 CLI（~/.cc-deck/bin/org，Leader 的指令通道） ----------

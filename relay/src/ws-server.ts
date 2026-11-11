@@ -27,6 +27,7 @@ import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
 import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
+import { projectBoard } from "./board-projection.js"; // W-BOARDV2：看板读时投影（/api/board-projection 数据源）
 import { subFanTarget } from "./subfanout.js"; // W-SUBFANOUT：订阅直通判定单点（架构升级期一①）
 import { harvestCheck } from "./harvest.js";
 import { reviewSeatSnapshotPayload } from "./review-seat.js"; // W-REVIEWSEAT：SNAPSHOT.review_seat 数据源 // W-CMDIMPL ①：收割机器闸
@@ -1002,6 +1003,30 @@ export function startServer(
     // 任务书/回执写「见 recall:<id>」，端上按 id 取回 {kind, 摘要≤80, 关联[]}。
     // id 路由四类对象（会话/板卡/派单/回执文件），关联只用既有账面事实（零写账、
     // 权限走既有 token——与 /api/artifacts 同款）。hop=2 展开第二跳（板卡→派单→回执）。
+    // W-BOARDV2（1111 定调「看板=查表投影」）：单板投影只读端点——PM/端上按需拉取
+    // 每卡投影泳道+黑板全链生命周期。token 鉴权同 /api/artifacts 族（读面既有口径）。
+    // 投影失败=空卡清单+error 键（不 5xx：读面降级安全，端上回落 base_status）。
+    if (req.method === "GET" && url.pathname === "/api/board-projection") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      const gid = (url.searchParams.get("gid") ?? "").trim();
+      if (!gid) {
+        res.writeHead(400, { "content-type": "application/json" })
+          .end(JSON.stringify({ ok: false, error: "缺 gid 参数（?gid=<组id>&token=…）" }));
+        return;
+      }
+      try {
+        const projection = projectBoard(gid);
+        res.writeHead(200, { "content-type": "application/json" })
+          .end(JSON.stringify({ ok: true, projection }));
+      } catch (e) {
+        res.writeHead(200, { "content-type": "application/json" })
+          .end(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e), projection: { gid, generated_at: 0, source: "dispatch-log-projection", cards: [] } }));
+      }
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/recall") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");

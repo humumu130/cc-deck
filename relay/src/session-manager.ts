@@ -27,10 +27,11 @@ import { classifyReportStatus } from "./deliver-callback.js"; // domstep1：Repo
 import { appendSubagentRow, countRunningSubagents, markPendingDispose, readSubagentLedger, scanOrphanSubagents, shouldLessonBackfill, SUBAGENT_KINDS, type SubagentKind, type SubagentRow } from "./subagent-ledger.js"; // W-PMRESOURCE-V1（#106）：子代理轻账（件1 模块——register/done/fail/list+orphan 扫描+回流门控）
 import {
   appendDispatch, clearOrgAnchor, clearPmOverride, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ensureUserClaudeBroadcast, evaluateCommandPermission,
-  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, dispatchLogPath, readDispatchLog, readDispatchLogFile, readDispatchLogRaw, hasDispatchEvent, readOrgAnchor, readPmOverride, registerAnchorLockExempt, setPmOverride, writeOrgAnchor,
   clearDutyAppoint, readAppointRejected, readDutyAppoint, recordAppointRejected, readPmLastApproved, recordPmLastApproved, registerDispatchTerminalHook, setDutyAppoint, setDispatchClosedHook,
   appendDutyFeedPending, takeDutyFeedPending, restoreDutyFeedPending, // [W-DUTYWIRE] 值守唤醒 pending 队列（空窗期事件不丢，claim/回活补投；R1 restore=投递失败批量重入队口）
 } from "./org.js";
+import { projectBoard, clearBoardProjectionCache } from "./board-projection.js"; // W-BOARDV2（1111 用户定调「查表即真相」）：看板读时投影（黑板事件链→泳道）
 import { chainBaseSlug, findContCard, harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）；W-ORPHANCARD 刀一/刀二（chainBaseSlug 基族扩展+findContCard 续跑复用）
 import { supersededChainPrs, branchBaseOf, type OpenPrSnap } from "./board-truth.js"; // W-BOARDTRUTH 刀1：同链 PR 收割即闭判定（纯函数）
 import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, lastRealUserMessageAt, dutyUserActiveMin, dutyNoProgressDelayMs, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）；W-DUTYBACKOFF：三刀数据面
@@ -865,10 +866,10 @@ export class SessionManager {
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
   // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
   // 与休眠登记路径，免拉真 CLI 子进程
-  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; workerPlugins?: string[] }) => AgentLike) | null = null;
+  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; workerPlugins?: string[]; orgWorker?: boolean; orgRole?: string; turnReport?: boolean; workerBoard?: boolean }) => AgentLike) | null = null;
 
   setAgentFactory(
-    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; workerPlugins?: string[] }) => AgentLike) | null,
+    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; workerPlugins?: string[]; orgWorker?: boolean; orgRole?: string; turnReport?: boolean; workerBoard?: boolean }) => AgentLike) | null,
   ): void {
     this.agentFactory = fn;
   }
@@ -889,7 +890,7 @@ export class SessionManager {
     model: string,
     cb: AgentCallbacks,
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; orgWorker?: boolean; orgRole?: string; turnReport?: boolean },
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string; employee?: boolean; orgWorker?: boolean; orgRole?: string; turnReport?: boolean; workerBoard?: boolean },
   ): AgentLike {
     // #27 引擎分叉（V2 Agent 无关编排的工厂缝）：codex = CodexAgentSession
     //（一回合一进程，resume 锚 = codex thread_id；允许规则/雇员家是 Claude 概念，
@@ -954,6 +955,12 @@ export class SessionManager {
       ...restOpts,
       rules: this.allowRules,
       ...(opts?.employee ? { workerPlugins: listWorkerPluginPaths() } : {}),
+      // W-BOARDV2（审查 A-P0 修正）：钩子接线单点——雇员会话 spawn 即挂黑板 SDK 钩子
+      //（此前五 spawn 点无一传 workerBoard，钩子从未注册=worker 事件生产恒零，测试
+      // 直打 workerBoardEvent/buildWorkerBoardHooks 纯函数结构性发现不了）。newAgent
+      // 是全部 spawn 点的唯一漏斗（create/resume/fresh/revive 都经此），在此按 employee
+      // 打闸=单点接线；回调本体仍由 spawn 点 setWorkerBoard 回接（sid 落定后）。
+      ...(opts?.employee ? { workerBoard: true } : {}),
     };
     return this.agentFactory
       ? this.agentFactory(cwd, model, cb, initialPrompt, withRules)
@@ -3564,6 +3571,12 @@ export class SessionManager {
     managed.agent = agent;
     managed.state.session_id = agent.id;
     this.sessions.set(agent.id, managed);
+    // W-BOARDV2：雇员会话回接黑板上报口（sid 已落定——SDK 钩子早到事件由 adapter
+    // 缓冲补投）。Leader 也是雇员但无在途单=workerBoardEvent 天然 no-op，统一回接。
+    if (managed.state.employee && agent.setWorkerBoard) {
+      const boardSid = managed.state.session_id;
+      agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
     this.bus.emit(managed.state.session_id, "SESSION_CREATED", {
       cwd,
       initial_prompt: prompt,
@@ -4307,6 +4320,11 @@ export class SessionManager {
         turnReport: !!s.state.project_gid && s.state.session_id !== this.leaderId, // W-DELIVERCB R2 P1-a：编排 worker 交付自报白名单（CCR_TURN_REPORT——钩子自环闸放行）
       });
       s.agent = agent;
+      // W-BOARDV2：回接黑板上报口（resume 保持原 sid——SDK 钩子事件按 s.state.session_id 落账）
+      if (s.state.employee && agent.setWorkerBoard) {
+        const boardSid = s.state.session_id;
+        agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+      }
       this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */
       s.state.action_summary = "重新注入上下文";
       s.state.last_error = undefined;
@@ -4411,6 +4429,11 @@ export class SessionManager {
       throw e;
     }
     s.agent = agent;
+    // W-BOARDV2：回接黑板上报口（resume 保持原 sid——SDK 钩子事件按 s.state.session_id 落账）
+    if (s.state.employee && agent.setWorkerBoard) {
+      const boardSid = s.state.session_id;
+      agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
     // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
     this.transition(s.state.session_id, "WORKING", "resume"); /* W-SMIMPL③ 直写收口 */
     s.state.historical = false;
@@ -4501,6 +4524,12 @@ export class SessionManager {
             ...(s.state.engine ? { engine: s.state.engine } : {}),
           },
         );
+      // W-BOARDV2：回接黑板上报口（fresh 回退=新流直接挂 s.agent——外层 agent 变量是
+      // 刚被 stop+killTree 的挂死流，回接它=新流永远拿不到上报口，审查 A-P1 ②修正）
+      if (s.state.employee && s.agent?.setWorkerBoard) {
+        const boardSid = s.state.session_id;
+        s.agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+      }
         this.pushExternalLog(s.state.session_id, "system",
           replayText
             ? `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话重发本条消息`
@@ -4676,6 +4705,11 @@ export class SessionManager {
       throw e;
     }
     s.agent = agent;
+    // W-BOARDV2：回接黑板上报口（resume 保持原 sid——SDK 钩子事件按 s.state.session_id 落账）
+    if (s.state.employee && agent.setWorkerBoard) {
+      const boardSid = s.state.session_id;
+      agent.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
     this.transition(s.state.session_id, "WORKING", "revive"); /* W-SMIMPL③ 直写收口 */
     s.state.turn_started_at = Date.now(); // #291 审查 A-P3-1：parked 恢复中——秒表起点
     s.state.action_summary = "恢复中";
@@ -5070,6 +5104,67 @@ export class SessionManager {
     this.openDispatches.set(key, q);
   }
 
+  // ---------- W-BOARDV2 worker 黑板事件（1111 用户令「hooks 强制保证 worker 必更新」） ----------
+
+  // 心跳节流窗（毫秒）：worker-milestone 每回合 fires（SDK Stop 钩子），长会话高频
+  // 回合会刷账——90s 窗内同席合并。ack/start/done 不节流（每单一次，去重按单 id）。
+  private static readonly WORKER_BOARD_THROTTLE_MS = 90_000;
+
+  /** worker-milestone 节流账（sid→上次落账 ts）。 */
+  private workerBoardMilestoneAt = new Map<string, number>();
+
+  /** 每单一次性事件去重账（sid:event→dispatch id；同单同类事件只落一行）。 */
+  private workerBoardSeen = new Map<string, string>();
+
+  /**
+   * worker 黑板事件落账（SDK 钩子上报口——agent-adapter.buildWorkerBoardHooks 四事件）。
+   * 解席→解单（openDispatches 内存账=权威；无在途单=非派单会话/已收口，静默忽略），
+   * 行形态对齐既有段链（同 id 追加行、status 恒 running=施工中语义——黑板事件不改
+   * 六态状态机，event 字段承载细分生命周期，读侧收敛末行赢语义零破坏）。
+   * 返回 true=已落账（测试/观测面用）。
+   */
+  workerBoardEvent(sid: string, event: string, detail?: string): boolean {
+    const VALID = ["worker-ack", "worker-start", "worker-milestone", "worker-done"];
+    if (!VALID.includes(event)) return false;
+    const open = this.openDispatches.get(sid);
+    if (!open || open.length === 0) return false; // 无在途单：Leader/PM/随手办会话=no-op
+    const e = open[open.length - 1];
+    // 每单一次性去重（ack/start/done 同单只一行；milestone 例外走节流）
+    if (event !== "worker-milestone") {
+      const seenKey = `${sid}:${event}`;
+      if (this.workerBoardSeen.get(seenKey) === e.id) return false;
+      this.workerBoardSeen.set(seenKey, e.id);
+      if (this.workerBoardSeen.size > 400) {
+        // 防陈账膨胀：超 400 清一半最旧（插入序 FIFO 简易）
+        const keys = [...this.workerBoardSeen.keys()].slice(0, 200);
+        for (const k of keys) this.workerBoardSeen.delete(k);
+      }
+    } else {
+      const last = this.workerBoardMilestoneAt.get(sid) ?? 0;
+      if (Date.now() - last < SessionManager.WORKER_BOARD_THROTTLE_MS) return false;
+      this.workerBoardMilestoneAt.set(sid, Date.now());
+      if (this.workerBoardMilestoneAt.size > 400) {
+        const cut = Date.now() - 600_000;
+        for (const [k, v] of this.workerBoardMilestoneAt) if (v < cut) this.workerBoardMilestoneAt.delete(k);
+      }
+    }
+    const ok = appendDispatch({
+      ts: Date.now(),
+      id: e.id,
+      tier: e.tier,
+      target: sid,
+      status: "running", // 黑板事件行恒 running（施工中语义）——六态状态机零破坏
+      event,
+      receipt: detail ? truncate(detail, 160) : undefined,
+      session_id: sid,
+      ...(e.anchor ? { project_anchor: e.anchor } : {}),
+      ...(e.actor ? { actor: e.actor } : {}),
+      ...(e.generation !== undefined ? { generation: e.generation } : {}),
+    });
+    if (ok) console.log(`[boardv2] worker-event ${event} dispatch=${e.id.slice(0, 8)} sid=${sid.slice(0, 12)}`);
+    return ok;
+  }
+
   /** W-BOARDTRUTH 刀1：同链 PR 收割即闭（第三现治本——异步 gh 链，绝不阻塞 pr-report 主面）。
    * 判定=board-truth.supersededChainPrs 纯函数（同链基族+title 基族词双保险——宁可漏关
    * 不可错关，#29/#6 长挂 PR 防线）；gh 不在/代理死/网络断=降级审计（boardtruth-pr-close-
@@ -5294,6 +5389,18 @@ export class SessionManager {
       // 裸翻 done）；判定走 receiptTailLineOk 行锚单点（R2 slice(-400) 字窗截断 27%
       // 真实回执——A 审 426 份实测 412 字回执军规行被切）。
       const receiptGateBlocked = !boardTo && status === "done" && e.gid && !this.receiptTailLineOk(e.receiptPath);
+      // W-BOARDV2「done 说真话」（1111 用户令）：relay 收口 done 前与黑板对账——同 id
+      // 全程无 worker-done 申报（SDK TaskCompleted 钩子未 firing：worker 半途跑路/
+      // 静默收工——1111 实锤「跑路标 done 无回执」形态的可观测化）→ 收口行落
+      // abnormal_done:true。纯观测标：leader-board/看板投影「异常完成」角标消费，
+      // 不改状态语义（板翻卡仍按既有资格位链走）。两个对账闸（反方审查 P1/P2 处置）：
+      // ① 仅 claude 引擎——codex/registered engines 无 SDK 钩子=结构性无申报，对账
+      //   恒假阳性（e.engine 缺省=claude 口径与 engineFields 缺省 Claude 一致）；
+      // ② interrupted 收口不标——流关闭兜底/多消息合并重放是 watchdog/用户常态操作，
+      //   中断≠跑路（mixed 语义会每中断一张「交付存疑」牌）。
+      // failed 行不对账（本身即异常信号）。
+      const engineSupportsBoard = !e.engine || e.engine === "claude";
+      const workerDoneSeen = status === "done" && engineSupportsBoard && !opts?.interrupted ? hasDispatchEvent(e.id, "worker-done") : true;
       appendDispatch({
         ts: Date.now(), id: e.id, tier: e.tier,
         target: key === this.leaderId ? "org-leader" : key,
@@ -5304,6 +5411,8 @@ export class SessionManager {
         ...(receiptGateBlocked ? { receipt_gate: true } : {}),
         // W-SMIMPL ②：回执契约标记透传（done 无「结果：」行=账面闭环内容空，纯观测）
         ...(opts?.receiptMissing && status === "done" ? { receipt_missing: true } : {}),
+        // W-BOARDV2「done 说真话」：worker-done 申报缺席（异常完成——观测标，见上）
+        ...(status === "done" && !workerDoneSeen ? { abnormal_done: true } : {}),
         // S1 零产出闸（relfix-s）：显式 failure_reason 优先（org.appendDispatch 咽喉只在
         // 未带值时跑文本分类器——显式带值=结构判定直达，防「零产出闸」前缀误落 logic_error）
         ...(opts?.failureReason ? { failure_reason: opts.failureReason } : {}),
@@ -5657,7 +5766,10 @@ export class SessionManager {
           }
         }
       }
-      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
+      // W-BOARDV2：event 显式置 undefined（JSON.stringify 落盘丢键）——e 是收敛末行，
+      // 可能是 worker-milestone 等黑板事件行；展开继承会把事件词带进 done 行，投影面
+      // 把「重启中断收口」永判成施工中（事件词同向精化规则的边界洞，回归自堵）
+      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断", event: undefined });
       if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
       this.notifyDispatchClosed(
         { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
@@ -8412,6 +8524,27 @@ ${lines.join("\n")}
             const st = str("status");
             if (!BOARD_ENTRY_STATUSES.includes(st as BoardEntryStatus)) return { ok: false, error: `status 必须是 ${BOARD_ENTRY_STATUSES.join("|")}` };
             const m = moveBoardEntry(gid, str("entry_id"), st as BoardEntryStatus);
+            // W-BOARDV2（1111 定调「手动干预=事件入同一张表」）：手工搬卡同步落
+            // user-override 黑板事件行——投影时后写赢，单一事实源不破。行约定：
+            // id=ovr-<uuid>（独立段链不沾任何派单 id）、target=card:<gid>:<entry_id>
+            //（投影按卡寻址）、status 恒 "done"（六态合法终态值，schema 写严格——
+            // 目标泳道在 stage=custom.board-<lane>）、session_id=""（人工动作无席）。
+            // 行对一切咽喉惰性（done 终态不在任何在途/幂等/锁的过滤集）。失败只
+            // warn 不回滚搬卡（板文件仍动=legacy 面行为不变；投影面此笔缺席由
+            // transitions 事件源兜住——二期副本退役前无观测缺口）。
+            if (m.ok) {
+              // 不带 project_anchor（审查 A-P2 ⑦）：project-detail 回执流按组锚过滤，
+              // ovr 行带锚会以伪回执混入时间线挤占窗口；投影按 target 寻址不需要锚
+              const okw = appendDispatch({
+                ts: Date.now(), id: `ovr-${randomUUID()}`, tier: "随手办",
+                target: `card:${gid}:${str("entry_id")}`, status: "done",
+                event: "user-override", stage: `custom.board-${st}`,
+                receipt: truncate(`手动改板：${str("entry_id")} → ${st}${str("note") ? `（${str("note")}）` : ""}`, 200),
+                session_id: "",
+                actor: "user",
+              });
+              if (!okw) console.warn(`[boardv2] user-override 事件落账失败（板面已动，投影回落 transitions 源）gid=${gid} entry=${str("entry_id")}`);
+            }
             // W-ORG-DEFECTS A-P2-3：手工 move 搬卡到待收割态同喂 board-change（与
             // upsert 边同判——worker_done 收口自动搬卡有收口链兜着，本边补 PM/用户
             // 手工 move 面的唤醒缺口）
@@ -8802,8 +8935,17 @@ ${lines.join("\n")}
           });
           // W-EXPP1：lessons 摘除下发（与 emitBoard 同口径——detail 拉取是端上板缓存的
           // 另一条喂养链，磁盘文件不动）。P0 编制上限（2026-10-15）：cap/workers/queued
-          // 随详情下发——面板可见席位水位（headcount_cap 缺席=全局缺省值生效）
-          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool, cap: headcountCapOf(g), workers: genericWorkerCount(g.headcount), queued: this.queueDepth(g.id), dispatch_queue: this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === g.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g.id, title: (x.input as { title?: string }).title || "" })) } };
+          // 随详情下发——面板可见席位水位（headcount_cap 缺席=全局缺省值生效）。
+          // W-BOARDV2：projection 随 detail 下发（端上板页按需拉取即得投影泳道；失败
+          // 缺键=端上回落 base_status 旧口径，降级安全）
+          const projection = (() => {
+            try {
+              return projectBoard(g.id);
+            } catch {
+              return undefined;
+            }
+          })();
+          return { ok: true, data: { group: g, board: (() => { const b = loadBoard(g.id); return b.lessons?.length ? { ...b, lessons: [] } : b; })(), receipts, pool, cap: headcountCapOf(g), workers: genericWorkerCount(g.headcount), queued: this.queueDepth(g.id), dispatch_queue: this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === g.id).map((x) => ({ dispatch_id: x.dispatch_id, gid: g.id, title: (x.input as { title?: string }).title || "" })), ...(projection ? { projection } : {}) } };
         }
         // ---------- #92 W-NOTIFY2 D：派发回执链时间线一处可查（只读；org chain [id前缀] [条数]） ----------
         // 四态 = 台账行 dispatched(派单)→running(收帧/承接)→done|failed+receipt(回执)
@@ -9381,11 +9523,23 @@ ${lines.join("\n")}
     // lessons 摘除后的下发形态（磁盘文件不动——迁移器幂等重读依据）
     const outBoard: ProjectBoard = board.lessons?.length ? { ...board, lessons: [] } : board;
     this.lastBoardBroadcast.set(gid, outBoard);
+    // W-BOARDV2（1111 定调「看板=查表投影」）：帧随带投影——每卡当前泳道由
+    // dispatch-log 黑板事件链读时计算（board-projection.ts，秒级缓存），端上渲染
+    // 以 projection.lane 为准（base_status=legacy 副本仅兼容保留）。投影失败不阻
+    // 断广播（端上回落 base_status 旧口径——降级安全）。
+    const projection = (() => {
+      try {
+        return projectBoard(gid);
+      } catch {
+        return undefined;
+      }
+    })();
     if (!prev) {
       const lessonIds = (board.lessons ?? []).map((l) => l.id);
       this.bus.emitTransient("BOARD_UPDATED", {
         gid,
         board: outBoard,
+        ...(projection ? { projection } : {}),
         // 首发清缓存 delta：lesson id 全列 removes（有缓存端清空、无缓存端 no-op）
         ...(lessonIds.length ? {
           entity_refs: lessonIds,
@@ -9402,6 +9556,7 @@ ${lines.join("\n")}
     this.bus.emitTransient("BOARD_UPDATED", {
       gid,
       board: outBoard,
+      ...(projection ? { projection } : {}),
       // P3-4：refs=提示性定位索引，端上以 delta 本体为准；当前不含 lessons.removes
       //（lessons append-only 恒空），未来若引入删边须并入 refs。
       entity_refs: [
@@ -9626,7 +9781,7 @@ ${lines.join("\n")}
       this.dispatchQueueItems = [...this.dispatchQueueItems, item];
       if (!saveDispatchQueue(this.dispatchQueueItems)) console.warn("[dispatch-queue] 全局帽排队落盘失败（内存队列有效，重启该单丢失）");
       const titleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
-      appendDispatch({ ts: Date.now(), id: dispatchId, tier: "正经立项", target: "cap-queue", status: "queued", receipt: truncate(`${titleSeg}全局并发触顶（${this.activeManagedCount()}/${cap}）——排队等待空位（429 限流治理）`, 200), session_id: "", project_anchor: input.anchor, ...(input.actor ? { actor: input.actor } : {}), trigger_key: dispatchTriggerKey(input) });
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier: "正经立项", target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate(`${titleSeg}全局并发触顶（${this.activeManagedCount()}/${cap}）——排队等待空位（429 限流治理）`, 200), session_id: "", project_anchor: input.anchor, ...(input.actor ? { actor: input.actor } : {}), trigger_key: dispatchTriggerKey(input) }); /* W-BOARDV2：黑板事件——入队含判定原因（假性触顶可回放） */
       this.emitChainAudit("worker-cap", `全局并发闸：${this.activeManagedCount()}/${cap} 触顶，单 ${dispatchId.slice(0, 8)} 排队（队列 ${this.dispatchQueueItems.length}）`);
       console.log(`[dispatch] worker-cap queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length}（${this.activeManagedCount()}/${cap}）`);
       return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
@@ -9797,7 +9952,17 @@ ${lines.join("\n")}
     // 已由 review-route 用同款全链判据做出，探测清席换新会话=违背确定性），安全闸
     // 保留且不可用即响亮拒——不静默换席（无匹配回落 PM 子代理是调用方决策位）。
     const excludeSet = input.exclude_sessions?.length ? new Set(input.exclude_sessions) : null;
+    // W-BOARDV2（1111 用户追加①「派发侧黑板」）：选席扫描留痕——从入队到落席的每步
+    // 决策（候选命中/复拉/引擎失配清席/装配降级/触顶复用/排队/新建）push 进 seatScan，
+    // 落席时随 dispatch-seat-scan 事件行写台账（1111 实锤「假性触顶+排队死锁」的病根
+    // 就是这段无痕——落完这几笔，派发决策全程可回放）。逐候选跳过原因已有
+    // emitChainAudit("dispatch-reroute") 链路审计承载（记录不改），本数组只记
+    // dispatchWorker 层决策主干。
+    const seatScan: string[] = [];
     let pv = input.target_sid ? { sid: input.target_sid, tagHit: false } : (input.gid ? this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor, excludeSet) : null);
+    if (input.target_sid) seatScan.push(`定席:${input.target_sid.slice(0, 8)}`);
+    else if (pv) seatScan.push(`熟手命中:${pv.sid.slice(0, 8)}${pv.tagHit ? "(标签)" : ""}`);
+    else if (input.gid) seatScan.push("无熟手命中");
     let veteran: string | null = pv?.sid ?? null;
     if (input.target_sid) {
       const t = input.target_sid;
@@ -9824,8 +9989,10 @@ ${lines.join("\n")}
     if (input.gid && !veteran) {
       const revived = this.tryReviveVeteran(input.gid, role, anchor);
       if (revived) {
+        seatScan.push(`复拉重选:${revived.slice(0, 8)}`);
         pv = this.pickVeteranDetail(input.gid, input.skills, input.worktree, anchor, excludeSet);
         veteran = pv?.sid ?? null;
+        if (veteran) seatScan.push(`复拉后命中:${veteran.slice(0, 8)}`);
       }
     }
     const veteranTagHit = pv?.tagHit ?? false;
@@ -9840,6 +10007,7 @@ ${lines.join("\n")}
       if ((planned.engine && veteranState.engine !== planned.engine) ||
           (planned.model && veteranState.model !== planned.model) ||
           (planned.provider && veteranState.engine_provider !== planned.provider)) {
+        seatScan.push(`引擎失配清席:${veteran.slice(0, 8)}`);
         veteran = null;
       }
     }
@@ -9866,6 +10034,7 @@ ${lines.join("\n")}
         if (input.skills.every((sk) => seededTags.has(String(sk).trim().toLowerCase()))) {
           console.warn(`[role-builder] 新建岗 tag 冷启动：skills=[${input.skills.join(",")}] 全为 Builder 策展 tag 且无装配观测——探测降级告警（清熟手走新会话，不拒收）`);
           this.emitChainAudit("builder-tag-coldstart", `新建岗 tag 首派无观测：skills=[${input.skills.join(",")}]（Builder 策展声明在档，清熟手走新会话——探测降级不拒收）`);
+          seatScan.push(`Builder tag 冷启动清席:${veteran.slice(0, 8)}`);
           veteran = null;
         } else {
           const last = this.assemblyProbeNegative.get(veteran) ?? 0;
@@ -9884,6 +10053,7 @@ ${lines.join("\n")}
           const msg = `装配缺项降级：skills=[${input.skills.join(",")}] 在熟手装配清单（${truncate(hay, 90)}）零命中`;
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate(msg, 200), session_id: veteran, ...(input.gid ? { project_anchor: anchor } : {}), ...(engineFields as object) });
           console.log(`[dispatch] probe-degrade id=${dispatchId.slice(0, 8)} veteran=${veteran.slice(0, 8)} skills=[${input.skills.join(",")}]`);
+          seatScan.push(`装配缺项降级:${veteran.slice(0, 8)}`);
           veteran = null; // 降级：清熟手走新会话路由（编制闸在下方照常拦截触顶态）
         }
       }
@@ -9898,13 +10068,16 @@ ${lines.join("\n")}
         // 只清本组过期席，腾出名额走正常判定；无过期席/清完仍满才复用/排队
         try { this.trimHeadcounts({ onlyGid: input.gid }); } catch { /* 清理失败不阻断派单主路径 */ }
         const g1 = findGroup(input.gid);
+        seatScan.push(`编制触顶:${genericWorkerCount(g1?.headcount ?? g0.headcount)}/${headcountCapOf(g1 ?? g0)}（trim 后）`);
         if (g1 && g1.status === "active" && genericWorkerCount(g1.headcount) >= headcountCapOf(g1)) {
           const reuse = this.pickIdleRosterWorker(g1, role, planned, input.worktree, excludeSet);
           if (reuse) {
             veteran = reuse;
             capReuse = true;
+            seatScan.push(`触顶复用空闲席:${reuse.slice(0, 8)}`);
             this.pushExternalLog(reuse, "system", `编制已满（${genericWorkerCount(g1.headcount)}/${headcountCapOf(g1)}），本单复用空闲 worker（非新建）`);
           } else if (this.groupHasLiveWorker(g1)) {
+            seatScan.push("无空闲可复用→排队");
             return this.enqueueCapDispatch(input, g1, tier, anchor, actor, engineFields);
           } else {
             // #200 ③：全候选死（无忙者+无健康空闲者）不再「排队假 ok」——排队单在全员
@@ -10097,11 +10270,26 @@ ${lines.join("\n")}
     // 同样原子。检查用文件直读（org-write-tx 头注铁律：事务内禁投影读）；queue_replay
     // /redispatch 同 id 段链不误伤（id !== dispatchId 排除）。拒收=台账 failed 行
     // 记因（编制闸同款，logic_error 非瞬态不自动重试）。
+    // W-BOARDV2：选席扫描事件行——落席决策主干随 dispatched 行前置落账（同 id 段链，
+    // 收敛视图立即被真 dispatched 行覆盖；无 project_anchor/trigger_key=对一切咽喉惰性，
+    // 原始行留痕供投影/leader-board 全程回放）
+    const emitSeatScanRow = () => {
+      if (seatScan.length === 0) return;
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "seat-scan", status: "dispatched", event: "dispatch-seat-scan", receipt: truncate(`选席扫描：${seatScan.join("；")}`, 200), session_id: "", actor }); /* W-BOARDV2：actor 同链共享（#40 M4 台账行 actor 口径——全链可归因） */
+    };
     if (veteran) {
+      seatScan.push(capReuse ? `落席:触顶复用 ${veteran.slice(0, 8)}` : `落席:复用熟手 ${veteran.slice(0, 8)}`);
+      emitSeatScanRow();
       const clash = withStorageTx(undefined, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), ...(input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey });
+          const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", event: "dispatch-reused", session_id: veteran, project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), ...(input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* W-BOARDV2：黑板事件——复用哪位 veteran（target=承接席） */
+          if (!okd) {
+            // W-BOARDV2 反方审查 P2 处置：dispatched 行被咽喉拒写（S3-P4/写严格）时，
+            // 前置扫描行会成为该 id 收敛末行=永不收口的幽灵在途单——补偿 failed 行
+            // 收口（同 id 段链末行赢，扫描行被掩埋，台账收敛一致）
+            appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate("dispatched 行落账被拒（锚幂等/写严格）——本单未派发（扫描行补偿收口，W-BOARDV2）", 200), session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields, generation: dispatchGeneration });
+          }
           return null;
         }
         return c;
@@ -10112,7 +10300,14 @@ ${lines.join("\n")}
         return { ok: false, error: msg, dispatch_id: dispatchId }; /* dispatch_id 随拒收返回：调用方/审计按 id 关联 failed 记因行（编制闸同族但本行含活单语义，对账需要） */
       }
     } else {
-      appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), ...(input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等；R4-R1 no_pr=派单面打标 */
+      seatScan.push("落席:新建会话（spawn）");
+      emitSeatScanRow();
+      const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", event: "dispatch-spawned", session_id: "", project_anchor: anchor, actor, ...(input.title ? { title: input.title } : {}), ...(input.retry_of ? { retry_of: input.retry_of } : {}), ...engineFields, ...(input.no_pr === true ? { no_pr: true } : {}), ...(input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}), generation: dispatchGeneration, ...(taskSnapshot ? { task_snapshot: taskSnapshot } : {}), trigger_key: triggerKey }); /* #199 D：title 入台账（#NN 对账 join 键）；#G5 retry_of=本单由自动重试产生（同 id 段链标记）；S3 generation/task_snapshot=世代 CAS+板基线；domstep1 trigger_key=I2 入口幂等；R4-R1 no_pr=派单面打标；W-BOARDV2：黑板事件——真启动新会话 */
+      if (!okd) {
+        // W-BOARDV2 反方审查 P2 处置：同 veteran 分支——dispatched 行拒写时扫描行
+        // 补偿收口（防幽灵在途单，语义见上）
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate("dispatched 行落账被拒（锚幂等/写严格）——本单未派发（扫描行补偿收口，W-BOARDV2）", 200), session_id: "", project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields, generation: dispatchGeneration });
+      }
     }
 
     // M1 run 留档①任务书快照（multica 借①，m-observ 织合补）：实际派发注入后全文
@@ -10909,7 +11104,7 @@ ${lines.join("\n")}
     }
     // W-SANDBOXFIX P2-1：排队行同带标题截断段（与满队 failed 行同口径）
     const queuedTitleSeg = `【${(input.title?.trim() || input.prompt.split("\n")[0] || "无题").slice(0, 40)}】`;
-    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", receipt: truncate(`${queuedTitleSeg}编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, trigger_key: dispatchTriggerKey(input) }); // domstep1：queued 也在途（TRIGGER_IN_FLIGHT）——排队期间同 Trigger 照样拒重
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate(`${queuedTitleSeg}编制已满（${genericWorkerCount(g.headcount)}/${headcountCapOf(g)}）且无空闲 worker——排队等待空闲名额（不自动扩编）`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, trigger_key: dispatchTriggerKey(input) }); // domstep1：queued 也在途（TRIGGER_IN_FLIGHT）——排队期间同 Trigger 照样拒重；W-BOARDV2：黑板事件——入队含判定原因（编制触顶可回放）
     console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g.id} actor=${actor} title=${queuedTitleSeg}`);
     this.pushExternalLog(this.leaderId ?? "", "system", `派单排队：${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}（编制 ${genericWorkerCount(g.headcount)}/${headcountCapOf(g)} 触顶且全忙，队列位置 ${this.dispatchQueueItems.length}）`);
     return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
