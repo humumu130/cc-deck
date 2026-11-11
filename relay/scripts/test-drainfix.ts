@@ -63,9 +63,10 @@ const openOf = (mgr: SessionManager): Map<string, { id: string; gid?: string; ti
 const queueLen = (mgr: SessionManager): number => (mgr as unknown as { dispatchQueueItems: QueuedDispatchLike[] }).dispatchQueueItems.length;
 const sweepTimerOf = (mgr: SessionManager): unknown => (mgr as unknown as { dispatchSweepTimer: unknown }).dispatchSweepTimer;
 
-/** 断档形态注入（1111 实锤复刻）：收口边哑火——状态已翻 DONE、悬账已清、台账活单
- * 行已收敛终态（closeHungDispatchRows 同款无事件收口形态——事件外路径不挂排水），
- * 但零事件（无 onTurnEnd → 无排水触发）。这就是修前「全闲+队列单」死锁终态的形态。 */
+/** 无事件收口形态注入（事件边哑火模拟——D1 用）：状态已翻 DONE、悬账已清、台账活单
+ * 行已收敛终态（closeHungDispatchRows/断线翻转同款「事件外收口」形态——此类路径不
+ * 挂排水），但零事件（无 onTurnEnd → 无排水触发）。注：真实 mid-turn 断档（状态滞留
+ * WORKING）由 D2 覆盖；本注入模拟的是断档后状态已被翻转、但队列单仍无人接的终态。 */
 const injectGapFlip = (mgr: SessionManager, sid: string): void => {
   for (const r of openOf(mgr).get(sid) ?? []) {
     appendDispatch({ ts: Date.now(), id: r.id, tier: r.tier ?? "轻立项", target: sid, status: "done", receipt: "断档翻转（测试注入·事件外收口，中断口径）", session_id: sid });
@@ -166,8 +167,20 @@ async function main() {
       const realNow = Date.now;
       Date.now = () => realNow() + 40 * 60_000;
       try {
+        // 第一拍（W-DRAINFIX-R1 审查 P1 返修）：两轮确认——首拍只记账不收口
+        //（单拍帧龄判死会误伤「回合内 >30min 静默长命令」的活 worker）
+        const res0 = mgr.sweepDispatchQueueOnce();
+        assert(res0.deadClosed === 0 && ledOf(dA)?.status === "running" && openOf(mgr).has(sA), "两轮确认第一拍不收口（防误伤静默长命令活 worker——首拍只记账）");
+        // 退避锁（W-DRAINFIX-R1 P3）：同拍再扫（触顶回队后退避窗内）——不重放不刷台账
+        //（判据=队列条目 enqueued_at 不变：重放回队会生成新条目新时间戳）
+        const enqBefore = loadDispatchQueue().find((x) => x.dispatch_id === dB)?.enqueued_at ?? 0;
+        mgr.sweepDispatchQueueOnce();
+        const enqAfter = loadDispatchQueue().find((x) => x.dispatch_id === dB)?.enqueued_at ?? -1;
+        assert(enqAfter === enqBefore, `触顶回队退避：退避窗内不重放（enqueued_at ${enqBefore}→${enqAfter}，不每拍刷 queued 行/时间线）`);
+        // 第二拍：跨确认窗（+40min→+75min，间隔 35min ≥ 30min）仍 dead → 收口
+        Date.now = () => realNow() + 75 * 60_000;
         const res = mgr.sweepDispatchQueueOnce();
-        assert(res.deadClosed === 1 && res.triggered === true, `断档悬账收口 1 行（实际 deadClosed=${res.deadClosed}）`);
+        assert(res.deadClosed === 1 && res.triggered === true, `断档悬账收口 1 行（两轮确认，实际 deadClosed=${res.deadClosed}）`);
         const ledA = ledOf(dA);
         assert(ledA?.status === "failed" && (ledA?.receipt ?? "").includes("断档兜底"), `TA failed 收口（receipt 含「断档兜底」——实际 ${ledA?.status}/「${ledA?.receipt ?? "无"}」）`);
         assert(!openOf(mgr).has(sA), "wA open 单已清（dispatch 槽位释放）");

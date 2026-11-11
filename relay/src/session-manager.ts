@@ -845,6 +845,16 @@ export class SessionManager {
   // 缺省 5min；startDispatchSweep 起，CCR_NO_DISPATCH_SWEEP=1 全停）——drain 原六触发点全是
   // 事件边，编制全闲+队列挂单=零事件永哑火，sweep 补「事件+周期」双触发
   private dispatchSweepTimer: ReturnType<typeof setInterval> | null = null;
+  // W-DRAINFIX-R1（审查 P1 返修）：断档嫌疑两轮确认账——单拍帧龄判死会误伤「回合内
+  // >30min 静默长命令」的活 worker（zombieWatchdog R3-P2-a② 同款实锤形态：误收口+
+  // PM 重派=双写）。首拍只记账，确认窗（CCR_SEAT_TURN_GAP_MIN，缺省 30min）后仍
+  // dead 才收口——活 worker 期间任一帧/进度即翻 alive 清嫌疑；bar 与看门狗两轮确认
+  //（15min 嫌疑+30min 确认+1h 节拍）同量级，且动作更轻（不 retire 不 kill）。
+  private drainfixDeadSuspects = new Map<string, number>();
+  // W-DRAINFIX-R1（审查 P3）：触顶回队退避账（gid → 下次 sweep 可试排时刻）——真触顶
+  // 组每拍重放=queued 台账行+PM 时间线 5min 一刷；重派回队（试排前后该组队列深度
+  // 不减）即退避 15min。事件边排水不受影响（收口/除名即时接续），sweep 只是兜底拍。
+  private dispatchSweepBackoff = new Map<string, number>();
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
@@ -10991,49 +11001,72 @@ ${lines.join("\n")}
   //     实测实锤），不能拿它当全局排水用；
   //   B open 单挂着但对应 worker 断档 → SEATALIVE 复合判活 pmOverrideLiveness=dead
   //     （pid 活=活绝不动——对齐 closeHungDispatchRows 活 worker 误伤守卫；pid 死/无
-  //     pid 且帧龄超回合间隙 TTL=dead）按僵尸看门狗同款口径 closeOpenDispatches 收口
-  //     悬账（failed + 板回 backlog——断档者的单不丢，PM/收割链可重派），其尾部排水
-  //     挂点自动让排队单顶上。alive/between-turns（回合间隙守位，SEATALIVE 刀1 语义）
-  //     一律不动；不 retire 成员不 kill 进程——那是僵尸看门狗（managed+agent+1h 节拍
-  //     两轮确认）的辖区，sweep 只收悬账且动作可逆（板卡回 backlog 重派即恢复），
-  //     误判面零新增：帧龄 bar=回合间隙 TTL（缺省 30min）＞看门狗嫌疑 bar（15min）。
+  //     pid 且帧龄超回合间隙 TTL=dead）**两轮确认后**按僵尸看门狗同款口径
+  //     closeOpenDispatches 收口悬账（failed + 板回 backlog——断档者的单不丢，PM/收割
+  //     链可重派）。alive/between-turns（回合间隙守位，SEATALIVE 刀1 语义）一律不动；
+  //     不 retire 成员不 kill 进程——那是僵尸看门狗（managed+agent+1h 节拍两轮确认）
+  //     的辖区，sweep 只收悬账且动作可逆（板卡回 backlog 重派即恢复）。**边界如实**
+  //     （W-DRAINFIX-R1 审查 P2）：触顶全忙组 B 收口后同拍排水仍会回队（席位的忙判定
+  //     看 status 不看 open 行——WORKING-死席的编制位回收归看门狗/#200③，sweep 不越
+  //     权），让位（retire/真实收口）后既有排水挂点即接续——「永不被接」死锁已除，
+  //     窄形态延迟解锁（≤看门狗节拍）。
   /** W-DRAINFIX 周期兜底一拍（public=测试/巡检观测面可直调）。返回统计：
    * triggered=本拍有动作（排水或收口），deadClosed=断档悬账收口行数。 */
   sweepDispatchQueueOnce(now = Date.now()): { triggered: boolean; deadClosed: number } {
     let deadClosed = 0;
-    // B 先扫断档悬账（快照遍历——closeOpenDispatches 会就地改 openDispatches）
+    // B 先扫断档悬账（快照遍历——closeOpenDispatches 会就地改 openDispatches）。
+    // **两轮确认**（W-DRAINFIX-R1 审查 P1 返修）：首拍 dead 只记账，确认窗后仍 dead
+    // 才收口——单拍帧龄判死会把「回合内长命令静默 >TTL」的活 worker 误收口（误关+
+    // 重派=双写，zombieWatchdog R3-P2-a② 同款实锤形态）。verdict 翻活/悬账被别的
+    // 路径收掉即清嫌疑。
+    const confirmMs = (Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30) * 60_000;
     for (const [sid, rows] of [...this.openDispatches]) {
-      if (!rows.length) continue;
+      if (!rows.length) { this.drainfixDeadSuspects.delete(sid); continue; }
       const s = this.sessions.get(sid);
       // 判定面复用 SEATALIVE 复合判活：cli_pid 直取会话现值（同源无换代差=stale 档
       // 不可达）；会话不在册（卡被驱逐/重启回收后的 openDispatches 残留——closeHung
-      // DispatchRows 同款形态）按 pid=0 帧龄判，无帧即 dead
+      // DispatchRows 同款形态）按 pid=0 帧龄判
       const verdict = this.pmOverrideLiveness({ cli_pid: s?.state.cli_pid ?? 0, session_id: sid });
-      if (verdict !== "dead") continue;
+      if (verdict !== "dead") { this.drainfixDeadSuspects.delete(sid); continue; }
+      const first = this.drainfixDeadSuspects.get(sid);
+      if (first === undefined || now - first < confirmMs) {
+        if (first === undefined) this.drainfixDeadSuspects.set(sid, now);
+        continue; // 首拍记账/确认窗内不动
+      }
+      this.drainfixDeadSuspects.delete(sid);
       const count = rows.length;
       const gids = [...new Set(rows.map((r) => r.gid).filter((x): x is string => !!x))];
       const at = lastFrameAtFromEvents(this.cfg.dataDir, sid);
       const ageText = at === null ? "无帧" : `帧龄 ${Math.round((now - at) / 60_000)}min`;
       try {
-        this.closeOpenDispatches(sid, "failed", `断档兜底（周期 sweep）：worker 判活=dead（${ageText}，超回合间隙窗），回合中断收口——板卡回 backlog 可重派`, true, false, undefined, "backlog");
-        deadClosed += count;
-        this.emitChainAudit("drainfix-dead-close", `断档悬账收口：会话 ${sid.slice(0, 12)} ${count} 张 open 单（组 ${gids.map((g) => g.slice(0, 8)).join(",") || "无"}）判活=dead（${ageText}）——failed 收口回 backlog，排队单随排水接续`);
+        this.closeOpenDispatches(sid, "failed", `断档兜底（周期 sweep 两轮确认）：worker 判活=dead（${ageText}，超回合间隙窗且跨确认窗仍无帧），回合中断收口——板卡回 backlog 可重派`, true, false, undefined, "backlog");
+        deadClosed += count; // 计 open 行数（个别行 CAS 跳过残留以台账末行为准）
+        this.emitChainAudit("drainfix-dead-close", `断档悬账收口（两轮确认）：会话 ${sid.slice(0, 12)} ${count} 张 open 单（组 ${gids.map((g) => g.slice(0, 8)).join(",") || "无"}）判活=dead（${ageText}，确认窗 ${Math.round(confirmMs / 60_000)}min 跨越）——failed 收口回 backlog，排队单随排水接续`);
       } catch (e) {
-        console.warn(`[drainfix] 断档悬账收口失败 sid=${sid.slice(0, 12)}（下轮 sweep 重试）: ${e instanceof Error ? e.message : String(e)}`);
+        console.warn(`[drainfix] 断档悬账收口失败 sid=${sid.slice(0, 12)}（重新计嫌疑，下轮 sweep 再试）: ${e instanceof Error ? e.message : String(e)}`);
       }
+    }
+    for (const sid of [...this.drainfixDeadSuspects.keys()]) {
+      if (!(this.openDispatches.get(sid)?.length ?? 0)) this.drainfixDeadSuspects.delete(sid); // 悬账已被别的路径收掉——嫌疑账清位防陈账
     }
     // A 队列非空（或 B 刚收口腾位）→ 排水兜底一拍。**按队列内 gid 键控逐组排**
     //（reloadDispatchQueue 同款迭代）——drain 是 gid 键控双桶（先本 gid 项，回落无
     // gid 桶），drain("") 对带 gid 的排队单**全盲**（1111 事故单正是带 gid 单，任务书
     // 原文的 drain("") 字面照做排不掉它——实测实锤）；无 gid 桶项/断档收口腾位再补
     // 一次 drain("")（收口尾挂点已按受影响 gid 排过，此处兜其余组与无 gid 桶）。
+    // 触顶回队退避（W-DRAINFIX-R1 P3）：本拍试排后该组队列深度不减（重派回队）=
+    // 真触顶，退避 15min 防每拍 queued 台账行/PM 时间线刷屏；事件边排水不受影响。
     const triggered = this.dispatchQueueItems.length > 0 || deadClosed > 0;
     if (triggered) {
       const gids = new Set(this.dispatchQueueItems.map((x) => (x.input as { gid?: string }).gid ?? ""));
       const noBucket = gids.delete(""); // 无 gid 桶项在场
       if (noBucket || !gids.size || deadClosed > 0) gids.add(""); // 空队列×收口腾位 也补全局拍
       for (const g of gids) {
+        if (g && now < (this.dispatchSweepBackoff.get(g) ?? 0)) continue; // 退避窗内跳过（事件边不受影响）
+        const depth = (gidKey: string) => this.dispatchQueueItems.filter((x) => (x.input as { gid?: string }).gid === gidKey).length;
+        const before = g ? depth(g) : 0;
         try { this.drainDispatchQueue(g); } catch { /* 单组排水失败不阻断其余组，留队下一拍 */ }
+        if (g && depth(g) >= before && before > 0) this.dispatchSweepBackoff.set(g, now + 15 * 60_000);
       }
     }
     return { triggered, deadClosed };
@@ -11048,8 +11081,9 @@ ${lines.join("\n")}
   startDispatchSweep(): void {
     if (process.env.CCR_NO_DISPATCH_SWEEP === "1") return;
     if (this.dispatchSweepTimer) return;
-    const raw = Number(process.env.CCR_DISPATCH_SWEEP_MIN);
-    if (raw === 0) return; // 显式 0=全关（隔离缝）
+    const rawStr = process.env.CCR_DISPATCH_SWEEP_MIN;
+    if (rawStr === "0") return; // 显式 "0"=全关（隔离缝；空串/未设/坏值=缺省 5min——Number("")===0 不当显式 0）
+    const raw = Number(rawStr);
     const ms = Number.isFinite(raw) && raw > 0 ? raw * 60_000 : 5 * 60_000;
     try { this.sweepDispatchQueueOnce(); } catch { /* 首拍失败不阻断 boot，定时轮再来 */ }
     this.dispatchSweepTimer = setInterval(() => {
