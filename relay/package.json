@@ -178,6 +178,7 @@
     "test:boardrecon": "tsx scripts/test-boardrecon.ts",
     "test:orphancard": "tsx scripts/test-orphancard.ts",
     "test:pairloop": "tsx scripts/test-pairloop.ts",
+    "test:alivelamp": "tsx scripts/test-alivelamp.ts",
     "test:reviewseat": "tsx scripts/test-reviewseat.ts",
     "test:inboxv1": "tsx scripts/test-inboxv1.ts",
     "test:boardtruth": "tsx scripts/test-boardtruth.ts",
