@@ -221,6 +221,14 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   //（右侧分栏常驻：切走快照（pane detach 保活）切回原样恢复；防串台不降级=tab 各带原 sid）。
   ok(fz.includes("function resetForSession") && fz.includes("if (s === state.lastSid) return;") && fz.includes("resetForSession,") && web.includes("ccDeckFzone.resetForSession(sid)") && web.includes("ccDeckFzone.resetForSession(s.session_id)") && web.split("resetForSession(").length >= 3, "F10b 切会话挂点双挂（选中链 MO+slimOpenSession 成员卡直开——lastSid 幂等守卫，开合态不动）");
   ok(fz.includes("const stash = new Map()") && fz.includes("detachPanes") && fz.includes("restorePanes") && fz.includes("STASH_MAX = 8") && fz.includes("stashEvict"), "F10c R2 暂存恢复链（stash Map+pane detach 保活+LRU 淘汰 8 会话——切回原样恢复零重载）");
+  {
+    // W-FZONE-R2-R1（双审 P2 返修防复发锚）：restorePanes 函数体零释放——释放必经 unloadPane
+    //（closeTab/stashEvict 两路独占）。原「尾清理循环」裸 panes.delete 绕过 unloadPane（blob
+    // 泄漏）+误删他 sid pane（保活名存实亡）——负向锚锁死不得回归。
+    const rpStart = fz.indexOf("function restorePanes");
+    const rpBody = fz.slice(rpStart, fz.indexOf("function stashEvict"));
+    ok(rpStart >= 0 && rpBody.includes("appendChild") && !rpBody.includes("panes.delete("), "F10c-bis restorePanes 零释放（他 sid pane 留池保活——释放归 closeTab/stashEvict 双路独占必经 unloadPane；裸 panes.delete( 调用负向锚防复发，注释提及不误伤）");
+  }
   ok(web.includes("el.dataset.fzUrl") && web.includes("window.__ccDeck005FzoneUnload") && fz.includes("window.__ccDeck005FzoneUnload") && !web.includes('let fzObjUrl = ""'), "F11 图片 blob per-tab 槽（P2-②：双图并存互不 revoke，关 tab/切会话经 unload 挂口回收——负向锚=单槽旧串不得回归）");
 
   // ============ F-B2. W-FZONE-B2 文件工作区批二（格式矩阵+自动推 tab+空间树+P3 随批） ============

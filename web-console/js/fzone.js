@@ -164,7 +164,10 @@
         load(t.id, np, t.sid, t.path);
       }
     }
-    for (const [id, p] of panes) if (!keep.has(id) && !p.isConnected) { panes.delete(id); } // 目标会话不引用的 pane 留 stash（属其他会话快照）
+    // R2-R1（双审 P2 定谳）：本函数零释放——panes=全 stash 会话 pane 池（目标会话不引用的
+    // 他 sid pane 留池保活），释放归两路独占：closeTab（unloadPane+panes.delete）/stashEvict
+    //（LRU 淘汰 unloadPane+delete 双连）。原「尾清理循环」裸 delete 绕过 unloadPane（图片
+    // blob 不 revoke 泄漏）+他 sid pane 误删（B→A→B 切回必兜底重载=保活名存实亡）——已删。
   }
   function stashEvict() {
     while (stash.size > STASH_MAX) {
