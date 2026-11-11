@@ -1700,6 +1700,7 @@
                   if (S.selected === s.session_id) return;
                   if (S.selected) inputDrafts.set(S.selected, UI.input.value); // #B3-4 同款：切走存草稿
                   S.selected = s.session_id;
+                  if (window.ccDeckFzone && window.ccDeckFzone.resetForSession) window.ccDeckFzone.resetForSession(s.session_id); // W-FZONE-B1-R1 P2-①：成员卡直开=切会话，同款清空工作区 tab
                   S.forceScroll = true;
                   UI.input.value = inputDrafts.get(s.session_id) ?? "";
                   S.staged = [];
@@ -4116,6 +4117,86 @@
                   });
                 }
 
+                // ---------- W-FZONE-B1（1111 拍板 B · 批一）：文件工作区内容加载器 ----------
+                // fzone.js（tab 系统/容器）经 window.__ccDeck005FzoneLoad(el, sid, path) 委托到此——
+                // 复用 fetchArtifact/ARTIFACT_CHUNK 管线 + mdHtml/synHtml 既有渲染（md=消息同款、
+                // 代码=行号+轻量高亮、图片=blob 适应宽+点击原尺寸）；>2MB 文本头部截断+提示（任务书）。
+                // 失败态=tab 内错误卡+重试钮（data-fz-retry 由 fzone.js 委托接管——detailbug 先例：
+                // 手动点击才弹错，加载失败不 toast 轰炸）。el.isConnected 守卫=关掉的 tab 弃置回包。
+                // 图片 blob=per-tab 槽（W-FZONE-B1-R1 修审 P2-②：单槽互踩——开第二张图不再 revoke
+                // 第一张；url 挂 el.dataset.fzUrl，关 tab/切会话经 __ccDeck005FzoneUnload 挂口回收）
+                // sheet 桶的文本安全子集（W-P2TAIL 修 fzone-b1-review-a P2）——桶内其余
+                // xlsx/xls/numbers/plist/db/sqlite 为二进制档，落兜底卡防 UTF-8 乱码墙
+                const SHEET_TEXT_EXT = new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"]);
+                function loadFzoneContent(el, sid, path) {
+                  const name = baseName(path);
+                  const ext = String(name || "").toLowerCase().split(".").pop();
+                  const kind = artifactKindFor(name);
+                  const asMd = AV_MD_EXT.has(ext);
+                  const asImg = kind === "image";
+                  // 文本面=md/纯文扩展/sheet 文本子集/代码；doc 桶 pdf/docx/rtf 与 sheet 桶
+                  // xlsx/xls/numbers/plist/db/sqlite 等二进制不放行（落「暂不支持」兜底——批二
+                  // 格式矩阵，防二进制被当 UTF-8 解码出乱码墙；av 模态同表达式不动——批二处置面）
+                  const asText = asMd || AV_TEXT_EXTRA.has(ext) || SHEET_TEXT_EXT.has(ext) || kind === "code";
+                  if (!asImg && !asText) { el.innerHTML = fzFb("此格式暂不支持在线预览（" + (ext || "无扩展名") + "）——pdf/office/数据库/媒体为批二", false, path); return; }
+                  el.innerHTML = '<div class="fz-load">拉取中…</div>';
+                  fetchArtifact(sid, path).then((res) => {
+                    if (!el.isConnected) return; // tab 已关，弃置回包
+                    const bytes = artifactBytes(res);
+                    if (asImg) {
+                      const prevUrl = el.dataset.fzUrl || "";
+                      if (prevUrl) { try { URL.revokeObjectURL(prevUrl); } catch (_) {} } // 仅回收本 pane 旧图（重试/重载同 pane 场景——他 pane 的 url 不碰）
+                      const url = URL.createObjectURL(new Blob([bytes], { type: res.mime || "image/" + ext }));
+                      el.dataset.fzUrl = url;
+                      el.innerHTML = '<div class="fz-imgwrap"><img class="fz-img" src="' + url + '" alt="预览 ' + esc(name) + '" title="点击切换 原尺寸 ↔ 适应宽度"></div>';
+                      const img = el.querySelector(".fz-img");
+                      if (img) img.addEventListener("click", () => img.classList.toggle("full"));
+                    } else {
+                      const CAP = 2 * 1048576; // >2MB 文本只载头部+提示
+                      const cut = bytes.length > CAP;
+                      const text = new TextDecoder("utf-8", { fatal: false }).decode(cut ? bytes.slice(0, CAP) : bytes);
+                      const capNote = cut ? '<div class="fz-capnote">文件超过 2MB，仅显示头部——完整内容请下载查看</div>' : "";
+                      if (asMd) {
+                        el.innerHTML = capNote + '<div class="fz-md">' + mdHtml(text) + "</div>"; // md=消息渲染同款（任务书「代码块样式对齐既有消息渲染」）
+                      } else {
+                        const fam = synLangOf(ext); // 扩展名→SYN 家族（未知=null 纯文本）
+                        const lines = text.split("\n");
+                        el.innerHTML = capNote + '<div class="fz-code"><pre class="fz-code-n" aria-hidden="true">' + lines.map((_, i) => i + 1).join("\n") + '</pre><pre class="fz-code-c"><code>' + (fam ? (synHtml(text, fam) ?? esc(text)) : esc(text)) + "</code></pre></div>";
+                      }
+                    }
+                  }).catch((err) => {
+                    if (!el.isConnected) return;
+                    el.innerHTML = fzFb(String((err && err.message) || err), true, path);
+                  });
+                }
+                function fzFb(msg, retry, path) {
+                  return '<div class="fz-fb"><span class="fz-fb-ico">✕</span><span>拉取失败：' + esc(String(msg).slice(0, 160)) + "</span>" + (retry ? '<button type="button" class="secondary-btn" data-fz-retry="' + esc(path) + '">重试</button>' : "") + "</div>";
+                }
+                // 工作区开 tab 单口（输出物行/眼睛钮/消息内路径 token 三入口共用）
+                function openFzoneTab(path) {
+                  if (!path || !S.selected || !window.ccDeckFzone) return;
+                  window.ccDeckFzone.open(S.selected, path);
+                }
+                // 消息文本内路径 token（.fpath[data-p]——mdInline 既有包裹）→ 输出物登记面对齐
+                //（basename 相等或尾段命中才可点开——未登记路径零动作，防任意路径拉取探测）
+                function frefResolvePath(token) {
+                  const t = String(token || "").replace(/[\\/]+$/, "");
+                  if (!t) return null;
+                  const base = t.split(/[\\/]/).filter(Boolean).pop();
+                  const arts = Array.isArray(curSession()?.artifacts) ? curSession().artifacts : [];
+                  for (const a of arts) {
+                    const p = String(a && a.path || "");
+                    if (!p) continue;
+                    if (p === t || p.endsWith("/" + t) || p.split(/[\\/]/).pop() === base) return p;
+                  }
+                  return null;
+                }
+                window.__ccDeck005FzoneLoad = loadFzoneContent; // fzone.js 内容加载挂口
+                window.__ccDeck005FzoneUnload = (el) => { const u = el && el.dataset ? el.dataset.fzUrl : ""; if (u) { try { URL.revokeObjectURL(u); } catch (_) {} try { delete el.dataset.fzUrl; } catch (_) {} } }; // P2-②：fzone.js 关 tab/切会话清空时回收 per-tab blob url
+                window.__ccDeck005ArtIconHtml = artIconHtml; // tab 图标（六类同源）
+                window.__ccDeck005MdRender = mdHtml; // md 渲染单口导出（消息/工作区/探针三面同源——mobile.js 跨域面同族先例）
+                window.__ccDeck005FzoneOpenByToken = (t) => { const p = frefResolvePath(t); if (p) openFzoneTab(p); }; // 工作区面板内 .fpath 点击路由
+
                 // ---------- 渲染：更多 tab（用量 + 统计键值行，四 tab 制：追加令3 合并原用量/更多） ----------
                 function renderMore() {
                   const pane = UI.panes[3];
@@ -5094,6 +5175,7 @@
                     if (sid !== S.selected) {
                       if (S.selected) inputDrafts.set(S.selected, UI.input.value); // #B3-4 切走存草稿
                       S.selected = sid;
+                      if (window.ccDeckFzone && window.ccDeckFzone.resetForSession) window.ccDeckFzone.resetForSession(sid); // W-FZONE-B1-R1 P2-①：切会话清空工作区 tab（防跨会话同名路径静默串台）
                       S.forceScroll = true;
                       histLoad(sid);
                       UI.input.value = inputDrafts.get(sid) ?? ""; // #B3-4 切回恢复（未输入过清空，防串会话）
@@ -5176,8 +5258,14 @@
                     }
                     const cpy = ev.target.closest(".copy-btn");
                     if (cpy) { ev.stopPropagation(); copyText(cpy.dataset.copy || ""); b2Toast("已复制"); return; }
-                    const fp = ev.target.closest(".fpath");
-                    if (fp) { ev.stopPropagation(); copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || "")); return; }
+                    const fp = ev.target.closest(".fpath"); // W-FZONE-B1 入口②（改道先行于复制——原「点击=复制路径」分支）：登记面命中（basename/尾段对齐）=开工作区 tab；未登记路径保持复制兜底，零动作面不变
+                    if (fp) {
+                      ev.stopPropagation();
+                      const fzReg = fp.dataset.p ? frefResolvePath(String(fp.dataset.p)) : null;
+                      if (fzReg) { openFzoneTab(fzReg); return; }
+                      copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || ""));
+                      return;
+                    }
                     const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x], .am-head[data-x]"); // W-AUTOMSG：am-head=自动注入折叠头（复用 expanded 切换链）
                     if (xEl) { ev.stopPropagation(); toggleExpand(xEl.dataset.x); return; }
                     const ubImg = ev.target.closest(".ub-img"); // FB14：缩略图点击放大/还原
@@ -5269,7 +5357,7 @@
                       return;
                     }
                     const afView = ev.target.closest("[data-af-view]");
-                    if (afView) { ev.stopPropagation(); openArtViewer(afView.dataset.afView); return; }
+                    if (afView) { ev.stopPropagation(); openFzoneTab(afView.dataset.afView); return; } // W-FZONE-B1：眼睛钮=工作区 tab（批一自 av 模态改道）
                     const afDl = ev.target.closest("[data-af-dl]");
                     if (afDl) { ev.stopPropagation(); const row = afDl.closest(".art-row"); if (row) downloadNode(row, S.selected).catch(() => {}); return; }
                     const afAll = ev.target.closest("[data-af-all-dl]");
@@ -5313,8 +5401,9 @@
                     }
                     const batch = ev.target.closest("[data-artifact-batch]");
                     if (batch) { ev.stopPropagation(); runBatch(batch.closest("[data-artifact-group]")); return; }
-                    const artRow = ev.target.closest("#session-body .art-row"); // #168 点行=在线预览（下载走行尾钮/浮层）
-                    if (artRow) { openArtViewer(String(artRow.dataset.path || "")); return; }
+                    const artRow = ev.target.closest("#session-body .art-row"); // W-FZONE-B1：点行=工作区 tab（#168 在线预览批一自 av 模态改道；下载仍走行尾钮）
+                    if (artRow) { openFzoneTab(String(artRow.dataset.path || "")); return; }
+                    // （W-FZONE-B1 入口②消息内路径 token 已改道先行于本段的 .fpath 复制分支——此处不重复设口，防死代码）
                     const del = ev.target.closest("[data-session-delete]");
                     if (del) { ev.stopPropagation(); confirmDelete(); return; }
                     const kvCopy = ev.target.closest(".kv-copy-btn");
