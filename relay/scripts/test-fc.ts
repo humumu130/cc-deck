@@ -167,6 +167,8 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   const list = readFileSync(join(root, "expo-app", "src", "screens", "ListScreen.tsx"), "utf-8");
   const detail = readFileSync(join(root, "expo-app", "src", "screens", "DetailScreen.tsx"), "utf-8");
   const css = readFileSync(join(root, "web-console", "css", "base.css"), "utf-8");
+  const fz = readFileSync(join(root, "web-console", "js", "fzone.js"), "utf-8"); // W-FZONE-B1
+  const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8"); // W-FZONE-B1
 
   // relay
   ok(sm.includes('if (next === "DONE" || next === "ERROR") s.state.turn_started_at = undefined;'), "A1 transition 终态清算（turn_started_at——relay 状态机「WORKING⟔活跃 turn」半边）");
@@ -200,6 +202,23 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(detail.includes("isRealWorking(r.s)).length") && detail.includes('standby ? "待开工"'), "A18 expo 详情 roster 计数+行词（待命不占在跑）");
   ok(web.includes("已接单未开工或挂起（无近期工具活动）") && web.includes('"待命 · 可接单"') /* W-DOCKFIX 语义等价迁移：dock 待命文案随方案 A 一行流改（isRealWorking 同判定不动） */ && mobile.includes("待开工</b><span>已接单未开工或挂起") && detail.includes('"⏸ 待开工 · "'), "A19 详情/dock/mobile 同屏一致（审查 B-P2-2：卡待开工而详情运行中走秒的矛盾根除——四面同一判定）");
   ok(detail.includes("isRealWorking(s) && s.turn_started_at ? fmtElapsed"), "A19b expo 详情 turnRun 待命不走秒");
+
+  // ============ F. W-FZONE-B1 文件工作区批一（1111 拍板 B：tab 骨架+三格式+点击链路） ============
+  ok(html.includes('class="workspace-main"') && html.includes('id="fzone"') && html.includes('js/fzone.js'), "F1 容器骨架（workspace-main 行容器+#fzone 面板+fzone.js 挂载）");
+  ok(fz.includes("data-fz-tab") && fz.includes("data-fz-close") && fz.includes("const hit = state.tabs.find((t) => t.id === id);") && fz.includes("return; } // 聚焦已有 tab"), "F2 tab 系统（切换/关闭/同文件重开=聚焦不重复——任务书铁则）");
+  ok(fz.includes("auxclick") && fz.includes("ccd_fzone_w") && fz.includes("ccd_fzone_open") && fz.includes('localStorage.getItem(W_KEY)'), "F3 中键关闭+拖宽/开合 localStorage 记忆（缺省 38%——clampW/readW 口径）");
+  ok(web.includes("window.__ccDeck005FzoneLoad = loadFzoneContent") && web.includes("fz-code-n") && web.includes("fz-md") && web.includes("fz-img") && web.includes("2 * 1048576") && web.includes("data-fz-retry") && web.includes("if (!el.isConnected) return;"), "F4 三格式加载器（md=mdHtml 同款/代码=行号槽+synHtml/图片=blob+点击原尺寸；>2MB 头部截断；重试钮；关 tab 弃置回包守卫）");
+  ok(web.includes("SHEET_TEXT_EXT.has(ext)") && web.includes('new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"])') && !web.includes('AV_TEXT_EXTRA.has(ext) || kind === "sheet"'), "F4b sheet 桶二进制守卫（xlsx/xls/numbers/plist/db/sqlite 不进文本渲染落兜底卡——文本安全子集放行，W-P2TAIL 修 fzone-b1-review-a P2；负向锚=整桶放行旧串不得回归）");
+  ok(web.includes("openFzoneTab(String(artRow.dataset.path") && web.includes("openFzoneTab(afView.dataset.afView") && web.includes('const fp = ev.target.closest(".fpath")') && web.includes("frefResolvePath(String(fp.dataset.p)") && web.includes("if (fzReg) { openFzoneTab(fzReg); return; }"), "F5 点击入口三轨（输出物行整行/眼睛钮/消息文本路径 token 改道先行于复制兜底——批一自 av 模态改道；原死代码口已除）");
+  ok(web.includes('p.endsWith("/" + t)') && web.includes("p.split(/[\\\\/]/).pop() === base"), "F6 登记面对齐守卫（basename/尾段命中才开——未登记路径零动作防探测）");
+  ok(css.includes(".fzone .wtab.on::after") && css.includes(".fz-code") && css.includes(".fz-resizer") && css.includes(".workspace-main"), "F7 CSS（mock b.html 同构：brand 顶条/行号双列/拖宽柄/行容器让位）");
+  ok(web.includes("function loadAvContent") && web.includes("av-md"), "F8 av 模态管线保留（批一改道不拆——下载/定位钮链不破，批二处置）；md 渲染消息同款复用零分叉");
+  ok(html.includes("data-fzone-toggle") && fz.includes('document.addEventListener("click"') && fz.includes("[data-fzone-toggle]") && fz.includes("classList.toggle(\"on\", on)") && css.includes("@media (max-width: 1199px)") && css.includes(".workspace-main > .fzone") && fz.includes("空 · 点消息里的文件"), "F9 常驻开关钮（收起后唯一再展开入口+on 态回显）+窄窗浮层（<1200 右缘覆盖零挤压——mock 风险条批一解）+空态提示卡");
+
+  // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============
+  ok(fz.includes("function tabId(sid, path)") && fz.includes('state.tabs.push({ id, path: p, sid: String(sid) })') && fz.includes("load(t.id, pane, t.sid, t.path)") && !fz.includes("state.sid = sid"), "F10 tab 会话作用域（P2-①：复合 id sid+path 跨会话同名路径不串台/tab 自带 sid/retry 取 tab sid 真路径——负向锚=全局 state.sid 覆写旧串不得回归）");
+  ok(fz.includes("function resetForSession") && fz.includes("if (s === state.lastSid) return;") && fz.includes("resetForSession,") && web.includes("ccDeckFzone.resetForSession(sid)") && web.includes("ccDeckFzone.resetForSession(s.session_id)") && web.split("resetForSession(").length >= 3, "F10b 切会话清空双挂点（选中链 MO+slimOpenSession 成员卡直开——lastSid 幂等守卫，开合态不动）");
+  ok(web.includes("el.dataset.fzUrl") && web.includes("window.__ccDeck005FzoneUnload") && fz.includes("window.__ccDeck005FzoneUnload") && !web.includes('let fzObjUrl = ""'), "F11 图片 blob per-tab 槽（P2-②：双图并存互不 revoke，关 tab/切会话经 unload 挂口回收——负向锚=单槽旧串不得回归）");
 }
 
 console.log(`\n§P-§A：${pass} ok / ${fail} FAIL`);
