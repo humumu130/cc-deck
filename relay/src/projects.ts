@@ -1974,7 +1974,10 @@ export interface RetiredLedgerEvent {
   ts: number;
   gid: string;
   session_id: string;
-  cause: "manual" | "idle-trim" | "group-disband";
+  /** dispatch-sweep=[W-GATEPROBE]（1111 断档死锁治本 delta）：周期 sweep 断档 holder 席位回收除名
+   *  （悬账 failed 回 backlog+腾编制）——web 端 cause 计数/标签防御性忽略未知值（回落通用
+   *  「离席」零破坏），通知+审计行承载可观测。 */
+  cause: "manual" | "idle-trim" | "group-disband" | "dispatch-sweep";
   detail?: string;
 }
 

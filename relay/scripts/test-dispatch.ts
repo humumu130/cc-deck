@@ -5,7 +5,8 @@
 //       D5 状态护栏 D6 断档补记（dispatched/running 悬账）D7 handleCommand 确认决议/详情拉取
 //       D14 resume 挂死自愈（F-07：fresh 重放/ERROR+saved/STOP·删除·合并窗口/usage 记忆）
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -1126,6 +1127,86 @@ async function main() {
       assert(rows17.length >= 3 && rows17.every((e) => e.actor === "leader"), "台账行 actor=leader（dispatched→running→failed 全链）");
       // (e) 全量收口语义：注入不重复派帧——did2 只有一条 DISPATCH_DONE
       assert(doneFrames.filter((f) => f.dispatch_id === did2).length === 1, "每单恰一帧（不随注入重复）");
+    }
+
+    // ---------- D18 [W-GATEPROBE] 断档 holder 席位回收（W-DRAINFIX delta——1111 断档第五现） ----------
+    // 基座=sweepDispatchQueueOnce（W-DRAINFIX 周期拍：断档悬账收口+逐 gid 排水，其套件
+    // test:drainfix 已测）；本段只测 delta：external/无 wrapper dead holder 的席位回收
+    // （member 除名腾编制）+两路防线（managed+agent=僵尸看门狗辖区不抢 / pid 活零动作）。
+    console.log("D18 断档 holder 席位回收（W-GATEPROBE delta）:");
+    {
+      okNext = true;
+      process.env.CCR_ORG_MAX_GROUPS = "20"; // 测试缝：前段已积 5 活跃组触护栏（末段无后续依赖，不恢复）
+      mkdirSync(join(DATA, "proj-gp"), { recursive: true });
+      const c18 = mgr.orgAction("project-create", { name: "gateprobe", anchor: join(DATA, "proj-gp"), tier: "轻立项" }) as { ok: boolean; error?: string; data?: { group?: { id: string }; confirm?: { id: string } } };
+      assert(c18.ok === true, `sweep 组立项（前置）${c18.ok ? "" : " → " + (c18.error ?? "?")}`);
+      const gidGP = c18.data?.group?.id ?? "";
+      const dec18 = mgr.orgAction("confirm-decide", { confirm_id: c18.data?.confirm?.id ?? "", approve: true, by: "u" });
+      assert(dec18.ok === true || listGroups().find((g) => g.id === gidGP)?.status === "active", "sweep 组就绪（确认决议/信任直通两路，前置）");
+      const mgrAny = mgr as unknown as {
+        openDispatches: Map<string, { id: string; tier: string; gid?: string }[]>;
+        sessions: Map<string, unknown>;
+      };
+      const t18 = spawn("/usr/bin/true", [], { stdio: "ignore" }); // 即退进程：取已死 pid（强证据路径）
+      const deadPid = t18.pid ?? 0;
+      await wait(200);
+      assert(deadPid > 0, "死 pid 备好（前置）");
+      // external 死档 holder：直注会话卡+45min 前旧帧（>30min 回合间隙 TTL；不走
+      // ensureExternal——其 SESSION_CREATED 新帧会判成 between-turns，与「真断档=末帧
+      // 已老」形态相反）
+      const deadSid = `ext-dead-${randomUUID().slice(0, 8)}`;
+      mgrAny.sessions.set(deadSid, {
+        agent: null,
+        state: { session_id: deadSid, external: true, cli_pid: deadPid, status: "WORKING", relay_session_id: "sdk-dead", updated_at: Date.now() - 45 * 60_000 },
+        logs: [],
+      });
+      appendFileSync(join(DATA, "events.ndjson"), JSON.stringify({ seq: 990_000_000 + Math.floor(Math.random() * 1000), session_id: deadSid, ts: Date.now() - 45 * 60_000, type: "SESSION_LOG", payload: { kind: "tool_use", text: "sweep 死档末帧（45min 前）" } }) + "\n");
+      const amDead = addMember(gidGP, deadSid, "worker", {});
+      assert(amDead.ok === true, "断档 worker 入编（内部 addMember=dispatch 入编同路径，前置）");
+      mgrAny.openDispatches.set(deadSid, [{ id: "dsp-sweep-dead", tier: "随手办", gid: gidGP }]);
+      // managed+agent 对照（僵尸看门狗辖区）：悬账收口照走（基座行为），席位**不**抢收
+      const zSid = `mg-zombie-${randomUUID().slice(0, 8)}`;
+      mgrAny.sessions.set(zSid, {
+        agent: { ended: true },
+        state: { session_id: zSid, external: false, cli_pid: 0, status: "WORKING", relay_session_id: "sdk-z", project_gid: gidGP, updated_at: Date.now() - 45 * 60_000 },
+        logs: [],
+      });
+      appendFileSync(join(DATA, "events.ndjson"), JSON.stringify({ seq: 990_100_000 + Math.floor(Math.random() * 1000), session_id: zSid, ts: Date.now() - 45 * 60_000, type: "SESSION_LOG", payload: { kind: "tool_use", text: "zombie 辖区末帧（45min 前）" } }) + "\n");
+      const amZ = addMember(gidGP, zSid, "worker", {});
+      assert(amZ.ok === true, "zombie 辖区席入编（前置）");
+      mgrAny.openDispatches.set(zSid, [{ id: "dsp-sweep-zombie", tier: "随手办", gid: gidGP }]);
+      // pid 活对照（1104 pmseat 误伤防线）：进程活=回合在途 → 悬账席位全不动
+      const liveSid = `ext-live-${randomUUID().slice(0, 8)}`;
+      const stLive = mgr.ensureExternal(liveSid, join(DATA, "proj-gp"), "sweep 活对照", "sdk-live");
+      stLive.cli_pid = process.pid; // 本测试进程：恒活
+      addMember(gidGP, liveSid, "worker", {});
+      mgrAny.openDispatches.set(liveSid, [{ id: "dsp-sweep-live", tier: "随手办", gid: gidGP }]);
+      // 两轮确认适配（W-GATEPROBE-R1 解并：基座 #112 squash 后 sweep=返修两轮确认形态——
+      // 首拍 dead 只记账不收口，跨确认窗（CCR_SEAT_TURN_GAP_MIN 缺省 30min）次拍才收口+
+      // 席位回收。D18 原单拍写法撞新基座=六断言红（收口永不发生）；test-drainfix D2 同款
+      // Date.now 双拍适配，断言零改动（语义不变：dead→failed 收口→除名腾编制）。
+      const sweepFn = (mgr as unknown as { sweepDispatchQueueOnce(): { triggered: boolean; deadClosed: number } });
+      const realNow18 = Date.now;
+      let sweepR: { triggered: boolean; deadClosed: number };
+      Date.now = () => realNow18() + 40 * 60_000; // 首拍（帧龄超 TTL，确认窗起点）
+      try {
+        sweepFn.sweepDispatchQueueOnce(); // 首拍：记账不收口
+        Date.now = () => realNow18() + 75 * 60_000; // 跨确认窗（35min ≥ 30min）
+        sweepR = sweepFn.sweepDispatchQueueOnce(); // 次拍：收口+delta 除名
+      } finally { Date.now = realNow18; }
+      const d1row = readDispatchLog().find((e) => e.id === "dsp-sweep-dead");
+      assert(!!d1row && d1row.status === "failed", "external 死档悬账 failed 收口（基座行为保持）");
+      assert(!mgrAny.openDispatches.has(deadSid) && !mgrAny.openDispatches.has(zSid), "两 dead holder 悬账清空（基座行为保持）");
+      assert(sweepR.deadClosed >= 2, "deadClosed 计数≥2（两 dead holder 均收口）");
+      assert(!(listGroups().find((g) => g.id === gidGP)?.headcount ?? []).some((h) => h.session_id === deadSid), "delta①：external 死档 worker 除名腾编制（触顶组排队单不再被死档卡位）");
+      const retired18 = readFileSync(join(ORG, "retired-entries.jsonl"), "utf-8");
+      assert(retired18.includes(deadSid) && retired18.includes("dispatch-sweep"), "delta②：离席成因入库（cause=dispatch-sweep）");
+      const audit18 = readFileSync(join(DATA, "chain-audit.jsonl"), "utf-8");
+      assert(audit18.includes("drainfix-dead-close") && audit18.includes("\"dispatch-sweep\""), "delta③：双审计词齐（悬账收口 drainfix-dead-close + 席位回收 dispatch-sweep）");
+      assert((listGroups().find((g) => g.id === gidGP)?.headcount ?? []).some((h) => h.session_id === zSid), "防线①：managed+agent 席位不抢收（僵尸看门狗辖区——其 retire 边带杀树，两轮确认语义不绕过）");
+      assert(mgrAny.openDispatches.has(liveSid) && !readDispatchLog().some((e) => e.id === "dsp-sweep-live"), "防线②：pid 活 holder 零动作（1104 pmseat 误伤防线——进程活=回合在途）");
+      // 清理对照残悬账（zombie 辖区席留给看门狗语义，不泄漏给后续段）
+      mgrAny.openDispatches.delete(liveSid);
     }
 
     // ---------- 收尾 ----------

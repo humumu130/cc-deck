@@ -11237,6 +11237,41 @@ ${lines.join("\n")}
         this.closeOpenDispatches(sid, "failed", `断档兜底（周期 sweep 两轮确认）：worker 判活=dead（${ageText}，超回合间隙窗且跨确认窗仍无帧），回合中断收口——板卡回 backlog 可重派`, true, false, undefined, "backlog");
         deadClosed += count; // 计 open 行数（个别行 CAS 跳过残留以台账末行为准）
         this.emitChainAudit("drainfix-dead-close", `断档悬账收口（两轮确认）：会话 ${sid.slice(0, 12)} ${count} 张 open 单（组 ${gids.map((g) => g.slice(0, 8)).join(",") || "无"}）判活=dead（${ageText}，确认窗 ${Math.round(confirmMs / 60_000)}min 跨越）——failed 收口回 backlog，排队单随排水接续`);
+        // [W-GATEPROBE] 席位回收（要求③最低线）：external/无 wrapper/无卡 dead holder 僵尸
+        // 看门狗显式不管（external continue）——悬账收口后席位仍在编制=触顶组排队单被死档
+        // 卡死无自动出口（idle-trim 24h 太慢；#200③ 响亮错只拒新单不腾位）。member-retire
+        // 同款除名腾位，去 killTree（进程已死无树可杀；误判可 member-add 复拉——idle-trim
+        // 同款只出编制不删会话）。managed+agent 形态归看门狗辖区跳过（其 retire 边带杀树，
+        // 此处不抢不双杀）。
+        if (s && !s.state.external && s.agent) continue; // 僵尸看门狗辖区（两轮确认+杀树）
+        const leftGids: string[] = [];
+        for (const g of listGroups()) {
+          if (g.status !== "active") continue;
+          if (!g.headcount.some((h) => h.session_id === sid)) continue;
+          try {
+            removeMember(g.id, sid);
+            appendRetiredEvent({ ts: now, gid: g.id, session_id: sid, cause: "dispatch-sweep", detail: `断档疏通：判活=dead（${ageText}），悬账 failed 收口回 backlog，席位腾出（排队单随排水接续）` });
+            leftGids.push(g.id);
+          } catch (e) {
+            this.emitChainAudit("dispatch-sweep", `sid=${sid.slice(0, 12)} 组=${g.id.slice(0, 8)} 断档席位回收失败: ${e instanceof Error ? e.message : String(e)}（下轮 sweep 重试）`);
+          }
+        }
+        if (leftGids.length) {
+          this.emitChainAudit("dispatch-sweep", `sid=${sid.slice(0, 12)} 组=${leftGids.map((x) => x.slice(0, 8)).join(",")} 断档 holder 席位回收：member 除名腾编制（${ageText}，idle-trim 同款只出编制不删会话）`);
+          try {
+            this.upsertNotification("system", `dispatch-sweep-${sid.slice(0, 12)}-${now}`, undefined, {
+              title: "断档 worker 席位回收",
+              body: truncate(`会话 ${sid.slice(0, 12)} 判活=dead（${ageText}）——悬账已 failed 收口回待办、编制席位已腾出（排队单将接续派发）。会话卡保留，确认误判可 member-add 复拉`, 200),
+              severity: "info",
+              group: "activity",
+              actionable: false,
+              sessionId: this.leaderId ?? undefined,
+              domain: "session",
+              returnPath: "sessions",
+            });
+          } catch { /* 通知面尽力而为 */ }
+          this.emitOrgState();
+        }
       } catch (e) {
         console.warn(`[drainfix] 断档悬账收口失败 sid=${sid.slice(0, 12)}（重新计嫌疑，下轮 sweep 再试）: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -11880,7 +11915,7 @@ ${lines.join("\n")}
   retiredMemberEntries(): RetiredEntry[] {
     const sids = this.retiredMemberSids();
     if (!sids.length) return [];
-    const lastEv = new Map<string, { cause: "manual" | "idle-trim" | "group-disband"; ts: number; detail?: string }>();
+    const lastEv = new Map<string, { cause: "manual" | "idle-trim" | "group-disband" | "dispatch-sweep"; ts: number; detail?: string }>();
     for (const ev of listRetiredEvents()) {
       const prev = lastEv.get(ev.session_id);
       if (!prev || ev.ts >= prev.ts) lastEv.set(ev.session_id, { cause: ev.cause, ts: ev.ts, ...(ev.detail ? { detail: ev.detail } : {}) });
