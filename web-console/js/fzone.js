@@ -1,5 +1,8 @@
 // W-FZONE-B1（1111 拍板方案 B · 批一）：右侧文件工作区——tab 系统 + 容器（拖宽/收起/记忆）。
-// 设计规格 = ~/.cc-deck/artifacts/fzone-mocks/b.html（ws/ws-tools/ws-tabs/wtab 形态权威）。
+// W-FZONE-R3（1111 用户军令三）：布局层照抄 WorkBuddy（asar 逆向规格书=回执 w-fzone-r3.md 段A）——
+// fzone+4px sash 从会话面板容器内迁出为窗口级兄弟（session-split 行容器）；默认宽 440、clamp[340,800]
+// （WorkBuddy useState(440)+Math.min(Math.max(w,340),800) 同构）。tab/内容链路不变；mock b.html 降为
+// 历史 token 参考（布局权威让位 WorkBuddy 逆向规格）。
 // 内容加载委托 session-domain 注册的 window.__ccDeck005FzoneLoad(el, sid, path)（复用
 // fetchArtifact/mdHtml/synHtml 闭包内管线——本文件零数据面）；图标委托 __ccDeck005ArtIconHtml。
 // 批一范围：md/代码/图片三格式 + 点击入口闭环；批二（W-FZONE-B2）：格式矩阵（pdf 原生 viewer/
@@ -22,18 +25,23 @@
   const iconHtml = (name) => (typeof window.__ccDeck005ArtIconHtml === "function" ? window.__ccDeck005ArtIconHtml(name) : "");
 
   // ---------- 宽度/收起（记忆：localStorage 持久——任务书「收起/展开记忆」） ----------
-  function clampW(w) { return Math.max(280, Math.min(Math.round(window.innerWidth * 0.72), w)); }
+  // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
+  // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
+  // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
+  function clampW(w) { return Math.max(340, Math.min(800, Math.round(window.innerWidth * 0.72), w)); }
   function applyW(w) { root.style.width = clampW(w) + "px"; }
   function readW() {
     const v = Number(localStorage.getItem(W_KEY));
-    return Number.isFinite(v) && v >= 280 ? v : Math.round(window.innerWidth * 0.38); // 缺省 38%（任务书口径）
+    return Number.isFinite(v) && v >= 340 ? clampW(v) : 440; // 缺省 440（WorkBuddy 同构）；旧记忆 <340（38%/280 时代）归一
   }
   function setOpen(on, remember) {
     root.hidden = !on;
     root.classList.toggle("open", on);
+    const sash = document.querySelector("#d-session .fz-sash");
+    if (sash) sash.hidden = !on; // sash 随面板开合（WorkBuddy：面板关=整组不渲染，我方 hidden 等价）
     if (remember) { try { localStorage.setItem(OPEN_KEY, on ? "1" : "0"); } catch (_) {} }
-    const main = document.querySelector("#d-session .workspace-main");
-    if (main) main.classList.toggle("fz-on", on);
+    const split = document.querySelector("#d-session .session-split");
+    if (split) split.classList.toggle("fz-on", on);
     // 头部常驻开关钮状态回显（面板收起后=唯一再展开入口——静态 conv-mini 钮，data-fzone-toggle 不随对话重建）
     document.querySelectorAll("[data-fzone-toggle]").forEach((b) => {
       b.classList.toggle("on", on);
@@ -298,15 +306,25 @@
     const tg = ev.target.closest("[data-fzone-toggle]");
     if (tg) { ev.preventDefault(); setOpen(root.hidden, true); }
   });
-  const rz = root.querySelector("[data-fz-resize]");
+  // W-FZONE-R3：拖拽柄=会话面板外的窗口级 sash（.fz-sash——WorkBuddy __detail-sash 形态）；
+  // 算法 WorkBuddy 同构：mousedown 记 startX/startWidth → move=startWidth+(startX-clientX)（右锚定，
+  // 向左拖=加宽）→ clamp[340,800] → up 摘监听+解锁 body cursor/userSelect（拖拽全程全局锁
+  // col-resize 光标+禁文本选择——WorkBuddy onMouseUp 同款）。pointer capture 版实现（ Nova/WKWebView
+  // 兼容性优于 document mousemove 挂摘）。
+  const rz = document.querySelector("#d-session .fz-sash[data-fz-resize]");
   if (rz) {
     rz.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
       const startX = ev.clientX, startW = root.getBoundingClientRect().width;
       rz.setPointerCapture(ev.pointerId);
+      rz.classList.add("dragging");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
       const move = (e2) => applyW(startW + (startX - e2.clientX));
       const up = () => {
         rz.removeEventListener("pointermove", move); rz.removeEventListener("pointerup", up);
+        rz.classList.remove("dragging");
+        document.body.style.cursor = ""; document.body.style.userSelect = "";
         try { localStorage.setItem(W_KEY, String(clampW(root.getBoundingClientRect().width))); } catch (_) {}
       };
       rz.addEventListener("pointermove", move); rz.addEventListener("pointerup", up);
