@@ -48,7 +48,16 @@ set -uo pipefail
 
 usage() { grep '^# ' "$0" | sed 's/^# //; s/^#$//' >&2; }
 
+# W-LDLOCK（1111 实锤②治本·任务 #151）：锁离手标志——1=已交接（relay enqueue 成功，
+# 锁归属认领边）或归属已转移/已自放（明示拒路径自放后/HTTP 000 结果未知保留）——die()
+# 不再动锁（防误放 relay 认领边的锁）；0 且拿过锁=die 前放锁（拿锁后未交接即死=锁悬置
+# 120min，PM 曾手工 rm 清障两次——die 放锁兜底，与 :459 区拒收放锁同款 rm 语义：
+# wt-lock.py 无 release 子命令，rm -f 与既有路径等效）。
+handed=0
 die() { # $1=退出码 $2=文案
+  if [ "${did_acquire_lock:-0}" = "1" ] && [ "$handed" = "0" ]; then
+    rm -f "${wt_lock:-}" && echo "leader-dispatch：已释放本次获取的锁（${wt_lock:-}）" >&2
+  fi
   echo "leader-dispatch：$2" >&2
   exit "$1"
 }
@@ -280,6 +289,47 @@ if [ "$dry" = 0 ]; then
   fi
 fi
 
+# ---------- W-REVEXCL（1109 二现治本）：--review-of 解析→exclude 并集 ----------【W-LDLOCK 前移：原在拿锁后——id 笔误 die 曾悬置锁 120min（1111 实锤②），纯读无副作用前置到 worktree 预建前=零锁窗口早死】
+# 查 org 派单台账 dispatch-log.ndjson 取前单实施者 session_id（与 relay readDispatchLog
+# 同源三段解析，W-REVEXCL-R1 谓词补齐——org.ts orgDir()/config.ts isDataDirIsolated）：
+# ① CCR_ORG_DIR 显式最高优先；② CCR_DATA_DIR **仅隔离态**（已设且归一值≠生产缺省
+# ~/.cc-deck/data——生产内嵌 relay 显式 set 的缺省值不算隔离，防 org 目录被联动搬走）
+# 才随 data 走 <CCR_DATA_DIR>/org；③ 其余（未设/生产缺省值）恒 ~/.cc-deck/org。
+# 旧形态 ${CCR_DATA_DIR:+$CCR_DATA_DIR/org} 对任何非空值无条件拼 /org——PM 会话恒设
+# CCR_DATA_DIR=生产缺省 → 解析到不存在的 ~/.cc-deck/data/org → --review-of 恒 die 2
+#（R1 P1，w-revexcl-review.md 实证）。归一比较用 python os.path.abspath——node
+# path.resolve 同语义（绝对化归一不解析 symlink，与 relay 逐字同源；realpath 会解
+# symlink 反而漂移）。查不到=响亮报错（exit 2）——不静默裸派（裸派=审查单可能落回
+# 实施者本人，今日实锤形态）。
+if [ -n "$review_of" ]; then
+  _org_dir=""
+  if [ -n "${CCR_ORG_DIR:-}" ]; then
+    _org_dir="$CCR_ORG_DIR"
+  elif [ -n "${CCR_DATA_DIR:-}" ]; then
+    _cc_isolated="$(python3 -c 'import os,sys; print("1" if os.path.abspath(sys.argv[1]) != os.path.abspath(os.path.join(os.path.expanduser("~"), ".cc-deck", "data")) else "0")' "$CCR_DATA_DIR")"
+    [ "$_cc_isolated" = "1" ] && _org_dir="$CCR_DATA_DIR/org"
+  fi
+  [ -z "$_org_dir" ] && _org_dir="$HOME/.cc-deck/org"
+  _dl="$_org_dir/dispatch-log.ndjson"
+  [ -f "$_dl" ] || die 2 "--review-of: 派单台账不存在（$_dl）——确认 CCR_ORG_DIR/CCR_DATA_DIR 指向"
+  _impl_sid="$(python3 -c '
+import json,sys
+want, path = sys.argv[1], sys.argv[2]
+last = None
+for line in open(path, encoding="utf-8"):
+    line = line.strip()
+    if not line: continue
+    try: e = json.loads(line)
+    except Exception: continue
+    if e.get("id") == want and e.get("session_id"):
+        last = e["session_id"]  # 同 id 多行取末行（终态行 session 权威）
+print(last if last else "")
+' "$review_of" "$_dl")"
+  [ -n "$_impl_sid" ] || die 2 "--review-of: 台账中未找到 dispatch_id=$review_of 的实施者 session_id（id 笔误或行无 session_id）——不静默裸派"
+  echo "leader-dispatch：审查单排除前单 $review_of 实施者 ${_impl_sid%%-*}…（--review-of 解析）" >&2
+  if [ -n "$exclude_arg" ]; then exclude_arg="$_impl_sid,$exclude_arg"; else exclude_arg="$_impl_sid"; fi
+fi
+
 # ---------- worktree 预建（派单方建：失败面前置到派单时刻；单机部署无跨机收益） ----------
 if [ "$no_wt" = 0 ] && [ "$dry" = 0 ]; then
   if [ "$wt_state" = "reuse" ]; then
@@ -324,47 +374,6 @@ if [ "$no_wt" = 0 ]; then
   else
     echo "[锁] dry-run：预检过（$lock_verdict），真派时将原子写 $wt_lock"
   fi
-fi
-
-# ---------- W-REVEXCL（1109 二现治本）：--review-of 解析→exclude 并集 ----------
-# 查 org 派单台账 dispatch-log.ndjson 取前单实施者 session_id（与 relay readDispatchLog
-# 同源三段解析，W-REVEXCL-R1 谓词补齐——org.ts orgDir()/config.ts isDataDirIsolated）：
-# ① CCR_ORG_DIR 显式最高优先；② CCR_DATA_DIR **仅隔离态**（已设且归一值≠生产缺省
-# ~/.cc-deck/data——生产内嵌 relay 显式 set 的缺省值不算隔离，防 org 目录被联动搬走）
-# 才随 data 走 <CCR_DATA_DIR>/org；③ 其余（未设/生产缺省值）恒 ~/.cc-deck/org。
-# 旧形态 ${CCR_DATA_DIR:+$CCR_DATA_DIR/org} 对任何非空值无条件拼 /org——PM 会话恒设
-# CCR_DATA_DIR=生产缺省 → 解析到不存在的 ~/.cc-deck/data/org → --review-of 恒 die 2
-#（R1 P1，w-revexcl-review.md 实证）。归一比较用 python os.path.abspath——node
-# path.resolve 同语义（绝对化归一不解析 symlink，与 relay 逐字同源；realpath 会解
-# symlink 反而漂移）。查不到=响亮报错（exit 2）——不静默裸派（裸派=审查单可能落回
-# 实施者本人，今日实锤形态）。
-if [ -n "$review_of" ]; then
-  _org_dir=""
-  if [ -n "${CCR_ORG_DIR:-}" ]; then
-    _org_dir="$CCR_ORG_DIR"
-  elif [ -n "${CCR_DATA_DIR:-}" ]; then
-    _cc_isolated="$(python3 -c 'import os,sys; print("1" if os.path.abspath(sys.argv[1]) != os.path.abspath(os.path.join(os.path.expanduser("~"), ".cc-deck", "data")) else "0")' "$CCR_DATA_DIR")"
-    [ "$_cc_isolated" = "1" ] && _org_dir="$CCR_DATA_DIR/org"
-  fi
-  [ -z "$_org_dir" ] && _org_dir="$HOME/.cc-deck/org"
-  _dl="$_org_dir/dispatch-log.ndjson"
-  [ -f "$_dl" ] || die 2 "--review-of: 派单台账不存在（$_dl）——确认 CCR_ORG_DIR/CCR_DATA_DIR 指向"
-  _impl_sid="$(python3 -c '
-import json,sys
-want, path = sys.argv[1], sys.argv[2]
-last = None
-for line in open(path, encoding="utf-8"):
-    line = line.strip()
-    if not line: continue
-    try: e = json.loads(line)
-    except Exception: continue
-    if e.get("id") == want and e.get("session_id"):
-        last = e["session_id"]  # 同 id 多行取末行（终态行 session 权威）
-print(last if last else "")
-' "$review_of" "$_dl")"
-  [ -n "$_impl_sid" ] || die 2 "--review-of: 台账中未找到 dispatch_id=$review_of 的实施者 session_id（id 笔误或行无 session_id）——不静默裸派"
-  echo "leader-dispatch：审查单排除前单 $review_of 实施者 ${_impl_sid%%-*}…（--review-of 解析）" >&2
-  if [ -n "$exclude_arg" ]; then exclude_arg="$_impl_sid,$exclude_arg"; else exclude_arg="$_impl_sid"; fi
 fi
 
 # ---------- org dispatch 请求体（gid 派单锚取组 F-03；板卡联动 relay 内建） ----------
@@ -458,12 +467,18 @@ if [ "$code" != "200" ] || [ -z "$api_ok" ]; then
   #   并明示防双开单——盲重试会像 1104 那样同任务双 worker 双开（先查 org status open 派单）。
   if [ -n "$code" ] && [ "$code" != "000" ] && [ "${did_acquire_lock:-0}" = "1" ]; then
     rm -f "$wt_lock" && echo "leader-dispatch：服务端明示拒收——worktree 锁随撤（$wt_lock）" >&2
+    handed=1 # W-LDLOCK：已自放——后续 die() 不重复放/不重复提示
   fi
   if [ "$code" = "000" ] || [ -z "$code" ]; then
     echo "leader-dispatch：HTTP 000=服务端结果未知（可能已派单）——先 org status 查 open 派单确认，盲重试会双开单（1104 实锤：同任务两 worker 双跑同树）" >&2
+    handed=1 # W-LDLOCK：000=锁归属可能的认领边（本进程不再释放——die() 放锁兜底对此豁免）
   fi
   die 1 "org dispatch 拒收（HTTP ${code:-无响应}）${api_err:+：$api_err}"
 fi
+
+# W-LDLOCK：enqueue 成功=锁交接 relay 认领边（dispatchWorker 原子 claim 补写归属）——此后
+# 本地台账/活性核验（die 4）等一切退出路径锁保留，die() 放锁兜底对此豁免（不误放他边锁）。
+handed=1
 
 # ---------- 本地派单账（leader-harvest 按名寻址） ----------
 mkdir -p "$data"
