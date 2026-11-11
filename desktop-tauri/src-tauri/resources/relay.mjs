@@ -52947,7 +52947,7 @@ function harvestTraeUsage(trajPath, cb2) {
     output += num4(u.output_tokens);
     cacheRead += num4(u.cache_read_input_tokens);
     cacheCreate += num4(u.cache_creation_input_tokens);
-    lastCtx = num4(u.input_tokens) + cacheRead + cacheCreate;
+    lastCtx = num4(u.input_tokens) + num4(u.cache_read_input_tokens) + num4(u.cache_creation_input_tokens);
   }
   if (!seen) return null;
   cb2.onUsage({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheCreate });
@@ -67837,6 +67837,36 @@ ${out}`;
         this.closeOpenDispatches(sid, "failed", `\u65AD\u6863\u515C\u5E95\uFF08\u5468\u671F sweep \u4E24\u8F6E\u786E\u8BA4\uFF09\uFF1Aworker \u5224\u6D3B=dead\uFF08${ageText}\uFF0C\u8D85\u56DE\u5408\u95F4\u9699\u7A97\u4E14\u8DE8\u786E\u8BA4\u7A97\u4ECD\u65E0\u5E27\uFF09\uFF0C\u56DE\u5408\u4E2D\u65AD\u6536\u53E3\u2014\u2014\u677F\u5361\u56DE backlog \u53EF\u91CD\u6D3E`, true, false, void 0, "backlog");
         deadClosed += count;
         this.emitChainAudit("drainfix-dead-close", `\u65AD\u6863\u60AC\u8D26\u6536\u53E3\uFF08\u4E24\u8F6E\u786E\u8BA4\uFF09\uFF1A\u4F1A\u8BDD ${sid.slice(0, 12)} ${count} \u5F20 open \u5355\uFF08\u7EC4 ${gids.map((g2) => g2.slice(0, 8)).join(",") || "\u65E0"}\uFF09\u5224\u6D3B=dead\uFF08${ageText}\uFF0C\u786E\u8BA4\u7A97 ${Math.round(confirmMs / 6e4)}min \u8DE8\u8D8A\uFF09\u2014\u2014failed \u6536\u53E3\u56DE backlog\uFF0C\u6392\u961F\u5355\u968F\u6392\u6C34\u63A5\u7EED`);
+        if (s && !s.state.external && s.agent) continue;
+        const leftGids = [];
+        for (const g2 of listGroups()) {
+          if (g2.status !== "active") continue;
+          if (!g2.headcount.some((h) => h.session_id === sid)) continue;
+          try {
+            removeMember(g2.id, sid);
+            appendRetiredEvent({ ts: now, gid: g2.id, session_id: sid, cause: "dispatch-sweep", detail: `\u65AD\u6863\u758F\u901A\uFF1A\u5224\u6D3B=dead\uFF08${ageText}\uFF09\uFF0C\u60AC\u8D26 failed \u6536\u53E3\u56DE backlog\uFF0C\u5E2D\u4F4D\u817E\u51FA\uFF08\u6392\u961F\u5355\u968F\u6392\u6C34\u63A5\u7EED\uFF09` });
+            leftGids.push(g2.id);
+          } catch (e) {
+            this.emitChainAudit("dispatch-sweep", `sid=${sid.slice(0, 12)} \u7EC4=${g2.id.slice(0, 8)} \u65AD\u6863\u5E2D\u4F4D\u56DE\u6536\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}\uFF08\u4E0B\u8F6E sweep \u91CD\u8BD5\uFF09`);
+          }
+        }
+        if (leftGids.length) {
+          this.emitChainAudit("dispatch-sweep", `sid=${sid.slice(0, 12)} \u7EC4=${leftGids.map((x) => x.slice(0, 8)).join(",")} \u65AD\u6863 holder \u5E2D\u4F4D\u56DE\u6536\uFF1Amember \u9664\u540D\u817E\u7F16\u5236\uFF08${ageText}\uFF0Cidle-trim \u540C\u6B3E\u53EA\u51FA\u7F16\u5236\u4E0D\u5220\u4F1A\u8BDD\uFF09`);
+          try {
+            this.upsertNotification("system", `dispatch-sweep-${sid.slice(0, 12)}-${now}`, void 0, {
+              title: "\u65AD\u6863 worker \u5E2D\u4F4D\u56DE\u6536",
+              body: truncate2(`\u4F1A\u8BDD ${sid.slice(0, 12)} \u5224\u6D3B=dead\uFF08${ageText}\uFF09\u2014\u2014\u60AC\u8D26\u5DF2 failed \u6536\u53E3\u56DE\u5F85\u529E\u3001\u7F16\u5236\u5E2D\u4F4D\u5DF2\u817E\u51FA\uFF08\u6392\u961F\u5355\u5C06\u63A5\u7EED\u6D3E\u53D1\uFF09\u3002\u4F1A\u8BDD\u5361\u4FDD\u7559\uFF0C\u786E\u8BA4\u8BEF\u5224\u53EF member-add \u590D\u62C9`, 200),
+              severity: "info",
+              group: "activity",
+              actionable: false,
+              sessionId: this.leaderId ?? void 0,
+              domain: "session",
+              returnPath: "sessions"
+            });
+          } catch {
+          }
+          this.emitOrgState();
+        }
       } catch (e) {
         console.warn(`[drainfix] \u65AD\u6863\u60AC\u8D26\u6536\u53E3\u5931\u8D25 sid=${sid.slice(0, 12)}\uFF08\u91CD\u65B0\u8BA1\u5ACC\u7591\uFF0C\u4E0B\u8F6E sweep \u518D\u8BD5\uFF09: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -74964,7 +74994,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.10";
+  const verRelay = "0.7.1-test.11";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }

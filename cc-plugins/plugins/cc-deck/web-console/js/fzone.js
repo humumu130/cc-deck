@@ -2,7 +2,9 @@
 // 设计规格 = ~/.cc-deck/artifacts/fzone-mocks/b.html（ws/ws-tools/ws-tabs/wtab 形态权威）。
 // 内容加载委托 session-domain 注册的 window.__ccDeck005FzoneLoad(el, sid, path)（复用
 // fetchArtifact/mdHtml/synHtml 闭包内管线——本文件零数据面）；图标委托 __ccDeck005ArtIconHtml。
-// 批一范围：md/代码/图片三格式 + 点击入口闭环；pdf/docx/媒体/自动推 tab/空间树/diff=批二。
+// 批一范围：md/代码/图片三格式 + 点击入口闭环；批二（W-FZONE-B2）：格式矩阵（pdf 原生 viewer/
+// 音频/视频——session-domain 侧）+ 产物自动推 tab（autoOpen 不抢焦点+「新」角标）+ ⌘1-8 直达
+// + 工作空间树抽屉（降级形态：已登记产物按目录分组——relay 无列目录命令）；diff=无通道降级。
 (function () {
   "use strict";
   const W_KEY = "ccd_fzone_w", OPEN_KEY = "ccd_fzone_open";
@@ -39,8 +41,10 @@
   function renderTools() {
     if (!toolsEl) return;
     const n = state.tabs.length;
+    const freshN = state.tabs.filter((t) => t.fresh).length;
     toolsEl.innerHTML = '<button type="button" class="fz-tool" data-fz-collapse title="' + (root.hidden ? "展开文件工作区" : "收起文件工作区（保留全部 tab）") + '">' + (root.hidden ? "⟨ 展开" : "收起 ⟩") + "</button>" +
-      '<span class="fz-spring"></span><span class="fz-state">' + (n ? n + " tab" + (n > 1 ? "s" : "") : "空") + "</span>";
+      '<button type="button" class="fz-tool" data-fz-tree-btn title="工作空间树（本会话产物按目录分组）">▤ 树</button>' +
+      '<span class="fz-spring"></span><span class="fz-state">' + (n ? n + " tab" + (n > 1 ? "s" : "") + (freshN ? ' · <b class="fz-freshn">' + freshN + " 新</b>" : "") : "空") + "</span>";
   }
   // ---------- tab 渲染 ----------
   function baseName(p) { return String(p || "").split(/[\\/]/).filter(Boolean).pop() || String(p || ""); }
@@ -50,6 +54,7 @@
       '<button type="button" class="wtab' + (t.id === state.active ? " on" : "") + '" data-fz-tab="' + esc(t.id) + '" title="' + esc(t.path) + '" role="tab" aria-selected="' + (t.id === state.active ? "true" : "false") + '">' +
       '<span class="fic">' + iconHtml(baseName(t.path)) + "</span>" +
       '<span class="fname">' + esc(baseName(t.path)) + "</span>" +
+      (t.fresh ? '<span class="fz-badge" title="本回合新增">新</span>' : "") +
       '<span class="x" data-fz-close="' + esc(t.id) + '" role="button" aria-label="关闭 ' + esc(baseName(t.path)) + '" title="关闭">✕</span>' +
       "</button>").join("") || '<span class="fz-tabs-empty">尚无打开的文件</span>';
   }
@@ -74,7 +79,7 @@
     state.lastSid = String(sid);
     const id = tabId(sid, p);
     const hit = state.tabs.find((t) => t.id === id);
-    if (hit) { state.active = id; renderAll(); return; } // 聚焦已有 tab（复合 id=同会话同路径才命中，跨会话串台不可能）
+    if (hit) { hit.fresh = false; state.active = id; renderAll(); return; } // 聚焦已有 tab（复合 id=同会话同路径才命中，跨会话串台不可能；聚焦即清「新」角标）
     const pane = document.createElement("div");
     pane.className = "fz-pane";
     pane.dataset.fzPane = id;
@@ -84,6 +89,27 @@
     state.active = id;
     setOpen(true, false);
     renderAll();
+    load(id, pane, sid, p);
+  }
+  // ---------- W-FZONE-B2 件②：产物自动推 tab（回合收口新增 artifacts——session-domain
+  // fzAutoTabOnUpdate 差分调这里）：不抢焦点（state.active 不动——用户正在看的 tab 不切）+
+  // 「新」角标（点击聚焦即清）。面板收起时不强行展开（不打扰）：tab 静默入列，工具行计数带
+  // 「N 新」，用户展开即见。已开过的文件重复新增=只补角标不开新 tab。
+  function autoOpen(sid, path) {
+    const p = String(path || "");
+    if (!p) return;
+    state.lastSid = String(sid);
+    const id = tabId(sid, p);
+    const hit = state.tabs.find((t) => t.id === id);
+    if (hit) { if (!hit.fresh) { hit.fresh = true; renderTabs(); renderTools(); } return; }
+    const pane = document.createElement("div");
+    pane.className = "fz-pane";
+    pane.dataset.fzPane = id;
+    pane.innerHTML = '<div class="fz-load">拉取中…</div>';
+    bodyEl.appendChild(pane);
+    state.tabs.push({ id, path: p, sid: String(sid), fresh: true });
+    if (!state.active) state.active = id; // 面板空态首 tab：自然成为 active（无焦点可抢）
+    renderAll(); // 面板收着也渲染（hidden 容器内零视觉；展开即见）
     load(id, pane, sid, p);
   }
   function load(id, pane, sid, path) { // path 独立参数（P2-① 复合 id 不再等价 path——挂口第三参须传真路径）
@@ -116,6 +142,7 @@
     const s = String(sid || "");
     if (s === state.lastSid) return;
     state.lastSid = s;
+    closeTree(); // 树抽屉随会话清空（数据源已随会话切换失效）
     [...bodyEl.querySelectorAll("[data-fz-pane]")].forEach(unloadPane);
     bodyEl.innerHTML = "";
     state.tabs = [];
@@ -132,12 +159,51 @@
     load(t.id, pane, t.sid, t.path);
   }
 
-  // ---------- 事件（tab 切换/关闭/中键关/重试/收起/拖宽） ----------
+  // ---------- W-FZONE-B2 件③：工作空间树抽屉（降级形态：已登记产物按目录分组——relay 无
+  // 列目录命令，任务书预判降级；数据源=window.__ccDeck005FzoneArts（session-domain 当前会话
+  // artifacts 原文路径）；点击走 OpenByToken（原文 path 直命中 openFzoneTab）。懒加载口径：
+  // 首次点击「▤ 树」才拉数据渲染（产物多时也只渲一屏列表+目录分组，无递归展开成本）。
+  let treeEl = null;
+  function dirOf(p) { const seg = String(p || "").replace(/[\\/]+$/, "").split(/[\\/]/); seg.pop(); return seg.join("/"); }
+  function renderTree() {
+    closeTree();
+    const arts = (typeof window.__ccDeck005FzoneArts === "function" ? window.__ccDeck005FzoneArts() : null) || [];
+    const groups = new Map(); // dir → [name]
+    for (const a of arts) {
+      const d = dirOf(a.path) || "（根）";
+      if (!groups.has(d)) groups.set(d, []);
+      groups.get(d).push(baseName(a.path));
+    }
+    const rows = [...groups.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).map(([d, names]) =>
+      '<div class="fz-tree-dir">' + esc(d) + "</div>" +
+      names.sort().map((n) => '<button type="button" class="fz-tree-file" data-fz-tree-open="' + esc(d === "（根）" ? n : d + "/" + n) + '"><span class="fic">' + iconHtml(n) + "</span>" + esc(n) + "</button>").join("")
+    ).join("");
+    treeEl = document.createElement("div");
+    treeEl.className = "fz-tree";
+    treeEl.dataset.fzTree = "1";
+    treeEl.innerHTML = '<div class="fz-tree-head"><span>工作空间 · ' + arts.length + " 件产物</span><button type=\"button\" class=\"fz-tool\" data-fz-tree-close title=\"关闭树\">✕</button></div>" +
+      '<div class="fz-tree-list">' + (rows || '<div class="fz-tree-empty">本会话暂无登记产物——产物由 deliver/输出物链登记</div>') + "</div>" +
+      '<div class="fz-tree-note">降级形态：按已登记产物目录分组（目录浏览需 relay 列目录通道，批三评估）</div>';
+    bodyEl.appendChild(treeEl);
+  }
+  function closeTree() {
+    if (treeEl && treeEl.isConnected) treeEl.remove();
+    treeEl = null;
+  }
+
+  // ---------- 事件（tab 切换/关闭/中键关/重试/收起/拖宽/树/⌘1-8） ----------
   root.addEventListener("click", (ev) => {
     const x = ev.target.closest("[data-fz-close]");
     if (x) { ev.stopPropagation(); close(x.dataset.fzClose); return; }
     const tb = ev.target.closest("[data-fz-tab]");
-    if (tb) { state.active = tb.dataset.fzTab; renderAll(); return; }
+    if (tb) {
+      state.active = tb.dataset.fzTab;
+      const cur = state.tabs.find((t) => t.id === state.active);
+      if (cur && cur.fresh) cur.fresh = false; // 点击聚焦清「新」角标
+      closeTree();
+      renderAll();
+      return;
+    }
     const rt = ev.target.closest("[data-fz-retry]");
     if (rt) { retry(rt.dataset.fzRetry); return; }
     // md 预览体内的路径 token（mdHtml 同款 .fpath）→ 经 session-domain 登记面解析开新 tab
@@ -145,12 +211,38 @@
     if (fp && typeof window.__ccDeck005FzoneOpenByToken === "function") { window.__ccDeck005FzoneOpenByToken(fp.dataset.p); return; }
     const co = ev.target.closest("[data-fz-collapse]");
     if (co) { setOpen(root.hidden, true); return; }
+    // W-FZONE-B2 件③：树抽屉（钮=开/关切换；树内文件=OpenByToken 路由开 tab；树外点击=收树）
+    if (ev.target.closest("[data-fz-tree-close]")) { closeTree(); return; }
+    const tf = ev.target.closest("[data-fz-tree-open]");
+    if (tf) {
+      if (typeof window.__ccDeck005FzoneOpenByToken === "function") window.__ccDeck005FzoneOpenByToken(tf.dataset.fzTreeOpen);
+      closeTree();
+      return;
+    }
+    if (ev.target.closest(".fz-tree")) return; // 树体内部其余点击不动作
+    if (ev.target.closest("[data-fz-tree-btn]")) { if (treeEl) closeTree(); else renderTree(); return; }
+    if (treeEl) closeTree(); // 树外点击收树
   });
   root.addEventListener("auxclick", (ev) => { // 中键关闭（spec 交互流）
     if (ev.button !== 1) return;
     const tb = ev.target.closest("[data-fz-tab]");
     if (tb) { ev.preventDefault(); close(tb.dataset.fzTab); }
   });
+  // W-FZONE-B2 件⑤（批一 P3 随批）：⌘/Ctrl+1..8 直达第 N tab（Nova/WKWebView 壳内生效——
+  // 桌面浏览器 ⌘1-8 系浏览器 tab 切换保留键，页面层 preventDefault 抢不到属预期，回执声明）
+  document.addEventListener("keydown", (ev) => {
+    if (!(ev.metaKey || ev.ctrlKey) || ev.altKey || ev.shiftKey) return;
+    const n = parseInt(ev.key, 10);
+    if (!(n >= 1 && n <= 8) || !state.tabs.length || root.hidden) return;
+    const t = state.tabs[n - 1];
+    if (!t) return;
+    ev.preventDefault();
+    t.fresh = false;
+    state.active = t.id;
+    closeTree();
+    renderAll();
+  });
+
   // 头部常驻开关钮（会话 head-actions 静态位——面板收起后唯一再展开入口；委托监听不依赖面板可见）
   document.addEventListener("click", (ev) => {
     const tg = ev.target.closest("[data-fzone-toggle]");
@@ -177,5 +269,5 @@
   if (remembered) setOpen(true, false); // 恢复展开但零 tab=空态（批一无自动重开文件——内容 tab 不持久化）
   renderAll();
 
-  window.ccDeckFzone = Object.freeze({ open, close, resetForSession, toggle: () => setOpen(root.hidden, true), isOpen: () => !root.hidden, tabs: () => state.tabs.map((t) => t.path) });
+  window.ccDeckFzone = Object.freeze({ open, autoOpen, close, resetForSession, toggle: () => setOpen(root.hidden, true), isOpen: () => !root.hidden, tabs: () => state.tabs.map((t) => t.path) }); // B2：autoOpen 入 API（session-domain 差分挂点消费）
 })();

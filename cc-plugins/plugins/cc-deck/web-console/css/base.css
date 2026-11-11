@@ -762,6 +762,26 @@
     .fzone { position: relative; display: flex; flex-direction: column; flex: 0 0 auto; width: 38%; min-width: 280px; border-left: 1px solid var(--line-strong); background: var(--surface1); }
     .fzone[hidden] { display: none; }
     .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
+
+    /* ═══ W-FZONE-B2（批二）：角标/树抽屉/pdf/媒体——token 同源 ═══ */
+    .fzone .fz-badge { flex: none; margin-left: 5px; padding: 0 4px; border-radius: 4px; background: var(--brand, #EC9A73); color: #fff; font-size: 9.5px; font-weight: 700; line-height: 14px; }
+    .fzone .fz-freshn { color: var(--brand, #EC9A73); font-weight: 700; }
+    .fzone .fz-pdfwrap { position: absolute; inset: 0; }
+    .fzone .fz-pdf { width: 100%; height: 100%; border: 0; background: var(--surface2, #fff); }
+    .fzone .fz-mediawrap { display: flex; align-items: center; justify-content: center; padding: 18px; height: 100%; }
+    .fzone .fz-video { max-width: 100%; max-height: 100%; border-radius: 6px; background: #000; }
+    .fzone .fz-audiocard { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 22px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }
+    .fzone .fz-audio-name { font-size: 12px; color: var(--text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fzone .fz-audio { width: min(420px, 100%); }
+    .fzone .fz-tree { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--surface1); }
+    .fzone .fz-tree-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--text); font-weight: 700; }
+    .fzone .fz-tree-list { flex: 1; overflow: auto; padding: 6px 10px; }
+    .fzone .fz-tree-dir { font-size: 10.5px; color: var(--dim); margin: 8px 0 3px; font-family: var(--mono, monospace); word-break: break-all; }
+    .fzone .fz-tree-dir:first-child { margin-top: 2px; }
+    .fzone .fz-tree-file { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px 4px 14px; border: 0; background: none; color: var(--text); font-size: 12px; text-align: left; cursor: pointer; border-radius: 5px; }
+    .fzone .fz-tree-file:hover { background: color-mix(in srgb, var(--dim) 12%, transparent); }
+    .fzone .fz-tree-empty { padding: 18px 6px; font-size: 11.5px; color: var(--dim); }
+    .fzone .fz-tree-note { padding: 6px 10px; border-top: 1px solid var(--line); font-size: 10px; color: var(--dim); }
     .fzone .fz-tool { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-E); color: var(--dim); border: 1px solid var(--line-strong); background: transparent; border-radius: 7px; padding: 2px 9px; cursor: pointer; }
     .fzone .fz-tool:hover { color: var(--text-strong); border-color: var(--faint); }
     .fzone .fz-spring { flex: 1; }
