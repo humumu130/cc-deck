@@ -4636,7 +4636,14 @@
                   return [{ id: "claude", label: "Claude", state: "ready", preflight: { state: "pass", reason: "" }, models: S.models }];
                 }
                 function defaultEngineId(source) { const ready = catalogEntries(source).find((e) => e.state === "ready"); return ready ? ready.id : "claude"; }
+                // W-ZCODE-C（1111 拍板 C，调研回执 w-zcode-assess.md）：zcode 产品化标注常量——
+                // 上游无官方 npm 分发（CLI 已开源 zai-org/ZCode；社区包 zcode-app-cli 存在但
+                // 未经供应链审计，暂不接入）；GLM 用户可走 claude 别名桥接。
+                // 复评触发器：官方 npm 分发出现时复评（届时撤本特判+engine-catalog zcode unsupported 分支）。
+                // 双端同源副本：settings-domain.js 引擎行+expo NewSessionModal 各持同口径常量（改三处同步——AUTO_MSG_PREFIXES 双端副本同惯例）。
+                const ZCODE_NOTE = "无官方 npm 分发 · CLI 已开源（zai-org/ZCode），社区包未经供应链审计暂不接入 · GLM 用户可走 claude 别名桥接 · 官方 npm 分发出现时复评";
                 function engineStateText(e) {
+                  if (e.id === "zcode" && (e.state === "unsupported" || /枚举占位/.test(String((e.preflight && e.preflight.reason) || "")))) return "未接入 · 无官方分发"; // W-ZCODE-C：二字短标升产品短句（W-ENGINESLIM 口径内的最小扩张）
                   if (e.state === "ready") return e.models && e.models.length ? e.models.length + " 个模型" : "已就绪 · 使用默认模型";
                   if (e.state === "needs_auth") return "未登录 · " + oneLine(e.auth_hint || "请先完成引擎登录"); // #102 批 A：装了没登录——黄点+指引
                   // UI 反馈批 1029 件C：不可用文案产品化——relay preflight 原因是运维口径直出
@@ -4673,6 +4680,7 @@
                 function engineStateHint(e) {
                   if (e.state === "ready") return "";
                   if (e.state === "needs_auth") return oneLine(String(e.auth_hint || ""));
+                  if (e.id === "zcode") return ZCODE_NOTE; // W-ZCODE-C：zcode 产品口径替代运维原文（「枚举占位未接入编排」对用户零行动价值）——title 全量查询口
                   return oneLine(String((e.preflight && e.preflight.reason) || ""));
                 }
                 // #368（旧壳 8781-8794 口径）：cwd 预填「上次创建用的目录」优先，无记忆回落
