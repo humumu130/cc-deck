@@ -58,6 +58,13 @@ assert(!artB.some((a) => a.path.toLowerCase() === f1.toLowerCase()), "① 隔壁
 r = mgr.deliverBySession(SID_B, "/definitely/not/a/session/cwd", f2);
 assert(r.ok && r.session_id === CARD_B, `② ext- 前缀形态回归 → 挂 ${CARD_B.slice(0, 12)}（实际 ${r.session_id?.slice(0, 12) ?? "无"}）`);
 
+// W-T11CIFIX（run 42971578878 实锤 CI flaky 根治）：上方 ①②两次 deliver 各刷目标卡
+// updated_at（registerDeliverable 挂账路径）且 Date.now() 毫秒粒度——CI 慢机上两连调用
+// 可落同一毫秒 → B 不严格新于 A → matchSessionByCwd 严格 > 打平取先者 A → ③挂 A 红
+//（本机快机难复现，探针实证 ①刷 A/②刷 B 链）。②后隔 5ms 显式再拔 B（建卡段同款手法
+// 补 deliver 段缺口）——B 恒严格最新，③确定性选 B。
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+mgr.setExternalStatus(CARD_B, "WORKING", "正在忙"); // B updated_at 严格 > A（③前最后一拔）
 // ③ 回落兜底不破：未知 sid + cwd 命中 → deliverByCwd 语义（挂最近活跃的 B）
 r = mgr.deliverBySession("unknown-sid-0000", root, f2);
 assert(r.ok && r.session_id === CARD_B, "③ 未知 sid 回落 cwd 启发式 → 最近活跃卡");
