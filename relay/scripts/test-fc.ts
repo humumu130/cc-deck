@@ -219,6 +219,16 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(fz.includes("function tabId(sid, path)") && fz.includes('state.tabs.push({ id, path: p, sid: String(sid) })') && fz.includes("load(t.id, pane, t.sid, t.path)") && !fz.includes("state.sid = sid"), "F10 tab 会话作用域（P2-①：复合 id sid+path 跨会话同名路径不串台/tab 自带 sid/retry 取 tab sid 真路径——负向锚=全局 state.sid 覆写旧串不得回归）");
   ok(fz.includes("function resetForSession") && fz.includes("if (s === state.lastSid) return;") && fz.includes("resetForSession,") && web.includes("ccDeckFzone.resetForSession(sid)") && web.includes("ccDeckFzone.resetForSession(s.session_id)") && web.split("resetForSession(").length >= 3, "F10b 切会话清空双挂点（选中链 MO+slimOpenSession 成员卡直开——lastSid 幂等守卫，开合态不动）");
   ok(web.includes("el.dataset.fzUrl") && web.includes("window.__ccDeck005FzoneUnload") && fz.includes("window.__ccDeck005FzoneUnload") && !web.includes('let fzObjUrl = ""'), "F11 图片 blob per-tab 槽（P2-②：双图并存互不 revoke，关 tab/切会话经 unload 挂口回收——负向锚=单槽旧串不得回归）");
+
+  // ============ F-B2. W-FZONE-B2 文件工作区批二（格式矩阵+自动推 tab+空间树+P3 随批） ============
+  ok(web.includes('const FZ_AUDIO_EXT = new Set(["mp3", "wav", "m4a", "aac", "ogg", "flac"])') && web.includes('const FZ_VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v"])') && web.includes('const asPdf = ext === "pdf"') && web.includes('fzSetUrl(el, new Blob([bytes], { type: res.mime || "application/pdf" }))'), "F12 格式矩阵：pdf=blob 原生 viewer 零依赖（iframe）+音频 6 扩展+视频 4 扩展（audio/video controls）——fzSetUrl per-tab 单槽泛化（重载先回收旧）", );
+  ok(web.includes('office/数据库档暂不支持（下载查看）') && !web.includes("pdf/office/数据库/媒体为批二"), "F13 降级卡文案更新（批二后 pdf/媒体已支持——负向锚=批一占位文案不得回归）");
+  ok(web.includes("fzAutoTabOnUpdate") && web.includes("const fzAutoTabBase = new Map()") && web.includes("if (!prev.working || s.status === \"WORKING\") return;") && web.includes("if (sid !== S.selected) return;") && web.includes("for (const p of paths) if (!prev.set.has(p)) fz.autoOpen(sid, p);"), "F14 产物自动推 tab（件②）：per-sid 基线 Map+首见建基不推+仅收口沿（WORKING→非 WORKING）+仅当前选中会话（不打扰）+差分新路径调 autoOpen");
+  ok(fz.includes("function autoOpen") && fz.includes('state.tabs.push({ id, path: p, sid: String(sid), fresh: true });') && fz.includes("if (!state.active) state.active = id;") && !fz.includes("autoOpen(sid, p); setOpen(true"), "F15 autoOpen 不抢焦点（active 不动+仅空态首 tab 自然成 active+负向锚=不得 setOpen 强展开）+fresh 角标");
+  ok(fz.includes('class="fz-badge"') && fz.includes("hit.fresh = false") && fz.includes("if (cur && cur.fresh) cur.fresh = false;") && css.includes(".fz-badge"), "F16 「新」角标（渲染+聚焦/点击/⌘直达三路清除+CSS）");
+  ok(fz.includes('data-fz-tree-btn') && fz.includes("function renderTree") && fz.includes("data-fz-tree-open") && web.includes("window.__ccDeck005FzoneArts") && fz.includes("fz-tree-note"), "F17 工作空间树抽屉（件③降级形态：树钮+目录分组渲染+__ccDeck005FzoneArts 数据挂口+降级说明条——relay 无列目录通道声明）");
+  ok(fz.includes("(ev.metaKey || ev.ctrlKey)") && fz.includes("parseInt(ev.key, 10)") && fz.includes("n >= 1 && n <= 8"), "F18 ⌘/Ctrl+1..8 直达第 N tab（件⑤批一 P3——Nova 壳内生效口径）");
+  ok(web.includes('img.addEventListener("error"') && web.includes("浏览器不支持解码该图片格式"), "F19 heic/tiff 破图兜底（onerror→降级卡+回收 blob url——件⑤批一 P3）");
 }
 
 console.log(`\n§P-§A：${pass} ok / ${fail} FAIL`);

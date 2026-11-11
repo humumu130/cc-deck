@@ -906,10 +906,28 @@
                 // #m-* 全覆盖）。语义：修饰键（Ctrl/⌘）点击=显式打开；触屏（hover:none/pointer:coarse）
                 // 直接点按打开；无修饰键桌面/浏览器不接管（桌面壳由 INIT_SCRIPT capture 兜底转系统
                 const MERGE_KEYS = ["status", "action_summary", "cwd", "title", "title_locked", "model", "turn_started_at", "last_tool_use_at", "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "pinned", "saved", "historical", "external", "remote_mode", "artifacts", "artifacts_truncated", "engine", "updated_at", "started_at", "duration_ms", "waiting_started_at", "last_error", "pre_compact_summary", "auth_hint", "relay_source", "activity_capabilities"]; // W-SRC2 #134（本批①）：增量 SESSION_UPDATED 透传 relay_source——SNAPSHOT 打标被后到无标增量覆写时自愈（relay 恒注入后此键恒在场，等值覆写零副作用）
+                // W-FZONE-B2 件②（产物自动推 tab）：回合收口（status 离开 WORKING）时差分当前
+                // 会话新增 artifacts → fzone.autoOpen（不抢焦点+「新」角标）。基线 Map 建 per-sid
+                // 路径集：首见建基不推（SNAPSHOT 初载/重连不误推）；仅当前选中会话推（他话不打扰
+                // ——tab 系按会话隔离，跨会话推了也会在切换时清空）。
+                const fzAutoTabBase = new Map(); // sid → { set:Set<path>, working:boolean }
+                function fzAutoTabOnUpdate(sid, s) {
+                  const arts = Array.isArray(s.artifacts) ? s.artifacts : null;
+                  const paths = arts ? arts.map((a) => String((a && a.path) || "")).filter(Boolean) : null;
+                  const prev = fzAutoTabBase.get(sid);
+                  fzAutoTabBase.set(sid, { set: new Set(paths || []), working: s.status === "WORKING" });
+                  if (!prev || !paths) return; // 首见建基不推
+                  if (!prev.working || s.status === "WORKING") return; // 仅收口沿（WORKING→非 WORKING）
+                  if (sid !== S.selected) return; // 不打扰：仅当前会话
+                  const fz = window.ccDeckFzone;
+                  if (!fz || typeof fz.autoOpen !== "function") return;
+                  for (const p of paths) if (!prev.set.has(p)) fz.autoOpen(sid, p);
+                }
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
                   for (const k of MERGE_KEYS) if (p[k] !== undefined) s[k] = p[k];
+                  fzAutoTabOnUpdate(sid, s); // 件②：收口差分推 tab（在 MERGE 后——读合成态）
                   if (Object.prototype.hasOwnProperty.call(p, "waiting_request")) s.waiting_request = p.waiting_request ?? null; // 权威自愈：null 即清
                   // #271：缺载不伪造——旧 fallback `|| Date.now()` 会把定位补水/扫描校正等
                   // 不带 updated_at 的部分帧洗成接收时刻（置灰判定连带失效）；真活动时刻由
@@ -4128,17 +4146,49 @@
                 // sheet 桶的文本安全子集（W-P2TAIL 修 fzone-b1-review-a P2）——桶内其余
                 // xlsx/xls/numbers/plist/db/sqlite 为二进制档，落兜底卡防 UTF-8 乱码墙
                 const SHEET_TEXT_EXT = new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"]);
+                // W-FZONE-B2 件①（格式矩阵）：pdf=blob+浏览器原生 viewer（零依赖选型——Chromium
+                // PDFium/WebKit PDFKit 自带翻页/缩放/搜索全套，WorkBuddy 的 pdfjs 是其 Electron
+                // 定制诉求，web-console 直接吃宿主原生能力零 bundle 增量）；媒体=audio/video
+                // controls blob；office/数据库档维持降级卡（docx-preview ~100KB 对低频档不值
+                // ——依赖体积克制，批三再评）。
+                const FZ_AUDIO_EXT = new Set(["mp3", "wav", "m4a", "aac", "ogg", "flac"]);
+                const FZ_VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v"]);
+                // per-tab blob url 单槽（批一图片槽泛化——pdf/媒体同用 dataset.fzUrl，重载先回收旧）
+                function fzSetUrl(el, blob) {
+                  const prevUrl = el.dataset.fzUrl || "";
+                  if (prevUrl) { try { URL.revokeObjectURL(prevUrl); } catch (_) {} }
+                  const url = URL.createObjectURL(blob);
+                  el.dataset.fzUrl = url;
+                  return url;
+                }
                 function loadFzoneContent(el, sid, path) {
                   const name = baseName(path);
                   const ext = String(name || "").toLowerCase().split(".").pop();
                   const kind = artifactKindFor(name);
                   const asMd = AV_MD_EXT.has(ext);
                   const asImg = kind === "image";
-                  // 文本面=md/纯文扩展/sheet 文本子集/代码；doc 桶 pdf/docx/rtf 与 sheet 桶
-                  // xlsx/xls/numbers/plist/db/sqlite 等二进制不放行（落「暂不支持」兜底——批二
-                  // 格式矩阵，防二进制被当 UTF-8 解码出乱码墙；av 模态同表达式不动——批二处置面）
+                  const asPdf = ext === "pdf";
+                  const asAudio = FZ_AUDIO_EXT.has(ext);
+                  const asVideo = FZ_VIDEO_EXT.has(ext);
+                  // 文本面=md/纯文扩展/sheet 文本子集/代码；docx/rtf/xlsx/plist/db 等二进制不放行
+                  //（落降级卡防乱码墙；pdf/音频/视频=批二放行走 blob 原生渲染）
                   const asText = asMd || AV_TEXT_EXTRA.has(ext) || SHEET_TEXT_EXT.has(ext) || kind === "code";
-                  if (!asImg && !asText) { el.innerHTML = fzFb("此格式暂不支持在线预览（" + (ext || "无扩展名") + "）——pdf/office/数据库/媒体为批二", false, path); return; }
+                  if (!asImg && !asText && !asPdf && !asAudio && !asVideo) { el.innerHTML = fzFb("此格式暂不支持在线预览（" + (ext || "无扩展名") + "）——pdf/音频/视频已支持；office/数据库档暂不支持（下载查看）", false, path); return; }
+                  if (asPdf || asAudio || asVideo) {
+                    el.innerHTML = '<div class="fz-load">拉取中…</div>';
+                    fetchArtifact(sid, path).then((res) => {
+                      if (!el.isConnected) return;
+                      const bytes = artifactBytes(res);
+                      if (asPdf) {
+                        const url = fzSetUrl(el, new Blob([bytes], { type: res.mime || "application/pdf" }));
+                        el.innerHTML = '<div class="fz-pdfwrap"><iframe class="fz-pdf" src="' + url + '" title="预览 ' + esc(name) + '"></iframe></div>';
+                      } else {
+                        const url = fzSetUrl(el, new Blob([bytes], { type: res.mime || (asVideo ? "video/" : "audio/") + ext }));
+                        el.innerHTML = '<div class="fz-mediawrap">' + (asVideo ? '<video class="fz-video" controls preload="metadata" src="' + url + '"></video>' : '<div class="fz-audiocard"><div class="fz-audio-name">' + esc(name) + '</div><audio class="fz-audio" controls preload="metadata" src="' + url + '"></audio></div>') + "</div>";
+                      }
+                    }).catch((err) => { if (!el.isConnected) return; el.innerHTML = fzFb(String((err && err.message) || err), true, path); });
+                    return;
+                  }
                   el.innerHTML = '<div class="fz-load">拉取中…</div>';
                   fetchArtifact(sid, path).then((res) => {
                     if (!el.isConnected) return; // tab 已关，弃置回包
@@ -4150,7 +4200,16 @@
                       el.dataset.fzUrl = url;
                       el.innerHTML = '<div class="fz-imgwrap"><img class="fz-img" src="' + url + '" alt="预览 ' + esc(name) + '" title="点击切换 原尺寸 ↔ 适应宽度"></div>';
                       const img = el.querySelector(".fz-img");
-                      if (img) img.addEventListener("click", () => img.classList.toggle("full"));
+                      if (img) {
+                        img.addEventListener("click", () => img.classList.toggle("full"));
+                        // W-FZONE-B2 件⑤（批一 P3 随批）：heic/tiff 等宿主不可解码格式破图兜底
+                        //（Chromium 不解 heic/tiff；Safari 部分支持——onerror 统一兜底不赌宿主）
+                        img.addEventListener("error", () => {
+                          try { URL.revokeObjectURL(url); } catch (_) {}
+                          try { delete el.dataset.fzUrl; } catch (_) {}
+                          el.innerHTML = fzFb("浏览器不支持解码该图片格式（" + (ext || "?") + "）——请下载查看", false, path);
+                        }, { once: true });
+                      }
                     } else {
                       const CAP = 2 * 1048576; // >2MB 文本只载头部+提示
                       const cut = bytes.length > CAP;
@@ -4196,6 +4255,13 @@
                 window.__ccDeck005ArtIconHtml = artIconHtml; // tab 图标（六类同源）
                 window.__ccDeck005MdRender = mdHtml; // md 渲染单口导出（消息/工作区/探针三面同源——mobile.js 跨域面同族先例）
                 window.__ccDeck005FzoneOpenByToken = (t) => { const p = frefResolvePath(t); if (p) openFzoneTab(p); }; // 工作区面板内 .fpath 点击路由
+                // W-FZONE-B2 件③（工作空间树·降级形态）：relay 无列目录命令——树=已登记产物按
+                // 目录分组（数据源=当前会话 artifacts 原文路径；fzone.js 树抽屉消费，点击走
+                // OpenByToken（原文 path p===t 直命中），零 relay 改动）
+                window.__ccDeck005FzoneArts = () => {
+                  const a = curSession()?.artifacts;
+                  return Array.isArray(a) ? a.map((x) => ({ path: String((x && x.path) || "") })).filter((x) => x.path) : [];
+                };
 
                 // ---------- 渲染：更多 tab（用量 + 统计键值行，四 tab 制：追加令3 合并原用量/更多） ----------
                 function renderMore() {
