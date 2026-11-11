@@ -759,8 +759,10 @@
     /* ═══ W-FZONE-R3（1111 用户军令三）：文件工作区窗口级分栏——布局规格=WorkBuddy asar 逆向规格书
        （project-detail-page-CSK2DXmS.css 同构：__body 行容器/__main 会话列/__detail-sash 4px 柄/__detail-panel 定宽面板；
        旧 workspace-main 行容器（分栏藏在会话详情容器内）退役——详见回执 w-fzone-r3.md 段A） ═══ */
-    .session-split { flex: 1; min-height: 0; display: flex; overflow: hidden; } /* =WorkBuddy __body{flex:1;min-height:0;display:flex;overflow:hidden} */
-    .session-split > .workspace { flex: 1; min-width: 0; } /* =WorkBuddy __main{flex:1;min-width:0}——整个会话面板（head/标签行/消息/输入框）作单列 */
+    .session-detail { min-width: 0; min-height: 0; display: flex; flex-direction: column; } /* W-FZONE-R3-R1（审三 P2）：=WorkBuddy project-detail-view{flex-direction:column;flex:1;min-width:0;display:flex} 尾段——head 横跨（=__header）+session-split（=__body）纵叠；顶栏回归原版 */
+    .session-detail > .workspace-head { flex: 0 0 auto; } /* head 横跨定高不参与让位（基础规则已是 flex:0 0 auto，显式锚防回归） */
+    .session-split { flex: 1; min-height: 0; display: flex; overflow: hidden; } /* =WorkBuddy __body{flex:1;min-height:0;display:flex;overflow:hidden}——R3-R1 起只包会话体（head 已上移横跨） */
+    .session-split > .workspace { flex: 1; min-width: 0; } /* =WorkBuddy __main{flex:1;min-width:0}——会话体（消息/状态条/输入框）作单列（head 在 split 外横跨） */
     .fz-sash { cursor: col-resize; z-index: 10; flex-shrink: 0; width: 4px; position: relative; } /* =WorkBuddy __detail-sash{cursor:col-resize;z-index:10;flex-shrink:0;width:4px;position:relative} */
     .fz-sash:hover, .fz-sash.dragging { background: color-mix(in srgb, var(--brand, #EC9A73) 60%, transparent); } /* =__detail-sash:hover 品牌色 60% */
     .fz-sash[hidden] { display: none; }

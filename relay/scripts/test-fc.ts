@@ -224,6 +224,12 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(!html.includes("workspace-main"), "R3-3 旧 workspace-main 行容器退役（分栏藏在会话详情容器内的病灶结构不得回归）");
     ok(fz.includes('Math.max(340, Math.min(800') && fz.includes(": 440; // 缺省 440") && fz.includes('document.querySelector("#d-session .fz-sash[data-fz-resize]")') && fz.includes('document.body.style.userSelect = "none";') && fz.includes("sash.hidden = !on;"), "R3-4 WorkBuddy 拖拽/宽度同构（clamp[340,800]+默认 440+sash 窗口级查找+拖拽 body cursor/userSelect 锁+sash 随开合联动）");
     ok(css.includes("width: 4px") && css.includes("cursor: col-resize") && css.includes(".fz-sash[hidden] { display: none; }") && css.includes("width: 440px") && css.includes(".session-split > .fz-sash { display: none; }"), "R3-5 CSS 同构锚（__detail-sash 4px col-resize+hover 品牌色 60%+hidden 互斥；__detail-panel 定宽 440；窄窗 sash 消失=WorkBuddy is-mobile 同款）");
+    // W-FZONE-R3-R1（审三 P2 返修）：顶栏回归 WorkBuddy 原版横跨——head（=CollabTopBar+__header）在 session-detail 纵列内 split 之上
+    {
+      const iDetail = html.indexOf('class="session-detail"'), iHead = html.indexOf('<header class="workspace-head"'), iHeadEnd = html.indexOf("</header>", iHead), iWsOpen = html.indexOf('<section class="workspace"');
+      ok(iDetail >= 0 && iDetail < iHead && iHeadEnd >= 0 && iHeadEnd < iSplit, "R3-6 顶栏横跨原版（审三 P2）：head 在 session-detail 内、session-split 之上（fzone 顶从 head 下缘起=__detail-panel 顶从 __header 下起）——R3 偏差形态「head 只在会话列/面板顶到窗口顶」不得回归");
+      ok(iHeadEnd < iWsOpen, "R3-6b head 不在会话体容器内（workspace 只包消息/状态条/输入框——防「fzone 嵌消息容器」类病灶的镜像锁）");
+    }
   }
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============
