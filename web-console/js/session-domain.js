@@ -4123,17 +4123,20 @@
                 // 失败态=tab 内错误卡+重试钮（data-fz-retry 由 fzone.js 委托接管——detailbug 先例：
                 // 手动点击才弹错，加载失败不 toast 轰炸）。el.isConnected 守卫=关掉的 tab 弃置回包。
                 let fzObjUrl = "";
+                // sheet 桶的文本安全子集（W-P2TAIL 修 fzone-b1-review-a P2）——桶内其余
+                // xlsx/xls/numbers/plist/db/sqlite 为二进制档，落兜底卡防 UTF-8 乱码墙
+                const SHEET_TEXT_EXT = new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"]);
                 function loadFzoneContent(el, sid, path) {
                   const name = baseName(path);
                   const ext = String(name || "").toLowerCase().split(".").pop();
                   const kind = artifactKindFor(name);
                   const asMd = AV_MD_EXT.has(ext);
                   const asImg = kind === "image";
-                  // 文本面=md/纯文扩展/数据格式（sheet）/代码；doc 桶里的 pdf/docx/rtf 等二进制档
-                  // 不放行（落「暂不支持」兜底——批二格式矩阵，防二进制被当 UTF-8 解码出乱码墙；
-                  // av 模态同表达式不动——批二处置面）
-                  const asText = asMd || AV_TEXT_EXTRA.has(ext) || kind === "sheet" || kind === "code";
-                  if (!asImg && !asText) { el.innerHTML = fzFb("此格式暂不支持在线预览（" + (ext || "无扩展名") + "）——pdf/docx/媒体为批二", false, path); return; }
+                  // 文本面=md/纯文扩展/sheet 文本子集/代码；doc 桶 pdf/docx/rtf 与 sheet 桶
+                  // xlsx/xls/numbers/plist/db/sqlite 等二进制不放行（落「暂不支持」兜底——批二
+                  // 格式矩阵，防二进制被当 UTF-8 解码出乱码墙；av 模态同表达式不动——批二处置面）
+                  const asText = asMd || AV_TEXT_EXTRA.has(ext) || SHEET_TEXT_EXT.has(ext) || kind === "code";
+                  if (!asImg && !asText) { el.innerHTML = fzFb("此格式暂不支持在线预览（" + (ext || "无扩展名") + "）——pdf/office/数据库/媒体为批二", false, path); return; }
                   el.innerHTML = '<div class="fz-load">拉取中…</div>';
                   fetchArtifact(sid, path).then((res) => {
                     if (!el.isConnected) return; // tab 已关，弃置回包
