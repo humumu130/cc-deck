@@ -1618,5 +1618,6 @@ export const CHAIN_AUDIT_ACTIONS = [
   "engine-tool-blocked", // W-ENGSEC 批三：非 claude 引擎危险工具拦截（检测即斩/外部仅通知——engine-tool-audit.ndjson 同步落账）
   "pm-no-target-streak", // no_pm_target 连续≥2 轮告警卡（3h 静默睡不允许——刀4）
   "pm-override-pid-stale-candidate", // 刀2：pid 死但回合窗内候选保留（可观测不静默）
+  "drainfix-dead-close", // W-DRAINFIX（1111 断档死锁治本）：周期 sweep 断档悬账收口（open 单 worker 判活=dead → failed 收口回 backlog，排队单随排水接续）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

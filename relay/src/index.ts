@@ -605,6 +605,11 @@ try {
 } catch (e) {
   console.warn(`[dispatch-queue] 重启回灌失败（队列按空处理）: ${e instanceof Error ? e.message : String(e)}`);
 }
+// W-DRAINFIX（1111 用户实锤断档死锁治本）：排水周期兜底注册——drain 原六触发点全是
+// 事件边，编制全闲+队列挂单=零事件永哑火（fzone-b1 断档→B1R 入队→15 编制全闲实锤）；
+// sweep 定时（CCR_DISPATCH_SWEEP_MIN 缺省 5min）补「事件+周期」双触发 + 断档悬账收口
+//（详见 session-manager.ts sweepDispatchQueueOnce 注释）
+mgr.startDispatchSweep();
 try {
   // W-GATEFIX：90s 回执闸的重启兜底——触发窗内重启丢的定时器由此补跑（TTL 10min）
   const n = mgr.recoverPendingReceiptChecks();
