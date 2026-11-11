@@ -13,7 +13,7 @@
 // 形态=test-dispatch 族同款（自包含 tsx + pass/fail 计数 + 假 agent 工厂，不拉真 CLI）。
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -170,12 +170,32 @@ async function main() {
     const closeRow2 = readDispatchLog().filter((r) => r.id === did2).find((r) => r.status === "done");
     assert(!!closeRow2 && closeRow2.abnormal_done === true, "worker-done 缺席 → 收口行 abnormal_done:true（异常完成可观测）");
     // 对账闸②：非 claude 引擎（结构性无申报能力）不标 abnormal（反方审查 P1 处置回归钉）
-    const d2c = mgr.orgAction("dispatch", { anchor, prompt: "codex 引擎单", engine: "codex" }) as { ok: boolean; dispatch_id?: string };
-    const did2c = d2c.ok ? (d2c as { dispatch_id: string }).dispatch_id : "";
-    assert(d2c.ok === true, "codex 引擎派单受理");
-    assert(await waitFor(() => readDispatchLog().filter((r) => r.id === did2c).some((r) => r.status === "done")), "codex 单收口 done");
-    const closeRow2c = readDispatchLog().filter((r) => r.id === did2c).find((r) => r.status === "done");
-    assert(!!closeRow2c && closeRow2c.abnormal_done !== true, "非 claude 引擎无申报 → 不标 abnormal_done（结构性豁免）");
+    // [W-BOARDV2-CIFIX] CI 环境整备：dispatch 前置 preflightDispatchEngine 对 codex 跑
+    // 生产真预检（preflightEngine 查可执行 + probeEngineAuth 查登录态）——CI runner 无
+    // codex 二进制→受理拒→本三断言环境红（本地有 codex 恒绿=CI/本地差异根因，CI 实跑
+    // 53/3 本地复现 CCR_CODEX_PATH=__none__ 逐字同形）。整备两关真 ready 路径非旁路：
+    // ① stub 可执行脚本（accessSync X_OK 过检——preflight 不真跑它）；② OPENAI_API_KEY
+    // 在场（codexConfigAuthPresent 认配置优先→ready，跳过 spawn login status 探测）。
+    // spawn 面零波及：fake factory 在场，newAgent codex 分支走替身不构造真 CLI 会话。
+    // probeCache 首探前设值（本进程此前未 probe 过 codex）——断言语义全保留。
+    const codexStub = join(DATA, "codex-stub.sh");
+    writeFileSync(codexStub, "#!/bin/sh\nexit 0\n", "utf-8");
+    chmodSync(codexStub, 0o755);
+    const envBakCodex = { CCR_CODEX_PATH: process.env.CCR_CODEX_PATH, OPENAI_API_KEY: process.env.OPENAI_API_KEY };
+    process.env.CCR_CODEX_PATH = codexStub;
+    process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "boardv2-ci-stub";
+    try {
+      const d2c = mgr.orgAction("dispatch", { anchor, prompt: "codex 引擎单", engine: "codex" }) as { ok: boolean; dispatch_id?: string };
+      const did2c = d2c.ok ? (d2c as { dispatch_id: string }).dispatch_id : "";
+      assert(d2c.ok === true, "codex 引擎派单受理");
+      assert(await waitFor(() => readDispatchLog().filter((r) => r.id === did2c).some((r) => r.status === "done")), "codex 单收口 done");
+      const closeRow2c = readDispatchLog().filter((r) => r.id === did2c).find((r) => r.status === "done");
+      assert(!!closeRow2c && closeRow2c.abnormal_done !== true, "非 claude 引擎无申报 → 不标 abnormal_done（结构性豁免）");
+    } finally {
+      // env 恢复（进程内防外溢；stub 随 DATA 临时目录清理）
+      if (envBakCodex.CCR_CODEX_PATH === undefined) delete process.env.CCR_CODEX_PATH; else process.env.CCR_CODEX_PATH = envBakCodex.CCR_CODEX_PATH;
+      if (envBakCodex.OPENAI_API_KEY === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = envBakCodex.OPENAI_API_KEY;
+    }
 
     // ---------- B5/B6 看板投影 + user-override ----------
     console.log("B5/B6 看板投影+user-override:");
