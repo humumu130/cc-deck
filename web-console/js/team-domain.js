@@ -50,7 +50,7 @@
                 // expFilter 双轴筛选（范围=项目组/global、状态=active/retired/all）；expArm=两步
                 // 确认武装位（退役/恢复先点一次变「确认？」，再点才发命令——操作带确认不裸奔）；
                 // expFlights 飞行中命令去重；expForm=改归组行内表单目标条目 id（null=收起）
-                const state = { projects: null, confirms: [], boards: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined, boardFreshAt: new Map(), _freshLastAt: 0 }; /* boardfresh（1104 用户令·板面说谎第三现）：boardFreshAt=per-gid 板数据最近落地时刻（detail ack/SNAPSHOT.boards/BOARD_UPDATED 三写点）；_freshLastAt=强刷节流（5s） */ // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
+                const state = { projects: null, confirms: [], boards: new Map(), projections: new Map(), receipts: new Map(), sessions: new Map(), selected: null, confirmSelected: null, source: "当前来源", command: null, online: false, mounted: false, epoch: 0, loads: new Map(), flights: new Set(), accepted: new Set(), unsupported: new Set(), experiences: null, experienceEnabled: undefined, expFilter: { scope: "all", status: "active" }, expArm: null, expFlights: new Set(), expForm: null, expArmTimer: null, expGcNote: null, expGcFlight: false, rules: null, rulesEnabled: undefined, rulesFilter: { status: "active", scope: "all" }, rulesArm: null, rulesArmTimer: null, rulesFlights: new Set(), rulesForm: null, rulesAddOpen: false, rulesImpOpen: false, rulesImpText: "", rulesImpPreview: null, rulesImpFlight: false, feedFilter: "all", feedSrc: "all", retiredEntries: undefined, boardFreshAt: new Map(), _freshLastAt: 0 }; /* boardfresh（1104 用户令·板面说谎第三现）：boardFreshAt=per-gid 板数据最近落地时刻（detail ack/SNAPSHOT.boards/BOARD_UPDATED 三写点）；_freshLastAt=强刷节流（5s） */ // feedFilter/feedSrc：活动页筛选双轴（类型=四态/源=引擎，Codex 轨拍板口径；纯前端过滤）
                 const query = (selector) => root.querySelector(selector);
                 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
                 const banner = (text) => '<div class="readonly-banner">' + escape(text) + "</div>";
@@ -371,6 +371,25 @@
                   if (isDone && task.dispatch_id && missingReceiptIds(project.id).has(task.dispatch_id)) {
                     clineBits.push('<span class="cline-miss" title="收口 done 但回执无「结果：」行（worker 静默收工）——请抽查该单交付">⚠ 无回执</span>');
                   }
+                  // W-BOARDV2：黑板投影 chip——异常完成⚠（worker-done 申报缺席）/已申报交付✓/
+                  // 当前黑板事件与停留时长（查表即真相的卡面表达）
+                  {
+                    const bp = task.__proj;
+                    if (bp) {
+                      if (bp.abnormal_done) {
+                        clineBits.push('<span class="cline-miss" title="relay 收口 done 但 worker-done 申报缺席（半途跑路/静默收工）——交付存疑，请抽查">⚠ 异常完成</span>');
+                      } else if (bp.worker_done_at) {
+                        clineBits.push('<span class="tchip" title="worker 已申报交付（黑板 worker-done ' + shortTime(bp.worker_done_at) + '）——待审查收割">✓ 已申报交付</span>');
+                      }
+                      if (!isDone && bp.last_event && bp.last_event_ts) {
+                        const evLabels = { "dispatch-queued": "排队", "dispatch-seat-scan": "选席扫描", "dispatch-reused": "复用熟手", "dispatch-spawned": "新建会话", "worker-ack": "接单", "worker-start": "开工", "worker-milestone": "施工心跳", "worker-done": "申报交付", "user-override": "手动改板" };
+                        const evName = evLabels[bp.last_event] || (String(bp.last_event).indexOf("board:") === 0 ? "" : String(bp.last_event));
+                        const ageS = Math.max(0, Math.round((Number(bp.age_ms) || 0) / 1000));
+                        const ageTxt = ageS < 90 ? ageS + "s" : ageS < 5400 ? Math.round(ageS / 60) + "m" : ageS < 172800 ? Math.round(ageS / 3600) + "h" : Math.round(ageS / 86400) + "d";
+                        if (evName) clineBits.push('<span title="黑板事件 ' + escape(evName) + ' · 当前态停留 ' + escape(ageTxt) + '">' + escape(evName) + " · " + escape(ageTxt) + "</span>");
+                      }
+                    }
+                  }
                   const selfCheck = taskSelfCheck(task);
                   const selfCheckLabel = selfCheck ? "AI 自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
                   const selfCheckHtml = selfCheck ? '<span class="task-verify" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span>" : "";
@@ -467,7 +486,21 @@
                 }
                 function boardMarkup(project) {
                   const board = state.boards.get(project?.id);
-                  const tasks = entities(board?.entries);
+                  // W-BOARDV2（1111 定调「看板=查表投影」）：投影泳道覆盖——relay 随帧/detail
+                  // 带 projection 时，卡位以 dispatch-log 黑板事件链的读时投影为准（legacy
+                  // 卡位=兼容副本仅回落；投影缺席=旧 relay/读失败，整段旁路零破坏）。
+                  const projByCard = (() => {
+                    const pj = state.projections.get(project?.id);
+                    return pj && Array.isArray(pj.cards) ? new Map(pj.cards.map((c) => [c.entry_id, c])) : null;
+                  })();
+                  const tasks0 = entities(board?.entries);
+                  const tasks = projByCard
+                    ? tasks0.map((t) => {
+                        const c = projByCard.get(t.id);
+                        if (!c || !c.lane) return t;
+                        return Object.assign({}, t, { status: c.lane, __proj: c });
+                      })
+                    : tasks0;
                   const loading = state.loads.get(project?.id);
                   // W-NOVAFIX B5：空态分档——projectsEmpty 见域顶定义（render/boardMarkup 共用）
                   // W3P-P2-4：加载/空态互斥——board 已载（含空）不再出顶部空态条（五泳道
@@ -1403,6 +1436,8 @@
                     if (state.projects.find((item) => item.id === gid) !== projectAtRequest || state.boards.get(gid) !== boardAtRequest) { state.loads.delete(gid); void requestDetail(gid, force, origin); return false; }
                     const result = verdict(ack);
                     if (!result.ok) { rememberUnsupported("COMMAND_PROJECT_DETAIL", result.error); throw new Error(result.error); }
+                    // W-BOARDV2（1111 定调「查表即真相」）：detail 随带投影——黑板事件链读时投影泳道落地
+                    if (ack.data && ack.data.projection && Array.isArray(ack.data.projection.cards)) state.projections.set(gid, ack.data.projection);
                     if (!detail(gid, ack.data)) throw new Error("项目详情回执缺少匹配的 group / board / receipts");
                     state.detailRetry = 0; // 成功清零退避档位（下次失败重新从 5s 起）
                     return true;
@@ -1526,7 +1561,7 @@
                   if (message?.type === "ORG_CONFIRM_UPDATED" && Array.isArray(payload?.pending)) { updateConfirms(mergePartition(state.confirms, payload.pending, context && context.relayName, confirmKeyOf)); render(); return true; }
                   // #283 同理：board 全量形态（board.gid+entries 在场）即权威覆盖，delta
                   // 并载不影响（本 case 只取 board.entries 全量）；gid 门控=并集含该组
-                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); state.boardFreshAt.set(payload.gid, Date.now()); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
+                  if (message?.type === "BOARD_UPDATED" && typeof payload?.gid === "string" && payload.board?.gid === payload.gid && Array.isArray(payload.board.entries) && state.projects?.some((item) => item.id === payload.gid)) { state.boards.set(payload.gid, payload.board); /* W-BOARDV2：帧随带投影（查表即真相——黑板事件链读时投影） */ if (payload.projection && Array.isArray(payload.projection.cards)) state.projections.set(payload.gid, payload.projection); state.boardFreshAt.set(payload.gid, Date.now()); render(); if (payload.gid === state.selected) void requestDetail(payload.gid, true); return true; }
                   // boardfresh 治本：板摘要对账（resume 快路径补发——瞬态板变更断连窗补不到的根治）。
                   // 失配 gid → requestDetail force 重拉（既有通道）；缺席 gid 本地保留（板组可能已删，
                   // 下次 SNAPSHOT 清）。公式=ws-server fnv1a 同式（`${id}:${status}` 有序 join 后 FNV-1a 32）

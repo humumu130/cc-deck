@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+# leader-board —— PM 状态黑板查询（W-BOARDV2，2026-11-11 用户令 1111）
+# ============================================================
+# 动机（用户 1111 实锤）：PM 对 worker 状态掌握差——worker 半途跑路标 done 无回执、
+# PM 用「帧龄/台账/板面」三处拼状态误判两次。本命令=单表直读 dispatch-log.ndjson
+#（黑板事实源），一屏输出：每在途单×worker 当前黑板态+最近事件时间+帧龄+回执在否；
+# 「异常完成」（relay done 而 worker-done 申报缺席）单列——跑路形态可观测化。
+# 数据源=黑板单表（不再三处拼）：读侧与 relay/src/board-projection.ts 同口径
+#（同 id 末行收敛=当前态；原始行=全生命周期链）。
+#
+# 用法：
+#   leader-board [选项]
+# 选项：
+#   --anchor <dir>   只看该锚（project_anchor 前缀匹配；缺省全部组）
+#   --limit <n>      在途单/终态单各最多显示 n 条（缺省 20）
+#   --window <n>     台账尾窗行数（缺省 20000，对齐 relay converge 读窗）
+#   --json           机器可解析 JSON 输出（PM 会话二次加工用）
+# 环境覆盖（deliver/org/leader-dispatch F-09 三件套同款）：
+#   CCR_ORG_DIR 显式 org 目录 > CCR_DATA_DIR 隔离（<data>/org）> ~/.cc-deck/org
+# 退出码：0=正常输出（含在途 0 单）；3=台账文件不存在（relay 未初始化/空环境）；2=argparse 用法错误（内建）
+import argparse
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+STAGE_LABEL = {
+    "dispatch-queued": "排队",
+    "dispatch-seat-scan": "选席扫描",
+    "dispatch-reused": "复用熟手",
+    "dispatch-spawned": "新建会话",
+    "worker-ack": "接单",
+    "worker-start": "开工",
+    "worker-milestone": "心跳",
+    "worker-done": "申报交付",
+    "user-override": "手动改板",
+    "queued": "排队",
+    "dispatched": "已派",
+    "running": "施工中",
+    "done": "收口done",
+    "failed": "failed",
+    "in_review": "审查中",
+}
+
+
+def org_dir() -> Path:
+    env = os.environ.get("CCR_ORG_DIR")
+    if env:
+        return Path(env)
+    # 隔离判定与 relay config.isDataDirIsolated 同口径：CCR_DATA_DIR 有值且
+    # ≠ 缺省家（~/.cc-deck/data）才算隔离态——缺省值时 org 仍在 ~/.cc-deck/org
+    data = os.environ.get("CCR_DATA_DIR")
+    default_data = Path.home() / ".cc-deck" / "data"
+    if data and os.path.abspath(os.path.expanduser(data)) != str(default_data):
+        return Path(os.path.expanduser(data)) / "org"
+    return Path.home() / ".cc-deck" / "org"
+
+
+def load_rows(path: Path, window: int):
+    rows = []
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+    for line in lines[-window:] if window > 0 else lines:
+        t = line.strip()
+        if not t:
+            continue
+        try:
+            r = json.loads(t)
+        except Exception:
+            continue
+        if isinstance(r, dict) and isinstance(r.get("id"), str) and r.get("id") and isinstance(r.get("status"), str):
+            rows.append(r)
+    return rows
+
+
+def fmt_ts(ts) -> str:
+    try:
+        return time.strftime("%m-%d %H:%M:%S", time.localtime(ts / 1000.0))
+    except Exception:
+        return "?"
+
+
+def fmt_dur(ms: float) -> str:
+    s = int(ms // 1000)
+    if s < 90:
+        return f"{s}s"
+    m = s // 60
+    if m < 90:
+        return f"{m}m{s % 60:02d}s"
+    h = m // 60
+    if h < 48:
+        return f"{h}h{m % 60:02d}m"
+    return f"{h // 24}d{h % 24}h"
+
+
+def trunc(s, n):
+    s = str(s or "").replace("\n", " ")
+    return s[:n] + ("…" if len(s) > n else "")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(add_help=True, description="W-BOARDV2 PM 状态黑板查询（dispatch-log 单表直读）")
+    ap.add_argument("--anchor", default="", help="只看该锚（前缀匹配）")
+    ap.add_argument("--limit", type=int, default=20)
+    ap.add_argument("--window", type=int, default=20000)
+    ap.add_argument("--json", action="store_true", help="JSON 输出")
+    args = ap.parse_args()
+
+    d = org_dir()
+    log = d / "dispatch-log.ndjson"
+    if not log.exists():
+        print(f"dispatch-log.ndjson 不存在（{log}）——relay 未初始化或空环境", file=sys.stderr)
+        return 3  # 2 留给 argparse 用法错误（其内建 exit 2），不撞车
+    rows = load_rows(log, args.window)
+    if args.anchor:
+        norm = args.anchor.rstrip("/").lower()
+        rows = [r for r in rows if str(r.get("project_anchor") or "").rstrip("/").lower().startswith(norm)]
+
+    # 同 id 末行收敛=当前态；原始行按 id 分组=生命周期链（文件序即时间序）
+    last_by_id = {}
+    chain_by_id = {}
+    for r in rows:
+        last_by_id[r["id"]] = r
+        chain_by_id.setdefault(r["id"], []).append(r)
+
+    now_ms = time.time() * 1000
+    active_ids = [i for i, r in last_by_id.items() if r["status"] in ("dispatched", "running", "queued")]
+    # 文件序稳定排序（早派在前）
+    first_seen = {}
+    for idx, r in enumerate(rows):
+        first_seen.setdefault(r["id"], idx)
+    active_ids.sort(key=lambda i: first_seen.get(i, 0))
+
+    def stage_of(rid):
+        """当前黑板态：末行事件词优先（黑板事件比六态更细）。"""
+        last = last_by_id[rid]
+        ev = last.get("event")
+        if ev and ev in STAGE_LABEL:
+            return STAGE_LABEL[ev], ev
+        return STAGE_LABEL.get(last["status"], last["status"]), (ev or last["status"])
+
+    def chain_line(rid, max_steps=12):
+        steps = []
+        for r in chain_by_id[rid][-max_steps:]:
+            label = STAGE_LABEL.get(r.get("event"), STAGE_LABEL.get(r["status"], r["status"]))
+            seg = f"{label} {fmt_ts(r.get('ts', 0))}"
+            if r.get("event") == "dispatch-seat-scan" and r.get("receipt"):
+                seg += f"（{trunc(r['receipt'], 60)}）"
+            steps.append(seg)
+        return " → ".join(steps)
+
+    active = []
+    for rid in active_ids:
+        last = last_by_id[rid]
+        label, _ = stage_of(rid)
+        wd = any(r.get("event") == "worker-done" for r in chain_by_id[rid])
+        chain_last_ts = max((r.get("ts", 0) for r in chain_by_id[rid]), default=0)
+        active.append({
+            "id": rid,
+            "title": trunc(last.get("title") or (last.get("receipt") or "").split("】")[0].lstrip("【"), 40),
+            "tier": last.get("tier", ""),
+            "seat": trunc(last.get("target") or "-", 14),
+            "stage": label,
+            "last_event": (last.get("event") or last["status"]),
+            "last_ts": chain_last_ts,
+            "age_ms": max(0, now_ms - chain_last_ts),
+            "worker_done": wd,
+            "receipt_gate": last.get("receipt_gate") is True,
+            "anchor": last.get("project_anchor") or "",
+            "chain": chain_line(rid),
+        })
+
+    # 异常完成（done 说真话）：relay 收口 done 而 worker-done 申报缺席。
+    # 对账范围只含**真派发过**的单（链里有 dispatched/running 行=worker 真承接过）——
+    # 审计行（看门狗 board-mirror/manual/org-command/drill）无承接席，不参与对账。
+    abnormal = []
+    terminal = []
+    for rid, last in last_by_id.items():
+        if last["status"] not in ("done", "failed"):
+            continue
+        if not any(r.get("status") in ("dispatched", "running") for r in chain_by_id[rid]):
+            continue
+        wd = any(r.get("event") == "worker-done" for r in chain_by_id[rid])
+        item = {
+            "id": rid,
+            "status": last["status"],
+            "title": trunc(last.get("title") or "", 40),
+            "ts": last.get("ts", 0),
+            "worker_done": wd,
+            "abnormal_done": last.get("abnormal_done") is True,
+            "receipt_missing": last.get("receipt_missing") is True,
+            "receipt": trunc(last.get("receipt"), 80),
+        }
+        if last["status"] == "done" and not wd:
+            abnormal.append(item)
+        terminal.append(item)
+    abnormal.sort(key=lambda x: -x["ts"])
+    terminal.sort(key=lambda x: -x["ts"])
+    abnormal = abnormal[: args.limit]
+    terminal = terminal[: args.limit]
+
+    if args.json:
+        print(json.dumps({
+            "ok": True,
+            "org_dir": str(d),
+            "window": args.window,
+            "rows_scanned": len(rows),
+            "now": int(now_ms),
+            "active": active,
+            "abnormal_done": abnormal,
+            "terminal_recent": terminal,
+        }, ensure_ascii=False, indent=2))
+        return 0
+
+    o = sys.stdout
+    o.write(f"== W-BOARDV2 黑板（dispatch-log 直读）==\n")
+    o.write(f"org={d} 尾窗={len(rows)}行 现在={time.strftime('%H:%M:%S')}\n\n")
+
+    o.write(f"== 在途单 {len(active_ids)} 张（显示前 {min(len(active), args.limit)}）==\n")
+    if not active:
+        o.write("  （无在途单）\n")
+    for a in active[: args.limit]:
+        wd_flag = "✓已申报交付" if a["worker_done"] else "未申报"
+        o.write(f"#{a['id'][:8]} 【{a['title']}】席={a['seat']} 当前={a['stage']} 停留={fmt_dur(a['age_ms'])} worker-done:{wd_flag}\n")
+        o.write(f"    链: {a['chain']}\n")
+
+    o.write(f"\n== 异常完成（done 且 worker-done 缺席——半途跑路/静默收工）{len(abnormal)} 笔 ==\n")
+    if not abnormal:
+        o.write("  （无——done 说真话对账干净）\n")
+    for x in abnormal:
+        o.write(f"#{x['id'][:8]} 【{x['title']}】收口 {fmt_ts(x['ts'])} 回执:{x['receipt'] or '（空）'}\n")
+
+    o.write(f"\n== 最近终态 {len(terminal)} 笔 ==\n")
+    if not terminal:
+        o.write("  （尾窗内无终态单）\n")
+    for x in terminal:
+        marks = []
+        if x["abnormal_done"]:
+            marks.append("abnormal_done")
+        if x["receipt_missing"]:
+            marks.append("receipt_missing")
+        if x["worker_done"] and x["status"] == "done":
+            marks.append("worker-done✓")
+        tag = ("[" + ",".join(marks) + "]") if marks else ""
+        o.write(f"#{x['id'][:8]} {x['status']} {fmt_ts(x['ts'])} 【{x['title']}】{tag} {x['receipt'] or ''}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

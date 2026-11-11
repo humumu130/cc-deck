@@ -171,8 +171,10 @@ async function main() {
     assert(w1?.project_gid === undefined, "随手办无组归属");
     assert(readFileSync(join(DATA, "last-cwd"), "utf-8") === stickySentinel, "派单不污染 sticky 默认目录（skipStickyCwd）");
     // 先落账再执行：readDispatchLog 按 id 收敛（同 id 留最后），原始序读 ndjson 验证
-    const raw1 = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; status: string; project_anchor?: string });
-    const rows1 = raw1.filter((e) => e.id === did1);
+    const raw1 = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; status: string; project_anchor?: string; event?: string });
+    // W-BOARDV2：选席扫描事件行（event=dispatch-seat-scan）先于 dispatched 行落账，
+    // 滤除后验 dispatched→running 原始序（断言意图不变——「先落账再执行」）
+    const rows1 = raw1.filter((e) => e.id === did1 && e.event !== "dispatch-seat-scan");
     assert(rows1.length >= 2 && rows1[0]?.status === "dispatched" && rows1[1]?.status === "running", "先落账再执行（dispatched → running 同 id 原始序）");
     assert(readDispatchLog().find((e) => e.id === did1)?.project_anchor === anchor, "台账带项目锚点（§2.5 分流数据源；收敛视图）");
 
@@ -362,7 +364,7 @@ async function main() {
     // 省全套 CLI 启动+transcript 重载；死流仍走 resumeAgent 换流，R3 段锁原语义）
     assert(created.length === created2, "DONE 熟手直注免换流（零重拉）");
     const rawE2 = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; status: string; target: string });
-    assert(rawE2.filter((x) => x.id === e2.dispatch_id)[0]?.target === wE1, "dispatched 行直指熟手（非 spawn-pending）");
+    assert(rawE2.filter((x) => x.id === e2.dispatch_id && (x as { event?: string }).event !== "dispatch-seat-scan")[0]?.target === wE1, "dispatched 行直指熟手（非 spawn-pending；W-BOARDV2 扫描行滤除）");
     assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE1)?.count ?? 0) === 2), "熟手再收口 → count=2");
     assert((listGroups().find((g) => g.id === gidE)?.headcount ?? []).filter((h) => h.session_id === wE1).length === 1, "重复派单 headcount 不重复入编（幂等）");
 
