@@ -183,7 +183,7 @@ export function harvestTraeUsage(trajPath: string, cb: AgentCallbacks): { input:
     output += num(u.output_tokens);
     cacheRead += num(u.cache_read_input_tokens);
     cacheCreate += num(u.cache_creation_input_tokens);
-    lastCtx = num(u.input_tokens) + cacheRead + cacheCreate; // 末次调用窗口占用（水位口径）
+    lastCtx = num(u.input_tokens) + num(u.cache_read_input_tokens) + num(u.cache_creation_input_tokens); // per-call 水位=末次调用自身三键（jsonl 基类同口径；回合累计 cache 会重复计前文——W-P2TAIL 修 engdistb-review P2）
   }
   if (!seen) return null;
   cb.onUsage({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheCreate });
