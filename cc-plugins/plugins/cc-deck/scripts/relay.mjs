@@ -18712,9 +18712,19 @@ function projectBoard(gid) {
     arr.push(r);
     byDispatch.set(r.id, arr);
   }
+  const exactIds = /* @__PURE__ */ new Set();
+  for (const entry of entries) if (entry.dispatch_id) exactIds.add(entry.dispatch_id);
+  const orphanByPrefix = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    if (r.event === "user-override" || exactIds.has(r.id)) continue;
+    const p = String(r.id).split("-")[0];
+    const arr = orphanByPrefix.get(p) ?? [];
+    arr.push(r);
+    orphanByPrefix.set(p, arr);
+  }
   const cards = entries.map((entry) => {
     const lifecycle = [];
-    const drows = entry.dispatch_id ? byDispatch.get(entry.dispatch_id) ?? [] : [];
+    const drows = entry.dispatch_id ? [...byDispatch.get(entry.dispatch_id) ?? [], ...orphanByPrefix.get(entry.dispatch_id.split("-")[0]) ?? []] : [];
     for (const r of drows) {
       lifecycle.push({
         ts: typeof r.ts === "number" ? r.ts : 0,
@@ -18771,6 +18781,7 @@ function projectBoard(gid) {
         lastTs2 = row.ts;
         if (row.event) lastEvent = label;
         else if (changed && !isBase) lastEvent = label;
+        else if (!isBase && (row.status === "failed" || row.status === "done")) lastEvent = label;
       }
     }
     {
@@ -18954,6 +18965,12 @@ function zombieTtlMs() {
   if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
   return Number.isFinite(n) && n > 0 ? n * 36e5 : 6 * 36e5;
 }
+function zombieBacklogTtlMs() {
+  const raw = process.env.CCR_BOARD_ZOMBIE_BACKLOG_TTL_H;
+  const n = raw === void 0 || raw === "" ? NaN : Number(raw);
+  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
+  return Number.isFinite(n) && n > 0 ? n * 36e5 : 72 * 36e5;
+}
 var ZOMBIE_NOTE_MARK = "[boardtruth5 \u50F5\u5C38\u5361\u544A\u8B66";
 function zombieInvariantScan(input) {
   const now = input.now ?? Date.now();
@@ -18968,17 +18985,21 @@ function zombieInvariantScan(input) {
   }
   const actions = [];
   if (!Number.isFinite(ttl)) return { actions };
+  const backlogTtl = zombieBacklogTtlMs();
   for (const { gid, board } of input.boards) {
     for (const e of board.entries) {
-      if (e.status !== "claimed" && e.status !== "submitted" && !(e.status === "backlog" && e.dispatch_id)) continue;
+      if (e.status !== "claimed" && e.status !== "submitted" && e.status !== "backlog") continue;
+      const isBacklogNoId = e.status === "backlog" && !e.dispatch_id;
       if (skip.has(e.id)) continue;
       if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue;
       const updated = Number(e.updated_at || e.ts || 0);
       if (!updated) continue;
       const ageMs = now - updated;
-      if (ageMs <= ttl) continue;
+      const effectiveTtl = isBacklogNoId ? Math.max(ttl, backlogTtl) : ttl;
+      if (ageMs <= effectiveTtl) continue;
       const key = harvestKeyOf(String(e.text || ""));
       if (!key || !key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1) continue;
+      if (isBacklogNoId && !key.startsWith("w-")) continue;
       const ev2 = input.harvest;
       const ledgerHit = ev2.doneLedger.get(key);
       const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt;
@@ -59571,6 +59592,66 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     this.reconAutoCloseStaleCards(trigger, now);
   }
+  /** W-CARDTERM-R1（1112 用户第六实锤后「自证件」令）：板账异常自证账——对账器修了什么/
+   * 修不动什么，用户板面红条直接可见（不再只写 chain-audit 等排查时才发现）。
+   * per-gid 内存账：fixedToday=当日对账已翻卡数（滚动日清）；stuck=当前仍异常残留
+   * （冻结组滞卡+failed×复核矛盾态——D18 保护不自动搬的显性化）。经 emitBoard 帧随板下发
+   * （board.health 字段，BOARD_UPDATED/首帧同口——勿新开轮询面）。 */
+  boardHealth = /* @__PURE__ */ new Map();
+  /** W-CARDTERM-R2 P2-5：僵尸网喂红条的第二账——patrol 僵尸扫描（形态不变量面：TTL×
+   * 三证）的发现清单 per-gid 存此，emitBoard 合成 health 时与 boardHealth.stuck 拼接
+   *（文本键去重，recon 扫描优先）。两账互补：boardHealth=台账关联面（dispatch_id join），
+   * 僵尸网=形态面（无 id/台账窗外的任务形卡只有它看得见——反方审三 F6 五网盲形态）。 */
+  boardZombies = /* @__PURE__ */ new Map();
+  /** W-CARDTERM-R2 P2-5：僵尸判定喂红条——patrol 每拍全量替换（僵尸扫描自带 TTL+note
+   * 幂等锚不重不漏）；清单变化即发帧（红条即时上屏/消退，与 recon 面同拍口径）。 */
+  boardHealthFeedZombies(gid, items) {
+    const prev = this.boardZombies.get(gid) ?? [];
+    if (!items.length) {
+      if (prev.length) {
+        this.boardZombies.delete(gid);
+        this.emitBoard(gid);
+      }
+      return;
+    }
+    this.boardZombies.set(gid, items);
+    if (JSON.stringify(prev) !== JSON.stringify(items)) this.emitBoard(gid);
+  }
+  /** W-CARDTERM 刀二（1112 第六现 32 张滞卡）：终态收割闭整链——同链基族
+   *（chainBaseSlug 剥 -rN/-review/-audit 尾，W-ORPHANCARD 刀二词表单点）在途前代卡
+   *（submitted/claimed/ready_to_install）一并翻 done。触发面两处：①pr-report MERGED
+   * 事件（cardlife-pr-merged 既有语义）；②board move→done（PM 手动收割确认——
+   * leader-harvest 翻卡走 org board move 口，本批前该口只精确命中主卡=链上 R1/REVIEW
+   * 单卡无人翻的主漏面）。活性闸（W-ORPHANCARD-R1 P1-1）：claimed 且 owner 会话活跃
+   * 跳过（双审并行不误翻）；submitted/ready_to_install 交付态无「在跑」语义照翻。
+   * ts 窗 14d 防远古卡误闭。 */
+  closeChainSiblings(gid, terminal, note) {
+    const CHAIN_WINDOW_MS = 14 * 24 * 36e5;
+    const curKey = harvestKeyOf(String(terminal.text || ""));
+    if (!curKey.startsWith("w-")) return;
+    const base = chainBaseSlug(curKey);
+    const prevs = (loadBoard(gid).entries || []).filter((x) => {
+      if (x.id === terminal.id) return false;
+      if (x.status !== "submitted" && x.status !== "claimed" && x.status !== "ready_to_install") return false;
+      const k3 = harvestKeyOf(String(x.text || ""));
+      if (!k3.startsWith("w-") || chainBaseSlug(k3) !== base) return false;
+      const xt2 = Number(x.ts || 0);
+      const ct2 = Number(terminal.ts || 0);
+      return ct2 > 0 && xt2 > 0 && Math.abs(ct2 - xt2) < CHAIN_WINDOW_MS;
+    });
+    const closedIds = [];
+    const skippedAlive = [];
+    for (const pv of prevs) {
+      if (pv.status === "claimed" && pv.owner_session && sessionActiveByEvents(this.cfg.dataDir, pv.owner_session)) {
+        skippedAlive.push(pv.id);
+        continue;
+      }
+      upsertBoardEntry(gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}${note}`, journal_action: "cardlife-chain-close" });
+      closedIds.push(pv.id);
+    }
+    if (skippedAlive.length) this.emitChainAudit("cardlife-chain-skip-live", `\u7EC8\u4EE3 ${terminal.id} done\u2192\u540C\u94FE\u5728\u9014\u5361\u8DF3\u8FC7 ${skippedAlive.length} \u5F20\uFF08${skippedAlive.join(",")}\uFF09\u2014\u2014owner \u4F1A\u8BDD\u6D3B\u8DC3\uFF08\u53CC\u5BA1\u5E76\u884C\u5728\u8DD1\uFF09\u4E0D\u8BEF\u7FFB\uFF0C\u5F85\u5176\u81EA\u7136\u6536\u53E3`);
+    if (closedIds.length) this.emitChainAudit("cardlife-chain-close", `\u7EC8\u4EE3 ${terminal.id} done\u2192\u540C\u94FE\u95ED\u524D\u4EE3 ${closedIds.length} \u5F20\uFF08${closedIds.join(",")}\uFF09`);
+  }
   /** #263：台账终态×板滞留卡自动收敛（runLedgerRecon 专用半边）。保护边界四件：
    * ①running/dispatched/queued 非终态不碰（收敛末行=终态行才入选）；②终态 1h 缓冲窗
    * 内不搬（worker 重连补报真回执会追加终态行刷新 ts，窗内搬=抢跑吞掉真收口）；③
@@ -59583,11 +59664,14 @@ provider=${opts.provider ?? "default"}` : void 0,
   reconAutoCloseStaleCards(trigger, now) {
     const led = /* @__PURE__ */ new Map();
     const ledAt = /* @__PURE__ */ new Map();
-    for (const e of readDispatchLog()) {
+    const ledInterrupt = /* @__PURE__ */ new Set();
+    for (const e of readDispatchLog(void 0, 2e4)) {
       if (e.status !== "done" && e.status !== "failed") continue;
       if (now - e.ts < 36e5) continue;
       led.set(e.id, e.status);
       ledAt.set(e.id, Number(e.ts) || 0);
+      if (e.status === "done" && String(e.receipt || "").startsWith("relay \u91CD\u542F")) ledInterrupt.add(e.id);
+      else ledInterrupt.delete(e.id);
     }
     if (!led.size) return;
     let movedDone = 0, movedBacklog = 0, frozenSkipped = 0;
@@ -59596,16 +59680,25 @@ provider=${opts.provider ?? "default"}` : void 0,
       const board = loadBoardFile(g2.id);
       if (!board) continue;
       const hits2 = board.entries.flatMap((x) => {
-        if (x.status !== "claimed" && x.status !== "backlog" || !x.dispatch_id) return [];
+        if (!x.dispatch_id) return [];
         const led2 = led.get(x.dispatch_id);
         if (!led2) return [];
-        if (x.status === "backlog" && (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id) || 0))) return [];
+        if (x.status === "submitted") {
+          if (led2 !== "done" || now - Number(ledAt.get(x.dispatch_id) || 0) < 4 * 36e5) return [];
+          return [{ dispatch_id: x.dispatch_id, to: "done", text: x.text }];
+        }
+        if (x.status !== "claimed" && x.status !== "backlog") return [];
+        if (x.status === "backlog" && !ledInterrupt.has(x.dispatch_id) && (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id) || 0))) return [];
         const to2 = led2 === "done" ? "done" : "backlog";
         return to2 === x.status ? [] : [{ dispatch_id: x.dispatch_id, to: to2, text: x.text }];
       });
-      if (!hits2.length) continue;
+      if (!hits2.length) {
+        this.boardReconHealthScan(g2, board, led, ledAt, now, void 0, ledInterrupt);
+        continue;
+      }
       if (g2.status !== "active") {
         frozenSkipped += hits2.length;
+        this.boardReconHealthScan(g2, board, led, ledAt, now, hits2.map((h) => ({ dispatch_id: h.dispatch_id, text: h.text, why: "frozen" })), ledInterrupt);
         continue;
       }
       for (const h of hits2) moveEntryByDispatch(g2.id, h.dispatch_id, h.to);
@@ -59621,12 +59714,67 @@ provider=${opts.provider ?? "default"}` : void 0,
           samples.push(m ? m[0] : `${h.dispatch_id.slice(0, 8)}\u2192${h.to}`);
         }
       }
+      let movedLocal = 0;
+      for (const h of hits2) {
+        const ent = after.entries.find((x) => x.dispatch_id === h.dispatch_id);
+        if (ent?.status === h.to) movedLocal++;
+      }
+      this.boardHealthBump(g2.id, movedLocal);
+      this.boardReconHealthScan(g2, after, led, ledAt, now, void 0, ledInterrupt);
+      this.emitBoard(g2.id);
     }
     if (movedDone + movedBacklog > 0) {
       this.emitChainAudit(
         "recon-autoclose",
         `recon(${trigger}) \u53F0\u8D26\u7EC8\u6001\xD7\u677F\u6EDE\u7559\u6536\u655B\uFF1A${movedDone} \u5F20\u2192done\u3001${movedBacklog} \u5F20\u2192backlog` + (frozenSkipped ? `\uFF08\u51BB\u7ED3\u7EC4\u5F85\u590D\u6D3B\u6536\u655B ${frozenSkipped} \u5F20\uFF09` : "") + (samples.length ? `\uFF5C${samples.join(" ")}` : "")
       );
+    }
+  }
+  /** W-CARDTERM-R1：recon 辅助——当日已修计数（hits×搬后实态，日滚动）。 */
+  boardHealthBump(gid, n) {
+    if (n <= 0) return;
+    const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const h = this.boardHealth.get(gid);
+    if (!h || h.day !== day) {
+      this.boardHealth.set(gid, { day, fixedToday: n, stuckAt: 0, stuck: h?.stuck ?? [] });
+      return;
+    }
+    h.fixedToday += n;
+  }
+  /** W-CARDTERM-R1：stuck 残留扫描——对账修不动的异常当前态（板面红条清单数据源）。
+   * 两类：①冻结组滞卡（挂起/归档组的终态滞留——保护不搬，示众等复活收敛）；
+   * ②failed×复核矛盾态（台账 failed 而卡在 submitted/ready_to_install——D18 复核闸
+   * 保护不自动搬，用户裁决面显性化）。搬卡完成后的组以搬后板实态复扫（残量为准）。 */
+  boardReconHealthScan(g2, board, led, ledAt, now, frozenHits, ledInterrupt) {
+    const stuck = [];
+    const frozenIds = new Set((frozenHits ?? []).map((h3) => h3.dispatch_id));
+    for (const x of board.entries) {
+      if (!x.dispatch_id) continue;
+      const led2 = led.get(x.dispatch_id);
+      if (!led2) continue;
+      if (frozenIds.has(x.dispatch_id)) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "frozen-stuck", hours: Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 36e5), note: "\u7EC4\u6302\u8D77/\u5F52\u6863\u2014\u2014\u677F\u51BB\u7ED3\u4FDD\u62A4\u4E0D\u81EA\u52A8\u642C\uFF0C\u590D\u6D3B\u540E\u4E0B\u8F6E\u5BF9\u8D26\u6536\u655B" });
+        continue;
+      }
+      if (led2 === "failed" && (x.status === "submitted" || x.status === "ready_to_install")) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "failed-in-review", hours: Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 36e5), note: `\u53F0\u8D26\u5DF2\u5931\u8D25 ${Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 36e5)}h\uFF0C\u5361\u4ECD\u505C\u300C${x.status === "submitted" ? "\u5BA1\u67E5\u4E2D" : "\u5F85\u88C5\u673A"}\u300D\u2014\u2014\u590D\u6838\u95F8\u4FDD\u62A4\u4E0D\u81EA\u52A8\u642C\uFF0C\u8BF7\u4EBA\u5DE5\u88C1\u51B3` });
+      }
+      const tHrs = Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 36e5);
+      const guardHit = (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id) || 0));
+      if (led2 === "failed" && x.status === "backlog" && tHrs >= 24) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "terminal-stuck", hours: tHrs, note: `\u53F0\u8D26\u5DF2\u5931\u8D25 ${tHrs}h\uFF0C\u5361\u505C\u5F85\u91CD\u6D3E\u51B3\u7B56\u2014\u2014\u91CD\u6D3E\u5EFA\u65B0\u5361\u6216\u4EBA\u5DE5\u6536\u53E3/\u5220\u5361\uFF08\u51B3\u7B56\u9762\u793A\u4F17\u4E0D\u81EA\u52A8\u642C\uFF09` });
+      } else if (led2 === "done" && x.status === "backlog" && !ledInterrupt?.has(x.dispatch_id) && guardHit && tHrs >= 4) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "terminal-stuck", hours: tHrs, note: `\u53F0\u8D26\u5DF2\u6536\u5272 ${tHrs}h\uFF0C\u4EBA\u5DE5\u91CD\u5F00\u5B88\u62A4\u751F\u6548\u4E2D\u2014\u2014\u5BF9\u8D26\u4E0D\u78BE\uFF1B\u82E5\u5DF2\u5904\u7F6E\u8BF7\u624B\u52A8\u6536\u53E3\uFF08\u5B88\u62A4\u2260\u9759\u9ED8\uFF09` });
+      } else if (x.status === "claimed" && tHrs >= 2) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "terminal-stuck", hours: tHrs, note: `\u53F0\u8D26\u7EC8\u6001\uFF08${led2 === "done" ? "\u5DF2\u6536\u5272" : "\u5DF2\u5931\u8D25"}\uFF09${tHrs}h\uFF0C\u5361\u4ECD\u505C\u8FD0\u884C\u4E2D\u2014\u2014\u642C\u5361\u672A\u751F\u6548\u91CD\u8BD5\u4E2D\uFF0C\u6301\u7EED\u5F02\u5E38\u8BF7\u4EBA\u5DE5\u6838` });
+      }
+    }
+    const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const h = this.boardHealth.get(g2.id);
+    if (!h || h.day !== day) this.boardHealth.set(g2.id, { day, fixedToday: 0, stuckAt: Date.now(), stuck });
+    else {
+      h.stuck = stuck;
+      h.stuckAt = Date.now();
     }
   }
   /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
@@ -62955,28 +63103,34 @@ provider=${opts.provider ?? "default"}` : void 0,
                 upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true });
                 handled = true;
               } else if (card && card.status !== "done") {
-                let r = { ok: false };
-                for (let attempt = 0; attempt < 3; attempt++) {
-                  r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true });
-                  if (r.ok) break;
-                  if (attempt < 2) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60);
-                }
-                if (!r.ok) {
-                  this.emitChainAudit("board-flip-degraded", `\u6536\u53E3\u7FFB\u5361 degraded\uFF1A\u5355 ${e.id.slice(0, 8)} \u5361 ${card.id} 3 \u6B21\u91CD\u8BD5\u5747\u8D25\uFF08${r.error}\uFF09\u2014\u2014\u56DE\u843D\u88F8\u8BBE\u515C\u5E95\uFF0C\u4EBA\u5DE5\u6838\u677F`);
-                  try {
-                    this.upsertNotification("system", "board-flip-degraded", `${e.id}:${card.id}`, {
-                      title: "\u6536\u53E3\u7FFB\u5361\u5931\u8D25\uFF08degraded\xB7\u5DF2\u91CD\u8BD5 3 \u6B21\uFF09",
-                      body: truncate2(`\u6D3E\u5355 ${e.id.slice(0, 8)} \u6536\u53E3 done \u4F46\u677F\u5199\u5931\u8D25\uFF1A${r.error}\u2014\u2014\u5DF2\u56DE\u843D\u88F8\u8BBE\u8DEF\u5F84\uFF0C\u8BF7\u6838\u5BF9\u677F\u5361 ${card.id} \u72B6\u6001\u3002`, 200),
-                      severity: "waiting",
-                      group: "attention",
-                      actionable: true,
-                      domain: "org",
-                      returnPath: "/"
-                    });
-                  } catch {
+                if (/-REVIEW\d*\b/.test(String(card.text ?? ""))) {
+                  const rv2 = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", note: `${card.note ? card.note + " " : ""}[cardterm] \u5BA1\u67E5\u5355\u7EC8\u6001\u76F4\u8FBE\uFF1A\u65E0\u6536\u5272\u540E\u7EED\uFF08PM \u91C7\u7EB3=\u56DE\u6267\u5DF2\u843D\uFF09` });
+                  if (rv2.ok) this.emitChainAudit("cardterm-review-direct", `\u5BA1\u67E5\u5355 ${e.id.slice(0, 8)}\u300C${truncate2(card.text ?? "", 36)}\u300D\u6536\u53E3\u56DE\u6267\u5408\u89C4\u2192\u5361\u76F4\u8FBE done\uFF08submitted \u5BF9\u5BA1\u67E5\u5355=\u7ED3\u6784\u6027\u6C38\u4E45\u6EDE\u7559\uFF0C\u89C1 w-cardterm\uFF09`);
+                  handled = rv2.ok;
+                } else {
+                  let r = { ok: false };
+                  for (let attempt = 0; attempt < 3; attempt++) {
+                    r = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", review_required: true });
+                    if (r.ok) break;
+                    if (attempt < 2) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60);
                   }
+                  if (!r.ok) {
+                    this.emitChainAudit("board-flip-degraded", `\u6536\u53E3\u7FFB\u5361 degraded\uFF1A\u5355 ${e.id.slice(0, 8)} \u5361 ${card.id} 3 \u6B21\u91CD\u8BD5\u5747\u8D25\uFF08${r.error}\uFF09\u2014\u2014\u56DE\u843D\u88F8\u8BBE\u515C\u5E95\uFF0C\u4EBA\u5DE5\u6838\u677F`);
+                    try {
+                      this.upsertNotification("system", "board-flip-degraded", `${e.id}:${card.id}`, {
+                        title: "\u6536\u53E3\u7FFB\u5361\u5931\u8D25\uFF08degraded\xB7\u5DF2\u91CD\u8BD5 3 \u6B21\uFF09",
+                        body: truncate2(`\u6D3E\u5355 ${e.id.slice(0, 8)} \u6536\u53E3 done \u4F46\u677F\u5199\u5931\u8D25\uFF1A${r.error}\u2014\u2014\u5DF2\u56DE\u843D\u88F8\u8BBE\u8DEF\u5F84\uFF0C\u8BF7\u6838\u5BF9\u677F\u5361 ${card.id} \u72B6\u6001\u3002`, 200),
+                        severity: "waiting",
+                        group: "attention",
+                        actionable: true,
+                        domain: "org",
+                        returnPath: "/"
+                      });
+                    } catch {
+                    }
+                  }
+                  handled = r.ok;
                 }
-                handled = r.ok;
               }
             } catch {
             }
@@ -65089,33 +65243,7 @@ ${lines.join("\n")}
             if (hit.entry.status === "submitted") {
               const flip = upsertBoardEntry(hit.gid, { id: hit.entry.id, text: hit.entry.text, status: "done", note: `${hit.entry.note ? hit.entry.note + " " : ""}[cardlife-r2 ${today}] PR merged \u81EA\u52A8\u6536\u53E3\uFF1A${prUrl || "\uFF08\u65E0 URL\uFF09"}`, journal_action: "cardlife-pr-merged" });
               if (flip.ok) {
-                const CHAIN_WINDOW_MS = 14 * 24 * 36e5;
-                const baseSlug = chainBaseSlug;
-                const curKey = harvestKeyOf(hit.entry.text);
-                if (curKey.startsWith("w-")) {
-                  const base = baseSlug(curKey);
-                  const prevs = (loadBoard(hit.gid).entries || []).filter((x) => {
-                    if (x.id === hit.entry.id) return false;
-                    if (x.status !== "submitted" && x.status !== "claimed" && x.status !== "ready_to_install") return false;
-                    const k3 = harvestKeyOf(String(x.text || ""));
-                    if (!k3.startsWith("w-") || baseSlug(k3) !== base) return false;
-                    const xt2 = Number(x.ts || 0);
-                    const ct2 = Number(hit.entry.ts || 0);
-                    return ct2 > 0 && xt2 > 0 && xt2 < ct2 && ct2 - xt2 < CHAIN_WINDOW_MS;
-                  });
-                  const closedIds = [];
-                  const skippedAlive = [];
-                  for (const pv of prevs) {
-                    if (pv.status === "claimed" && pv.owner_session && sessionActiveByEvents(this.cfg.dataDir, pv.owner_session)) {
-                      skippedAlive.push(pv.id);
-                      continue;
-                    }
-                    upsertBoardEntry(hit.gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}[cardlife-r2 ${today}] \u540C\u94FE\u95ED\u5361\uFF1A\u7EC8\u4EE3 ${hit.entry.id} PR merged\uFF08\u94FE\u57FA ${base}\uFF09`, journal_action: "cardlife-chain-close" });
-                    closedIds.push(pv.id);
-                  }
-                  if (skippedAlive.length) this.emitChainAudit("cardlife-chain-skip-live", `\u7EC8\u4EE3 ${hit.entry.id} PR merged\u2192\u540C\u94FE\u5728\u9014\u5361\u8DF3\u8FC7 ${skippedAlive.length} \u5F20\uFF08${skippedAlive.join(",")}\uFF09\u2014\u2014owner \u4F1A\u8BDD\u6D3B\u8DC3\uFF08\u53CC\u5BA1\u5E76\u884C\u5728\u8DD1\uFF09\u4E0D\u8BEF\u7FFB\uFF0C\u5F85\u5176\u81EA\u7136\u6536\u53E3`);
-                  if (closedIds.length) this.emitChainAudit("cardlife-chain-close", `\u7EC8\u4EE3 ${hit.entry.id} PR merged\u2192\u540C\u94FE\u95ED\u524D\u4EE3 ${closedIds.length} \u5F20\uFF08${closedIds.join(",")}\uFF09`);
-                }
+                this.closeChainSiblings(hit.gid, hit.entry, `[cardlife-r2 ${today}] \u540C\u94FE\u95ED\u5361\uFF1A\u7EC8\u4EE3 ${hit.entry.id} PR merged\uFF08${prUrl || "\u65E0 URL"}\uFF09`);
                 this.emitChainAudit("cardlife-pr-merged", `\u5361 ${hit.entry.id} submitted\u2192done\uFF08PR merged \u81EA\u52A8\u6536\u53E3\u2014\u2014\u8F6C\u79FB\u5185\u5EFA\u4E8E\u52A8\u4F5C\uFF0C\u673A\u68B0\u624B\u964D\u7EA7\u4E3A\u517C\u5BB9\u8DEF\u5F84\uFF09`);
                 this.emitBoard(hit.gid);
                 if (prUrl) void this.closeSupersededChainPRs(prUrl, dispatchId);
@@ -65626,6 +65754,9 @@ ${lines.join("\n")}
               if (!okw) console.warn(`[boardv2] user-override \u4E8B\u4EF6\u843D\u8D26\u5931\u8D25\uFF08\u677F\u9762\u5DF2\u52A8\uFF0C\u6295\u5F71\u56DE\u843D transitions \u6E90\uFF09gid=${gid} entry=${str2("entry_id")}`);
             }
             if (m.ok && (st2 === "submitted" || st2 === "ready_to_install")) this.feedPM("board-change");
+            if (m.ok && st2 === "done") {
+              this.closeChainSiblings(gid, { id: m.entry.id, text: m.entry.text, ts: m.entry.ts }, `[cardterm ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u540C\u94FE\u95ED\u5361\uFF1A\u7EC8\u4EE3 ${m.entry.id} \u6536\u5272\u786E\u8BA4\uFF08board move\u2192done\uFF09`);
+            }
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op2 === "del") {
             const d2 = removeBoardEntry(gid, str2("entry_id"));
@@ -66493,6 +66624,12 @@ ${lines.join("\n")}
     if (!board) return;
     const prev = this.lastBoardBroadcast.get(gid) ?? null;
     const outBoard = board.lessons?.length ? { ...board, lessons: [] } : board;
+    const zz2 = this.boardZombies.get(gid) ?? [];
+    const hh2 = this.boardHealth.get(gid);
+    if (hh2 || zz2.length) {
+      const seenText = new Set((hh2?.stuck ?? []).map((s) => s.text));
+      outBoard.health = hh2 ? { ...hh2, stuck: [...hh2.stuck, ...zz2.filter((z2) => !seenText.has(z2.text))] } : { day: "", fixedToday: 0, stuckAt: 0, stuck: zz2 };
+    }
     this.lastBoardBroadcast.set(gid, outBoard);
     const projection = (() => {
       try {
@@ -74994,7 +75131,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.13";
+  const verRelay = "0.7.1-test.14";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -76841,13 +76978,15 @@ var PatrolModule = class {
               try {
                 const r2 = JSON.parse(t);
                 if (typeof r2.id !== "string" || !r2.id) continue;
+                const interrupt = String(r2.receipt || "").startsWith("relay \u91CD\u542F");
                 const cur = byId.get(r2.id);
                 byId.set(r2.id, {
                   title: r2.title || cur?.title,
                   // 首行（dispatched）title 保住——终态行不带
-                  done: r2.status === "done" || (cur?.done ?? false),
-                  // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done）
-                  hasReceipt: !!r2.receipt || (cur?.hasReceipt ?? false)
+                  done: r2.status === "done" && !interrupt || (cur?.done ?? false),
+                  // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done；中断行不立 done）
+                  hasReceipt: !!r2.receipt && !interrupt || (cur?.hasReceipt ?? false)
+                  // 中断 receipt 不是交付证据
                 });
               } catch {
               }
@@ -76936,6 +77075,14 @@ var PatrolModule = class {
                 const up2 = upsertBoardEntry(z2.gid, { id: z2.entryId, text: be2.text, status: "done", note: `${be2.note ? be2.note + " " : ""}[boardtruth5 ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u50F5\u5C38\u8BC1\u636E\u5F3A\u7FFB\uFF08\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u8BC1\u636E=${z2.evidence}\uFF09\u2014\u2014\u5F62\u6001\u514D\u75AB\u4E0D\u53D8\u91CF\u6536\u53E3\uFF081109 \u4E94\u73B0\u5200\u4E8C\uFF09`, journal_action: "boardtruth5-zombie-done" });
                 if (up2.ok) zDoneN++;
               } else {
+                try {
+                  this.mgr.emitDutyFeedEvent("zombie-card", `\u50F5\u5C38\u5361\uFF08observe\xB7\u8BC1\u636E\u5728\uFF09\uFF1A${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u8BC1\u636E=${z2.evidence}\u2014\u2014\u672A\u6267\u884C\uFF0C\u5207 auto \u81EA\u52A8\u6536\u53E3\u6216\u4EBA\u5DE5\u6536\u5272`);
+                } catch {
+                }
+                try {
+                  this.mgr.upsertNotification("system", "boardtruth5-zombie-observe", z2.entryId, { title: `\u50F5\u5C38\u5361\uFF08\u8BC1\u636E\u5728\xB7observe\uFF09\uFF1A${String(be2.text).slice(0, 20)}`, body: `\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h\uFF0C\u8BC1\u636E=${z2.evidence}\u2014\u2014observe \u6863\u672A\u5F3A\u7FFB\uFF08\u7EA2\u6761\u5DF2\u793A\u4F17\uFF09\uFF0C\u4EBA\u5DE5\u6536\u53E3\u6216\u5207 auto`, severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/" });
+                } catch {
+                }
                 this.wouldDo("boardtruth5", "\u5F3A\u7FFB\u50F5\u5C38\u5361\uFF08\u8BC1\u636E\u5728\uFF09", `${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u8BC1\u636E=${z2.evidence}\u2014\u2014observe \u6863\u672A\u6267\u884C`);
               }
             } else {
@@ -76951,11 +77098,38 @@ var PatrolModule = class {
                 const up2 = upsertBoardEntry(z2.gid, { id: z2.entryId, text: be2.text, note: `${be2.note ? be2.note + " " : ""}${ZOMBIE_NOTE_MARK} ${(/* @__PURE__ */ new Date()).toLocaleDateString("zh-CN")}] \u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014\u5DF2\u544A\u8B66\u4E0D\u9759\u9ED8\u7FFB\uFF08\u4EBA\u5DE5\u6838\u5B9E\uFF1A\u771F\u957F\u4EFB\u52A1\u5FFD\u7565/\u771F\u50F5\u5C38\u6536\u53E3\uFF09` });
                 if (up2.ok) zAlarmN++;
               } else {
-                this.wouldDo("boardtruth5", "\u50F5\u5C38\u5361\u544A\u8B66\uFF08\u4E09\u8BC1\u5168\u65E0\uFF09", `${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014observe \u6863\u672A\u544A\u8B66`);
+                try {
+                  this.mgr.emitDutyFeedEvent("zombie-card", `\u50F5\u5C38\u5361\u544A\u8B66\uFF08observe\uFF09\uFF1A${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${z2.status} ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014\u8BF7\u6838\u5B9E\uFF08\u771F\u957F\u4EFB\u52A1\u5FFD\u7565\uFF0C\u771F\u50F5\u5C38\u4EBA\u5DE5\u6536\u53E3\uFF09`);
+                } catch {
+                }
+                try {
+                  this.mgr.upsertNotification("system", "boardtruth5-zombie-observe", z2.entryId, { title: `\u50F5\u5C38\u5361\uFF08observe\uFF09\uFF1A${String(be2.text).slice(0, 20)}`, body: `\u6EDE\u7559 ${z2.status} ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014\u5DF2\u544A\u8B66\u4E0D\u9759\u9ED8\u7FFB\uFF08\u7EA2\u6761\u5DF2\u793A\u4F17\uFF09\uFF0C\u4EBA\u5DE5\u6838\u5B9E`, severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/" });
+                } catch {
+                }
+                this.wouldDo("boardtruth5", "\u50F5\u5C38\u5361\u544A\u8B66\uFF08\u4E09\u8BC1\u5168\u65E0\uFF09", `${z2.entryId}\u300C${String(be2.text).slice(0, 24)}\u300D\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h \u4E09\u8BC1\u5168\u65E0\u2014\u2014observe \u6863\u5DF2\u544A\u8B66\uFF08duty feed+\u901A\u77E5\uFF09`);
               }
             }
           }
           this.push("board-recon", `\u50F5\u5C38\u4E0D\u53D8\u91CF\u5BF9\u8D26\uFF08${mode}\uFF09\uFF1A\u5F3A\u7FFB ${zDoneN}\xB7\u544A\u8B66 ${zAlarmN}\uFF08TTL ${Math.round(zombieTtlMs() / 36e5)}h\u2014\u2014\u4E94\u73B0\u5200\u4E8C\u5F62\u6001\u514D\u75AB\uFF09`);
+        }
+        {
+          const zFeed = /* @__PURE__ */ new Map();
+          for (const z2 of zs2.actions) {
+            const arr = zFeed.get(z2.gid) ?? [];
+            arr.push({
+              text: String(z2.text || z2.entryId).slice(0, 40),
+              kind: z2.evidence ? "zombie-evidence" : "zombie-no-evidence",
+              hours: Math.max(1, Math.round(z2.ageMs / 36e5)),
+              note: z2.evidence ? `\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h\uFF0C\u4EA4\u4ED8\u8BC1\u636E\u5728\uFF08${z2.evidence}\uFF09\u2014\u2014\u5F3A\u7FFB\u8D70 auto \u6863\uFF1Bobserve \u6863\u8BF7\u4EBA\u5DE5\u6536\u53E3\u6216\u5207 auto` : `\u6EDE\u7559 ${Math.round(z2.ageMs / 36e5)}h\uFF0C\u53F0\u8D26/\u56DE\u6267/dev log \u4E09\u8BC1\u5168\u65E0\u2014\u2014\u8BF7\u4EBA\u5DE5\u6838\u5B9E\uFF08\u771F\u957F\u4EFB\u52A1\u5FFD\u7565/\u771F\u50F5\u5C38\u6536\u53E3\uFF09`
+            });
+            zFeed.set(z2.gid, arr);
+          }
+          for (const { gid } of boards) {
+            try {
+              this.mgr.boardHealthFeedZombies(gid, zFeed.get(gid) ?? []);
+            } catch {
+            }
+          }
         }
       }
     } catch (e) {

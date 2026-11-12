@@ -901,13 +901,16 @@
                   if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
                   // W-ALIVELAMP（1111 用户实锤：多模态长工具执行期灯灭与真相脱节）：
                   // 长工具（mcp analyze_image 等分钟级单工具）执行中 tool_use 帧龄=工具开始
-                  // 时刻，超 15min 窗即判闲——但 CLI 活着（W-SEATALIVE 心跳帧持续刷
-                  // updated_at）。补第二判据：WORKING + updated_at 心跳新鲜（≤5min）=真在
-                  // 干活回合（挂起卡 CLI 死心跳停→updated_at 旧不亮；回合间 idle 心跳停同
-                  // 不亮——不复活挂起形态，291 原判据语义保持）。
+                  // 时刻，超 15min 窗即判闲——但回合仍活。补第二判据：WORKING + updated_at
+                  // 心跳新鲜（≤5min）且**有过工具活动（t>0 前置——W-P2TAIL2 按审查 P2-②
+                  // 收敛）**=真在干活回合。机制勘误（审查 P2-①）：心跳=relay 侧定时器
+                  //（5s/拍，与子进程健康无关——「CLI 死→心跳停」不成立，心跳真停=status
+                  // 翻离 WORKING/sweep 收殓翻态），挂起灭灯靠 sweep/看门狗翻 status 中介。
+                  // t>0 前置三态全正：起手窗（t=0 接单未开工）回灰=291 原语义；挂起
+                  //（t>0 心跳停）灭；长工具（t>0 超 15min 窗但心跳新鲜）亮。
                   const HB_MS = 5 * 60 * 1000;
                   const u = s.updated_at;
-                  if (typeof u === "number" && u > 0 && at - u <= HB_MS) return true; // 心跳新鲜：长工具执行中
+                  if (typeof u === "number" && u > 0 && t > 0 && at - u <= HB_MS) return true; // 心跳新鲜且有过工具活动：长工具执行中
                   return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
                 }
                 window.__ccDeck005IsRealWorking = isRealWorking; // team-domain 计数同源（跨文件共享）
