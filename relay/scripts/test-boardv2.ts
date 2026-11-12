@@ -241,6 +241,31 @@ async function main() {
     proj = projectBoard(gid);
     assert(proj.cards.find((c) => c.entry_id === "bv2-fail-card")?.lane === "backlog", "投影：failed → backlog（打回）");
 
+    // W-P2TAIL2 幽灵行收敛（1111 PM 实锤 a9512c8e 真实行原样复刻）：排队换 id——卡绑
+    // 旧 id（-26eb-），PM 手工收口 failed 行写换后新 id（-46f4-，orphan）→ 前缀兜底消费，
+    // 终态即时投影（原形态：精确关联失联→「排队 5h+」幽灵直到 TTL 撤单对旧 id 补写才自愈）
+    // 夹具时序对齐生产：卡与排队行同时刻建（卡 updated_at 前的行会被 tie-break 挡——
+    // base 行只在严格更晚时参与）；停留时长语义由 last_event_ts 锚表达（非 5h 旧数据）
+    const ghostOld = "a9512c8e-26eb-443a-b211-9b3c6f918b7e";
+    const ghostNew = "a9512c8e-46f4-4570-8953-eb48b9763e1c";
+    upsertBoardEntry(gid, { id: "bv2-ghost-card", text: "幽灵行复刻卡", dispatch_id: ghostOld, status: "planned" });
+    const tQ = Date.now();
+    appendDispatch({ ts: tQ, id: ghostOld, tier: "正经立项", target: "cap-queue", status: "queued", session_id: "", project_anchor: join(DATA, "proj-bv2"), receipt: "全局并发触顶排队等待空位" });
+    proj = projectBoard(gid);
+    let gCard = proj.cards.find((c) => c.entry_id === "bv2-ghost-card");
+    assert(gCard?.lane === "backlog" && gCard?.last_event === "dispatch:queued", "幽灵夹具前置：精确 queued 行→backlog 排队（换 id 前）");
+    const tFail = Date.now() + 1;
+    appendDispatch({ ts: tFail, id: ghostNew, tier: "正经立项", target: "w", status: "failed", receipt: "PM 手工收口：排队换 id 幽灵行", session_id: "", project_anchor: join(DATA, "proj-bv2"), actor: "leader" });
+    proj = projectBoard(gid);
+    gCard = proj.cards.find((c) => c.entry_id === "bv2-ghost-card");
+    assert(gCard?.lane === "backlog" && gCard?.last_event === "dispatch:failed", "幽灵行收敛：换 id failed 收口行（orphan 前缀兜底消费）→ 投影终态 dispatch:failed（不再幽灵排队等 TTL 自愈）");
+    assert(gCard?.last_event_ts === tFail, "幽灵行停留锚：last_event_ts=收口行 ts（age 从终态起算，非排队起算）");
+    // 负向：前缀无关的 orphan failed 行不得误挂任何卡（bv2-ghost-card 终态锚不被搅动）
+    appendDispatch({ ts: Date.now() + 2, id: "9f3e77aa-1111-4222-8333-c44444444444", tier: "轻立项", target: "w", status: "failed", session_id: "", project_anchor: join(DATA, "proj-bv2") });
+    proj = projectBoard(gid);
+    gCard = proj.cards.find((c) => c.entry_id === "bv2-ghost-card");
+    assert(gCard?.last_event === "dispatch:failed" && gCard?.last_event_ts === tFail, "负向：前缀不同的 orphan 行零误挂（终态锚原样——兜底只认同前缀）");
+
     // ---------- B9 接线断言（审查 A-P0 直接漏网处的回归钉：spawn opts 必须带 workerBoard） ----------
     console.log("B9 钩子接线+age 新鲜度:");
     // claude 系 spawn（非 codex——SDK 编程式钩子是 claude 通道，codex 结构性豁免，

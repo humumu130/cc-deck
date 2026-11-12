@@ -1137,10 +1137,12 @@ export function isRealWorking(s: { status?: string; last_tool_use_at?: number; u
   if (t === undefined) return true; // 老 relay 无字段：降级干活（不误伤）
   if (typeof t === "number" && t > 0 && at - t <= FRESH_MS) return true; // 近期工具帧：干活中
   // W-ALIVELAMP（1111）：长工具执行期第二判据——WORKING+updated_at 心跳新鲜（≤5min，
-  // W-SEATALIVE 回合感知心跳持续刷）=真干活；挂起/回合间 idle 心跳停不亮（291 语义保持）。
-  // 与 web 端 session-domain isRealWorking 逐句同源，测试锚互锁。
+  // W-SEATALIVE 回合感知心跳持续刷）且有过工具活动（t>0 前置——W-P2TAIL2 按审查 P2-②
+  // 收敛：起手窗 t=0 回灰=291 原语义；挂起 t>0 心跳停灭；长工具 t>0 心跳新亮）=真干活。
+  // 机制勘误（审查 P2-①）：心跳=relay 侧定时器与子进程健康无关，挂起灭灯靠 sweep/看门狗
+  // 翻 status 中介。与 web 端 session-domain isRealWorking 逐句同源，测试锚互锁。
   const HB_MS = 5 * 60 * 1000;
   const u = s.updated_at;
-  if (typeof u === "number" && u > 0 && at - u <= HB_MS) return true;
+  if (typeof u === "number" && u > 0 && t > 0 && at - u <= HB_MS) return true;
   return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
 }

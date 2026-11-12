@@ -206,10 +206,31 @@ export function projectBoard(gid: string): BoardProjection {
     arr.push(r);
     byDispatch.set(r.id, arr);
   }
+  // W-P2TAIL2（1111 PM 实锤 a9512c8e）：「排队换 id」幽灵行——429 治理排队重入换 id 后，
+  // 手工收口/终态行写到换后新 id，卡绑旧 id → 精确关联失联 → failed 已落账仍投影
+  // 「排队 N 小时」（直到 TTL 撤单对旧 id 补写 failed 才自愈——3.4h 幽灵窗口）。兜底：
+  // 未被任何卡精确消费的 orphan 行按 id 前缀（首段——派发生成器换 id 同族共前缀）挂到
+  // 同前缀卡；碰撞面=32bit 前缀×同窗单数（几十），可忽略；有精确卡的行不进 orphan 池
+  // （不抢真实他卡链）。consumption 边对齐实读行形态（a9512c8e 三行：queued 旧行/failed
+  // 收口新行/failed TTL 旧行——字段 status/receipt/actor 齐全，非词表缺词问题）。
+  const exactIds = new Set<string>();
+  for (const entry of entries) if (entry.dispatch_id) exactIds.add(entry.dispatch_id);
+  const orphanByPrefix = new Map<string, DispatchEntry[]>();
+  for (const r of rows) {
+    if (r.event === "user-override" || exactIds.has(r.id)) continue;
+    const p = String(r.id).split("-")[0];
+    const arr = orphanByPrefix.get(p) ?? [];
+    arr.push(r);
+    orphanByPrefix.set(p, arr);
+  }
 
   const cards: ProjectedCard[] = entries.map((entry) => {
     const lifecycle: ProjectedLifecycleRow[] = [];
-    const drows = entry.dispatch_id ? (byDispatch.get(entry.dispatch_id) ?? []) : [];
+    // W-P2TAIL2：精确行 + 前缀兜底 orphan 行（换 id 失联的终态收口链——ts 归并后写赢，
+    // 幽灵行死亡；orphan 行 event 形态与普通 dispatch 行同构，消费循环零分支新增）
+    const drows = entry.dispatch_id
+      ? [...(byDispatch.get(entry.dispatch_id) ?? []), ...(orphanByPrefix.get(entry.dispatch_id.split("-")[0]) ?? [])]
+      : [];
     for (const r of drows) {
       lifecycle.push({
         ts: typeof r.ts === "number" ? r.ts : 0,
@@ -278,9 +299,13 @@ export function projectBoard(gid: string): BoardProjection {
         lane = candidate;
         lastTs = row.ts;
         // last_event 语义=「当前态怎么来的」：事件词恒记（最细粒度）；无事件行只在
-        // 泳道变化时记（防机械行洗掉更有信息量的事件词）；base 兜底行不洗事件词
+        // 泳道变化时记（防机械行洗掉更有信息量的事件词）；base 兜底行不洗事件词。
+        // W-P2TAIL2：终态行（failed/done）恒记——queued→failed 同映 backlog（排队→打回）
+        // 时 lane 不变会漏记「失败」可辨性（板面 chip 由 last_event 辨，:120 设计意图在
+        // 「排队在前」场景失效=幽灵形态的标签面残留）；非终态机械行的防洗设计保持
         if (row.event) lastEvent = label;
         else if (changed && !isBase) lastEvent = label;
+        else if (!isBase && (row.status === "failed" || row.status === "done")) lastEvent = label;
       }
     }
     // last_event 精化：最近一条黑板事件词若与终态泳道同向，则优先呈现——
