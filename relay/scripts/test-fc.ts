@@ -232,7 +232,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
       ok(iDetail < iHead && iHeadEnd >= 0 && iHeadEnd < iDetailEnd && iHeadEnd < iWsOpen, "R4-6 会话头只在会话列：head 在 session-detail 内、会话体之上（head.right≤session-detail.right 不横跨工作区；workspace 只包消息/状态条/输入框）");
     }
     ok(!css.includes("max-width: 1199px") && !css.includes(".session-split > .fzone") && !css.includes("top: 0; right: 0; bottom: 0; z-index: 7"), "R4-7 窄窗禁浮层负向锚（<1200 覆盖媒体查询+fzone absolute 浮层规则不得回归——任何宽度都是真实列，用户口径④「tab 内容跑到对话面板来了」病灶）");
-    ok(!fz.includes("if (remembered) setOpen(true") && fz.includes("const NARROW_W = 1000") && fz.includes("narrow && !wasNarrow && !root.hidden"), "R4-8 冷启必收起（OPEN_KEY 自动展开不得回潮——用户口径④「切不掉」病灶）+极窄 <1000 单向自动收起（窄域内 resize 不抢用户手动再开）");
+    ok(!fz.includes("if (remembered) setOpen(true") && fz.includes("const NARROW_W = 1200") && fz.includes("narrow && !wasNarrow && !root.hidden"), "R4-8 冷启必收起（OPEN_KEY 自动展开不得回潮——用户口径④「切不掉」病灶）+窄域 <1200 单向自动收起（R4-R1 刀二 1000→1200——审二第五轮直答①「细条可用」带；窄域内 resize 不抢用户手动再开）");
   }
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============

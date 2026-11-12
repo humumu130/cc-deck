@@ -28,13 +28,32 @@
   // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
   // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
   // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
-  function clampW(w) { return Math.max(340, Math.min(800, Math.round(window.innerWidth * 0.72), w)); }
+  function clampW(w) {
+    // W-FZONE-R4-R1 刀三（审二 P2-① 1000px 档对话列 215px+composer 按钮溢出实录）：对话列保底
+    // 护栏——可用面板宽 = innerWidth − 队列宽（--queue-w 实算，缺省 235）− 512（对话列保底储备）
+    // − 4（sash），与 800/72vw 并列取小。储备 512=实测口径：composer 按钮行最小内容宽 366px
+    //（CDP 逐宽扫描 scrollWidth 下限）+ 会话区左右内边距/边距 chrome ≈130px + 余量 16——任务书
+    // 草案值 360 是「列宽」口径，列内 chrome 吃掉后 composer 实得 ~230px 仍溢出，故按验收目标
+    // （1150 景按钮行零溢出）取实测值。效果：≥1071px 窗宽面板全容纳按钮行；极窄（护栏值 <340
+    // 面板下限）下限优先——939-1071 带手动再开 composer 仍挤（面板 340 下限语义保留，已备案），
+    // <1200 跨入已自动收起。
+    let queueW = 235;
+    try {
+      const screenEl = document.querySelector(".desktop-screen");
+      const raw = screenEl ? getComputedStyle(screenEl).getPropertyValue("--queue-w") : "";
+      const n = Number(String(raw).replace(/px/i, "").trim());
+      if (Number.isFinite(n) && n > 0) queueW = n;
+    } catch (_) {}
+    const guard = window.innerWidth - queueW - 512 - 4;
+    return Math.max(340, Math.min(800, Math.round(window.innerWidth * 0.72), guard, w));
+  }
   function applyW(w) { root.style.width = clampW(w) + "px"; }
   function readW() {
     const v = Number(localStorage.getItem(W_KEY));
     return Number.isFinite(v) && v >= 340 ? clampW(v) : 440; // 缺省 440（WorkBuddy 同构）；旧记忆 <340（38%/280 时代）归一
   }
   function setOpen(on, remember) {
+    if (on) applyW(readW()); // W-FZONE-R4-R1 刀三：开面板按当前窗宽重钳（护栏保对话列——窄域手动再开不再 215px 细条；变宽回弹到记忆宽）——open/toggle/autoOpen 全走本口单点
     root.hidden = !on;
     root.classList.toggle("open", on);
     const sash = document.querySelector("#d-session .fz-sash");
@@ -337,19 +356,29 @@
   applyW(readW());
   renderAll();
 
-  // ---------- W-FZONE-R4：极窄自动收起（NARROW_W 单向） ----------
-  // 跨入窄域边沿且面板开→收起（tab 保留不丢；remember=true 写 OPEN_KEY=0——跨出窄域不回弹）；
+  // ---------- W-FZONE-R4：极窄自动收起（NARROW_W 单向）；R4-R1 刀二/刀三增强 ----------
+  // 跨入窄域边沿且面板开→收起（tab 保留不丢；remember=true 写 OPEN_KEY=0——注：跨出不回弹的实际
+  // 保障=下方「跨出边沿无动作」分支，该写入无消费者（审二 P3-② 备案，写点暂留不扩改））；
   // 窄域内 resize 不动作（用户头部钮手动再开不抢）；冷启必收起故载入态无面板可收（wasNarrow
   // 初始化即载入判定）。窄窗任何宽度面板都是真实列（R4 浮层形态已删，永不盖对话/输入框）。
-  const NARROW_W = 1000;
+  // R4-R1 刀二（审二第五轮直答①/P2-②）：NARROW_W 1000→1200——1000-1199「细条可用」带（对话列
+  // 191-291px+按钮溢出）正是用户主诉「工作区开着对话挤成缝」，跨入即收；自动收起复用 B4 toast
+  // 通道示众（静默再收=审二实录病——「我自己开的拖下窗口就没了」），仅自动收起边沿弹（手动
+  // 收/开、跨出窄域不弹）。
+  const NARROW_W = 1200;
   let wasNarrow = window.innerWidth < NARROW_W;
   let rzTid = 0;
   window.addEventListener("resize", () => {
     clearTimeout(rzTid);
     rzTid = setTimeout(() => {
       const narrow = window.innerWidth < NARROW_W;
-      if (narrow && !wasNarrow && !root.hidden) setOpen(false, true);
+      if (narrow && !wasNarrow && !root.hidden) {
+        setOpen(false, true);
+        try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast("窗口过窄，文件工作区已收起（头部 ▤ 工作区 可再开）"); } catch (_) {}
+      }
       wasNarrow = narrow;
+      // R4-R1 刀三：开面板状态下窗口变窄→护栏重钳（1200-1399 带 800px 面板挤对话同治；变宽回弹到记忆宽）
+      if (!root.hidden) applyW(readW());
     }, 120);
   });
 

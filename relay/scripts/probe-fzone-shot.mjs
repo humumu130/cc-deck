@@ -240,28 +240,40 @@ await shot("fz-5-md-light");
 await shot("fz-r4-wide-light"); // W-FZONE-R4：亮色宽窗对照（面板开态几何同 fz-r4-wide-dark）
 await ev(`(() => { const b = document.querySelector('[data-theme-toggle]'); if (b) b.click(); })()`); await wait(300);
 
-// ⑫b W-FZONE-R4 窄窗禁浮层：viewport=1000（旧 <1200 浮层区间）——fzone 真实列非浮层+对话/输入框完整可见
-await send("Emulation.setDeviceMetricsOverride", { width: 1000, height: 940, deviceScaleFactor: 1, mobile: false });
-await wait(700);
+// ⑫b W-FZONE-R4-R1 刀二：跨入 1200 窄域边沿（1440→1150）→自动收起+toast 示众（NARROW_W 1000→1200
+// 随审二第五轮直答①「细条可用」带；静默再收 P2-② 根治——仅自动收起弹，手动收/开不弹）
+await send("Emulation.setDeviceMetricsOverride", { width: 1150, height: 940, deviceScaleFactor: 1, mobile: false });
+await wait(800); // resize 防抖 120ms+缓冲
 const sN = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+const toastN = await ev(`(() => { const t = document.getElementById("toast"); return { show: t ? t.classList.contains("show") : false, txt: t ? t.textContent : "" }; })()`);
+ok(sN.hidden && sN.tabs.length >= 1, `跨入 1150（<NARROW_W=1200）：自动收起（hidden=${sN.hidden}，tab ${sN.tabs.length} 个保留不丢）`);
+ok(toastN.show && toastN.txt.includes("已收起") && toastN.txt.includes("工作区"), `自动收起 toast 示众（「${toastN.txt.slice(0, 44)}」——「我自己开的拖下窗口就没了」静默病根除）`);
+await shot("fz-r4r1-1150-autocollapse-toast");
+
+// ⑫b2 W-FZONE-R4-R1 刀三：窄域手动再开→面板护栏收窄保对话列（审二 P2-① 1000px 档 215px 细条+composer 按钮溢出绝迹）
+await ev(`window.ccDeckFzone.toggle()`); await wait(400);
 const geoN = await ev(`(() => {
   const z = document.getElementById("fzone").getBoundingClientRect();
-  const c = document.querySelector("#d-session .composer-input").getBoundingClientRect();
-  return { zL: Math.round(z.left), cR: Math.round(c.right), cW: Math.round(c.width), pos: getComputedStyle(document.getElementById("fzone")).position };
+  const ci = document.querySelector("#d-session .composer-input").getBoundingClientRect();
+  const cb = document.querySelector("#d-session .composer-bottom") || document.querySelector("#d-session .composer");
+  return { pos: getComputedStyle(document.getElementById("fzone")).position, zL: Math.round(z.left), zW: Math.round(z.width),
+    convW: Math.round(z.left - ci.left), ciR: Math.round(ci.right), ciW: Math.round(ci.width),
+    overflow: cb ? cb.scrollWidth > cb.clientWidth + 1 : null };
 })()`);
-ok(!sN.hidden, "窄窗 1000：面板开（真实列形态）——NARROW_W=1000 不含边界未触发自动收起");
-ok(geoN.pos !== "absolute" && geoN.cR <= geoN.zL + 1 && geoN.cW > 150, `窄窗 1000：fzone 真实列非浮层（computed position=${geoN.pos}）+输入框完整（right=${geoN.cR} ≤ fz.left=${geoN.zL}，宽 ${geoN.cW}px——flex 收缩让位非覆盖，旧浮层盖对话区 54% 病灶根除）`);
-await shot("fz-r4-narrow1000-dark");
+ok(geoN.pos !== "absolute" && geoN.ciR <= geoN.zL + 1, `窄域 1150 手动再开：fzone 真实列非浮层（position=${geoN.pos}）+输入框完整（right=${geoN.ciR} ≤ fz.left=${geoN.zL}）`);
+ok(geoN.convW >= 356, `刀三护栏：对话列保底 ≥360px（实测可用 ${geoN.convW}px——面板自动收窄至 ${geoN.zW}px，215px 细条形态绝迹）`);
+ok(geoN.overflow === false, `composer 按钮行零溢出（overflow=${geoN.overflow}——审二 P2-① 一钮被挤掉病根除）`);
+await shot("fz-r4r1-1150-guard");
 
-// ⑫c 极窄 <1000：跨入窄域边沿→单向自动收起（tab 保留）；跨回宽域不自动弹回
+// ⑫c W-FZONE-R4-R1：深窄 960（1150→960 同窄域无边沿不误收）开态护栏随 resize 重钳；跨回宽窗不弹收+宽度回钳
 await send("Emulation.setDeviceMetricsOverride", { width: 960, height: 940, deviceScaleFactor: 1, mobile: false });
 await wait(800); // resize 防抖 120ms+缓冲
 const sX = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(sX.hidden && sX.tabs.length >= 1, `极窄 960：跨入窄域自动收起（hidden=${sX.hidden}，tab 保留 ${sX.tabs.length} 个不丢）`);
+ok(!sX.hidden && sX.w >= 339 && sX.w <= 341, `深窄 960 开态护栏重钳至面板下限（hidden=${sX.hidden}，面板 ${Math.round(sX.w)}px=340 下限——护栏值 209<下限时下限优先；对话列 381px≥360 保底；同窄域无边沿不误收；939-1071 手动再开带 composer 仍挤=面板下限语义备案）`);
 await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 940, deviceScaleFactor: 1, mobile: false });
 await wait(700);
 const sW2 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(sW2.hidden && sW2.tabs.length >= 1, "跨回宽窗 1440：不自动弹回（单向收起——头部钮可再开）");
+ok(!sW2.hidden && sW2.w <= 800, `跨回宽窗 1440：手动开的面板不弹收（hidden=${sW2.hidden}——单向只收不弹）+宽度回钳（${Math.round(sW2.w)}px ≤ 800）`);
 
 // ⑫d 冷启 reload：预置 OPEN_KEY=1（模拟用户上次开着离开）→ 冷启必收起（R4 病灶「空面板冷启复活=切不掉」根除）
 await ev('localStorage.setItem("ccd_fzone_open", "1")');
