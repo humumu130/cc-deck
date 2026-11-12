@@ -3853,3 +3853,18 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
    图标 10.8px 承 :2135 全局档，title 悬停显引擎名。成员卡 identity-cluster 徽章不动（另域）。 */
 #d-team .tchip.owner .ow-eng { display: inline-flex; align-items: center; flex: none; margin-right: 4px; }
 #d-team .tchip.owner .ow-eng .badge-brand { display: inline-flex; align-items: center; }
+
+/* =============== W-CARDTERM-R1：板账异常自证红条（1112 用户「自证件」令）=============== */
+.board-health-bar { margin: 0 0 10px; border: 1px solid color-mix(in srgb, var(--error) 45%, transparent); background: color-mix(in srgb, var(--error) 8%, transparent); border-radius: var(--radius-sm); }
+.board-health-bar > summary { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; color: var(--error); font-size: 12.5px; font-weight: 700; list-style: none; user-select: none; }
+.board-health-bar > summary::-webkit-details-marker { display: none; }
+.board-health-bar > summary::after { content: "▾"; margin-left: auto; font-size: 10px; opacity: .7; }
+.board-health-bar[open] > summary::after { content: "▴"; }
+.board-health-bar .bh-fixed { margin-left: 10px; color: var(--ok); font-weight: 600; font-size: 11px; }
+.board-health-bar .bh-list { border-top: 1px solid color-mix(in srgb, var(--error) 25%, transparent); padding: 6px 12px 10px; }
+.board-health-bar .bh-row { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; font-size: 12px; border-bottom: 1px dashed color-mix(in srgb, var(--text-strong) 8%, transparent); }
+.board-health-bar .bh-row:last-child { border-bottom: none; }
+.board-health-bar .bh-name { font-family: var(--mono); color: var(--text-strong); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34%; }
+.board-health-bar .bh-kind { flex: none; color: var(--error); font-weight: 600; font-size: 11.5px; }
+.board-health-bar .bh-hours { flex: none; color: var(--warn); font-family: var(--mono); font-size: 11px; }
+.board-health-bar .bh-note { color: var(--dim); font-size: 11.5px; min-width: 0; }

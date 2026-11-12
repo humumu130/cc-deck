@@ -1497,6 +1497,72 @@ export class SessionManager {
     this.reconAutoCloseStaleCards(trigger, now);
   }
 
+  /** W-CARDTERM-R1（1112 用户第六实锤后「自证件」令）：板账异常自证账——对账器修了什么/
+   * 修不动什么，用户板面红条直接可见（不再只写 chain-audit 等排查时才发现）。
+   * per-gid 内存账：fixedToday=当日对账已翻卡数（滚动日清）；stuck=当前仍异常残留
+   * （冻结组滞卡+failed×复核矛盾态——D18 保护不自动搬的显性化）。经 emitBoard 帧随板下发
+   * （board.health 字段，BOARD_UPDATED/首帧同口——勿新开轮询面）。 */
+  private boardHealth = new Map<string, { day: string; fixedToday: number; stuckAt: number; stuck: Array<{ text: string; kind: string; hours: number; note: string }> }>();
+
+  /** W-CARDTERM-R2 P2-5：僵尸网喂红条的第二账——patrol 僵尸扫描（形态不变量面：TTL×
+   * 三证）的发现清单 per-gid 存此，emitBoard 合成 health 时与 boardHealth.stuck 拼接
+   *（文本键去重，recon 扫描优先）。两账互补：boardHealth=台账关联面（dispatch_id join），
+   * 僵尸网=形态面（无 id/台账窗外的任务形卡只有它看得见——反方审三 F6 五网盲形态）。 */
+  private boardZombies = new Map<string, Array<{ text: string; kind: string; hours: number; note: string }>>();
+
+  /** W-CARDTERM-R2 P2-5：僵尸判定喂红条——patrol 每拍全量替换（僵尸扫描自带 TTL+note
+   * 幂等锚不重不漏）；清单变化即发帧（红条即时上屏/消退，与 recon 面同拍口径）。 */
+  boardHealthFeedZombies(gid: string, items: Array<{ text: string; kind: string; hours: number; note: string }>): void {
+    const prev = this.boardZombies.get(gid) ?? [];
+    if (!items.length) {
+      if (prev.length) { this.boardZombies.delete(gid); this.emitBoard(gid); }
+      return;
+    }
+    this.boardZombies.set(gid, items);
+    if (JSON.stringify(prev) !== JSON.stringify(items)) this.emitBoard(gid);
+  }
+
+  /** W-CARDTERM 刀二（1112 第六现 32 张滞卡）：终态收割闭整链——同链基族
+   *（chainBaseSlug 剥 -rN/-review/-audit 尾，W-ORPHANCARD 刀二词表单点）在途前代卡
+   *（submitted/claimed/ready_to_install）一并翻 done。触发面两处：①pr-report MERGED
+   * 事件（cardlife-pr-merged 既有语义）；②board move→done（PM 手动收割确认——
+   * leader-harvest 翻卡走 org board move 口，本批前该口只精确命中主卡=链上 R1/REVIEW
+   * 单卡无人翻的主漏面）。活性闸（W-ORPHANCARD-R1 P1-1）：claimed 且 owner 会话活跃
+   * 跳过（双审并行不误翻）；submitted/ready_to_install 交付态无「在跑」语义照翻。
+   * ts 窗 14d 防远古卡误闭。 */
+  private closeChainSiblings(gid: string, terminal: { id: string; text?: string; ts?: number }, note: string): void {
+    const CHAIN_WINDOW_MS = 14 * 24 * 3600_000;
+    const curKey = harvestKeyOf(String(terminal.text || ""));
+    if (!curKey.startsWith("w-")) return;
+    const base = chainBaseSlug(curKey);
+    const prevs = (loadBoard(gid).entries || []).filter((x) => {
+      if (x.id === terminal.id) return false;
+      if (x.status !== "submitted" && x.status !== "claimed" && x.status !== "ready_to_install") return false;
+      const k = harvestKeyOf(String(x.text || ""));
+      if (!k.startsWith("w-") || chainBaseSlug(k) !== base) return false;
+      // W-CARDTERM：时间窗改双向（|Δts|<14d，原 xt<ct 单向）——审查单（-REVIEW）与主单
+      // 并行/晚派，主单收割时审查卡 ts 晚于主卡，单向判据闭不到（P2TAIL2-REVIEW1/2 滞留
+      // 的链窗死角实锤）；误伤面由活性闸兜底（claimed 且 owner 活跃跳过）+submitted/
+      // ready_to_install 本就是交付终局态（同链族收割=族终局，闭合理）。
+      const xt = Number(x.ts || 0);
+      const ct = Number(terminal.ts || 0);
+      return ct > 0 && xt > 0 && Math.abs(ct - xt) < CHAIN_WINDOW_MS;
+    });
+    const closedIds: string[] = [];
+    const skippedAlive: string[] = [];
+    for (const pv of prevs) {
+      if (pv.status === "claimed" && pv.owner_session && sessionActiveByEvents(this.cfg.dataDir, pv.owner_session)) {
+        skippedAlive.push(pv.id);
+        continue;
+      }
+      // W-CARDLIFE-R3 P2-2：note 拼接保留（前代卡的打回留痕不被闭链覆写洗掉）
+      upsertBoardEntry(gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}${note}`, journal_action: "cardlife-chain-close" });
+      closedIds.push(pv.id);
+    }
+    if (skippedAlive.length) this.emitChainAudit("cardlife-chain-skip-live", `终代 ${terminal.id} done→同链在途卡跳过 ${skippedAlive.length} 张（${skippedAlive.join(",")}）——owner 会话活跃（双审并行在跑）不误翻，待其自然收口`);
+    if (closedIds.length) this.emitChainAudit("cardlife-chain-close", `终代 ${terminal.id} done→同链闭前代 ${closedIds.length} 张（${closedIds.join(",")}）`);
+  }
+
   /** #263：台账终态×板滞留卡自动收敛（runLedgerRecon 专用半边）。保护边界四件：
    * ①running/dispatched/queued 非终态不碰（收敛末行=终态行才入选）；②终态 1h 缓冲窗
    * 内不搬（worker 重连补报真回执会追加终态行刷新 ts，窗内搬=抢跑吞掉真收口）；③
@@ -1509,11 +1575,20 @@ export class SessionManager {
   private reconAutoCloseStaleCards(trigger: string, now: number): void {
     const led = new Map<string, "done" | "failed">();
     const ledAt = new Map<string, number>(); // boardfix R3 补（双审 B-P1①）：终态行 ts——backlog 人工重开守护判据
-    for (const e of readDispatchLog()) {
+    // W-CARDTERM-R2 P1-2（反方审三实锤：生产 2637 ids，readDispatchLog() 默认 500 窗=11-09
+    // 起，11 张 backlog 死卡 7 张台账行窗外 led miss=刀三+红条同盲互证）：窗扩 20k 对齐
+    // converge（projects.ts:1530）/patrol 对账（patrol.ts:599）先例——台账 ndjson 数千行
+    // 量级，同 id 末行收敛读入毫秒级。
+    const ledInterrupt = new Set<string>(); // W-CARDTERM-R2 P1：中断补记行在册（receipt「relay 重启」前缀）——守护语义修判据
+    for (const e of readDispatchLog(undefined, 20_000)) {
       if (e.status !== "done" && e.status !== "failed") continue;
       if (now - e.ts < 3_600_000) continue; // 1h 缓冲窗（防收口在途）
       led.set(e.id, e.status);
       ledAt.set(e.id, Number(e.ts) || 0);
+      // 末行赢：中断补记 done 行打标（closeHungDispatchRows :5897 恒带前缀）；同 id 后续
+      // 干净收口行（真收口覆盖）解除
+      if (e.status === "done" && String(e.receipt || "").startsWith("relay 重启")) ledInterrupt.add(e.id);
+      else ledInterrupt.delete(e.id);
     }
     if (!led.size) return;
     let movedDone = 0, movedBacklog = 0, frozenSkipped = 0;
@@ -1523,20 +1598,42 @@ export class SessionManager {
       if (!board) continue; // 坏半态板跳过（读失败≠空板，同 emitBoard 口径）
       // 目标态≠现态才算待搬（failed×已 backlog=已收敛不重搬不重记——幂等零搬动零审计）
       const hits = board.entries.flatMap((x): { dispatch_id: string; to: "done" | "backlog"; text?: string }[] => {
-        if ((x.status !== "claimed" && x.status !== "backlog") || !x.dispatch_id) return [];
+        if (!x.dispatch_id) return [];
         const led2 = led.get(x.dispatch_id);
         if (!led2) return [];
+        // W-CARDTERM 刀三（1112 第六现 32 张滞卡）：submitted 复核态长窗兜底——台账 done
+        // ∧超 4h 才收敛（:1503「submitted 有自己的确认闭环」对审查单/返修单结构性不成立：
+        // 审查单无 PR 收割事件、返修单链闭依赖收割触发——超窗=确认闭环已死，板不说谎
+        // 优先于复核闸理想假设；4h=复核窗延长版缓冲，窗内复核权完整保留）。failed×submitted
+        // 罕见矛盾态不碰（人工核）；claimed/backlog 的 1h 窗既有语义不变。
+        if (x.status === "submitted") {
+          if (led2 !== "done" || now - Number(ledAt.get(x.dispatch_id) || 0) < 4 * 3_600_000) return [];
+          return [{ dispatch_id: x.dispatch_id, to: "done" as const, text: x.text }];
+        }
+        if (x.status !== "claimed" && x.status !== "backlog") return [];
         // boardfix R3 补（双审 B-P1①）：backlog 卡的人工重开守护——终态行 ts 之后又有
         // backlog 迁移行=人工退回重做（刀1 接卡合法前置），recon 不得在 30-90min 窗内碾
         // 回 done（判据与 converge 强翻豁免①同款零 ε 口径；程序性刷文本不产生 backlog
         // 迁移行，误挡面零）。claimed 卡不适用：#263 的 22 卡实锤正是 claimed 停滞形态，
         // 时间线判据无意义，维持原语义。
-        if (x.status === "backlog" && (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id!) || 0))) return [];
+        // W-CARDTERM-R2 P1 守护语义修（反方审三：closeHungDispatchRows :5898 中断补记
+        // 自带退 backlog 搬卡（moveEntryByDispatch）——迁移行 ts 恒晚于补记 done 行，
+        // 守护把程序自身搬卡当人工重开=中断卡永久堵死，1112 实锤 7（窗外）+2（窗内）
+        // 张）。判据=终态行 receipt 前缀「relay 重启」（F-08 同款谓词，数据驱动——存量
+        // 卡零迁移即可判，优于给 closeHung 搬卡打新标只保增量）。中断卡超 1h 窗照收敛
+        // done：台账终态已立+重派恒建新卡（旧卡结构性无人认领）+PM 1112 手工清账同款
+        // 终局；F-08「中断不算收割」辖 converge boot 强翻面，recon 面口径=板不说谎。
+        if (x.status === "backlog" && !ledInterrupt.has(x.dispatch_id) && (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id!) || 0))) return [];
         const to = led2 === "done" ? "done" : "backlog"; // failed→backlog 保留卡（不吞——重派/换人/放弃是 failed 单的对账决策面）
         return to === x.status ? [] : [{ dispatch_id: x.dispatch_id, to, text: x.text }];
       });
-      if (!hits.length) continue;
-      if (g.status !== "active") { frozenSkipped += hits.length; continue; }
+      if (!hits.length) { this.boardReconHealthScan(g, board, led, ledAt, now, undefined, ledInterrupt); continue; } // 无待搬也扫矛盾残留（stuck 发现与搬卡独立）
+      // W-CARDTERM-R1：stuck 发现（先记后搬——冻结组的 hits 即「修不动」残留）
+      if (g.status !== "active") {
+        frozenSkipped += hits.length;
+        this.boardReconHealthScan(g, board, led, ledAt, now, hits.map((h) => ({ dispatch_id: h.dispatch_id, text: h.text, why: "frozen" as const })), ledInterrupt);
+        continue;
+      }
       for (const h of hits) moveEntryByDispatch(g.id, h.dispatch_id, h.to);
       // 搬后回读核实（moveEntryByDispatch void 返回，静默拒写不可信——计数只认落盘实态）
       const after = loadBoardFile(g.id);
@@ -1550,6 +1647,12 @@ export class SessionManager {
           samples.push(m ? m[0] : `${h.dispatch_id.slice(0, 8)}→${h.to}`);
         }
       }
+      // W-CARDTERM-R1：当日已修计数（rolling 日清——movedLocal=本组本轮搬后核实数）+残留复扫+板帧下发（红条数据源）
+      let movedLocal = 0;
+      for (const h of hits) { const ent = after.entries.find((x) => x.dispatch_id === h.dispatch_id); if (ent?.status === h.to) movedLocal++; }
+      this.boardHealthBump(g.id, movedLocal);
+      this.boardReconHealthScan(g, after, led, ledAt, now, undefined, ledInterrupt);
+      this.emitBoard(g.id);
     }
     if (movedDone + movedBacklog > 0) {
       this.emitChainAudit("recon-autoclose",
@@ -1557,6 +1660,68 @@ export class SessionManager {
         (frozenSkipped ? `（冻结组待复活收敛 ${frozenSkipped} 张）` : "") +
         (samples.length ? `｜${samples.join(" ")}` : ""));
     }
+  }
+
+  /** W-CARDTERM-R1：recon 辅助——当日已修计数（hits×搬后实态，日滚动）。 */
+  private boardHealthBump(gid: string, n: number): void {
+    if (n <= 0) return;
+    const day = new Date().toISOString().slice(0, 10);
+    const h = this.boardHealth.get(gid);
+    if (!h || h.day !== day) { this.boardHealth.set(gid, { day, fixedToday: n, stuckAt: 0, stuck: h?.stuck ?? [] }); return; }
+    h.fixedToday += n;
+  }
+
+  /** W-CARDTERM-R1：stuck 残留扫描——对账修不动的异常当前态（板面红条清单数据源）。
+   * 两类：①冻结组滞卡（挂起/归档组的终态滞留——保护不搬，示众等复活收敛）；
+   * ②failed×复核矛盾态（台账 failed 而卡在 submitted/ready_to_install——D18 复核闸
+   * 保护不自动搬，用户裁决面显性化）。搬卡完成后的组以搬后板实态复扫（残量为准）。 */
+  private boardReconHealthScan(
+    g: { id: string; status?: string },
+    board: { entries: Array<{ dispatch_id?: string; status?: string; text?: string; updated_at?: number; transitions?: Array<{ status?: string; ts?: number }> }> },
+    led: Map<string, "done" | "failed">,
+    ledAt: Map<string, number>,
+    now: number,
+    frozenHits?: Array<{ dispatch_id: string; text?: string; why: "frozen" }>,
+    ledInterrupt?: Set<string>,
+  ): void {
+    const stuck: Array<{ text: string; kind: string; hours: number; note: string }> = [];
+    const frozenIds = new Set((frozenHits ?? []).map((h) => h.dispatch_id));
+    for (const x of board.entries) {
+      if (!x.dispatch_id) continue;
+      const led2 = led.get(x.dispatch_id);
+      if (!led2) continue;
+      if (frozenIds.has(x.dispatch_id)) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "frozen-stuck", hours: Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000), note: "组挂起/归档——板冻结保护不自动搬，复活后下轮对账收敛" });
+        continue;
+      }
+      // failed×复核矛盾（D18 保护态：不搬但示众——台账说失败、卡还停在复核/待装泳道）
+      if (led2 === "failed" && (x.status === "submitted" || x.status === "ready_to_install")) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "failed-in-review", hours: Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000), note: `台账已失败 ${Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000)}h，卡仍停「${x.status === "submitted" ? "审查中" : "待装机"}」——复核闸保护不自动搬，请人工裁决` });
+      }
+      // W-CARDTERM-R2 P1-1/P1-3：terminal-stuck 第三类——台账终态已立而卡滞非终态超窗
+      //（反方审三 12 张 backlog 死卡形态治本：对账修不动/决策面/守护中的显性化——红条
+      // 示众而非静默，与 frozen-stuck/failed-in-review 同为「修不动就亮出来」口径）：
+      // ①backlog×failed×超 24h：failed→backlog=设计内决策面（重派/换人/放弃），无人
+      //   决策超日即死卡（1112 实锤 2 真失败+2 worktree 活锁）——不自动搬（failed 单
+      //   的对账决策权在人），示众请裁决。
+      // ②backlog×done×守护命中（非中断终态）：真人工重开守护生效中——保护不碾但示众
+      //   （反方口径「守护命中≠静默」），已处置请手动收口。
+      // ③claimed×终态×超 2h：收敛搬卡未生效残留（moveEntry 拒写/竞态——搬后回读仍
+      //   claimed），重试安全网示众。
+      const tHrs = Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000);
+      const guardHit = (x.transitions || []).some((t) => t && t.status === "backlog" && Number(t.ts || 0) > Number(ledAt.get(x.dispatch_id!) || 0));
+      if (led2 === "failed" && x.status === "backlog" && tHrs >= 24) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "terminal-stuck", hours: tHrs, note: `台账已失败 ${tHrs}h，卡停待重派决策——重派建新卡或人工收口/删卡（决策面示众不自动搬）` });
+      } else if (led2 === "done" && x.status === "backlog" && !ledInterrupt?.has(x.dispatch_id) && guardHit && tHrs >= 4) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "terminal-stuck", hours: tHrs, note: `台账已收割 ${tHrs}h，人工重开守护生效中——对账不碾；若已处置请手动收口（守护≠静默）` });
+      } else if (x.status === "claimed" && tHrs >= 2) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "terminal-stuck", hours: tHrs, note: `台账终态（${led2 === "done" ? "已收割" : "已失败"}）${tHrs}h，卡仍停运行中——搬卡未生效重试中，持续异常请人工核` });
+      }
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    const h = this.boardHealth.get(g.id);
+    if (!h || h.day !== day) this.boardHealth.set(g.id, { day, fixedToday: 0, stuckAt: Date.now(), stuck });
+    else { h.stuck = stuck; h.stuckAt = Date.now(); }
   }
 
   /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
@@ -5480,6 +5645,19 @@ export class SessionManager {
                 upsertBoardEntry(e.gid, { id: card.id, text: card.text, review_required: true }); // 幂等保位（无 status 不入 transitions 行）
                 handled = true;
               } else if (card && card.status !== "done") {
+                // W-CARDTERM 刀一（1112 第六现）：审查单（title -REVIEW\d* 形态）无收割后续
+                //（不开 PR→cardlife-pr-merged 永不触发；PM 采纳=读回执行为无板面事件）——
+                // submitted 的「过审收割」退出路径结构性缺席=永久滞留（32 张实锤主力形态）。
+                // 回执合规（交付证据成立，本分支前置）即终态直达 done+审计留痕；实施单 R2
+                // 内核（done 请求+review_required→落 submitted 待收割复核）语义不变。
+                // 判据源=卡文本（非台账行 title——收口终态行经 archiveDispatchTerminal 归档
+                // 后 title 字段丢失，台账判据源结构性失效；卡文本前缀=派单建卡 title 同源
+                // normalizeBoardCardText，W-XXX-REVIEW2 形态生产/夹具通吃）
+                if (/-REVIEW\d*\b/.test(String(card.text ?? ""))) {
+                  const rv = upsertBoardEntry(e.gid, { id: card.id, text: card.text, status: "done", note: `${card.note ? card.note + " " : ""}[cardterm] 审查单终态直达：无收割后续（PM 采纳=回执已落）` });
+                  if (rv.ok) this.emitChainAudit("cardterm-review-direct", `审查单 ${e.id.slice(0, 8)}「${truncate(card.text ?? "", 36)}」收口回执合规→卡直达 done（submitted 对审查单=结构性永久滞留，见 w-cardterm）`);
+                  handled = rv.ok;
+                } else {
                 // W-CARDLIFE-R2 件②（收口事务补强——design-cardlife-r1「收口三步无事务
                 // 边界」差距②）：板写失败=短退避重试×3（写侧瞬时态：journal 回放窗/
                 // 文件锁竞态）；仍失败=degraded 留痕（chain-audit journal 面+告警卡，
@@ -5501,6 +5679,7 @@ export class SessionManager {
                   } catch { /* 通知尽力而为 */ }
                 }
                 handled = r.ok;
+                }
               }
             } catch { /* 读板异常回落裸设 */ }
             if (!handled) moveEntryByDispatch(e.gid, e.id, "done"); // 兜底：卡缺失/读板异常/degraded（老行为；卡 done 时 no-op）
@@ -7926,45 +8105,10 @@ ${lines.join("\n")}
               // note 拼接后传（boardfix 续单接卡 :9583 同款口径）。
               const flip = upsertBoardEntry(hit.gid, { id: hit.entry.id, text: hit.entry.text, status: "done", note: `${hit.entry.note ? hit.entry.note + " " : ""}[cardlife-r2 ${today}] PR merged 自动收口：${prUrl || "（无 URL）"}`, journal_action: "cardlife-pr-merged" });
               if (flip.ok) {
-                // 同链前代卡（返修链闭链）：同板同 slug 基族（w-foo 与 w-foo-r1…去 -rN
-                // 代尾同基）+ts 早于本卡+仍在途（submitted/claimed/ready_to_install）→
-                // 一并翻 done——终代收割闭整链（cardlife R0 机械手版 cardlife_chain_cards
-                // 移植 relay 侧；ts 窗 14d 防远古卡误闭）
-                const CHAIN_WINDOW_MS = 14 * 24 * 3600_000;
-                // W-ORPHANCARD 刀二（1109 实锤 9 张审查卡滞留）：基族换 chainBaseSlug 单点
-                //（-rN 之外扩剥 -review/-audit 审查尾——终代收割闭整链含审查卡；多重尾循环剥）
-                const baseSlug = chainBaseSlug;
-                const curKey = harvestKeyOf(hit.entry.text);
-                if (curKey.startsWith("w-")) {
-                  const base = baseSlug(curKey);
-                  const prevs = (loadBoard(hit.gid).entries || []).filter((x) => {
-                    if (x.id === hit.entry.id) return false;
-                    if (x.status !== "submitted" && x.status !== "claimed" && x.status !== "ready_to_install") return false;
-                    const k = harvestKeyOf(String(x.text || ""));
-                    if (!k.startsWith("w-") || baseSlug(k) !== base) return false;
-                    const xt = Number(x.ts || 0);
-                    const ct = Number(hit.entry.ts || 0);
-                    return ct > 0 && xt > 0 && xt < ct && ct - xt < CHAIN_WINDOW_MS;
-                  });
-                  const closedIds: string[] = [];
-                  const skippedAlive: string[] = [];
-                  for (const pv of prevs) {
-                    // W-ORPHANCARD-R1 P1-1（审查 t-ea2391a7 定谳·误翻守卫）：claimed=可能仍在跑
-                    //（双审并行常态：A 路先收割 R1 时 B 路还在审——审查重演实锤）。活性闸：owner
-                    // 近窗有事件=活→跳过闭链（板面不谎「已完成」）+告警审计留其自然收口；死会话/
-                    // 无 owner 照翻（波②治理保真——9 张滞留审查卡多为死会话 claimed）。
-                    // submitted/ready_to_install=交付态无「在跑」语义，不受此闸。
-                    if (pv.status === "claimed" && pv.owner_session && sessionActiveByEvents(this.cfg.dataDir, pv.owner_session)) {
-                      skippedAlive.push(pv.id);
-                      continue;
-                    }
-                    // W-CARDLIFE-R3 P2-2：同款 note 拼接保留（前代卡的打回留痕不被闭链覆写洗掉）
-                    upsertBoardEntry(hit.gid, { id: pv.id, text: pv.text, status: "done", note: `${pv.note ? pv.note + " " : ""}[cardlife-r2 ${today}] 同链闭卡：终代 ${hit.entry.id} PR merged（链基 ${base}）`, journal_action: "cardlife-chain-close" });
-                    closedIds.push(pv.id);
-                  }
-                  if (skippedAlive.length) this.emitChainAudit("cardlife-chain-skip-live", `终代 ${hit.entry.id} PR merged→同链在途卡跳过 ${skippedAlive.length} 张（${skippedAlive.join(",")}）——owner 会话活跃（双审并行在跑）不误翻，待其自然收口`);
-                  if (closedIds.length) this.emitChainAudit("cardlife-chain-close", `终代 ${hit.entry.id} PR merged→同链闭前代 ${closedIds.length} 张（${closedIds.join(",")}）`);
-                }
+                // W-CARDTERM 刀二（1112 第六现 32 张滞卡）：链闭提取共享方法 closeChainSiblings
+                //（本处 PR merged + board move→done 双触发——收割只精确命中主卡、链上 R1/REVIEW
+                // 单卡无人翻是主漏面；链识别/活性闸/note 拼接语义原样平移）
+                this.closeChainSiblings(hit.gid, hit.entry, `[cardlife-r2 ${today}] 同链闭卡：终代 ${hit.entry.id} PR merged（${prUrl || "无 URL"}）`);
                 this.emitChainAudit("cardlife-pr-merged", `卡 ${hit.entry.id} submitted→done（PR merged 自动收口——转移内建于动作，机械手降级为兼容路径）`);
                 this.emitBoard(hit.gid);
                 // W-BOARDTRUTH 刀1（t-1e731c9c 第三现治本）：同链 PR 收割即闭——merged 事件
@@ -8549,6 +8693,12 @@ ${lines.join("\n")}
             // upsert 边同判——worker_done 收口自动搬卡有收口链兜着，本边补 PM/用户
             // 手工 move 面的唤醒缺口）
             if (m.ok && (st === "submitted" || st === "ready_to_install")) this.feedPM("board-change");
+            // W-CARDTERM 刀二（1112 第六现）：move→done=终态收割确认（PM 手动收割/leader-harvest
+            // 翻卡均走本口）——同链前代卡（R1/R2 返修+REVIEW 审查单）一并闭（本批前该口只精确
+            // 命中主卡=链上别名单卡无人翻的主漏面）。活性闸在共享方法内（claimed 且 owner 活跃跳过）。
+            if (m.ok && st === "done") {
+              this.closeChainSiblings(gid, { id: m.entry.id, text: m.entry.text, ts: m.entry.ts }, `[cardterm ${new Date().toLocaleDateString("zh-CN")}] 同链闭卡：终代 ${m.entry.id} 收割确认（board move→done）`);
+            }
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op === "del") {
             const d = removeBoardEntry(gid, str("entry_id"));
@@ -9522,6 +9672,18 @@ ${lines.join("\n")}
     const prev = this.lastBoardBroadcast.get(gid) ?? null;
     // lessons 摘除后的下发形态（磁盘文件不动——迁移器幂等重读依据）
     const outBoard: ProjectBoard = board.lessons?.length ? { ...board, lessons: [] } : board;
+    // W-CARDTERM-R1：板账异常自证随帧（board.health——红条数据源；内存账缺失=undefined
+    // 字段不下发，端上旧帧回退无红条=健康缺省，fail-open）
+    // W-CARDTERM-R2 P2-5：僵尸网发现（boardZombies）拼接进 health.stuck——文本键去重
+    //（recon 扫描优先，僵尸补形态面）；两账皆空=健康态字段不下发（零渲染口径不变）。
+    const zz = this.boardZombies.get(gid) ?? [];
+    const hh = this.boardHealth.get(gid);
+    if (hh || zz.length) {
+      const seenText = new Set((hh?.stuck ?? []).map((s) => s.text));
+      (outBoard as { health?: unknown }).health = hh
+        ? { ...hh, stuck: [...hh.stuck, ...zz.filter((z) => !seenText.has(z.text))] }
+        : { day: "", fixedToday: 0, stuckAt: 0, stuck: zz };
+    }
     this.lastBoardBroadcast.set(gid, outBoard);
     // W-BOARDV2（1111 定调「看板=查表投影」）：帧随带投影——每卡当前泳道由
     // dispatch-log 黑板事件链读时计算（board-projection.ts，秒级缓存），端上渲染

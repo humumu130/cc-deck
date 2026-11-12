@@ -84,7 +84,7 @@ console.log("B. 刀二 chainBaseSlug（收割闭链基族——审查尾扩展�
   ok(chainBaseSlug("w-x-r1-review2") === "w-x", "B10 多重尾含数字代（返修的二次审查）");
   ok(chainBaseSlug("w-revexcl-fin") === "w-revexcl-fin", "B11 低频尾不剥（-fin 披露面——zombie TTL 兜底，防误伤优先于覆盖率）");
   const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf8");
-  ok(sm.includes("const baseSlug = chainBaseSlug;"), "B7 cardlife 闭链基族已换单点（源码锚）");
+  ok(sm.includes("private closeChainSiblings(") && sm.includes("chainBaseSlug(curKey)"), "B7 cardlife 闭链基族已换单点（源码锚——W-CARDTERM 提取 closeChainSiblings 共享方法：pr-report MERGED+board move→done 双触发同源，链窗双向化）");
 }
 
 console.log("C. 刀三 harvestKeyOf 归一锁测（续跑/返修后缀天然归一——防漂移）");

@@ -521,6 +521,21 @@
                   // flex-grow 按任务数+0 宽段不渲染+min-width 2px 底可见语义全保持。
                   const doneN = boardCounts.get("done") || 0;
                   const segLanes = lanes.filter(([status]) => status !== "done");
+                  // W-CARDTERM-R1（1112 用户「自证件」令）：板账异常红条——对账器修不动/修了什么
+                  // 板面直接示众（relay board.health 随 BOARD_UPDATED/detail 帧下发；health 缺席
+                  // =旧 relay/健康态零渲染不占空间）。stuck=当前仍异常（清单可展开）；fixedToday=
+                  // 当日对账已自动翻卡数（次要行，仅红条在场时随展——健康态零痕迹纪律）。
+                  const bh = board && board.health && Array.isArray(board.health.stuck) ? board.health : null;
+                  const stuckList = bh ? bh.stuck : [];
+                  const boardHealthBar = stuckList.length
+                    ? '<details class="board-health-bar err"><summary>⚠ 板账异常 ' + stuckList.length + ' 张（点击查看）' + (Number(bh.fixedToday) > 0 ? '<span class="bh-fixed" title="今日对账已自动翻正的卡数">今日已自动修正 ' + bh.fixedToday + ' 张</span>' : "") + "</summary>"
+                      + '<div class="bh-list">' + stuckList.map(function (it) {
+                          // W-CARDTERM-R2：红条类型随 terminal-stuck（台账终态滞留——backlog 死卡
+                          // 形态治本示众）与僵尸网两类（证据在/三证全无）扩人话映射
+                          const kindTxt = it && it.kind === "frozen-stuck" ? "挂起组滞卡" : it && it.kind === "failed-in-review" ? "台账失败但卡停复核" : it && it.kind === "terminal-stuck" ? "台账终态滞留" : it && it.kind === "zombie-evidence" ? "僵尸卡·证据在" : it && it.kind === "zombie-no-evidence" ? "僵尸卡·三证全无" : String((it && it.kind) || "异常");
+                          return '<div class="bh-row"><span class="bh-name">' + esc(String((it && it.text) || "?")) + '</span><span class="bh-kind">' + kindTxt + '</span><span class="bh-hours">' + (Number(it && it.hours) > 0 ? "已 " + it.hours + "h" : "近期") + '</span><span class="bh-note">' + esc(String((it && it.note) || "")) + "</span></div>";
+                        }).join("") + "</div></details>"
+                    : "";
                   const boardOverview = '<div class="board-overview"><div class="board-progress-row"><div class="board-progress" aria-label="活跃任务分布（完成已移出）">' + segLanes.filter(([status]) => boardCounts.get(status) > 0).map(([status]) => '<i class="' + status + '" style="flex-grow:' + boardCounts.get(status) + '" title="' + (lanes.find(([s]) => s === status) || [status, status])[1] + ' ' + boardCounts.get(status) + '"></i>').join("") + '</div><span class="ov-done" title="完成 ' + doneN + '（量级碾压活跃态，已移出比例条）">✓ ' + doneN + "</span></div>" + '<div class="board-legend">' + segLanes.map(([status, label]) => '<span style="--legend-color:var(--p-' + (status === "ready_to_install" ? "ready" : status) + ')"><i></i>' + label + ' <b>' + boardCounts.get(status) + '</b></span>').join("") + '</div></div>'; /* t25fix #7：0 宽段不渲染（空段+分隔线堆叠=「全灰/被遮挡」观感），段宽 flex-grow 按任务数比例（gap 布局下百分比宽会溢出）；boardpolish：done 段+图例行剥离（✓ N 徽章承载） */
                   const laneBody = (status, items) => {
                     // V8R：泳道内平铺（原型 bcol 无分区头概念）——claimed 全列统一「运行中置顶
@@ -621,7 +636,7 @@
                   const staleMs = Date.now() - freshAt;
                   const freshHtml = freshAt ? '<div class="board-fresh" data-board-fresh="' + escape(project?.id || "") + '">更新于 ' + fmtHM(freshAt) + (staleMs > 600_000 ? ' <span class="board-fresh-stale">· 数据可能过期</span>' : "") + "</div>" : "";
                   const offlineHtml = !state.online ? '<div class="board-offline">离线——显示的是 ' + (freshAt ? fmtHM(freshAt) + " 的快照" : "旧数据（无龄戳）") + "</div>" : "";
-                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + offlineHtml + boardOverview + freshHtml + '<div class="board">' + columns + "</div>" + dockHtml + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
+                  return (empty ? banner(empty) : "") + (board?.frozen ? banner("任务板已冻结，只读展示。") : "") + offlineHtml + boardHealthBar + boardOverview + freshHtml + '<div class="board">' + columns + "</div>" + dockHtml + boardFoot + (unknown.length ? banner("以下任务状态未识别，保留原值，不归入完成。") + unknown.map((task) => taskMarkup(task, project)).join("") : "");
                 }
                 function activityMarkup(project, opts = {}) {
                   // W-ACTIVITY3（#116，1015 拍板）：视觉基准=v3 原型活动页（feedwrap/.fi 轻列表

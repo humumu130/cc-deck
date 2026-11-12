@@ -301,6 +301,17 @@ export function zombieTtlMs(): number {
   return Number.isFinite(n) && n > 0 ? n * 3600_000 : 6 * 3600_000;
 }
 
+/** W-CARDTERM-R2 P1（反方审三 F6 面）：无关联 backlog 僵尸 TTL——任务形卡（w-slug 键、
+ * 无 dispatch_id——关联丢失/手搬残留）在 backlog 超本窗=结构性无人认领（重派恒建新卡，
+ * 旧卡无 id 也可判滞留）。backlog 本是待派池常态滞留，取远长于在途 TTL（缺省 72h；
+ * CCR_BOARD_ZOMBIE_BACKLOG_TTL_H 可调，"0"=关同款逃生阀）。 */
+export function zombieBacklogTtlMs(): number {
+  const raw = process.env.CCR_BOARD_ZOMBIE_BACKLOG_TTL_H;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  if (Number.isFinite(n) && n === 0) return Number.POSITIVE_INFINITY;
+  return Number.isFinite(n) && n > 0 ? n * 3600_000 : 72 * 3600_000;
+}
+
 /** 僵尸告警 note 标记（幂等锚）：已标记卡第二轮不再重复告警（scan 侧滤除）。
  * 子串稳定无日期——note 内容比对用前缀，追加细节不影响识别。 */
 export const ZOMBIE_NOTE_MARK = "[boardtruth5 僵尸卡告警";
@@ -348,23 +359,31 @@ export function zombieInvariantScan(input: {
   }
   const actions: ZombieEvidenceAction[] = [];
   if (!Number.isFinite(ttl)) return { actions }; // 逃生阀开（TTL=∞）：判定族整体关闭
+  const backlogTtl = zombieBacklogTtlMs(); // W-CARDTERM-R2：无关联 backlog 独立 TTL（待派池常态滞留>在途节奏）
   for (const { gid, board } of input.boards) {
     for (const e of board.entries) {
       // 形态面：非终态滞留两态；W-LANEFLIP 刀三（1110 夜令·续跑卡滞 8h 实锤）补第三态——
       // **backlog+dispatch_id**（曾派发过的卡）：前续单终态 failed（如 S1 误翻）后卡回 backlog、
       // 续跑/后继单已 done 但卡 dispatch_id 还挂前续（fail 不翻卡=等重投语义）→对账残余滞留。
-      // 判据收窄：纯待办 backlog（无 dispatch_id）不动——形态免疫不变量原则保持（只看
-      // 「曾派发+超 TTL+交付证据」三事实，不引入路径形态）。
-      if (e.status !== "claimed" && e.status !== "submitted" && !(e.status === "backlog" && e.dispatch_id)) continue;
+      // W-CARDTERM-R2 P1（反方审三 F6 五网盲）：再补第四形态——**backlog 无 dispatch_id
+      // 但任务形（w-slug 键）**：关联丢失/手搬残留的任务卡（1112 实锤「无关联滞卡（工作
+      // 其实已完结）」），recon/红条 id 必需门结构性不可见，唯僵尸网形态面能兜。纯手写
+      // 待办（非 w-slug）仍不辖——PM 自留池非对账面（判据收窄原则保持：只看「任务形+
+      // 超长 TTL+交付证据」三事实）。三态门直判（别名布尔会打散 TS 状态窄化）。
+      if (e.status !== "claimed" && e.status !== "submitted" && e.status !== "backlog") continue;
+      const isBacklogNoId = e.status === "backlog" && !e.dispatch_id;
       if (skip.has(e.id)) continue; // 本拍 R3 已判定——两器不重复动作
       if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue; // 告警幂等锚（第二轮不再重复）
       const updated = Number(e.updated_at || e.ts || 0);
       if (!updated) continue; // 无时戳不臆断
       const ageMs = now - updated;
-      if (ageMs <= ttl) continue; // 未超 TTL（在途常态——6h 内交付/审查中是正常节奏）
+      const effectiveTtl = isBacklogNoId ? Math.max(ttl, backlogTtl) : ttl; // 无关联 backlog 取长窗（72h 缺省）
+      if (ageMs <= effectiveTtl) continue; // 未超 TTL（在途常态——6h 内交付/审查中是正常节奏）
       const key = harvestKeyOf(String(e.text || ""));
-      // 空键不参与证据匹配（includes("")/get("") 恒命中=假证据面）；回落键碰撞同 skip
+      // 空键不参与证据匹配（includes("")/get("") 恒命中=假证据面）；回落键碰撞同 skip；
+      // W-CARDTERM-R2：无关联 backlog 只辖任务形（w-slug）——手写待办不进对账面
       if (!key || (!key.startsWith("w-") && (fallbackKeyCounts.get(key) ?? 0) > 1)) continue;
+      if (isBacklogNoId && !key.startsWith("w-")) continue;
       const ev = input.harvest;
       const ledgerHit = ev.doneLedger.get(key);
       const ledgerOk = !!ledgerHit && ledgerHit.count >= 1 && ledgerHit.hasReceipt; // 证据①：台账 done+回执

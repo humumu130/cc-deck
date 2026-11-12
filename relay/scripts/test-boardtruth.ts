@@ -180,5 +180,40 @@ console.log("E P1 撤单驱逐（矛盾链根除）:");
   }
 }
 
+// ---------- W-CARDTERM-R1：板账异常自证红条（1112 用户「自证件」令——集成锚） ----------
+console.log("R1 板账异常自证红条（CARDTERM-R1）:");
+{
+  const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
+  const td = readFileSync(new URL("../../web-console/js/team-domain.js", import.meta.url), "utf-8");
+  const css = readFileSync(new URL("../../web-console/css/base.css", import.meta.url), "utf-8");
+  ok(sm.includes("boardHealth = new Map") && sm.includes("fixedToday") && sm.includes("stuck: Array<{ text: string; kind: string; hours: number; note: string }>"), "R1a relay 异常账在册（boardHealth Map——当日已修/残留两类）");
+  ok(sm.includes("boardReconHealthScan") && sm.includes('"frozen-stuck"') && sm.includes('"failed-in-review"'), "R1b stuck 扫描两类（冻结组滞卡+failed×复核矛盾——D18 保护态显性化）");
+  ok(sm.includes("(outBoard as { health?: unknown }).health = hh"), "R1c emitBoard 帧挂 health（BOARD_UPDATED 首帧/diff 同口——勿新开轮询面）");
+  ok(sm.includes("this.boardHealthBump(g.id, movedLocal)") && sm.includes("this.emitBoard(g.id);"), "R1d 搬后计数+帧下发（对账动作即时反映到红条数据源）");
+  ok(td.includes('class="board-health-bar err"') && td.includes("板账异常 ") && td.includes("（点击查看）"), "R1e 前端红条 markup（常驻警示条+可展开）");
+  ok(td.includes("board && board.health && Array.isArray(board.health.stuck)") && td.includes(': "";'), "R1f N=0 零渲染（健康态零痕迹——三元空串不占空间）");
+  ok(td.includes("挂起组滞卡") && td.includes("台账失败但卡停复核") && sm.includes("请人工裁决") && sm.includes("复活后下轮对账收敛"), "R1g 人话纪律（类型人话在 td/note 人话在 sm——处置建议皆人话非裸枚举）");
+  ok(td.includes("bh.fixedToday") && td.includes("今日已自动修正"), "R1h 当日已修可见（次要行——修了什么同样示众）");
+  ok(css.includes(".board-health-bar") && css.includes("var(--error)") && css.includes(".bh-list"), "R1i 红条 CSS（err 色系+清单布局）");
+  ok(td.includes("boardHealthBar + "), "R1j 红条入板 pane（泳道之上页头之下——boardMarkup return 前拼）");
+}
+
+// ---------- W-CARDTERM-R2：backlog 死卡收敛+僵尸喂红条（集成锚——反方审三 P1 返修） ----------
+console.log("R2 backlog 死卡收敛+僵尸喂红条（CARDTERM-R2）:");
+{
+  const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
+  const br = readFileSync(new URL("../src/board-recon.ts", import.meta.url), "utf-8");
+  const pt = readFileSync(new URL("../src/patrol.ts", import.meta.url), "utf-8");
+  const td = readFileSync(new URL("../../web-console/js/team-domain.js", import.meta.url), "utf-8");
+  ok(sm.includes("readDispatchLog(undefined, 20_000)") && sm.includes("ledInterrupt"), "R2a P1-2 窗扩 20k+中断行在册（刀三+红条同受益；守护语义修判据=台账行 receipt 前缀）");
+  ok(sm.includes('"terminal-stuck"'), "R2b 红条 terminal-stuck 第三类（backlog×failed 超龄/守护命中示众/claimed 残留——backlog 死卡显性化）");
+  ok(sm.includes("boardHealthFeedZombies") && sm.includes("boardZombies"), "R2c 僵尸喂红条账+喂入口（patrol 拍尾全量替换——清单变化即发帧）");
+  ok(sm.includes("...hh.stuck, ...zz.filter"), "R2d emitBoard health 合成（僵尸拼接文本键去重——recon 扫描优先，两账皆空=零渲染口径不变）");
+  ok(pt.includes('startsWith("relay 重启")') && pt.includes("不算收割证据"), "R2e patrol 证据①滤中断行（P2-4——切 auto 防中断退单卡成批误翻）");
+  ok(pt.includes("boardtruth5-zombie-observe"), "R2f observe 档僵尸告警双通道（duty feed+通知——「不静默翻」不退化成「不翻不响」P2-5）");
+  ok(br.includes("zombieBacklogTtlMs") && br.includes("isBacklogNoId"), "R2g 僵尸形态门扩无关联 backlog（w-slug×72h 长窗——F6 五网盲面接住）");
+  ok(td.includes("台账终态滞留") && td.includes("僵尸卡·证据在") && td.includes("僵尸卡·三证全无"), "R2h 前端类型人话随扩（terminal-stuck+僵尸两类——红条清单第五类）");
+}
+
 console.log(`\nboardtruth: ${pass}/${pass + fail}${fail ? "（有红）" : ""}`);
 process.exit(fail ? 1 : 0);

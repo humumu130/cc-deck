@@ -183,6 +183,8 @@
     "test:reviewseat": "tsx scripts/test-reviewseat.ts",
     "test:inboxv1": "tsx scripts/test-inboxv1.ts",
     "test:boardtruth": "tsx scripts/test-boardtruth.ts",
+    "test:cardterm": "tsx scripts/test-cardterm.ts",
+    "test:cardterm-review3": "tsx scripts/test-cardterm-review3.ts",
     "test:boardv2": "tsx scripts/test-boardv2.ts",
     "test:laneflip": "tsx scripts/test-laneflip.ts",
     "test:dutybackoffr2": "tsx scripts/test-dutybackoffr2.ts"

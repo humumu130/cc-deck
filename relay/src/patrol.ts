@@ -614,11 +614,15 @@ export class PatrolModule {
             try {
               const r = JSON.parse(t) as { id?: string; title?: string; status?: string; receipt?: string };
               if (typeof r.id !== "string" || !r.id) continue;
+              // W-CARDTERM-R2 P2-4（反方审三 F7a 实锤）：中断补记行不算收割证据——对齐
+              // F-08/converge 谓词（receipt「relay 重启」前缀，projects.ts:1532）。切 auto
+              // 前必修：否则中断收口行成批喂出「证在」假阳，僵尸强翻把中断退单卡误翻 done。
+              const interrupt = String(r.receipt || "").startsWith("relay 重启");
               const cur = byId.get(r.id);
               byId.set(r.id, {
                 title: r.title || cur?.title, // 首行（dispatched）title 保住——终态行不带
-                done: r.status === "done" || (cur?.done ?? false), // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done）
-                hasReceipt: !!r.receipt || (cur?.hasReceipt ?? false),
+                done: (r.status === "done" && !interrupt) || (cur?.done ?? false), // 末行 done 即终态（后行覆盖前值语义：非 done 行不翻转已 done；中断行不立 done）
+                hasReceipt: (!!r.receipt && !interrupt) || (cur?.hasReceipt ?? false), // 中断 receipt 不是交付证据
               });
             } catch { /* 损坏行跳过 */ }
           }
@@ -710,6 +714,11 @@ export class PatrolModule {
               const up = upsertBoardEntry(z.gid, { id: z.entryId, text: be.text, status: "done", note: `${be.note ? be.note + " " : ""}[boardtruth5 ${new Date().toLocaleDateString("zh-CN")}] 僵尸证据强翻（滞留 ${Math.round(z.ageMs / 3600_000)}h 证据=${z.evidence}）——形态免疫不变量收口（1109 五现刀二）`, journal_action: "boardtruth5-zombie-done" });
               if (up.ok) zDoneN++;
             } else {
+              // W-CARDTERM-R2 P2-5：observe 档「不静默翻」≠「不翻不响」——证在也发 duty
+              // feed+通知（不写板不加 note 标——note 标=auto 幂等锚，observe 先写会让切
+              // auto 后强翻/告警双跳过）；红条示众走拍尾 boardHealthFeedZombies 统一喂账。
+              try { this.mgr.emitDutyFeedEvent("zombie-card", `僵尸卡（observe·证据在）：${z.entryId}「${String(be.text).slice(0, 24)}」滞留 ${Math.round(z.ageMs / 3600_000)}h 证据=${z.evidence}——未执行，切 auto 自动收口或人工收割`); } catch { /* 告警尽力而为 */ }
+              try { this.mgr.upsertNotification("system", "boardtruth5-zombie-observe", z.entryId, { title: `僵尸卡（证据在·observe）：${String(be.text).slice(0, 20)}`, body: `滞留 ${Math.round(z.ageMs / 3600_000)}h，证据=${z.evidence}——observe 档未强翻（红条已示众），人工收口或切 auto`, severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/" }); } catch { /* 通知尽力而为 */ }
               this.wouldDo("boardtruth5", "强翻僵尸卡（证据在）", `${z.entryId}「${String(be.text).slice(0, 24)}」滞留 ${Math.round(z.ageMs / 3600_000)}h 证据=${z.evidence}——observe 档未执行`);
             }
           } else {
@@ -719,11 +728,35 @@ export class PatrolModule {
               const up = upsertBoardEntry(z.gid, { id: z.entryId, text: be.text, note: `${be.note ? be.note + " " : ""}${ZOMBIE_NOTE_MARK} ${new Date().toLocaleDateString("zh-CN")}] 滞留 ${Math.round(z.ageMs / 3600_000)}h 三证全无——已告警不静默翻（人工核实：真长任务忽略/真僵尸收口）` });
               if (up.ok) zAlarmN++;
             } else {
-              this.wouldDo("boardtruth5", "僵尸卡告警（三证全无）", `${z.entryId}「${String(be.text).slice(0, 24)}」滞留 ${Math.round(z.ageMs / 3600_000)}h 三证全无——observe 档未告警`);
+              // W-CARDTERM-R2 P2-5：证无僵尸 observe 档同发 duty feed+通知（auto 档同款
+              // 文案口径）——「不静默翻」不能退化成「不翻不响」（反方审三：检测在转、
+              // 输出断链=生产 observe 档零告警零红条）。不加 note 标（幂等锚留 auto 用）。
+              try { this.mgr.emitDutyFeedEvent("zombie-card", `僵尸卡告警（observe）：${z.entryId}「${String(be.text).slice(0, 24)}」滞留 ${z.status} ${Math.round(z.ageMs / 3600_000)}h 三证全无——请核实（真长任务忽略，真僵尸人工收口）`); } catch { /* 告警尽力而为 */ }
+              try { this.mgr.upsertNotification("system", "boardtruth5-zombie-observe", z.entryId, { title: `僵尸卡（observe）：${String(be.text).slice(0, 20)}`, body: `滞留 ${z.status} ${Math.round(z.ageMs / 3600_000)}h 三证全无——已告警不静默翻（红条已示众），人工核实`, severity: "waiting", group: "attention", actionable: true, domain: "org", returnPath: "/" }); } catch { /* 通知尽力而为 */ }
+              this.wouldDo("boardtruth5", "僵尸卡告警（三证全无）", `${z.entryId}「${String(be.text).slice(0, 24)}」滞留 ${Math.round(z.ageMs / 3600_000)}h 三证全无——observe 档已告警（duty feed+通知）`);
             }
           }
         }
         this.push("board-recon", `僵尸不变量对账（${mode}）：强翻 ${zDoneN}·告警 ${zAlarmN}（TTL ${Math.round(zombieTtlMs() / 3600_000)}h——五现刀二形态免疫）`);
+      }
+      // W-CARDTERM-R2 P2-5：僵尸判定喂红条——每拍全量替换进 boardZombies 账（emitBoard
+      // 合成 health 时与 recon 扫描拼接、文本键去重）；本轮 boards 外的组（冻结/非
+      // active/已翻终态）清单清空不残留。zs.actions 空也走喂账=红条消退路径。
+      {
+        const zFeed = new Map<string, Array<{ text: string; kind: string; hours: number; note: string }>>();
+        for (const z of zs.actions) {
+          const arr = zFeed.get(z.gid) ?? [];
+          arr.push({
+            text: String(z.text || z.entryId).slice(0, 40),
+            kind: z.evidence ? "zombie-evidence" : "zombie-no-evidence",
+            hours: Math.max(1, Math.round(z.ageMs / 3_600_000)),
+            note: z.evidence
+              ? `滞留 ${Math.round(z.ageMs / 3_600_000)}h，交付证据在（${z.evidence}）——强翻走 auto 档；observe 档请人工收口或切 auto`
+              : `滞留 ${Math.round(z.ageMs / 3_600_000)}h，台账/回执/dev log 三证全无——请人工核实（真长任务忽略/真僵尸收口）`,
+          });
+          zFeed.set(z.gid, arr);
+        }
+        for (const { gid } of boards) { try { this.mgr.boardHealthFeedZombies(gid, zFeed.get(gid) ?? []); } catch { /* 喂账尽力而为 */ } }
       }
       } // R2-P2 off 早退门闭
     } catch (e) {
