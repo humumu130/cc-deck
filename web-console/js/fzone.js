@@ -28,13 +28,23 @@
   // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
   // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
   // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
-  function clampW(w) { return Math.max(340, Math.min(800, Math.round(window.innerWidth * 0.72), w)); }
+  // W-FZONE-R4 P1-2 修（审 B）：浮层退役后 72vw 护栏在 <1111px 区间护不住（0.72*1111≈800>可用）——
+  // 真实列时代并入可用空间上限 availMax（视口-会话列宽-sash-会话列保底 CHAT_MIN）：极窄窗「头部钮
+  // 可再开」与再开可用性自洽（会话列恒留 ≥CHAT_MIN，不被 flex-shrink:0 面板压到 0）。
+  const CHAT_MIN = 360; // 会话列保底（对话+输入框正常用；起点按 queue 右缘实算——含 rail 图标列，queue 235→420 拖宽同受护）
+  function availMax() {
+    const q = document.querySelector("#d-session .queue");
+    const qRight = q ? Math.round(q.getBoundingClientRect().right) : 297; // 缺省 62(rail)+235(queue)
+    return Math.max(340, Math.floor(window.innerWidth - qRight - 4 - CHAT_MIN));
+  }
+  function clampW(w) { return Math.max(340, Math.min(800, availMax(), Math.round(window.innerWidth * 0.72), w)); }
   function applyW(w) { root.style.width = clampW(w) + "px"; }
   function readW() {
     const v = Number(localStorage.getItem(W_KEY));
     return Number.isFinite(v) && v >= 340 ? clampW(v) : 440; // 缺省 440（WorkBuddy 同构）；旧记忆 <340（38%/280 时代）归一
   }
   function setOpen(on, remember) {
+    if (on) applyW(readW()); // R4 P1-2 修：展开时按当前视口重钳记忆宽（记忆 800 在极窄再开被收紧到 avail——只收不放，放宽走拖柄同闸）
     root.hidden = !on;
     root.classList.toggle("open", on);
     const sash = document.querySelector("#d-session .fz-sash");
@@ -349,6 +359,7 @@
     rzTid = setTimeout(() => {
       const narrow = window.innerWidth < NARROW_W;
       if (narrow && !wasNarrow && !root.hidden) setOpen(false, true);
+      else if (!root.hidden) applyW(root.getBoundingClientRect().width || readW()); // R4 P1-2 修：面板开着时视口变化（不跨窄域的场景如 1200→1100）同样重钳——只收不放
       wasNarrow = narrow;
     }, 120);
   });

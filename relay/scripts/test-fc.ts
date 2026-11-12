@@ -233,6 +233,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     }
     ok(!css.includes("max-width: 1199px") && !css.includes(".session-split > .fzone") && !css.includes("top: 0; right: 0; bottom: 0; z-index: 7"), "R4-7 窄窗禁浮层负向锚（<1200 覆盖媒体查询+fzone absolute 浮层规则不得回归——任何宽度都是真实列，用户口径④「tab 内容跑到对话面板来了」病灶）");
     ok(!fz.includes("if (remembered) setOpen(true") && fz.includes("const NARROW_W = 1000") && fz.includes("narrow && !wasNarrow && !root.hidden"), "R4-8 冷启必收起（OPEN_KEY 自动展开不得回潮——用户口径④「切不掉」病灶）+极窄 <1000 单向自动收起（窄域内 resize 不抢用户手动再开）");
+    ok(fz.includes("const CHAT_MIN = 360") && fz.includes("function availMax") && fz.includes("Math.min(800, availMax()") && fz.includes("if (on) applyW(readW())") && fz.includes("applyW(root.getBoundingClientRect().width || readW())"), "R4-9 极窄再开自洽（审 B P1-2 修）：clampW 并入可用空间上限（视口-会话列-sash-保底 360）+setOpen 展开与 resize 双口重钳（只收不放——72vw 浮层时代护栏 <1111px 失效缺口堵上，「头部钮可再开」与再开可用性自洽）");
   }
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============

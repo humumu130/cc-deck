@@ -258,6 +258,17 @@ await send("Emulation.setDeviceMetricsOverride", { width: 960, height: 940, devi
 await wait(800); // resize 防抖 120ms+缓冲
 const sX = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 ok(sX.hidden && sX.tabs.length >= 1, `极窄 960：跨入窄域自动收起（hidden=${sX.hidden}，tab 保留 ${sX.tabs.length} 个不丢）`);
+
+// ⑫c-2 极窄再开自洽（审 B P1-2 修锚）：960 视口+预置记忆宽 800 → 头部钮再开 →
+// 面板被 availMax 重钳（≤960-235-4-360=361）、会话列 ≥340 不被压 0——「头部钮可再开」承诺自洽
+await ev('localStorage.setItem("ccd_fzone_w", "800")');
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(600);
+const sRe = await ev(`(() => { const z = document.getElementById("fzone"); const d = document.querySelector("#d-session .session-detail"); const c = document.querySelector("#d-session .composer-input"); return JSON.stringify({ hidden: z.hidden, zw: Math.round(z.getBoundingClientRect().width), dw: Math.round(d.getBoundingClientRect().width), cw: Math.round(c.getBoundingClientRect().width) }); })()`);
+const rRe = JSON.parse(sRe);
+ok(!rRe.hidden, "极窄 960：头部钮再开生效（单向收起不剥夺用户主动再开——头部钮可再开承诺）");
+ok(rRe.zw <= 341 && rRe.dw >= 300 && rRe.cw > 150, `极窄 960：记忆宽 800 被 availMax（queue 右缘含 rail 实算）重钳为 ${rRe.zw}px（≤341=min-width 硬限）、会话列 ${rRe.dw}px ≥300 不被压 0、输入框 ${rRe.cw}px 完整（P1-2 修）`);
+await shot("fz-r4-narrow-reopen");
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(400); // 用户主动收起——恢复「跨回不弹回」断言前提（面板关着跨出窄域）
 await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 940, deviceScaleFactor: 1, mobile: false });
 await wait(700);
 const sW2 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
