@@ -148,21 +148,21 @@ async function resetState(): Promise<void> {
 {
   await resetState();
   const brief = "# 任务\n\n## 已知现状\n- relay/src/org.ts:343 台账单点\n\n## 验收点\n- 一条命令完成派单\n";
-  const r = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss", "--dry-run"], { input: brief });
+  const r = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss", "--dry-run", "--no-worktree"], { input: brief }); // --no-worktree：闸测试无需树（CI 浅检出无 origin/dev——基线解析 die 2 环境差）
   assert(r.status === 0, "dry-run 即便闸会拦也放行展示（零副作用）");
   assert(r.stderr.includes("缺节或空节「用户口径」"), "dry-run stderr 预告缺用户口径节");
   assert(r.stdout.includes("## 用户口径") && r.stdout.includes("（待填"), "骨架展开样例含占位节");
   assert(r.stdout.includes("## 纪律") && r.stdout.includes("结果：<一行结果>｜改动文件："), "机械注入尾注（回执格式+纪律行）在样例中");
   assert(orgBodies.length === 0, "dry-run 零 API 调用");
 
-  const r2 = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss"], { input: brief });
+  const r2 = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss", "--no-worktree"], { input: brief });
   assert(r2.status === 3, "实跑缺节被闸拦（退出码 3）");
   assert(r2.stderr.includes("用户口径"), "闸报缺「用户口径」");
 
   const bad = GOOD_BRIEF
     .replace("relay/src/org.ts:343 dispatchLogPath 为台账路径单点", "台账路径在 org.ts 某处")
     .replace("relay/src/ws-server.ts:758 /api/org 白名单含 dispatch", "白名单在 ws-server 某处");
-  const r3 = await run(LD, ["pg-1", "#213 无行号单", "--slug", "gate-noline"], { input: bad });
+  const r3 = await run(LD, ["pg-1", "#213 无行号单", "--slug", "gate-noline", "--no-worktree"], { input: bad });
   assert(r3.status === 3 && r3.stderr.includes("路径:行号"), "已知现状无 path:line 被拦（铁律②）");
 
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-skip", session_id: "s-skip" } });
