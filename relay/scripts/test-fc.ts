@@ -274,6 +274,23 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(css.includes(".msg-navbar__panel") && css.includes("backdrop-filter: blur(8px)") && css.includes("mask-image") && css.includes("@media (max-width: 879px)") && css.includes(".msg-navbar[hidden] { display: none; }"), "NAV7 CSS 同构（毛玻璃 panel blur8+渐隐 mask+窄窗 879 零占位双保险+门槛态 hidden 零占位）");
   }
 
+  // ============ TAB. W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 tab 独立整页 ============
+  {
+    ok(web.includes('p.classList.add("tabpage-pane")') && web.includes('scroll.className = "tabpage-scroll"') && web.includes("p.replaceChildren(head, scroll)") && web.includes("tabpageBody(1)") && web.includes("tabpageBody(2)") && web.includes("tabpageBody(3)") && web.includes('function tabpageBody(i)'), "TAB1 三 pane 迁出 #session-body（ready 收编段：tabpage 类+页头/滚动体两件常驻子；三渲染器写点走 tabpageBody 单口=.tabpage-scroll——页头行不被 paneSigWrite innerHTML 冲掉）");
+    {
+      // 字符串序锚：panes 收编（body.children）必须先于迁移（insertBefore(p, body)）——
+      // 且迁移落点=workspace 在 body 之前（CSS ~ 兄弟选择器让位前提）
+      const iGrab = web.indexOf("const panes = [...body.children]");
+      const iMove = web.indexOf("workspace.insertBefore(p, body)");
+      ok(iGrab >= 0 && iMove > iGrab, "TAB2 迁移时序与落点（panes 先从 #session-body 收编再前插 .workspace——DOM 序=三 pane 在 #session-body 之前）");
+    }
+    ok(web.includes('back.setAttribute("data-tabpage-back", "1")') && web.includes('back.textContent = "⟵ 返回对话"') && web.includes('const tabBack = ev.target.closest("[data-tabpage-back]");') && web.includes("if (UI.tabs && UI.tabs[0]) UI.tabs[0].click(); return;"), "TAB3 页头「⟵ 返回对话」快捷钮（section 委托分支→segment-bar tab0 同链——ctxMeter 跳「更多」同款 tabs.click 口径）");
+    ok(css.includes("#d-session .workspace > .tabpage-pane.active { display: flex; flex-direction: column; flex: 1 1 0; }") && css.includes("#d-session .workspace > .tabpage-pane.active ~ #session-body { display: none; }") && css.includes(".tabpage-scroll { flex: 1 1 auto; min-height: 0; overflow: auto;"), "TAB4 独立整页 CSS（激活=flex 列占满 head 之下整幅+own scroll 滚动体+非对话页 #session-body 兄弟选择器整列让位——零 JS 切换钩）");
+    ok(css.includes(".tabpage-head { flex: 0 0 auto;") && css.includes(".tabpage-head .tabpage-back") && !html.includes("tabpage"), "TAB5 页头行样式（轻量页名+回锚钮）+静态 HTML 零 tabpage 标记负向锚（页面结构纯 JS 装配——index-005 的 workspace 四件套 body/dock/agbox/footer 骨架不动）");
+    ok(web.includes('section.querySelector(".segment-bar")?.addEventListener("click"') && web.includes("S.tabChatMemo = { sid: S.selected, top: el.scrollTop"), "TAB6 #124 往返滚动 memo 原样（捕获段记账+回对话恢复链零改——#session-body 让位后的 scrollTop clamp 正是该 memo 护的场景）");
+    ok(readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8").includes('bar.closest(".workspace, .mobile-screen, .session-detail")'), "TAB7 R4 断链修复（setupStubTabs host 解析补 .session-detail——#128 R4 将会话 head 迁出 .workspace 后 closest 落空，包摄+wireSegmentTabs 整体跳过=四 tab 死钮+内容内联堆进消息流的既有断点；负向锚=裸 .workspace/.mobile-screen 双选旧串不得独存）");
+  }
+
 }
 
 console.log(`\n§P-§A：${pass} ok / ${fail} FAIL`);

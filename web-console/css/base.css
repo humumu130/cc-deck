@@ -2777,6 +2777,30 @@
     #session-body:hover { scrollbar-color: rgba(0,0,0,0.18) transparent; }
     html:not([data-theme="light"]) #session-body:hover { scrollbar-color: rgba(255,255,255,0.2) transparent; }
 
+    /* ═══ W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 tab 独立整页 ═══
+       三 pane 由 session-domain ready() 迁出 #session-body（消息滚动容器）——上移 .workspace
+       直接子级且前置于 body，激活时占满会话列 head 之下整幅：自有滚动容器+轻量页头行（页名+
+       「⟵ 返回对话」冗余回锚）。对话 tab 原样：#124 往返滚动 memo 链零改（非对话页 #session-body
+       display:none 引起的 scrollTop clamp 恰是 memo 捕获段原本护的场景）；dock/composer 随非对话
+       页保留=改前同行为（不扩权改行为）。 */
+    #d-session .workspace > .tabpage-pane { display: none; min-height: 0; } /* 缺省隐藏（覆盖 .workspace-pane 通用 min-height:100%——flex 列整页自持高度） */
+    #d-session .workspace > .tabpage-pane.active { display: flex; flex-direction: column; flex: 1 1 0; }
+    #d-session .workspace > .tabpage-pane.active ~ #session-body { display: none; } /* 非对话页激活=消息滚动容器整列让位（panes 前置于 body，~ 兄弟选择器承载，零 JS 切换钩） */
+    .tabpage-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 9px 18px 8px; border-bottom: 1px solid var(--line-soft); }
+    .tabpage-head .tabpage-title { font-size: var(--fs-B); font-weight: 700; color: var(--text-strong); letter-spacing: .2px; }
+    .tabpage-head .tabpage-back { margin-left: auto; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--dim); font-size: var(--fs-E); line-height: 1.6; cursor: pointer; }
+    .tabpage-head .tabpage-back:hover { color: var(--text-strong); border-color: var(--line-strong); background: var(--hover); }
+    .tabpage-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 22px; } /* 与 .workspace-body 同内边距——内容观感零迁移损；own scroll=脱离消息滚动容器 */
+    /* 整页滚动条同 #session-body 口径（overlay 式去轨道；4px 细 thumb hover 才显） */
+    .tabpage-scroll::-webkit-scrollbar { width: 4px; }
+    .tabpage-scroll::-webkit-scrollbar-track { background: transparent; }
+    .tabpage-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; }
+    .tabpage-scroll:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); }
+    html:not([data-theme="light"]) .tabpage-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+    .tabpage-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+    .tabpage-scroll:hover { scrollbar-color: rgba(0,0,0,0.18) transparent; }
+    html:not([data-theme="light"]) .tabpage-scroll:hover { scrollbar-color: rgba(255,255,255,0.2) transparent; }
+
     .pane-summary {margin-bottom: 10px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700;}
     .workspace-pane.team-conversation-pane.active { display: flex; flex-direction: column; min-height: calc(100% + 20px); margin-bottom: -20px; }
     .team-chat { display: grid; align-content: start; gap: 8px; max-width: 720px; }
