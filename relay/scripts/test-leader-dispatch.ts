@@ -148,21 +148,21 @@ async function resetState(): Promise<void> {
 {
   await resetState();
   const brief = "# 任务\n\n## 已知现状\n- relay/src/org.ts:343 台账单点\n\n## 验收点\n- 一条命令完成派单\n";
-  const r = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss", "--dry-run"], { input: brief });
+  const r = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss", "--dry-run", "--no-worktree"], { input: brief }); // --no-worktree：闸测试无需树（CI 浅检出无 origin/dev——基线解析 die 2 环境差）
   assert(r.status === 0, "dry-run 即便闸会拦也放行展示（零副作用）");
   assert(r.stderr.includes("缺节或空节「用户口径」"), "dry-run stderr 预告缺用户口径节");
   assert(r.stdout.includes("## 用户口径") && r.stdout.includes("（待填"), "骨架展开样例含占位节");
   assert(r.stdout.includes("## 纪律") && r.stdout.includes("结果：<一行结果>｜改动文件："), "机械注入尾注（回执格式+纪律行）在样例中");
   assert(orgBodies.length === 0, "dry-run 零 API 调用");
 
-  const r2 = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss"], { input: brief });
+  const r2 = await run(LD, ["pg-1", "#213 缺口径单", "--slug", "gate-miss", "--no-worktree"], { input: brief });
   assert(r2.status === 3, "实跑缺节被闸拦（退出码 3）");
   assert(r2.stderr.includes("用户口径"), "闸报缺「用户口径」");
 
   const bad = GOOD_BRIEF
     .replace("relay/src/org.ts:343 dispatchLogPath 为台账路径单点", "台账路径在 org.ts 某处")
     .replace("relay/src/ws-server.ts:758 /api/org 白名单含 dispatch", "白名单在 ws-server 某处");
-  const r3 = await run(LD, ["pg-1", "#213 无行号单", "--slug", "gate-noline"], { input: bad });
+  const r3 = await run(LD, ["pg-1", "#213 无行号单", "--slug", "gate-noline", "--no-worktree"], { input: bad });
   assert(r3.status === 3 && r3.stderr.includes("路径:行号"), "已知现状无 path:line 被拦（铁律②）");
 
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-skip", session_id: "s-skip" } });
@@ -293,10 +293,16 @@ async function resetState(): Promise<void> {
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-r1", session_id: "s-r1" } });
   const r1 = await run(LD, ["pg-1", "#213 续派一", "--slug", "reuse", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
   assert(r1.status === 0, "续派一（首建）受理");
+  // W-ORPHANSWEEP 断言-形态对齐（任务书「按实修断言」）：生产形态同 slug 续派前，上单
+  // 锁由 relay 收口边（scanClearWorktreeLocks）/收割清掉；mock 无 relay——rmSync 模拟该
+  // 收口边后再续派（断言语义不变：验「树复用+受理」；锁接管缝=domstep1r1 备案存量债，
+  // 同 5c reuse 前置同款口径，不越界修 wt-lock 语义）。
+  rmSync(join(wtRoot, "cc-deck-w-reuse", ".cc-deck-lock"), { force: true });
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-r2", session_id: "s-r2" } });
   const r2 = await run(LD, ["pg-1", "#213 续派二", "--slug", "reuse", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
   assert(r2.status === 0 && r2.stdout.includes("复用既有 worktree"), "同 slug 续派复用 worktree（幂等）");
-  execSync(`git -C "${repo}" worktree remove "${join(wtRoot, "cc-deck-w-reuse")}"`);
+  // r2 受理即重写哨兵锁（认领边——生产由 relay 清，mock 无人清）→ remove 需 --force 容忍
+  execSync(`git -C "${repo}" worktree remove --force "${join(wtRoot, "cc-deck-w-reuse")}"`);
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-r3", session_id: "s-r3" } });
   const r3 = await run(LD, ["pg-1", "#213 续派三", "--slug", "reuse", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
   assert(r3.status === 0 && r3.stdout.includes("挂载既有分支"), "分支在 worktree 无 → 挂载既有分支不重置");
