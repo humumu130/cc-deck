@@ -188,7 +188,7 @@ await ev(`(() => { const t = document.querySelector('#fzone [data-fz-tab][title=
 await wait(500);
 const s10 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 const mem = await ev(`localStorage.getItem("ccd_fzone_open")`);
-ok(s10.hidden && s10.tabs.length === 0 && mem === "0", `关最后一个 tab=面板收起+开合记忆（ccd_fzone_open=${mem}）`);
+ok(s10.hidden && s10.tabs.length === 0 && mem === null, `关最后一个 tab=面板收起+OPEN_KEY 全退役（P2 批五清账：写点删后 getItem=${mem}——读点 R4 已删，零残留实证）`);
 
 // ⑩ 头部常驻钮再展开（收起后唯一入口）→ 空态提示卡
 await ev(`document.querySelector('#session-head-actions [data-fzone-toggle]').click()`); await wait(400);
@@ -291,7 +291,7 @@ await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").cl
 const sW3 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 ok(!sW3.hidden && sW3.w >= 690 && sW3.w <= 800, `跨回再开：宽度回钳记忆档（${Math.round(sW3.w)}px=1440 档 avail≈697——护栏上限随窗宽放坡，composer 全按钮优先于记忆宽）`);
 
-// ⑫d 冷启 reload：预置 OPEN_KEY=1（模拟用户上次开着离开）→ 冷启必收起（R4 病灶「空面板冷启复活=切不掉」根除）
+// ⑫d 冷启 reload：预置 OPEN_KEY=1（模拟旧版本残留脏值——P2 批五写点已删无消费者，注入即「脏值免疫」实证）→ 冷启必收起（R4 病灶「空面板冷启复活=切不掉」根除）
 await ev('localStorage.setItem("ccd_fzone_open", "1")');
 await send("Page.reload");
 await wait(2800);
