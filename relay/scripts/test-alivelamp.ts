@@ -20,7 +20,7 @@ ok(isRealWorking({ status: "WORKING", last_tool_use_at: now - 20 * MIN, updated_
 ok(isRealWorking({ status: "WORKING", last_tool_use_at: now - 20 * MIN, updated_at: now - 6 * MIN }, now) === false, "A3 心跳 6min（超 5min 窗）→ 灭（两判据均不满足）");
 
 console.log("B. 291 原语义保持（新判据不复活挂起/待命形态）");
-ok(isRealWorking({ status: "WORKING", last_tool_use_at: 0, updated_at: now - 30_000 }, now) === true, "B1 接单未开工但心跳 30s（spawn 起手窗=CLI 活）→ 亮（起手窗分钟级自纠语义不变）");
+ok(isRealWorking({ status: "WORKING", last_tool_use_at: 0, updated_at: now - 30_000 }, now) === false, "B1 起手窗（t=0 从未有工具活动）心跳 30s 新鲜→灭（t>0 前置：有过工具活动才认心跳——291 原语义回正，W-P2TAIL2 按审查 P2-② 收敛）");
 ok(isRealWorking({ status: "WORKING", last_tool_use_at: 0, updated_at: now - 6 * MIN }, now) === false, "B2 接单未开工+心跳停（挂起/未真开跑）→ 灭（291 原语义）");
 ok(isRealWorking({ status: "WORKING", last_tool_use_at: now - 20 * MIN, updated_at: 0 }, now) === false, "B3 心跳字段缺失/0 → 只认 tool 窗（老数据兼容）");
 ok(isRealWorking({ status: "DONE", last_tool_use_at: now - 30_000, updated_at: now - 30_000 }, now) === false, "B4 非 WORKING 态恒灭");
