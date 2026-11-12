@@ -1,7 +1,7 @@
 // W-FZONE-B1（1111 拍板方案 B · 批一）：右侧文件工作区——tab 系统 + 容器（拖宽/收起/记忆）。
 // W-FZONE-R4（1112 用户四轮打回·第四轮定谳「在外面，在右侧」）：工作区=app 内容区级右列——
 // fzone+4px sash 与 session-detail 并列为 .session-shell 子级（不在会话面板内、head 不压工作区）；
-// 窄窗禁浮层（<1200 覆盖媒体查询删除，任何宽度都是真实列）+冷启必收起（OPEN_KEY 读点退役）+
+// 窄窗禁浮层（<1200 覆盖媒体查询删除，任何宽度都是真实列）+冷启必收起（OPEN_KEY 全退役——P2 批五清账）+
 // 极窄 <1000 单向自动收起（NARROW_W）。宽度 440、clamp[340,800] 沿用；tab/内容链路不变。
 // 内容加载委托 session-domain 注册的 window.__ccDeck005FzoneLoad(el, sid, path)（复用
 // fetchArtifact/mdHtml/synHtml 闭包内管线——本文件零数据面）；图标委托 __ccDeck005ArtIconHtml。
@@ -10,7 +10,7 @@
 // + 工作空间树抽屉（降级形态：已登记产物按目录分组——relay 无列目录命令）；diff=无通道降级。
 (function () {
   "use strict";
-  const W_KEY = "ccd_fzone_w", OPEN_KEY = "ccd_fzone_open";
+  const W_KEY = "ccd_fzone_w"; // P2 批五：OPEN_KEY 全退役（读写双点）——R4 冷启必收起后零消费者，清账
   const root = document.getElementById("fzone");
   if (!root) return;
   const toolsEl = root.querySelector("[data-fz-tools]");
@@ -49,13 +49,12 @@
     const v = Number(localStorage.getItem(W_KEY));
     return Number.isFinite(v) && v >= 340 ? clampW(v) : 440; // 缺省 440（WorkBuddy 同构）；旧记忆 <340（38%/280 时代）归一
   }
-  function setOpen(on, remember) {
+  function setOpen(on) {
     if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口
     root.hidden = !on;
     root.classList.toggle("open", on);
     const sash = document.querySelector("#d-session .fz-sash");
     if (sash) sash.hidden = !on; // sash 随面板开合（WorkBuddy：面板关=整组不渲染，我方 hidden 等价）
-    if (remember) { try { localStorage.setItem(OPEN_KEY, on ? "1" : "0"); } catch (_) {} }
     // R4：旧 fz-on 类随 session-split 退役删除（CSS 全仓零消费=vestigial）
     // 头部常驻开关钮状态回显（面板收起后=唯一再展开入口——静态 conv-mini 钮，data-fzone-toggle 不随对话重建）
     document.querySelectorAll("[data-fzone-toggle]").forEach((b) => {
@@ -115,7 +114,7 @@
     panes.set(id, pane); // W-FZONE-R2：pane 登记入跨会话保活表（detach/stash 恢复链一致）
     state.tabs.push({ id, path: p, sid: String(sid) }); // P2-①：tab 自带 sid（retry 不再依赖全局单值）
     state.active = id;
-    setOpen(true, false);
+    setOpen(true);
     renderAll();
     load(id, pane, sid, p);
   }
@@ -162,7 +161,7 @@
     if (pane) { unloadPane(pane); pane.remove(); }
     panes.delete(id); // W-FZONE-R2：关 tab 即真释放（保活表同步清——不占 stash 额度）
     if (state.active === id) state.active = state.tabs[Math.min(i, state.tabs.length - 1)]?.id ?? null;
-    if (!state.tabs.length) { setOpen(false, true); state.active = null; renderAll(); return; }
+    if (!state.tabs.length) { setOpen(false); state.active = null; renderAll(); return; }
     renderAll();
   }
   // 切会话暂存/恢复（W-FZONE-R2，1111 用户实锤「按 WorkBuddy 的开发」：右侧分栏常驻——
@@ -171,7 +170,7 @@
   // blob/iframe 零重载），切回=原样恢复。防串台语义不降级：恢复的 tab 各带原 sid（retry 仍
   // 用 tab.sid——复合 id 天然不串）。lastSid 幂等守卫沿用（同 sid 重入零动作）。
   // stash LRU 上限 8 会话：超出淘汰最旧（unloadPane 释放 blob/iframe——防长会话漂移内存膨胀）。
-  // 树抽屉不暂存（数据源随会话失效，切回按需重开）；开合态不动（OPEN_KEY 全局语义不变）。
+  // 树抽屉不暂存（数据源随会话失效，切回按需重开）；开合态不动。
   function detachPanes() { [...bodyEl.querySelectorAll("[data-fz-pane]")].forEach((p) => { panes.set(p.dataset.fzPane, p); p.remove(); }); }
   function restorePanes(sid) {
     const keep = new Set(state.tabs.map((t) => t.id));
@@ -283,7 +282,7 @@
     const fp = ev.target.closest(".fpath[data-p]");
     if (fp && typeof window.__ccDeck005FzoneOpenByToken === "function") { window.__ccDeck005FzoneOpenByToken(fp.dataset.p); return; }
     const co = ev.target.closest("[data-fz-collapse]");
-    if (co) { setOpen(root.hidden, true); return; }
+    if (co) { setOpen(root.hidden); return; }
     // W-FZONE-B2 件③：树抽屉（钮=开/关切换；树内文件=OpenByToken 路由开 tab；树外点击=收树）
     if (ev.target.closest("[data-fz-tree-close]")) { closeTree(); return; }
     const tf = ev.target.closest("[data-fz-tree-open]");
@@ -319,7 +318,7 @@
   // 头部常驻开关钮（会话 head-actions 静态位——面板收起后唯一再展开入口；委托监听不依赖面板可见）
   document.addEventListener("click", (ev) => {
     const tg = ev.target.closest("[data-fzone-toggle]");
-    if (tg) { ev.preventDefault(); setOpen(root.hidden, true); }
+    if (tg) { ev.preventDefault(); setOpen(root.hidden); }
   });
   // W-FZONE-R3：拖拽柄=会话面板外的窗口级 sash（.fz-sash——WorkBuddy __detail-sash 形态）；
   // 算法 WorkBuddy 同构：mousedown 记 startX/startWidth → move=startWidth+(startX-clientX)（右锚定，
@@ -348,20 +347,22 @@
 
   // ---------- 启动：冷启必收起（W-FZONE-R4） ----------
   // R3 及以前：OPEN_KEY 记忆上次开合、冷启自动恢复展开——用户实锤「空面板每次冷启复活=切不掉」
-  // 病灶根除：内容 tab 本就不跨启持久，空面板冷启零价值。OPEN_KEY 读点退役（写点保留：用户主动
+  // 病灶根除：内容 tab 本就不跨启持久，空面板冷启零价值。OPEN_KEY 全退役（读写双点）——
+  // R4 冷启必收起后零消费者，P2 批五清账（R4 批曾自认「写点保留」，本批终清）。
   // 开合仍记忆，不回灌冷启）；用户开文件/点头部钮才展开。
   applyW(readW());
   renderAll();
 
   // ---------- W-FZONE-R4：极窄自动收起（NARROW_W 单向）；R4-R1 刀二/刀三增强 ----------
-  // 跨入窄域边沿且面板开→收起（tab 保留不丢；remember=true 写 OPEN_KEY=0——注：跨出不回弹的实际
-  // 保障=下方「跨出边沿无动作」分支，该写入无消费者（审二 P3-② 备案，写点暂留不扩改））；
+  // 跨入窄域边沿且面板开→收起（tab 保留不丢；跨出不回弹的实际保障=下方「跨出边沿无动作」
+  // 分支——原 remember 写入无消费者已随 P2 批五 OPEN_KEY 清账删除）；
   // 窄域内 resize 不动作（用户头部钮手动再开不抢）；冷启必收起故载入态无面板可收（wasNarrow
   // 初始化即载入判定）。窄窗任何宽度面板都是真实列（R4 浮层形态已删，永不盖对话/输入框）。
   // R4-R1 刀二（审二第五轮直答①/P2-②）：NARROW_W 1000→1200——1000-1199「细条可用」带（对话列
   // 191-291px+按钮溢出）正是用户主诉「工作区开着对话挤成缝」，跨入即收；自动收起复用 B4 toast
   // 通道示众（静默再收=审二实录病——「我自己开的拖下窗口就没了」），仅自动收起边沿弹（手动
   // 收/开、跨出窄域不弹）。
+  // 1200=939-1071 备案带外沿+composer 全按钮零溢出实测下界（R4-R1 九档扫描 ≥1071）
   const NARROW_W = 1200;
   let wasNarrow = window.innerWidth < NARROW_W;
   let rzTid = 0;
@@ -370,7 +371,7 @@
     rzTid = setTimeout(() => {
       const narrow = window.innerWidth < NARROW_W;
       if (narrow && !wasNarrow && !root.hidden) {
-        setOpen(false, true);
+        setOpen(false);
         try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast("窗口过窄，文件工作区已收起（头部 ▤ 工作区 可再开）"); } catch (_) {}
       }
       wasNarrow = narrow;
