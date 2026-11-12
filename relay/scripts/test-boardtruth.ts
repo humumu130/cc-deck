@@ -180,5 +180,23 @@ console.log("E P1 撤单驱逐（矛盾链根除）:");
   }
 }
 
+// ---------- W-CARDTERM-R1：板账异常自证红条（1112 用户「自证件」令——集成锚） ----------
+console.log("R1 板账异常自证红条（CARDTERM-R1）:");
+{
+  const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
+  const td = readFileSync(new URL("../../web-console/js/team-domain.js", import.meta.url), "utf-8");
+  const css = readFileSync(new URL("../../web-console/css/base.css", import.meta.url), "utf-8");
+  ok(sm.includes("boardHealth = new Map") && sm.includes("fixedToday") && sm.includes("stuck: Array<{ text: string; kind: string; hours: number; note: string }>"), "R1a relay 异常账在册（boardHealth Map——当日已修/残留两类）");
+  ok(sm.includes("boardReconHealthScan") && sm.includes('"frozen-stuck"') && sm.includes('"failed-in-review"'), "R1b stuck 扫描两类（冻结组滞卡+failed×复核矛盾——D18 保护态显性化）");
+  ok(sm.includes("(outBoard as { health?: unknown }).health = hh"), "R1c emitBoard 帧挂 health（BOARD_UPDATED 首帧/diff 同口——勿新开轮询面）");
+  ok(sm.includes("this.boardHealthBump(g.id, movedLocal)") && sm.includes("this.emitBoard(g.id);"), "R1d 搬后计数+帧下发（对账动作即时反映到红条数据源）");
+  ok(td.includes('class="board-health-bar err"') && td.includes("板账异常 ") && td.includes("（点击查看）"), "R1e 前端红条 markup（常驻警示条+可展开）");
+  ok(td.includes("board && board.health && Array.isArray(board.health.stuck)") && td.includes(': "";'), "R1f N=0 零渲染（健康态零痕迹——三元空串不占空间）");
+  ok(td.includes("挂起组滞卡") && td.includes("台账失败但卡停复核") && sm.includes("请人工裁决") && sm.includes("复活后下轮对账收敛"), "R1g 人话纪律（类型人话在 td/note 人话在 sm——处置建议皆人话非裸枚举）");
+  ok(td.includes("bh.fixedToday") && td.includes("今日已自动修正"), "R1h 当日已修可见（次要行——修了什么同样示众）");
+  ok(css.includes(".board-health-bar") && css.includes("var(--error)") && css.includes(".bh-list"), "R1i 红条 CSS（err 色系+清单布局）");
+  ok(td.includes("boardHealthBar + "), "R1j 红条入板 pane（泳道之上页头之下——boardMarkup return 前拼）");
+}
+
 console.log(`\nboardtruth: ${pass}/${pass + fail}${fail ? "（有红）" : ""}`);
 process.exit(fail ? 1 : 0);

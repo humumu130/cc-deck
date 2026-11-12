@@ -1497,6 +1497,13 @@ export class SessionManager {
     this.reconAutoCloseStaleCards(trigger, now);
   }
 
+  /** W-CARDTERM-R1（1112 用户第六实锤后「自证件」令）：板账异常自证账——对账器修了什么/
+   * 修不动什么，用户板面红条直接可见（不再只写 chain-audit 等排查时才发现）。
+   * per-gid 内存账：fixedToday=当日对账已翻卡数（滚动日清）；stuck=当前仍异常残留
+   * （冻结组滞卡+failed×复核矛盾态——D18 保护不自动搬的显性化）。经 emitBoard 帧随板下发
+   * （board.health 字段，BOARD_UPDATED/首帧同口——勿新开轮询面）。 */
+  private boardHealth = new Map<string, { day: string; fixedToday: number; stuckAt: number; stuck: Array<{ text: string; kind: string; hours: number; note: string }> }>();
+
   /** #263：台账终态×板滞留卡自动收敛（runLedgerRecon 专用半边）。保护边界四件：
    * ①running/dispatched/queued 非终态不碰（收敛末行=终态行才入选）；②终态 1h 缓冲窗
    * 内不搬（worker 重连补报真回执会追加终态行刷新 ts，窗内搬=抢跑吞掉真收口）；③
@@ -1535,8 +1542,13 @@ export class SessionManager {
         const to = led2 === "done" ? "done" : "backlog"; // failed→backlog 保留卡（不吞——重派/换人/放弃是 failed 单的对账决策面）
         return to === x.status ? [] : [{ dispatch_id: x.dispatch_id, to, text: x.text }];
       });
-      if (!hits.length) continue;
-      if (g.status !== "active") { frozenSkipped += hits.length; continue; }
+      if (!hits.length) { this.boardReconHealthScan(g, board, led, ledAt, now); continue; } // 无待搬也扫矛盾残留（stuck 发现与搬卡独立）
+      // W-CARDTERM-R1：stuck 发现（先记后搬——冻结组的 hits 即「修不动」残留）
+      if (g.status !== "active") {
+        frozenSkipped += hits.length;
+        this.boardReconHealthScan(g, board, led, ledAt, now, hits.map((h) => ({ dispatch_id: h.dispatch_id, text: h.text, why: "frozen" as const })));
+        continue;
+      }
       for (const h of hits) moveEntryByDispatch(g.id, h.dispatch_id, h.to);
       // 搬后回读核实（moveEntryByDispatch void 返回，静默拒写不可信——计数只认落盘实态）
       const after = loadBoardFile(g.id);
@@ -1550,6 +1562,12 @@ export class SessionManager {
           samples.push(m ? m[0] : `${h.dispatch_id.slice(0, 8)}→${h.to}`);
         }
       }
+      // W-CARDTERM-R1：当日已修计数（rolling 日清——movedLocal=本组本轮搬后核实数）+残留复扫+板帧下发（红条数据源）
+      let movedLocal = 0;
+      for (const h of hits) { const ent = after.entries.find((x) => x.dispatch_id === h.dispatch_id); if (ent?.status === h.to) movedLocal++; }
+      this.boardHealthBump(g.id, movedLocal);
+      this.boardReconHealthScan(g, after, led, ledAt, now);
+      this.emitBoard(g.id);
     }
     if (movedDone + movedBacklog > 0) {
       this.emitChainAudit("recon-autoclose",
@@ -1557,6 +1575,48 @@ export class SessionManager {
         (frozenSkipped ? `（冻结组待复活收敛 ${frozenSkipped} 张）` : "") +
         (samples.length ? `｜${samples.join(" ")}` : ""));
     }
+  }
+
+  /** W-CARDTERM-R1：recon 辅助——当日已修计数（hits×搬后实态，日滚动）。 */
+  private boardHealthBump(gid: string, n: number): void {
+    if (n <= 0) return;
+    const day = new Date().toISOString().slice(0, 10);
+    const h = this.boardHealth.get(gid);
+    if (!h || h.day !== day) { this.boardHealth.set(gid, { day, fixedToday: n, stuckAt: 0, stuck: h?.stuck ?? [] }); return; }
+    h.fixedToday += n;
+  }
+
+  /** W-CARDTERM-R1：stuck 残留扫描——对账修不动的异常当前态（板面红条清单数据源）。
+   * 两类：①冻结组滞卡（挂起/归档组的终态滞留——保护不搬，示众等复活收敛）；
+   * ②failed×复核矛盾态（台账 failed 而卡在 submitted/ready_to_install——D18 复核闸
+   * 保护不自动搬，用户裁决面显性化）。搬卡完成后的组以搬后板实态复扫（残量为准）。 */
+  private boardReconHealthScan(
+    g: { id: string; status?: string },
+    board: { entries: Array<{ dispatch_id?: string; status?: string; text?: string; updated_at?: number }> },
+    led: Map<string, "done" | "failed">,
+    ledAt: Map<string, number>,
+    now: number,
+    frozenHits?: Array<{ dispatch_id: string; text?: string; why: "frozen" }>,
+  ): void {
+    const stuck: Array<{ text: string; kind: string; hours: number; note: string }> = [];
+    const frozenIds = new Set((frozenHits ?? []).map((h) => h.dispatch_id));
+    for (const x of board.entries) {
+      if (!x.dispatch_id) continue;
+      const led2 = led.get(x.dispatch_id);
+      if (!led2) continue;
+      if (frozenIds.has(x.dispatch_id)) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "frozen-stuck", hours: Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000), note: "组挂起/归档——板冻结保护不自动搬，复活后下轮对账收敛" });
+        continue;
+      }
+      // failed×复核矛盾（D18 保护态：不搬但示众——台账说失败、卡还停在复核/待装泳道）
+      if (led2 === "failed" && (x.status === "submitted" || x.status === "ready_to_install")) {
+        stuck.push({ text: String(x.text ?? x.dispatch_id).slice(0, 40), kind: "failed-in-review", hours: Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000), note: `台账已失败 ${Math.round((now - (Number(ledAt.get(x.dispatch_id)) || now)) / 3_600_000)}h，卡仍停「${x.status === "submitted" ? "审查中" : "待装机"}」——复核闸保护不自动搬，请人工裁决` });
+      }
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    const h = this.boardHealth.get(g.id);
+    if (!h || h.day !== day) this.boardHealth.set(g.id, { day, fixedToday: 0, stuckAt: Date.now(), stuck });
+    else { h.stuck = stuck; h.stuckAt = Date.now(); }
   }
 
   /** #199 C：启动 drain——turn-spool/*.jsonl 逐行回放（CLI 断电窗的外报补账）后清档 */
@@ -9522,6 +9582,10 @@ ${lines.join("\n")}
     const prev = this.lastBoardBroadcast.get(gid) ?? null;
     // lessons 摘除后的下发形态（磁盘文件不动——迁移器幂等重读依据）
     const outBoard: ProjectBoard = board.lessons?.length ? { ...board, lessons: [] } : board;
+    // W-CARDTERM-R1：板账异常自证随帧（board.health——红条数据源；内存账缺失=undefined
+    // 字段不下发，端上旧帧回退无红条=健康缺省，fail-open）
+    const hh = this.boardHealth.get(gid);
+    if (hh) (outBoard as { health?: unknown }).health = hh;
     this.lastBoardBroadcast.set(gid, outBoard);
     // W-BOARDV2（1111 定调「看板=查表投影」）：帧随带投影——每卡当前泳道由
     // dispatch-log 黑板事件链读时计算（board-projection.ts，秒级缓存），端上渲染
