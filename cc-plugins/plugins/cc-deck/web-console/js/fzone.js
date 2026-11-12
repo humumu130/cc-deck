@@ -1,8 +1,8 @@
 // W-FZONE-B1（1111 拍板方案 B · 批一）：右侧文件工作区——tab 系统 + 容器（拖宽/收起/记忆）。
-// W-FZONE-R3（1111 用户军令三）：布局层照抄 WorkBuddy（asar 逆向规格书=回执 w-fzone-r3.md 段A）——
-// fzone+4px sash 从会话面板容器内迁出为窗口级兄弟（session-split 行容器）；默认宽 440、clamp[340,800]
-// （WorkBuddy useState(440)+Math.min(Math.max(w,340),800) 同构）。tab/内容链路不变；mock b.html 降为
-// 历史 token 参考（布局权威让位 WorkBuddy 逆向规格）。
+// W-FZONE-R4（1112 用户四轮打回·第四轮定谳「在外面，在右侧」）：工作区=app 内容区级右列——
+// fzone+4px sash 与 session-detail 并列为 .session-shell 子级（不在会话面板内、head 不压工作区）；
+// 窄窗禁浮层（<1200 覆盖媒体查询删除，任何宽度都是真实列）+冷启必收起（OPEN_KEY 读点退役）+
+// 极窄 <1000 单向自动收起（NARROW_W）。宽度 440、clamp[340,800] 沿用；tab/内容链路不变。
 // 内容加载委托 session-domain 注册的 window.__ccDeck005FzoneLoad(el, sid, path)（复用
 // fetchArtifact/mdHtml/synHtml 闭包内管线——本文件零数据面）；图标委托 __ccDeck005ArtIconHtml。
 // 批一范围：md/代码/图片三格式 + 点击入口闭环；批二（W-FZONE-B2）：格式矩阵（pdf 原生 viewer/
@@ -28,20 +28,35 @@
   // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
   // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
   // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
-  function clampW(w) { return Math.max(340, Math.min(800, Math.round(window.innerWidth * 0.72), w)); }
+  // W-FZONE-R4 P1-2 修（审 B）：浮层退役后 72vw 护栏在 <1111px 区间护不住（0.72*1111≈800>可用）——
+  // 真实列时代并入可用空间上限 availMax（视口 − queue 右缘(含 rail 实算) − sash − 会话列保底储备）：
+  // 极窄窗「头部钮可再开」与再开可用性自洽（会话列不被 flex-shrink:0 面板压到 0）。
+  // W-FZONE-R4-R1 刀三（审二 P2-① 1000px 档对话列 215px+composer 按钮溢出实录）合流：保底储备取
+  // 实测口径 CHAT_FIT=442——审 B 的 CHAT_MIN 360 是「列宽」口径，列内 chrome（padding/margin ≈68px）
+  // 吃掉后 composer 实得 ~230px 仍溢出；CDP 逐宽实测 composer 按钮行最小内容宽 366px，全容纳需
+  // cbW≥366 → 储备 360+68+14 余量。效果：≥1071px 窗宽面板全容纳按钮行；极窄（avail<340 面板下限）
+  // 下限优先——939-1071 带手动再开 composer 仍挤（面板 340 下限语义保留，R4-R1 备案），<1200 跨入
+  // 已自动收起（刀二）。
+  const CHAT_FIT = 442; // 会话列保底储备（R4-R1 刀三实测口径：审 B CHAT_MIN 360 列宽保底+列内 chrome≈68+余量 14——超集覆盖）
+  function availMax() {
+    const q = document.querySelector("#d-session .queue");
+    const qRight = q ? Math.round(q.getBoundingClientRect().right) : 297; // 缺省 62(rail)+235(queue)
+    return Math.max(340, Math.floor(window.innerWidth - qRight - 4 - CHAT_FIT));
+  }
+  function clampW(w) { return Math.max(340, Math.min(800, availMax(), Math.round(window.innerWidth * 0.72), w)); }
   function applyW(w) { root.style.width = clampW(w) + "px"; }
   function readW() {
     const v = Number(localStorage.getItem(W_KEY));
     return Number.isFinite(v) && v >= 340 ? clampW(v) : 440; // 缺省 440（WorkBuddy 同构）；旧记忆 <340（38%/280 时代）归一
   }
   function setOpen(on, remember) {
+    if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口
     root.hidden = !on;
     root.classList.toggle("open", on);
     const sash = document.querySelector("#d-session .fz-sash");
     if (sash) sash.hidden = !on; // sash 随面板开合（WorkBuddy：面板关=整组不渲染，我方 hidden 等价）
     if (remember) { try { localStorage.setItem(OPEN_KEY, on ? "1" : "0"); } catch (_) {} }
-    const split = document.querySelector("#d-session .session-split");
-    if (split) split.classList.toggle("fz-on", on);
+    // R4：旧 fz-on 类随 session-split 退役删除（CSS 全仓零消费=vestigial）
     // 头部常驻开关钮状态回显（面板收起后=唯一再展开入口——静态 conv-mini 钮，data-fzone-toggle 不随对话重建）
     document.querySelectorAll("[data-fzone-toggle]").forEach((b) => {
       b.classList.toggle("on", on);
@@ -331,11 +346,41 @@
     });
   }
 
-  // ---------- 启动：恢复上次开合（有 tab 才显——冷启零 tab 不占版面；OPEN_KEY 记忆上次主动开合） ----------
+  // ---------- 启动：冷启必收起（W-FZONE-R4） ----------
+  // R3 及以前：OPEN_KEY 记忆上次开合、冷启自动恢复展开——用户实锤「空面板每次冷启复活=切不掉」
+  // 病灶根除：内容 tab 本就不跨启持久，空面板冷启零价值。OPEN_KEY 读点退役（写点保留：用户主动
+  // 开合仍记忆，不回灌冷启）；用户开文件/点头部钮才展开。
   applyW(readW());
-  const remembered = (() => { try { return localStorage.getItem(OPEN_KEY) === "1"; } catch (_) { return false; } })();
-  if (remembered) setOpen(true, false); // 恢复展开但零 tab=空态（批一无自动重开文件——内容 tab 不持久化）
   renderAll();
+
+  // ---------- W-FZONE-R4：极窄自动收起（NARROW_W 单向）；R4-R1 刀二/刀三增强 ----------
+  // 跨入窄域边沿且面板开→收起（tab 保留不丢；remember=true 写 OPEN_KEY=0——注：跨出不回弹的实际
+  // 保障=下方「跨出边沿无动作」分支，该写入无消费者（审二 P3-② 备案，写点暂留不扩改））；
+  // 窄域内 resize 不动作（用户头部钮手动再开不抢）；冷启必收起故载入态无面板可收（wasNarrow
+  // 初始化即载入判定）。窄窗任何宽度面板都是真实列（R4 浮层形态已删，永不盖对话/输入框）。
+  // R4-R1 刀二（审二第五轮直答①/P2-②）：NARROW_W 1000→1200——1000-1199「细条可用」带（对话列
+  // 191-291px+按钮溢出）正是用户主诉「工作区开着对话挤成缝」，跨入即收；自动收起复用 B4 toast
+  // 通道示众（静默再收=审二实录病——「我自己开的拖下窗口就没了」），仅自动收起边沿弹（手动
+  // 收/开、跨出窄域不弹）。
+  const NARROW_W = 1200;
+  let wasNarrow = window.innerWidth < NARROW_W;
+  let rzTid = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(rzTid);
+    rzTid = setTimeout(() => {
+      const narrow = window.innerWidth < NARROW_W;
+      if (narrow && !wasNarrow && !root.hidden) {
+        setOpen(false, true);
+        try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast("窗口过窄，文件工作区已收起（头部 ▤ 工作区 可再开）"); } catch (_) {}
+      }
+      wasNarrow = narrow;
+      // R4 P1-2 修（审 B）+ R4-R1 刀三合流：面板开着时视口变化（不跨窄域如 1200→1100，或跨出变宽）
+      // 同样重钳——变窄收进 avail 护栏（1200-1399 带 800px 面板挤对话同治），变宽回弹到记忆宽
+      //（readW=拖柄存值即记忆，回弹与拖柄语义一致；「只收不放」改为「收进回弹」——P1-2 只收目标
+      // 由 avail 钳承载，回弹不破坏其极窄自洽：极窄再开仍被 avail 压住）。
+      if (!root.hidden) applyW(readW());
+    }, 120);
+  });
 
   window.ccDeckFzone = Object.freeze({ open, autoOpen, close, resetForSession, toggle: () => setOpen(root.hidden, true), isOpen: () => !root.hidden, tabs: () => state.tabs.map((t) => t.path) }); // B2：autoOpen 入 API（session-domain 差分挂点消费）
 })();
