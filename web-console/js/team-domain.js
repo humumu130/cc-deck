@@ -530,7 +530,9 @@
                   const boardHealthBar = stuckList.length
                     ? '<details class="board-health-bar err"><summary>⚠ 板账异常 ' + stuckList.length + ' 张（点击查看）' + (Number(bh.fixedToday) > 0 ? '<span class="bh-fixed" title="今日对账已自动翻正的卡数">今日已自动修正 ' + bh.fixedToday + ' 张</span>' : "") + "</summary>"
                       + '<div class="bh-list">' + stuckList.map(function (it) {
-                          const kindTxt = it && it.kind === "frozen-stuck" ? "挂起组滞卡" : it && it.kind === "failed-in-review" ? "台账失败但卡停复核" : String((it && it.kind) || "异常");
+                          // W-CARDTERM-R2：红条类型随 terminal-stuck（台账终态滞留——backlog 死卡
+                          // 形态治本示众）与僵尸网两类（证据在/三证全无）扩人话映射
+                          const kindTxt = it && it.kind === "frozen-stuck" ? "挂起组滞卡" : it && it.kind === "failed-in-review" ? "台账失败但卡停复核" : it && it.kind === "terminal-stuck" ? "台账终态滞留" : it && it.kind === "zombie-evidence" ? "僵尸卡·证据在" : it && it.kind === "zombie-no-evidence" ? "僵尸卡·三证全无" : String((it && it.kind) || "异常");
                           return '<div class="bh-row"><span class="bh-name">' + esc(String((it && it.text) || "?")) + '</span><span class="bh-kind">' + kindTxt + '</span><span class="bh-hours">' + (Number(it && it.hours) > 0 ? "已 " + it.hours + "h" : "近期") + '</span><span class="bh-note">' + esc(String((it && it.note) || "")) + "</span></div>";
                         }).join("") + "</div></details>"
                     : "";
