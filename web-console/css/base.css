@@ -819,10 +819,30 @@
     .fzone .fz-imgwrap { display: flex; justify-content: center; padding: 4px 0; }
     .fzone .fz-img { max-width: 100%; cursor: zoom-in; border-radius: 6px; }
     .fzone .fz-img.full { max-width: none; width: auto; cursor: zoom-out; } /* 点击放大=原尺寸滚动（适应宽 ↔ 100%） */
+
     /* W-FZONE-R4：窄窗禁浮层——<1200 absolute 覆盖媒体查询整段删除（用户实锤「tab 内容跑到对话面板
        来了，而且切不掉」病灶：浮层盖掉对话区右 54% 含输入框右半）。任何宽度工作区都是真实列
        （对话列 flex 收缩），永不全高盖对话/输入框；极窄 <1000 自动收起由 fzone.js NARROW_W 承载
        （resize 防抖+单向收起不自动弹回——CSS 层无需规则）。 */
+/* ═══ W-NAVBAR（1112 用户拍板·期一）：历史提问索引轨——消息流右缘导航条（WorkBuddy
+       ConversationHistoryNavigation 逆向规格=~/.cc-deck/artifacts/w-fzone-nav.md §三；期一
+       减配：开合 opacity/translate 过渡，免 clip-path 双布局插值+补偿链——期二候选） ═══ */
+    .msg-navbar { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); z-index: 5; display: flex; align-items: flex-end; flex-direction: column; }
+    .msg-navbar[hidden] { display: none; } /* 门槛态零占位（<5 条用户消息 / <880px 视口） */
+    .msg-navbar__lines { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding: 6px 2px; } /* 折叠轨：短横线列（对位 WorkBuddy indicator 12×1.5px） */
+    .msg-navbar__line { width: 12px; height: 1.5px; padding: 0; background: color-mix(in srgb, var(--text) 20%, transparent); border: 0; cursor: pointer; transition: width .18s ease, background-color .18s ease; } /* 悬停命中区偏小——轨线间 gap 5px 由容器补 */
+    .msg-navbar__line:hover, .msg-navbar__line--active { width: 20px; background: var(--text); } /* active 加宽（对位 WorkBuddy 12→20px 同款） */
+    .msg-navbar__panel { position: absolute; top: 50%; right: 0; transform: translateY(-50%) translateX(8px); width: max-content; min-width: 96px; max-width: 320px; max-height: var(--msg-navbar-max-h, 400px); overflow: hidden auto; padding: 8px 0; opacity: 0; visibility: hidden; pointer-events: none; scrollbar-width: thin; background: color-mix(in srgb, var(--surface1) 90%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: .5px solid var(--line-strong); border-radius: var(--radius-lg, 14px); box-shadow: -5px 0 18px var(--panel-shadow, rgba(0, 0, 0, .18)); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%); transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s; } /* 毛玻璃 surface（对位 WorkBuddy popover 90%+blur8+2xl 圆角）+上下渐隐 mask（对位 fade-top/bottom） */
+    .msg-navbar.open .msg-navbar__panel { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(-50%); transition: opacity .2s ease, transform .2s ease, visibility 0s; }
+    .msg-navbar__item { display: flex; align-items: center; justify-content: flex-end; gap: 10px; box-sizing: border-box; width: 100%; min-width: 0; height: 26px; padding: 0 14px 0 12px; background: none; border: 0; color: var(--dim); font-size: var(--fs-B); font-family: inherit; text-align: right; cursor: pointer; }
+    .msg-navbar__item .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .msg-navbar__item .tick { flex: none; width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+    .msg-navbar__item:hover { color: var(--text); }
+    .msg-navbar__item--active { color: var(--text); font-weight: 600; }
+    .msg-navbar__item--active .tick { background: var(--brand); } /* active 短横线/圆点双视图同亮 */
+    @media (max-width: 879px) { .msg-navbar { display: none; } } /* 窄窗零占位双保险（JS 门槛兜 CSS） */
+
+
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); }
     /* #195 件六⑦：会话域 footer 与消息区同色一体（分隔线/独立底退役）+ 左右 22px 与消息列对齐

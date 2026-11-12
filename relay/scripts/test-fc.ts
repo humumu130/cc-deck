@@ -260,6 +260,19 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(fz.includes('data-fz-tree-btn') && fz.includes("function renderTree") && fz.includes("data-fz-tree-open") && web.includes("window.__ccDeck005FzoneArts") && fz.includes("fz-tree-note"), "F17 工作空间树抽屉（件③降级形态：树钮+目录分组渲染+__ccDeck005FzoneArts 数据挂口+降级说明条——relay 无列目录通道声明）");
   ok(fz.includes("(ev.metaKey || ev.ctrlKey)") && fz.includes("parseInt(ev.key, 10)") && fz.includes("n >= 1 && n <= 8"), "F18 ⌘/Ctrl+1..8 直达第 N tab（件⑤批一 P3——Nova 壳内生效口径）");
   ok(web.includes('img.addEventListener("error"') && web.includes("浏览器不支持解码该图片格式"), "F19 heic/tiff 破图兜底（onerror→降级卡+回收 blob url——件⑤批一 P3）");
+
+  // ============ NAV. W-NAVBAR 期一（1112 用户拍板）：历史提问索引轨（WorkBuddy 逆向规格 §三直用） ============
+  {
+    const nav = readFileSync(join(root, "web-console", "js", "navbar.js"), "utf-8");
+    ok(html.includes("js/navbar.js") && nav.includes('"use strict"') && nav.includes("msg-user-row[data-x]"), "NAV1 组件骨架（index-005 挂载+自治组件+数据源=.msg-user-row[data-x] 用户消息行）");
+    ok(nav.includes("MIN_ITEMS = 5") && nav.includes("MIN_VW = 880") && nav.includes("TEXT_MAX = 160") && nav.includes("MAX_H = 400"), "NAV2 门槛与尺寸参数照抄规格 §三（≥5 条用户消息∧≥880px/截 160/高上限 400）");
+    ok(nav.includes('scrollIntoView({ behavior: "smooth", block: "start" })') && !nav.includes("ensureLoaded(") && !nav.includes("ensureRequestLoaded("), "NAV3 点击跳转=scrollIntoView smooth（非虚拟化全挂载——调研定谳砍 WorkBuddy 虚拟加载链，负向锚=虚拟加载调用形态不得出现；注释提及设计依据放行）");
+    ok(nav.includes('addEventListener("scroll", syncActive, { passive: true })') && nav.includes("requestAnimationFrame") && css.includes(".msg-navbar__item--active"), "NAV4 滚动同步（passive 监听+rAF 节流+active 样式类——可视区顶部用户消息高亮）");
+    ok(nav.includes('"历史提问"') && nav.includes('aria-expanded') && nav.includes('"option"') && nav.includes('ev.key === "Escape"'), "NAV5 a11y（aria-label 历史提问+aria-expanded+展开 listbox/option+Escape 关）");
+    ok(nav.includes("ENTER_MS = 60") && nav.includes("LEAVE_MS = 180") && nav.includes("MutationObserver") && nav.includes("msg-echo"), "NAV6 交互参数与自治重建（enter 60ms 防抖/leave 180ms 延迟/MutationObserver 切会话重建/排除 .msg-echo 待发占位）");
+    ok(css.includes(".msg-navbar__panel") && css.includes("backdrop-filter: blur(8px)") && css.includes("mask-image") && css.includes("@media (max-width: 879px)") && css.includes(".msg-navbar[hidden] { display: none; }"), "NAV7 CSS 同构（毛玻璃 panel blur8+渐隐 mask+窄窗 879 零占位双保险+门槛态 hidden 零占位）");
+  }
+
 }
 
 console.log(`\n§P-§A：${pass} ok / ${fail} FAIL`);
