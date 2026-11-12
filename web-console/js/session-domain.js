@@ -5493,7 +5493,7 @@
                     }
                     const batch = ev.target.closest("[data-artifact-batch]");
                     if (batch) { ev.stopPropagation(); runBatch(batch.closest("[data-artifact-group]")); return; }
-                    const artRow = ev.target.closest("#session-body .art-row"); // W-FZONE-B1：点行=工作区 tab（#168 在线预览批一自 av 模态改道；下载仍走行尾钮）
+                    const artRow = ev.target.closest(".tabpage-pane .art-row, #session-body .art-row"); // W-FZONE-B1：点行=工作区 tab（#168 在线预览批一自 av 模态改道；下载仍走行尾钮）；W-TABPAGE-R1（审二 P1）：#session-body 形态随 pane[2] 迁出恒 NULL——扩 .tabpage-pane 形态双选（旧分支保留兼容，委托在 #d-session 级无跨域误命中面——art-row 仅输出物页渲染）
                     if (artRow) { openFzoneTab(String(artRow.dataset.path || "")); return; }
                     // （W-FZONE-B1 入口②消息内路径 token 已改道先行于本段的 .fpath 复制分支——此处不重复设口，防死代码）
                     const del = ev.target.closest("[data-session-delete]");
