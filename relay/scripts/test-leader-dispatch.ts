@@ -293,10 +293,16 @@ async function resetState(): Promise<void> {
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-r1", session_id: "s-r1" } });
   const r1 = await run(LD, ["pg-1", "#213 续派一", "--slug", "reuse", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
   assert(r1.status === 0, "续派一（首建）受理");
+  // W-ORPHANSWEEP 断言-形态对齐（任务书「按实修断言」）：生产形态同 slug 续派前，上单
+  // 锁由 relay 收口边（scanClearWorktreeLocks）/收割清掉；mock 无 relay——rmSync 模拟该
+  // 收口边后再续派（断言语义不变：验「树复用+受理」；锁接管缝=domstep1r1 备案存量债，
+  // 同 5c reuse 前置同款口径，不越界修 wt-lock 语义）。
+  rmSync(join(wtRoot, "cc-deck-w-reuse", ".cc-deck-lock"), { force: true });
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-r2", session_id: "s-r2" } });
   const r2 = await run(LD, ["pg-1", "#213 续派二", "--slug", "reuse", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
   assert(r2.status === 0 && r2.stdout.includes("复用既有 worktree"), "同 slug 续派复用 worktree（幂等）");
-  execSync(`git -C "${repo}" worktree remove "${join(wtRoot, "cc-deck-w-reuse")}"`);
+  // r2 受理即重写哨兵锁（认领边——生产由 relay 清，mock 无人清）→ remove 需 --force 容忍
+  execSync(`git -C "${repo}" worktree remove --force "${join(wtRoot, "cc-deck-w-reuse")}"`);
   orgResponses.push({ status: 200, body: { ok: true, dispatch_id: "did-r3", session_id: "s-r3" } });
   const r3 = await run(LD, ["pg-1", "#213 续派三", "--slug", "reuse", "--repo", repo, "--wait", "0"], { input: GOOD_BRIEF });
   assert(r3.status === 0 && r3.stdout.includes("挂载既有分支"), "分支在 worktree 无 → 挂载既有分支不重置");

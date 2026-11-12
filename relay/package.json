@@ -187,7 +187,8 @@
     "test:cardterm-review3": "tsx scripts/test-cardterm-review3.ts",
     "test:boardv2": "tsx scripts/test-boardv2.ts",
     "test:laneflip": "tsx scripts/test-laneflip.ts",
-    "test:dutybackoffr2": "tsx scripts/test-dutybackoffr2.ts"
+    "test:dutybackoffr2": "tsx scripts/test-dutybackoffr2.ts",
+    "test:leader-dispatch": "tsx scripts/test-leader-dispatch.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

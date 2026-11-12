@@ -152,6 +152,7 @@ fi
 
 # ---------- worktree 基线解析（只读操作，dry-run 也执行以校验可行） ----------
 repo=""; base_ref=""; base_sha=""; wt_state="skip"
+wt_made=0; wt_branch_made=0 # W-ORPHANSWEEP：本进程预建面旗（拒收随撤判据——reuse 既有面恒 0 不误删）
 if [ "$no_wt" = 0 ]; then
   if [ -n "$repo_arg" ]; then repo="$repo_arg"; else
     repo="$(git -C "$anchor" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -337,9 +338,11 @@ if [ "$no_wt" = 0 ] && [ "$dry" = 0 ]; then
   else
     if git -C "$repo" rev-parse --verify --quiet "$branch" >/dev/null 2>&1; then
       git -C "$repo" worktree add "$wt" "$branch" >/dev/null || die 2 "worktree add 失败（分支已存在但挂载失败？核对 git worktree list）"
+      wt_made=1 # W-ORPHANSWEEP：树本进程建（分支先在——拒收撤树保分支）
       echo "leader-dispatch：分支已存在，挂载既有分支（不重置）：$branch"
     else
       git -C "$repo" worktree add -b "$branch" "$wt" "$base_ref" >/dev/null || die 2 "worktree add -b 失败（磁盘满/路径冲突？）"
+      wt_made=1; wt_branch_made=1 # W-ORPHANSWEEP：树+分支均本进程建（拒收全撤）
     fi
     base_sha="$(git -C "$wt" merge-base HEAD "$base_ref" 2>/dev/null || true)"
     [ -n "$base_sha" ] || base_sha="$(git -C "$repo" rev-parse "$base_ref")"
@@ -446,7 +449,7 @@ body="$(printf '%s\n' "$resp" | sed '$d')"
 eval "$(python3 - "$body" "$code" <<'PY'
 import json, sys, shlex
 raw, code = sys.argv[1], sys.argv[2]
-ok = err = did = sid = q = ""
+ok = err = did = sid = q = dup = ""
 try:
     d = json.loads(raw)
     ok = "1" if d.get("ok") is True else ""
@@ -454,9 +457,10 @@ try:
     did = str(d.get("dispatch_id") or "")
     sid = str(d.get("session_id") or "")
     q = "1" if d.get("queued") else ""
+    dup = str(d.get("duplicate_of") or "")
 except Exception as e:
     err = f"响应非 JSON：{e}"
-print(f"api_ok={shlex.quote(ok)}; api_err={shlex.quote(err)}; dispatch_id={shlex.quote(did)}; sid={shlex.quote(sid)}; queued={q}")
+print(f"api_ok={shlex.quote(ok)}; api_err={shlex.quote(err)}; dispatch_id={shlex.quote(did)}; sid={shlex.quote(sid)}; queued={q}; dup={shlex.quote(dup)}")
 PY
 )"
 if [ "$code" != "200" ] || [ -z "$api_ok" ]; then
@@ -465,9 +469,26 @@ if [ "$code" != "200" ] || [ -z "$api_ok" ]; then
   #   不留 120min 假占用（1104 实锤：422 熟手探测拒后锁残留，续派同 slug 撞死锁连环三败）；
   # ②HTTP 000（curl 超时/断连=服务端结果未知，可能已派）：锁保留（worker 将认领此树），
   #   并明示防双开单——盲重试会像 1104 那样同任务双 worker 双开（先查 org status open 派单）。
-  if [ -n "$code" ] && [ "$code" != "000" ] && [ "${did_acquire_lock:-0}" = "1" ]; then
-    rm -f "$wt_lock" && echo "leader-dispatch：服务端明示拒收——worktree 锁随撤（$wt_lock）" >&2
-    handed=1 # W-LDLOCK：已自放——后续 die() 不重复放/不重复提示
+  if [ -n "$code" ] && [ "$code" != "000" ]; then
+    if [ "${did_acquire_lock:-0}" = "1" ]; then
+      rm -f "$wt_lock" && echo "leader-dispatch：服务端明示拒收——worktree 锁随撤（$wt_lock）" >&2
+      handed=1 # W-LDLOCK：已自放——后续 die() 不重复放/不重复提示
+    fi
+    # W-ORPHANSWEEP（domstep1r1 审 B③ 提案实施·#156 清尾）：明示拒=本单未受理——本进程
+    # 预建的 worktree/分支即孤儿（留=磁盘垃圾+同 slug 重派撞自己 2h 锁），随撤+stderr 留痕。
+    # reuse 既有面/relay 认领边不清（wt_made=0 零动作）；HTTP 000 不进本分支（结果未知不清）。
+    if [ "${wt_made:-0}" = "1" ] && [ "$no_wt" = 0 ]; then
+      if git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1; then :; else
+        rm -rf "$wt"; git -C "$repo" worktree prune >/dev/null 2>&1 || true
+      fi
+      if [ "${wt_branch_made:-0}" = "1" ]; then
+        git -C "$repo" branch -D "$branch" >/dev/null 2>&1 || true
+        echo "leader-dispatch：拒单清扫：worktree+分支已随拒收撤除（$wt / $branch）——同 slug 可立即重派" >&2
+      else
+        echo "leader-dispatch：拒单清扫：worktree 已随拒收撤除（分支 $branch 先于本单存在，保留）：$wt" >&2
+      fi
+    fi
+    echo "RESULT ok=false${dup:+ duplicate_of=$dup}"
   fi
   if [ "$code" = "000" ] || [ -z "$code" ]; then
     echo "leader-dispatch：HTTP 000=服务端结果未知（可能已派单）——先 org status 查 open 派单确认，盲重试会双开单（1104 实锤：同任务两 worker 双跑同树）" >&2
