@@ -487,6 +487,45 @@ function staticLockTests(): void {
     "F⑱ observe3 折叠锚预置在册（动态组默认折叠/组头开合/签名位——合流语义终态）");
   assert(cssSrc.includes(".ngrp-fold") && cssSrc.includes(".ngrp .caret"),
     "F⑲ observe3 折叠 CSS 预置在册（复用既有 token 零新色）");
+  // W-BOARDCLEAN-R1（审二 P1 返修）：对象/数组值人话渲染——抽真函数跑真 fixture
+  //（teampolish blockFrom 同范式）：trim 拟裁席位 list（席位数组）+结项 checklist（嵌套
+  // 对象）两生产卡型；负向锚=[object Object] 绝迹+摘要行无裸 JSON；正向锚=数组逐项可见。
+  {
+    const i0 = teamSrc.indexOf("function cfEntryHuman");
+    const i1 = teamSrc.indexOf("function teamAnchorHint");
+    assert(i0 > 0 && i1 > i0, "F⑳0 人话渲染函数簇在册（cfEntryHuman/cfValueHuman/cfSumHuman 顶层纯函数）");
+    if (i0 > 0 && i1 > i0) {
+      const escapeStub = (s: unknown) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const fns = new Function("escape", teamSrc.slice(i0, i1) + "; return { cfEntryHuman, cfValueHuman, cfSumHuman };")(escapeStub) as {
+        cfEntryHuman: (x: unknown) => string;
+        cfValueHuman: (v: unknown) => string;
+        cfSumHuman: (v: unknown) => string;
+      };
+      const trimList = [
+        { session_id: "aabbccdd-1111-2222-3333-444455556666", role: "worker", last_active: 1, reason: "72h 无活动" },
+        { session_id: "eeff0011-7777-8888-9999-000011112222", role: "worker", nick: "夜巡", last_active: 2, reason: "7d 无活动" },
+      ];
+      const html = fns.cfValueHuman(trimList);
+      assert(!html.includes("[object Object]"), "F⑳a 拟裁席位数组无 [object Object]（审二 P1 病灶绝迹）");
+      assert(html.includes("aabbccdd") && html.includes("eeff0011") && html.includes("72h 无活动") && html.includes("夜巡"),
+        "F⑳b 数组逐项可见（每席一行：会话短号+理由+昵称——拟裁清单是首裁闸正文）");
+      assert(html.includes("2 项") && (html.match(/class="cf-item"/g) ?? []).length === 2, "F⑳c 数组计数+逐项行结构（cf-item 每条目一行）");
+      const checklist = { gid: "pg-test", name: "收尾组", openDispatches: [{ id: "d1a2b3c4-1111", tier: "正经立项", status: "running", target: "aabb1122", ts: 1 }], headcount: [{ session_id: "aabb3344-9999", role: "worker" }], openBoardEntries: 3, anchor_dir: "/tmp/x" };
+      const h2 = fns.cfValueHuman(checklist);
+      assert(!h2.includes("[object Object]") && h2.includes("openDispatches") && h2.includes("headcount") && h2.includes("aabb3344") && h2.includes("d1a2b3c4"),
+        "F⑳d 结项核对对象键值子行可见（子键+在编席位短号+未收口派单短号）");
+      const sum1 = fns.cfSumHuman(trimList);
+      const sum2 = fns.cfSumHuman(checklist);
+      assert(sum1 === "2 项" && sum2 === "6 个字段" && !sum1.includes("{") && !sum2.includes("{"),
+        "F⑳e 摘要行短句人话（N 项/N 个字段——无占位符无裸 JSON）");
+      assert(fns.cfValueHuman("abc") === "abc" && fns.cfValueHuman(undefined) === "—" && fns.cfEntryHuman({ weird: 1 }).includes('{"weird":1}'),
+        "F⑳f 标量/空值回归+无据对象 code JSON 兜底（#144 折叠口径：details 内允许原文）");
+      assert(fns.cfEntryHuman([{ id: "zz990011-3333-4444", status: "running", tier: "正经立项" }]).includes("zz990011") && !fns.cfEntryHuman([{ id: "zz990011-3333-4444", status: "running" }]).includes("{"),
+        "F⑳h 嵌套数组逐项（checklist 子值 openDispatches/headcount 不落 JSON 团块——视觉初审实锤）");
+      assert(teamSrc.includes("cfValueHuman(v)") && teamSrc.includes("cfKeySum(k, confirm.payload[k])"),
+        "F⑳g 接线锚：cfKeyLabel 兜底对象分支走 cfValueHuman+摘要行走 cfKeySum（展开内容不压摘要）");
+    }
+  }
 }
 
 async function main(): Promise<void> {

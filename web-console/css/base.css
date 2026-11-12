@@ -3750,6 +3750,7 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
     .task-card details.cf-detail { margin: 6px 0 2px; }
     .task-card details.cf-detail summary { cursor: pointer; color: var(--faint); font-size: var(--fs-B); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .task-card .cf-kv { color: var(--dim); font-size: var(--fs-B); line-height: 1.6; word-break: break-all; }
+    .task-card .cf-kv .cf-item { display: block; padding-left: 10px; word-break: normal; overflow-wrap: anywhere; } /* W-BOARDCLEAN-R1：对象/数组值逐项子行（拟裁席位/结项核对清单；子行恢复词边界换行——视觉初审：break-all 把 running 断成 ru/nning） */
     .task-card .cf-kv code { font-family: var(--mono); font-size: var(--fs-D); color: var(--text-strong); background: var(--surface1); border-radius: 4px; padding: 0 4px; }
 .lane-stale-body { padding: 2px 4px 6px; display: flex; flex-direction: column; gap: 6px; }
 .lane-stale .task-card { opacity: .82; }
