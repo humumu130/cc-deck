@@ -1792,7 +1792,7 @@
                   const sid = typeof x.session_id === "string" && x.session_id.length >= 8 ? x.session_id.slice(0, 8)
                     : typeof x.id === "string" && x.id.length >= 8 ? x.id.slice(0, 8)
                     : typeof x.target === "string" && x.target.length >= 8 ? x.target.slice(0, 8) : "";
-                  if (sid) bits.push("<code>" + sid + "</code>");
+                  if (sid) bits.push("<code>" + escape(sid) + "</code>"); // 审查 P2 纵深修：短号同样过 escape（relay 生成 id 现不可利用，防御面闭环）
                   if (typeof x.reason === "string" && x.reason.trim()) bits.push(escape(x.reason.trim()));
                   if (typeof x.tier === "string" && x.tier.trim()) bits.push(escape(x.tier.trim()));
                   if (typeof x.status === "string" && x.status.trim()) bits.push(escape(x.status.trim()));
