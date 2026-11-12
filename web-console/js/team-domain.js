@@ -1238,7 +1238,25 @@
                     const cfReason = typeof confirm.reason === "string" && confirm.reason.trim() ? escape(confirm.reason) : "";
                     const cfMeta = [cfReason, owner ? escape(owner.name || owner.id) : ""].filter(Boolean).join(" · ");
                     const cfPayloadKeys = confirm.payload && typeof confirm.payload === "object" ? Object.keys(confirm.payload).filter((k) => confirm.payload[k] !== undefined && confirm.payload[k] !== null && confirm.payload[k] !== "") : [];
-                    const cfPayloadLine = cfPayloadKeys.length ? '<div class="inspector-copy">' + escape(JSON.stringify(confirm.payload)) + "</div>" : "";
+                    // W-BOARDCLEAN（1112 用户实锤+#144 军令复发收口）：payload 不再裸 JSON 序列化
+                    // 直入 DOM——键值人话映射（sid 短号/进程 PID/来源分档中文/目录·档位口语），
+                    // 折叠前只显一句摘要行，全量进 <details>（lane-stale 同款原生折叠零 JS；
+                    // 未知键回落「键：值」仍过 escape——非 JSON 形态不违军令）。
+                    const cfKeyLabel = (k, v) => {
+                      if (k === "sid" || k === "session_id") return "会话 <code>" + escape(String(v).slice(0, 8)) + "</code>";
+                      if (k === "cli_pid") return "进程 PID " + (Number(v) ? escape(String(v)) : "0（外部/常驻形态）");
+                      if (k === "origin") return "来源：" + (v === "claim" ? "手动接管（claim）" : v === "auto" ? "自动提名" : escape(String(v)));
+                      if (k === "cwd" || k === "anchor_dir") return "目录 " + escape(String(v));
+                      if (k === "gid") return "项目组 <code>" + escape(String(v).slice(0, 10)) + "</code>";
+                      if (k === "tier") return "立项档：" + escape(String(v));
+                      if (k === "receipt") return "回执文件 <code>" + escape(String(v).split("/").pop() || String(v)) + "</code>";
+                      return escape(String(k)) + "：" + escape(String(v));
+                    };
+                    const cfPayloadRows = cfPayloadKeys.map((k) => '<div class="cf-kv">' + cfKeyLabel(k, confirm.payload[k]) + "</div>").join("");
+                    const cfPayloadSum = cfPayloadKeys.length ? cfPayloadKeys.slice(0, 2).map((k) => cfKeyLabel(k, confirm.payload[k]).replace(/<[^>]+>/g, "")).join(" · ") : "";
+                    const cfPayloadLine = cfPayloadKeys.length
+                      ? '<details class="cf-detail"><summary>参数 · ' + escape(String(cfPayloadSum).slice(0, 60)) + (cfPayloadKeys.length > 2 ? " 等" : "") + "</summary>" + cfPayloadRows + "</details>"
+                      : "";
                     return '<div class="task-card" data-team-confirm="' + escape(confirm.id) + '"><div class="inspector-title"><strong>' + cfTitle + '</strong><span class="tag action">' + (state.accepted.has(confirm.id) ? "等待权威更新" : state.flights.has(confirm.id) ? "提交中" : "待你确认") + "</span></div>" + (cfMeta ? "<p>" + cfMeta + "</p>" : "") + cfPayloadLine + decisionButtons(confirm) + "</div>";
                   }).join("") : "";
                   tSigWrite(query("[data-team-confirms]"), "cf:" + tSigOf(confirmCards), count ? confirmCards : banner("暂无待确认事项")); // #282 三批 M2
@@ -1250,8 +1268,7 @@
                   // PENDING_USER_ACTIONS_UPDATED 触发 render）。
                   // 双落位：检查器栏（窄窗可折叠）+ 看板 pane 底部「待你确认」区上方（恒可见
                   // ——检查器折叠态入口不失踪；点击委托共用 root 一处，两落位同链）
-                  let auBoardHtml = "";
-                  {
+                                  {
                     const auBridge = window.__ccDeck005B4;
                     const auItems = Array.isArray(auBridge && auBridge.pendingUserActions) ? auBridge.pendingUserActions.filter((x) => x && typeof x.kind === "string") : null;
                     const auBlock = query("[data-awaituser-block]");
@@ -1275,16 +1292,20 @@
                           + auRow("等你输入的会话", wN, "session", "去会话列表——等你拍板的会话已浮顶带角标")
                           + auRow("待回填验收单", accN, "acceptance", "打开最早一张待填验收单", firstAcc && typeof firstAcc.entity_id === "string" ? ' data-awaitu-acc="' + escape(firstAcc.entity_id) + '"' : "");
                         tSigWrite(query("[data-awaituser-rows]"), "au:" + tSigOf(auRowsHtml), auRowsHtml || banner("暂无待拍板事项"));
-                        auBoardHtml = '<div class="inspector-block"><div class="inspector-title"><span>等你拍板 · ' + auItems.length + '</span><span class="tag action">' + auItems.length + "</span></div>" + auRowsHtml + "</div>";
+                        // W-BOARDCLEAN（1112 用户实锤）：看板 pane 落位退役——PM 编排聚合块
+                        // （等你拍板/待你确认/验尸单）全收检查器栏（auBlock 既有位恒在，
+                        // 窄窗折叠已有；角标计数不丢）。看板页只渲染任务泳道本体。
                       }
                     }
                   }
                   // W-DESIGNHUB（用户澄清并入）：看板挂载——系统设计图纸区。图纸匹配同项目域
                   // 口径（name/锚点分词 ∩ tags 子串双向）。输出物原第二区已迁独立「输出」tab
                   // （W-OUTTAB，用户 1015 拍板：输出物不放看板里）
+                  // W-BOARDCLEAN（1112 用户实锤）：看板 pane 净化——PM 工作流双落位（聚合入口块
+                  // 聚合入口+待你确认 confirmCards 区）整体迁出，看板页只留任务泳道+设计图纸；
+                  // 确认卡唯一落位=检查器栏「待你确认」（tSigWrite [data-team-confirms] 既有链），
+                  // 等你拍板唯一落位=检查器栏 auBlock（角标计数保留）。
                   const boardFinal = boardMarkup(project)
-                    + auBoardHtml // [W-AWAITUSER] 看板 pane 底部聚合入口（恒可见位；检查器折叠态不失踪）
-                    + (count ? '<div class="inspector-block"><div class="inspector-title"><span>待你确认 · ' + count + '</span></div>' + confirmCards + "</div>" : "")
                     + teamDesignSection(project);
                   tSigWrite(panes[1], "p1:" + tSigOf(boardFinal), boardFinal);
                   const headRefresh = query("[data-team-refresh]"); // 件四②：head 刷新钮禁用态随详情通道/加载中
@@ -2388,7 +2409,7 @@
                       const b4 = window.__ccDeck005B4;
                       if (kind === "confirm") {
                         b4?.clickTab?.("#d-team .segment-bar", "看板");
-                        toast("已切到看板——待你确认区在本页下方");
+                        toast("已切到看板——待确认卡在本页右侧「待你确认」区");
                       } else if (kind === "session") {
                         b4?.railJump?.("session");
                       } else if (kind === "acceptance" && auJump.dataset.awaituAcc) {

@@ -467,6 +467,13 @@ function staticLockTests(): void {
   assert(sessionSrc.includes("awaitu-flag") && sessionSrc.includes("等你拍板"), "F⑫ 会话卡「等你拍板」chip 在册");
   // 团队待办入口 + bridge 数据面 + 壳容器
   assert(teamSrc.includes("PENDING_USER_ACTIONS_UPDATED") && teamSrc.includes("data-awaitu-jump"), "F⑬ 团队域待办分区入口+帧消费在册");
+  // W-BOARDCLEAN（1112 用户实锤）：看板 pane 净化负向锚——PM 工作流双落位（auBoardHtml
+  // 聚合入口+待你确认 confirmCards 区）迁出看板 pane；唯一落位=检查器栏（auBlock 容器+
+  // [data-team-confirms] tSigWrite 链）；payload 人话化（裸 JSON 序列化退役——#144 军令）。
+  assert(!teamSrc.includes("auBoardHtml") && !teamSrc.includes("+ auBoardHtml"), "F⑰a 看板 pane 等你拍板块退役（负向锚——编排入口不占泳道区）");
+  assert(!teamSrc.includes("待你确认 · ' + count") && !teamSrc.includes("'<div class=\"inspector-block\"><div class=\"inspector-title\"><span>待你确认"), "F⑰b 看板 pane 待你确认区退役（确认卡唯一落位=检查器栏）");
+  assert(teamSrc.includes('tSigWrite(query("[data-team-confirms]")') && teamSrc.includes("boardMarkup(project)\n                    + teamDesignSection"), "F⑰c 检查器栏确认卡链保持+看板终拼=泳道+图纸（无编排块）");
+  assert(!teamSrc.includes("escape(JSON.stringify(confirm.payload))") && teamSrc.includes("cf-detail") && teamSrc.includes("cfKeyLabel"), "F⑰d 确认卡 payload 人话化（裸 JSON 退役+键值映射+details 折叠——#144 军令收口）");
   assert(bridgeSrc.includes("pending_user_actions") && bridgeSrc.includes("PENDING_USER_ACTIONS_UPDATED"), "F⑭ bridge 数据面（快照键+增量帧）在册");
   assert(shellSrc.includes("data-awaituser-block"), "F⑮ 活壳检查器「等你拍板」容器在册");
   assert(storeSrc.includes('case "USER_NOTE"') && appSrc.includes("store.onUserNote") && appSrc.includes("notifyAlert(\"等你拍板\""),

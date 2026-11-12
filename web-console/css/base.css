@@ -3745,7 +3745,13 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
 .lane-stale > summary::-webkit-details-marker { display: none; }
 .lane-stale > summary::before { content: "▸ "; }
 .lane-stale[open] > summary::before { content: "▾ "; }
-.lane-stale .lane-stale-body { padding: 2px 4px 6px; display: flex; flex-direction: column; gap: 6px; }
+.lane-stale /* W-BOARDCLEAN（1112 用户实锤）：确认卡参数折叠区——#144 军令「JSON 不可裸见」的
+ * 人话化承载（lane-stale 同族原生 details；摘要行在 summary，键值行小块）。 */
+    .task-card details.cf-detail { margin: 6px 0 2px; }
+    .task-card details.cf-detail summary { cursor: pointer; color: var(--faint); font-size: var(--fs-B); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-card .cf-kv { color: var(--dim); font-size: var(--fs-B); line-height: 1.6; word-break: break-all; }
+    .task-card .cf-kv code { font-family: var(--mono); font-size: var(--fs-D); color: var(--text-strong); background: var(--surface1); border-radius: 4px; padding: 0 4px; }
+.lane-stale-body { padding: 2px 4px 6px; display: flex; flex-direction: column; gap: 6px; }
 .lane-stale .task-card { opacity: .82; }
 
     /* ======================= follow-up UI 批（1029，件C/E/F/G/B CSS 面） ======================= */
