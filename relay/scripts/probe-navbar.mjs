@@ -82,6 +82,23 @@ const s5 = await ev(`(() => { const nb = document.querySelector(".msg-navbar"); 
 const o5 = JSON.parse(s5);
 ok(!o5.open && o5.vis === "hidden", `⑤ Escape 收起（open=${o5.open}/vis=${o5.vis}——open 类移除+panel 隐藏）`);
 
+// ⑦ 折叠线真点击跳转（W-NAVHIT-R1 断言补口——审一 P1 漏网缝：③ 走面板行合成 click()，
+//    折叠线点击路径零覆盖；本条走 CDP Input 真坐标点击，命中层（::before 定位层 z 序）
+//    若盖线即红——合成 click() 不经 hit-test 测不出此类病）
+const foldedClick = await (async () => {
+  const b0 = await ev(`(() => { const b = document.getElementById("session-body"); b.scrollTop = b.scrollHeight; b.dispatchEvent(new Event("scroll")); return b.scrollTop; })()`);
+  await wait(250);
+  const pt = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); if (nb.classList.contains("open")) return { err: "open" }; const l = nb.querySelectorAll(".msg-navbar__line")[3]; if (!l) return { err: "noline" }; const r = l.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })())`));
+  if (pt.err) return { err: pt.err };
+  const hit = await ev(`(() => { const e = document.elementFromPoint(${pt.x}, ${pt.y}); return e ? (String(e.className || "").split(" ")[0] || e.tagName) : "null"; })()`);
+  await send("Input.dispatchMouseEvent", { type: "mousePressed", x: pt.x, y: pt.y, button: "left", clickCount: 1 });
+  await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: pt.x, y: pt.y, button: "left", clickCount: 1 });
+  await wait(900); // smooth scrollIntoView
+  const b1 = await ev(`document.getElementById("session-body").scrollTop`);
+  return { b0, b1, hit, x: Math.round(pt.x), y: Math.round(pt.y) };
+})();
+ok(!foldedClick.err && foldedClick.b0 > 100 && foldedClick.b1 < foldedClick.b0 - 200, `⑦ 折叠线真点击跳转：底(${Math.round(foldedClick.b0 ?? -1)})→点线4(${foldedClick.x ?? "?"},${foldedClick.y ?? "?"})→${Math.round(foldedClick.b1 ?? -1)}（elementFromPoint=${foldedClick.hit}——真命中层点击非合成，::before 盖线即红）`);
+
 // ⑥ 亮色主题截图+console 零错
 await ev(`document.documentElement.setAttribute("data-theme", "light")`);
 await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))`);
