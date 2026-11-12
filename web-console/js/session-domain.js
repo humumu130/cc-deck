@@ -3753,8 +3753,12 @@
                   pane.innerHTML = html;
                   return true;
                 }
+                // W-TABPAGE：任务/输出物/更多三页渲染写点=页内滚动体 .tabpage-scroll（页头行
+                // 是 pane 常驻子，innerHTML 不能冲掉它）；结构缺席（异常防御）回落 pane 根，
+                // paneSigWrite 语义不变。读侧（querySelector 定行/钮）仍走 pane 根=含页头全树，两不误。
+                function tabpageBody(i) { const p = UI && UI.panes && UI.panes[i]; return (p && p.querySelector(":scope > .tabpage-scroll")) || p; }
                 function renderTasks() {
-                  const pane = UI.panes[1];
+                  const pane = tabpageBody(1); // W-TABPAGE：写点=任务页滚动体（页头常驻）
                   const s = curSession();
                   if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   const allTodos = Array.isArray(s.todos) ? s.todos.filter(Boolean) : [];
@@ -3901,7 +3905,7 @@
                   if (mi) mi.textContent = open ? "收起目录" : "展开目录";
                 }
                 function renderArtifacts() {
-                  const pane = UI.panes[2];
+                  const pane = tabpageBody(2); // W-TABPAGE：写点=输出物页滚动体（页头常驻）
                   const s = curSession();
                   if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   const arts = Array.isArray(s.artifacts) ? s.artifacts : [];
@@ -4277,7 +4281,7 @@
 
                 // ---------- 渲染：更多 tab（用量 + 统计键值行，四 tab 制：追加令3 合并原用量/更多） ----------
                 function renderMore() {
-                  const pane = UI.panes[3];
+                  const pane = tabpageBody(3); // W-TABPAGE：写点=更多页滚动体（页头常驻）
                   const s = curSession();
                   if (!s) { paneSigWrite(pane, "nosel", '<div class="readonly-banner">未选择会话</div>'); return; }
                   let html = '<div class="detail-panel-list">';
@@ -5400,6 +5404,8 @@
                     // [data-slim-team] dock 入口卡点击链随 W-TEAMCHIP2 ② dock 退役删除
                     //（进团队域即清未读由团队域 select 侧 __ccDeck005SlimUi.markSeen 承接）；
                     // B11 data-group-toggle 折叠链同批退役（零生产者）。
+                    const tabBack = ev.target.closest("[data-tabpage-back]");
+                    if (tabBack) { ev.stopPropagation(); if (UI.tabs && UI.tabs[0]) UI.tabs[0].click(); return; } // W-TABPAGE 页头「⟵ 返回对话」：与 segment-bar tab0 同链（ctxMeter 跳「更多」同款 tabs.click 口径）
                     const taskHide = ev.target.closest("[data-task-hide]");
                     if (taskHide) { ev.stopPropagation(); const cs = curSession(); if (cs) { hiddenTaskKeys.add(cs.session_id + "#" + taskHide.dataset.taskHide); renderTasks(); } return; } // #B3-9
                     const taskJump = ev.target.closest("[data-task-jump]");
@@ -5487,7 +5493,7 @@
                     }
                     const batch = ev.target.closest("[data-artifact-batch]");
                     if (batch) { ev.stopPropagation(); runBatch(batch.closest("[data-artifact-group]")); return; }
-                    const artRow = ev.target.closest("#session-body .art-row"); // W-FZONE-B1：点行=工作区 tab（#168 在线预览批一自 av 模态改道；下载仍走行尾钮）
+                    const artRow = ev.target.closest(".tabpage-pane .art-row, #session-body .art-row"); // W-FZONE-B1：点行=工作区 tab（#168 在线预览批一自 av 模态改道；下载仍走行尾钮）；W-TABPAGE-R1（审二 P1）：#session-body 形态随 pane[2] 迁出恒 NULL——扩 .tabpage-pane 形态双选（旧分支保留兼容，委托在 #d-session 级无跨域误命中面——art-row 仅输出物页渲染）
                     if (artRow) { openFzoneTab(String(artRow.dataset.path || "")); return; }
                     // （W-FZONE-B1 入口②消息内路径 token 已改道先行于本段的 .fpath 复制分支——此处不重复设口，防死代码）
                     const del = ev.target.closest("[data-session-delete]");
@@ -5775,7 +5781,36 @@
                     }
                   }
                   // workspace 改 grid 三行两列——head 跨列/body+rail 同排/footer 跨列，禁 fixed）
-                  for (let i = 1; i < panes.length; i++) { panes[i].removeAttribute("data-stub"); panes[i].textContent = ""; }
+                  // W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 pane 迁出
+                  // #session-body（消息滚动容器）——上移 .workspace 直接子级且前置于 body（CSS
+                  // 兄弟选择器 .tabpage-pane.active ~ #session-body 让位的前提），激活时占满
+                  // 会话列 head 之下整幅、自有滚动容器=独立页面感；切换仍由地基 wireSegmentTabs
+                  // 的 .active 类承载（零新增 JS 切换钩）。每页常驻两件子：轻量页头行（页名+
+                  // 「⟵ 返回对话」冗余回锚，segment-bar 仍是切换器）+滚动体 .tabpage-scroll
+                  //（渲染写点 tabpageBody 单口指到这里——paneSigWrite innerHTML 冲不掉页头）。
+                  for (let i = 1; i < panes.length; i++) {
+                    const p = panes[i];
+                    p.removeAttribute("data-stub");
+                    p.classList.add("tabpage-pane");
+                    const name = ((UI.tabs[i] && (UI.tabs[i].querySelector(".tab-txt") || UI.tabs[i]))?.textContent || "").trim();
+                    const head = document.createElement("div");
+                    head.className = "tabpage-head";
+                    const tTitle = document.createElement("strong");
+                    tTitle.className = "tabpage-title";
+                    tTitle.textContent = name;
+                    const back = document.createElement("button");
+                    back.type = "button";
+                    back.className = "tabpage-back";
+                    back.setAttribute("data-tabpage-back", "1");
+                    back.title = "返回对话";
+                    back.setAttribute("aria-label", "返回对话");
+                    back.textContent = "⟵ 返回对话";
+                    head.append(tTitle, back);
+                    const scroll = document.createElement("div");
+                    scroll.className = "tabpage-scroll";
+                    p.replaceChildren(head, scroll);
+                    workspace.insertBefore(p, body); // DOM 序=panes 在 #session-body 之前（~ 选择器前提）；dock/agbox/footer 兄弟不动（非对话页保留=改前同行为）
+                  }
                   setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
                   // B12 过程/思考开关：head-actions 点击由 #164 的 UI.section 域内委托统一接
                   // （4201 convTgl 分支，自带 stopPropagation）。本处曾再绑一层容器级委托——

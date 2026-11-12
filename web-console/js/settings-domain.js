@@ -870,7 +870,12 @@ function connectLan(ctx) {
         document.querySelectorAll(".segment-bar, .mobile-detail-tabs, .mobile-team-tabs").forEach((bar) => {
           if (bar.closest(".settings-panel") || bar.closest("#d-settings")) return; // ⑥c-1：设置域已由 setupSettingsDomain 重建六面板，不让位 stub。件十四（2026-10-10）：原排除只查 .settings-panel——设置域 head 的「连接/设备/配对记录」segment-bar 在 workspace-head 不在 panel 内，漏网被 stub 包摄：六面板被裹进 originalPane + 建「×× · 此面板即将开放」占位 pane 与真面板争 body（切连接卡子 tab 再切设置卡 → 别卡第三列显示「即将开放」占位，用户实测复现）；排除补 #d-settings 根修
           const buttons = [...bar.querySelectorAll("button")];
-          const host = bar.closest(".workspace, .mobile-screen");
+          // W-TABPAGE 修复（R4 断链）：#d-session 的 segment-bar 在 header.workspace-head 内——
+          // R4（#128）将会话 head 迁出 .workspace 到 .session-detail 级后，closest(".workspace")
+          // 落空 → 本域包摄+wireSegmentTabs 整体跳过 → 四 tab 死钮、任务/输出物/更多内容全数
+          // 内联堆进消息流（用户「全都堆在绘画面板上」实锤来源）。补 .session-detail 解析位，
+          // 恢复 R4 前的包摄语义（body 仍唯一定位 .workspace-body=#session-body）。
+          const host = bar.closest(".workspace, .mobile-screen, .session-detail");
           const body = host?.querySelector(".workspace-body, .mobile-content");
           if (!body || !buttons.length) return;
           const initialIndex = Math.max(0, buttons.findIndex((button) => button.classList.contains("active")));

@@ -210,7 +210,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(fz.includes("auxclick") && fz.includes("ccd_fzone_w") && !fz.includes("ccd_fzone_open") && !fz.includes("setItem(OPEN_KEY") && fz.includes('localStorage.getItem(W_KEY)'), "F3 中键关闭+拖宽 localStorage 宽度记忆（R3 口径 440/clamp[340,800]；P2 批五：OPEN_KEY 全退役负向锚——常量/写点零残留防回潮）");
   ok(web.includes("window.__ccDeck005FzoneLoad = loadFzoneContent") && web.includes("fz-code-n") && web.includes("fz-md") && web.includes("fz-img") && web.includes("2 * 1048576") && web.includes("data-fz-retry") && web.includes("if (!el.isConnected) return;"), "F4 三格式加载器（md=mdHtml 同款/代码=行号槽+synHtml/图片=blob+点击原尺寸；>2MB 头部截断；重试钮；关 tab 弃置回包守卫）");
   ok(web.includes("SHEET_TEXT_EXT.has(ext)") && web.includes('new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"])') && !web.includes('AV_TEXT_EXTRA.has(ext) || kind === "sheet"'), "F4b sheet 桶二进制守卫（xlsx/xls/numbers/plist/db/sqlite 不进文本渲染落兜底卡——文本安全子集放行，W-P2TAIL 修 fzone-b1-review-a P2；负向锚=整桶放行旧串不得回归）");
-  ok(web.includes("openFzoneTab(String(artRow.dataset.path") && web.includes("openFzoneTab(afView.dataset.afView") && web.includes('const fp = ev.target.closest(".fpath")') && web.includes("frefResolvePath(String(fp.dataset.p)") && web.includes("if (fzReg) { openFzoneTab(fzReg); return; }"), "F5 点击入口三轨（输出物行整行/眼睛钮/消息文本路径 token 改道先行于复制兜底——批一自 av 模态改道；原死代码口已除）");
+  ok(web.includes('.tabpage-pane .art-row, #session-body .art-row') && web.includes("openFzoneTab(String(artRow.dataset.path") && web.includes("openFzoneTab(afView.dataset.afView") && web.includes('const fp = ev.target.closest(".fpath")') && web.includes("frefResolvePath(String(fp.dataset.p)") && web.includes("if (fzReg) { openFzoneTab(fzReg); return; }"), "F5 点击入口三轨（输出物行整行/眼睛钮/消息文本路径 token 改道先行于复制兜底——批一自 av 模态改道；原死代码口已除；W-TABPAGE-R1：行选择器双形态=tabpage 迁移后 #session-body 恒 NULL 断链修）");
   ok(web.includes('p.endsWith("/" + t)') && web.includes("p.split(/[\\\\/]/).pop() === base"), "F6 登记面对齐守卫（basename/尾段命中才开——未登记路径零动作防探测）");
   ok(css.includes(".fzone .wtab.on::after") && css.includes(".fz-code") && css.includes(".fz-sash") && css.includes(".session-shell"), "F7 CSS（R4：brand 顶条/行号双列/4px col-resize sash/session-shell 行容器）");
   ok(web.includes("function loadAvContent") && web.includes("av-md"), "F8 av 模态管线保留（批一改道不拆——下载/定位钮链不破，批二处置）；md 渲染消息同款复用零分叉");
@@ -272,6 +272,23 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(nav.includes('"历史提问"') && nav.includes('aria-expanded') && nav.includes('"option"') && nav.includes('ev.key === "Escape"'), "NAV5 a11y（aria-label 历史提问+aria-expanded+展开 listbox/option+Escape 关）");
     ok(nav.includes("ENTER_MS = 60") && nav.includes("LEAVE_MS = 180") && nav.includes("MutationObserver") && nav.includes("msg-echo"), "NAV6 交互参数与自治重建（enter 60ms 防抖/leave 180ms 延迟/MutationObserver 切会话重建/排除 .msg-echo 待发占位）");
     ok(css.includes(".msg-navbar__panel") && css.includes("backdrop-filter: blur(8px)") && css.includes("mask-image") && css.includes("@media (max-width: 879px)") && css.includes(".msg-navbar[hidden] { display: none; }"), "NAV7 CSS 同构（毛玻璃 panel blur8+渐隐 mask+窄窗 879 零占位双保险+门槛态 hidden 零占位）");
+  }
+
+  // ============ TAB. W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 tab 独立整页 ============
+  {
+    ok(web.includes('p.classList.add("tabpage-pane")') && web.includes('scroll.className = "tabpage-scroll"') && web.includes("p.replaceChildren(head, scroll)") && web.includes("tabpageBody(1)") && web.includes("tabpageBody(2)") && web.includes("tabpageBody(3)") && web.includes('function tabpageBody(i)'), "TAB1 三 pane 迁出 #session-body（ready 收编段：tabpage 类+页头/滚动体两件常驻子；三渲染器写点走 tabpageBody 单口=.tabpage-scroll——页头行不被 paneSigWrite innerHTML 冲掉）");
+    {
+      // 字符串序锚：panes 收编（body.children）必须先于迁移（insertBefore(p, body)）——
+      // 且迁移落点=workspace 在 body 之前（CSS ~ 兄弟选择器让位前提）
+      const iGrab = web.indexOf("const panes = [...body.children]");
+      const iMove = web.indexOf("workspace.insertBefore(p, body)");
+      ok(iGrab >= 0 && iMove > iGrab, "TAB2 迁移时序与落点（panes 先从 #session-body 收编再前插 .workspace——DOM 序=三 pane 在 #session-body 之前）");
+    }
+    ok(web.includes('back.setAttribute("data-tabpage-back", "1")') && web.includes('back.textContent = "⟵ 返回对话"') && web.includes('const tabBack = ev.target.closest("[data-tabpage-back]");') && web.includes("if (UI.tabs && UI.tabs[0]) UI.tabs[0].click(); return;"), "TAB3 页头「⟵ 返回对话」快捷钮（section 委托分支→segment-bar tab0 同链——ctxMeter 跳「更多」同款 tabs.click 口径）");
+    ok(css.includes("#d-session .workspace > .tabpage-pane.active { display: flex; flex-direction: column; flex: 1 1 0; }") && css.includes("#d-session .workspace > .tabpage-pane.active ~ #session-body { display: none; }") && css.includes(".tabpage-scroll { flex: 1 1 auto; min-height: 0; overflow: auto;"), "TAB4 独立整页 CSS（激活=flex 列占满 head 之下整幅+own scroll 滚动体+非对话页 #session-body 兄弟选择器整列让位——零 JS 切换钩）");
+    ok(css.includes(".tabpage-head { flex: 0 0 auto;") && css.includes(".tabpage-head .tabpage-back") && !html.includes("tabpage"), "TAB5 页头行样式（轻量页名+回锚钮）+静态 HTML 零 tabpage 标记负向锚（页面结构纯 JS 装配——index-005 的 workspace 四件套 body/dock/agbox/footer 骨架不动）");
+    ok(web.includes('section.querySelector(".segment-bar")?.addEventListener("click"') && web.includes("S.tabChatMemo = { sid: S.selected, top: el.scrollTop"), "TAB6 #124 往返滚动 memo 原样（捕获段记账+回对话恢复链零改——#session-body 让位后的 scrollTop clamp 正是该 memo 护的场景）");
+    ok(readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8").includes('bar.closest(".workspace, .mobile-screen, .session-detail")'), "TAB7 R4 断链修复（setupStubTabs host 解析补 .session-detail——#128 R4 将会话 head 迁出 .workspace 后 closest 落空，包摄+wireSegmentTabs 整体跳过=四 tab 死钮+内容内联堆进消息流的既有断点；负向锚=裸 .workspace/.mobile-screen 双选旧串不得独存）");
   }
 
 }
