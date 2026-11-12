@@ -204,32 +204,35 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(detail.includes("isRealWorking(s) && s.turn_started_at ? fmtElapsed"), "A19b expo 详情 turnRun 待命不走秒");
 
   // ============ F. W-FZONE-B1 文件工作区批一（1111 拍板 B：tab 骨架+三格式+点击链路） ============
-  // W-FZONE-R3：F1/F3/F7/F9 锚随布局层照抄 WorkBuddy 迁移改版（session-split 窗口级行容器+4px sash+440/clamp[340,800]）
-  ok(html.includes('class="session-split"') && html.includes('id="fzone"') && html.includes('js/fzone.js'), "F1 容器骨架（session-split 窗口级行容器+#fzone 面板+fzone.js 挂载——R3 WorkBuddy __body 同构）");
+  // W-FZONE-R4：F1/F7/F9 锚随第四轮迁移改版（session-shell 行容器+fzone=会话面板整列的兄弟+冷启必收起+窄窗禁浮层）
+  ok(html.includes('class="session-shell"') && html.includes('id="fzone"') && html.includes('js/fzone.js'), "F1 容器骨架（R4 session-shell 行容器+#fzone 面板+fzone.js 挂载——工作区=app 内容区级右列）");
   ok(fz.includes("data-fz-tab") && fz.includes("data-fz-close") && fz.includes("const hit = state.tabs.find((t) => t.id === id);") && fz.includes("return; } // 聚焦已有 tab"), "F2 tab 系统（切换/关闭/同文件重开=聚焦不重复——任务书铁则）");
   ok(fz.includes("auxclick") && fz.includes("ccd_fzone_w") && fz.includes("ccd_fzone_open") && fz.includes('localStorage.getItem(W_KEY)'), "F3 中键关闭+拖宽/开合 localStorage 记忆（R3 口径：缺省 440、clamp[340,800]——WorkBuddy useState(440) 同构）");
   ok(web.includes("window.__ccDeck005FzoneLoad = loadFzoneContent") && web.includes("fz-code-n") && web.includes("fz-md") && web.includes("fz-img") && web.includes("2 * 1048576") && web.includes("data-fz-retry") && web.includes("if (!el.isConnected) return;"), "F4 三格式加载器（md=mdHtml 同款/代码=行号槽+synHtml/图片=blob+点击原尺寸；>2MB 头部截断；重试钮；关 tab 弃置回包守卫）");
   ok(web.includes("SHEET_TEXT_EXT.has(ext)") && web.includes('new Set(["csv", "tsv", "json", "jsonl", "jsonc", "ndjson", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "properties"])') && !web.includes('AV_TEXT_EXTRA.has(ext) || kind === "sheet"'), "F4b sheet 桶二进制守卫（xlsx/xls/numbers/plist/db/sqlite 不进文本渲染落兜底卡——文本安全子集放行，W-P2TAIL 修 fzone-b1-review-a P2；负向锚=整桶放行旧串不得回归）");
   ok(web.includes("openFzoneTab(String(artRow.dataset.path") && web.includes("openFzoneTab(afView.dataset.afView") && web.includes('const fp = ev.target.closest(".fpath")') && web.includes("frefResolvePath(String(fp.dataset.p)") && web.includes("if (fzReg) { openFzoneTab(fzReg); return; }"), "F5 点击入口三轨（输出物行整行/眼睛钮/消息文本路径 token 改道先行于复制兜底——批一自 av 模态改道；原死代码口已除）");
   ok(web.includes('p.endsWith("/" + t)') && web.includes("p.split(/[\\\\/]/).pop() === base"), "F6 登记面对齐守卫（basename/尾段命中才开——未登记路径零动作防探测）");
-  ok(css.includes(".fzone .wtab.on::after") && css.includes(".fz-code") && css.includes(".fz-sash") && css.includes(".session-split"), "F7 CSS（R3 WorkBuddy 同构：brand 顶条/行号双列/4px col-resize sash/session-split 行容器）");
+  ok(css.includes(".fzone .wtab.on::after") && css.includes(".fz-code") && css.includes(".fz-sash") && css.includes(".session-shell"), "F7 CSS（R4：brand 顶条/行号双列/4px col-resize sash/session-shell 行容器）");
   ok(web.includes("function loadAvContent") && web.includes("av-md"), "F8 av 模态管线保留（批一改道不拆——下载/定位钮链不破，批二处置）；md 渲染消息同款复用零分叉");
-  ok(html.includes("data-fzone-toggle") && fz.includes('document.addEventListener("click"') && fz.includes("[data-fzone-toggle]") && fz.includes("classList.toggle(\"on\", on)") && css.includes("@media (max-width: 1199px)") && css.includes(".session-split > .fzone") && fz.includes("空 · 点消息里的文件"), "F9 常驻开关钮（收起后唯一再展开入口+on 态回显）+窄窗浮层（<1200 右缘覆盖零挤压+sash 隐藏——R3 锚 session-split）+空态提示卡");
-  // W-FZONE-R3（1111 用户军令三）：布局层级照抄 WorkBuddy——fzone 不在会话详情容器内的负向锚
+  ok(html.includes("data-fzone-toggle") && fz.includes('document.addEventListener("click"') && fz.includes("[data-fzone-toggle]") && fz.includes("classList.toggle(\"on\", on)") && !css.includes("max-width: 1199px") && !css.includes(".session-split > .fzone") && fz.includes("空 · 点消息里的文件") && fz.includes("NARROW_W"), "F9 常驻开关钮（收起后唯一再展开入口+on 态回显）+R4 窄窗禁浮层（<1200 覆盖媒体查询负向锚+极窄收起改由 fzone.js NARROW_W 单向承载）+空态提示卡");
+  // W-FZONE-R4（1112 用户四轮打回·第四轮定谳「在外面，在右侧」）：fzone=app 内容区级右列——不在会话面板（session-detail）内的层级锚
   {
-    const iSplit = html.indexOf('class="session-split"'), iFooter = html.indexOf("</footer>", iSplit),
-      iSash = html.indexOf('class="fz-sash"'), iFz = html.indexOf('<aside class="fzone"'), iWsClose = html.indexOf("</section>", iSplit);
-    ok(iSplit >= 0 && iSplit < iFooter && iFooter < iWsClose, "R3-1 会话面板整体（含 footer 输入框）在 session-split 内=窗口级让位（WorkBuddy __main 同构——head/标签行/消息/输入框单列）");
-    ok(iWsClose >= 0 && iWsClose < iSash && iSash < iFz, "R3-2 fzone/sash 在会话面板闭标签之后=不在会话详情容器内（任务书层级负向锚——字符串序锁 sash+fzone 均为 workspace 的窗口级兄弟）");
-    ok(!html.includes("workspace-main"), "R3-3 旧 workspace-main 行容器退役（分栏藏在会话详情容器内的病灶结构不得回归）");
-    ok(fz.includes('Math.max(340, Math.min(800') && fz.includes(": 440; // 缺省 440") && fz.includes('document.querySelector("#d-session .fz-sash[data-fz-resize]")') && fz.includes('document.body.style.userSelect = "none";') && fz.includes("sash.hidden = !on;"), "R3-4 WorkBuddy 拖拽/宽度同构（clamp[340,800]+默认 440+sash 窗口级查找+拖拽 body cursor/userSelect 锁+sash 随开合联动）");
-    ok(css.includes("width: 4px") && css.includes("cursor: col-resize") && css.includes(".fz-sash[hidden] { display: none; }") && css.includes("width: 440px") && css.includes(".session-split > .fz-sash { display: none; }"), "R3-5 CSS 同构锚（__detail-sash 4px col-resize+hover 品牌色 60%+hidden 互斥；__detail-panel 定宽 440；窄窗 sash 消失=WorkBuddy is-mobile 同款）");
-    // W-FZONE-R3-R1（审三 P2 返修）：顶栏回归 WorkBuddy 原版横跨——head（=CollabTopBar+__header）在 session-detail 纵列内 split 之上
+    const iShell = html.indexOf('class="session-shell"'), iShellEnd = html.indexOf("</div><!-- /.session-shell -->"),
+      iDetail = html.indexOf('class="session-detail"'), iDetailEnd = html.indexOf("</div><!-- /.session-detail -->"),
+      iSash = html.indexOf('class="fz-sash"'), iFz = html.indexOf('<aside class="fzone"');
+    ok(iDetail >= 0 && iDetailEnd >= 0 && iDetailEnd < iSash && iSash < iFz, "R4-1 fz/sash 不在 session-detail 内（会话面板闭标签在 sash/fzone 之前——用户口径①②④「工作区不在会话面板里面」字符串序锚）");
+    ok(iShell >= 0 && iShell < iDetail && iDetail < iShellEnd && iFz < iShellEnd, "R4-2 sash 与 session-detail 同为 session-shell 子级（#d-session 网格第二列 occupant=session-shell——工作区整列独立于会话面板，如会话列表是左列）");
+    ok(!html.includes('class="session-split"'), "R4-2b session-split 行容器退役负向锚（R3 形态不得回归）");
+    ok(!html.includes("workspace-main"), "R4-3 旧 workspace-main 行容器退役（分栏藏在会话详情容器内的病灶结构不得回归）");
+    ok(fz.includes('Math.max(340, Math.min(800') && fz.includes(": 440; // 缺省 440") && fz.includes('document.querySelector("#d-session .fz-sash[data-fz-resize]")') && fz.includes('document.body.style.userSelect = "none";') && fz.includes("sash.hidden = !on;"), "R4-4 拖拽/宽度同构保留（clamp[340,800]+默认 440+sash 查询迁移后仍中+拖拽 body cursor/userSelect 锁+sash 随开合联动）");
+    ok(css.includes("width: 4px") && css.includes("cursor: col-resize") && css.includes(".fz-sash[hidden] { display: none; }") && css.includes("width: 440px") && css.includes(".session-shell > .session-detail"), "R4-5 CSS 锚（__detail-sash 4px col-resize+hidden 互斥+__detail-panel 定宽 440+session-shell>session-detail 会话列 flex 让位）");
+    // R4-6：会话头只在会话列（用户口径④「head 压工作区」根治）——head 在 session-detail 内、会话体之上
     {
-      const iDetail = html.indexOf('class="session-detail"'), iHead = html.indexOf('<header class="workspace-head"'), iHeadEnd = html.indexOf("</header>", iHead), iWsOpen = html.indexOf('<section class="workspace"');
-      ok(iDetail >= 0 && iDetail < iHead && iHeadEnd >= 0 && iHeadEnd < iSplit, "R3-6 顶栏横跨原版（审三 P2）：head 在 session-detail 内、session-split 之上（fzone 顶从 head 下缘起=__detail-panel 顶从 __header 下起）——R3 偏差形态「head 只在会话列/面板顶到窗口顶」不得回归");
-      ok(iHeadEnd < iWsOpen, "R3-6b head 不在会话体容器内（workspace 只包消息/状态条/输入框——防「fzone 嵌消息容器」类病灶的镜像锁）");
+      const iHead = html.indexOf('<header class="workspace-head"'), iHeadEnd = html.indexOf("</header>", iHead), iWsOpen = html.indexOf('<section class="workspace"');
+      ok(iDetail < iHead && iHeadEnd >= 0 && iHeadEnd < iDetailEnd && iHeadEnd < iWsOpen, "R4-6 会话头只在会话列：head 在 session-detail 内、会话体之上（head.right≤session-detail.right 不横跨工作区；workspace 只包消息/状态条/输入框）");
     }
+    ok(!css.includes("max-width: 1199px") && !css.includes(".session-split > .fzone") && !css.includes("top: 0; right: 0; bottom: 0; z-index: 7"), "R4-7 窄窗禁浮层负向锚（<1200 覆盖媒体查询+fzone absolute 浮层规则不得回归——任何宽度都是真实列，用户口径④「tab 内容跑到对话面板来了」病灶）");
+    ok(!fz.includes("if (remembered) setOpen(true") && fz.includes("const NARROW_W = 1000") && fz.includes("narrow && !wasNarrow && !root.hidden"), "R4-8 冷启必收起（OPEN_KEY 自动展开不得回潮——用户口径④「切不掉」病灶）+极窄 <1000 单向自动收起（窄域内 resize 不抢用户手动再开）");
   }
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============
