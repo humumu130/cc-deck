@@ -233,6 +233,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     }
     ok(!css.includes("max-width: 1199px") && !css.includes(".session-split > .fzone") && !css.includes("top: 0; right: 0; bottom: 0; z-index: 7"), "R4-7 窄窗禁浮层负向锚（<1200 覆盖媒体查询+fzone absolute 浮层规则不得回归——任何宽度都是真实列，用户口径④「tab 内容跑到对话面板来了」病灶）");
     ok(!fz.includes("if (remembered) setOpen(true") && fz.includes("const NARROW_W = 1200") && fz.includes("narrow && !wasNarrow && !root.hidden"), "R4-8 冷启必收起（OPEN_KEY 自动展开不得回潮——用户口径④「切不掉」病灶）+窄域 <1200 单向自动收起（R4-R1 刀二 1000→1200——审二第五轮直答①「细条可用」带；窄域内 resize 不抢用户手动再开）");
+    ok(fz.includes("const CHAT_FIT = 442") && fz.includes("function availMax") && fz.includes("Math.min(800, availMax()") && fz.includes("if (on) applyW(readW())") && fz.includes("if (!root.hidden) applyW(readW())") && fz.includes('toast("窗口过窄，文件工作区已收起'), "R4-9 极窄再开自洽+R4-R1 刀二/刀三合流：clampW 并入可用空间上限 availMax（视口−queue 右缘含 rail−sash−CHAT_FIT 442=审 B CHAT_MIN 360 列保底+列内 chrome≈68 实测超集）+setOpen 展开与 resize 双口重钳（变宽回弹记忆宽）+自动收起 toast 示众（静默再收根治）");
   }
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============

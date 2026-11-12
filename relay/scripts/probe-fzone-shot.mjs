@@ -269,11 +269,27 @@ await shot("fz-r4r1-1150-guard");
 await send("Emulation.setDeviceMetricsOverride", { width: 960, height: 940, deviceScaleFactor: 1, mobile: false });
 await wait(800); // resize 防抖 120ms+缓冲
 const sX = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(!sX.hidden && sX.w >= 339 && sX.w <= 341, `深窄 960 开态护栏重钳至面板下限（hidden=${sX.hidden}，面板 ${Math.round(sX.w)}px=340 下限——护栏值 209<下限时下限优先；对话列 381px≥360 保底；同窄域无边沿不误收；939-1071 手动再开带 composer 仍挤=面板下限语义备案）`);
+ok(!sX.hidden && sX.w >= 339 && sX.w <= 341, `深窄 960 开态护栏重钳至面板下限（hidden=${sX.hidden}，面板 ${Math.round(sX.w)}px=340 下限——护栏值 217<下限时下限优先；对话列 319px 保底；同窄域无边沿不误收；939-1071 手动再开带 composer 仍挤=面板下限语义备案）`);
+
+// ⑫c-2 极窄再开自洽（审 B P1-2 修锚，R4-R1 合流保留）：960 视口+预置记忆宽 800 → 头部钮再开 →
+// 面板被 availMax 重钳（CHAT_FIT 442 口径下 960 档 avail=217→340 下限）、会话列 ≥300 不被压 0
+await ev('localStorage.setItem("ccd_fzone_w", "800")');
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(400); // 先收（本序 960 下面板为开态——归位到 ⑫c-2 的「收起后再开」前提）
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(600);
+const sRe = await ev(`(() => { const z = document.getElementById("fzone"); const d = document.querySelector("#d-session .session-detail"); const c = document.querySelector("#d-session .composer-input"); return JSON.stringify({ hidden: z.hidden, zw: Math.round(z.getBoundingClientRect().width), dw: Math.round(d.getBoundingClientRect().width), cw: Math.round(c.getBoundingClientRect().width) }); })()`);
+const rRe = JSON.parse(sRe);
+ok(!rRe.hidden, "极窄 960：头部钮再开生效（单向收起不剥夺用户主动再开——头部钮可再开承诺）");
+ok(rRe.zw <= 341 && rRe.dw >= 300 && rRe.cw > 150, `极窄 960：记忆宽 800 被 availMax（queue 右缘含 rail 实算）重钳为 ${rRe.zw}px（≤341=min-width 硬限）、会话列 ${rRe.dw}px ≥300 不被压 0、输入框 ${rRe.cw}px 完整（P1-2 修）`);
+await shot("fz-r4-narrow-reopen");
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(400); // 用户主动收起——恢复「跨回不弹回」断言前提（面板关着跨出窄域）
 await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 940, deviceScaleFactor: 1, mobile: false });
 await wait(700);
 const sW2 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
-ok(!sW2.hidden && sW2.w <= 800, `跨回宽窗 1440：手动开的面板不弹收（hidden=${sW2.hidden}——单向只收不弹）+宽度回钳（${Math.round(sW2.w)}px ≤ 800）`);
+ok(sW2.hidden && sW2.tabs.length >= 1, "跨回宽窗 1440：不自动弹回（单向收起——头部钮可再开）");
+// R4-R1 刀三补充：跨回后手动再开 → 记忆 800 被 avail 钳（1440 档 avail=1440-297-4-442=697——保 composer 全按钮零溢出；≥1561 窗才放满 800）
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(500);
+const sW3 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+ok(!sW3.hidden && sW3.w >= 690 && sW3.w <= 800, `跨回再开：宽度回钳记忆档（${Math.round(sW3.w)}px=1440 档 avail≈697——护栏上限随窗宽放坡，composer 全按钮优先于记忆宽）`);
 
 // ⑫d 冷启 reload：预置 OPEN_KEY=1（模拟用户上次开着离开）→ 冷启必收起（R4 病灶「空面板冷启复活=切不掉」根除）
 await ev('localStorage.setItem("ccd_fzone_open", "1")');

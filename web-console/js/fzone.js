@@ -28,32 +28,29 @@
   // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
   // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
   // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
-  function clampW(w) {
-    // W-FZONE-R4-R1 刀三（审二 P2-① 1000px 档对话列 215px+composer 按钮溢出实录）：对话列保底
-    // 护栏——可用面板宽 = innerWidth − 队列宽（--queue-w 实算，缺省 235）− 512（对话列保底储备）
-    // − 4（sash），与 800/72vw 并列取小。储备 512=实测口径：composer 按钮行最小内容宽 366px
-    //（CDP 逐宽扫描 scrollWidth 下限）+ 会话区左右内边距/边距 chrome ≈130px + 余量 16——任务书
-    // 草案值 360 是「列宽」口径，列内 chrome 吃掉后 composer 实得 ~230px 仍溢出，故按验收目标
-    // （1150 景按钮行零溢出）取实测值。效果：≥1071px 窗宽面板全容纳按钮行；极窄（护栏值 <340
-    // 面板下限）下限优先——939-1071 带手动再开 composer 仍挤（面板 340 下限语义保留，已备案），
-    // <1200 跨入已自动收起。
-    let queueW = 235;
-    try {
-      const screenEl = document.querySelector(".desktop-screen");
-      const raw = screenEl ? getComputedStyle(screenEl).getPropertyValue("--queue-w") : "";
-      const n = Number(String(raw).replace(/px/i, "").trim());
-      if (Number.isFinite(n) && n > 0) queueW = n;
-    } catch (_) {}
-    const guard = window.innerWidth - queueW - 512 - 4;
-    return Math.max(340, Math.min(800, Math.round(window.innerWidth * 0.72), guard, w));
+  // W-FZONE-R4 P1-2 修（审 B）：浮层退役后 72vw 护栏在 <1111px 区间护不住（0.72*1111≈800>可用）——
+  // 真实列时代并入可用空间上限 availMax（视口 − queue 右缘(含 rail 实算) − sash − 会话列保底储备）：
+  // 极窄窗「头部钮可再开」与再开可用性自洽（会话列不被 flex-shrink:0 面板压到 0）。
+  // W-FZONE-R4-R1 刀三（审二 P2-① 1000px 档对话列 215px+composer 按钮溢出实录）合流：保底储备取
+  // 实测口径 CHAT_FIT=442——审 B 的 CHAT_MIN 360 是「列宽」口径，列内 chrome（padding/margin ≈68px）
+  // 吃掉后 composer 实得 ~230px 仍溢出；CDP 逐宽实测 composer 按钮行最小内容宽 366px，全容纳需
+  // cbW≥366 → 储备 360+68+14 余量。效果：≥1071px 窗宽面板全容纳按钮行；极窄（avail<340 面板下限）
+  // 下限优先——939-1071 带手动再开 composer 仍挤（面板 340 下限语义保留，R4-R1 备案），<1200 跨入
+  // 已自动收起（刀二）。
+  const CHAT_FIT = 442; // 会话列保底储备（R4-R1 刀三实测口径：审 B CHAT_MIN 360 列宽保底+列内 chrome≈68+余量 14——超集覆盖）
+  function availMax() {
+    const q = document.querySelector("#d-session .queue");
+    const qRight = q ? Math.round(q.getBoundingClientRect().right) : 297; // 缺省 62(rail)+235(queue)
+    return Math.max(340, Math.floor(window.innerWidth - qRight - 4 - CHAT_FIT));
   }
+  function clampW(w) { return Math.max(340, Math.min(800, availMax(), Math.round(window.innerWidth * 0.72), w)); }
   function applyW(w) { root.style.width = clampW(w) + "px"; }
   function readW() {
     const v = Number(localStorage.getItem(W_KEY));
     return Number.isFinite(v) && v >= 340 ? clampW(v) : 440; // 缺省 440（WorkBuddy 同构）；旧记忆 <340（38%/280 时代）归一
   }
   function setOpen(on, remember) {
-    if (on) applyW(readW()); // W-FZONE-R4-R1 刀三：开面板按当前窗宽重钳（护栏保对话列——窄域手动再开不再 215px 细条；变宽回弹到记忆宽）——open/toggle/autoOpen 全走本口单点
+    if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口
     root.hidden = !on;
     root.classList.toggle("open", on);
     const sash = document.querySelector("#d-session .fz-sash");
@@ -377,7 +374,10 @@
         try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast("窗口过窄，文件工作区已收起（头部 ▤ 工作区 可再开）"); } catch (_) {}
       }
       wasNarrow = narrow;
-      // R4-R1 刀三：开面板状态下窗口变窄→护栏重钳（1200-1399 带 800px 面板挤对话同治；变宽回弹到记忆宽）
+      // R4 P1-2 修（审 B）+ R4-R1 刀三合流：面板开着时视口变化（不跨窄域如 1200→1100，或跨出变宽）
+      // 同样重钳——变窄收进 avail 护栏（1200-1399 带 800px 面板挤对话同治），变宽回弹到记忆宽
+      //（readW=拖柄存值即记忆，回弹与拖柄语义一致；「只收不放」改为「收进回弹」——P1-2 只收目标
+      // 由 avail 钳承载，回弹不破坏其极窄自洽：极窄再开仍被 avail 压住）。
       if (!root.hidden) applyW(readW());
     }, 120);
   });
