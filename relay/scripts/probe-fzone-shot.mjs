@@ -204,6 +204,24 @@ const hasRz = await ev(`!!document.querySelector('#d-session .fz-sash[data-fz-re
 ok(s12.tabs.length === 1 && hasRetry && (s12.fb || "").includes("拉取失败"), `失败态=tab 内错误卡+重试钮（「${(s12.fb || "").slice(0, 30)}」）`);
 ok(hasRz, "拖宽柄在场（R3：窗口级 4px sash，440 起可拖 clamp[340,800]——WorkBuddy 同构）");
 
+// ⑪c W-FZONE-R4 几何断言（宽窗 1440，面板开 1 tab）：工作区=app 内容区级右列——
+// fz.top==queue.top（顶=内容区顶）/head 只在会话列（不横跨工作区）/输入框完整不被盖
+const geo = await ev(`(() => {
+  const q = document.querySelector("#d-session .queue").getBoundingClientRect();
+  const z = document.getElementById("fzone").getBoundingClientRect();
+  const h = document.querySelector("#d-session .workspace-head").getBoundingClientRect();
+  const d = document.querySelector("#d-session .session-detail").getBoundingClientRect();
+  const c = document.querySelector("#d-session .composer-input").getBoundingClientRect();
+  const el = document.getElementById("fzone");
+  return { qTop: q.top, zTop: z.top, hRight: h.right, dRight: d.right, zLeft: z.left,
+           cRight: c.right, cW: c.width, shellChild: el.parentElement.className, inDetail: !!el.closest(".session-detail") };
+})()`);
+ok(geo.shellChild === "session-shell" && !geo.inDetail, `R4 结构：fzone 父级=session-shell、不在 session-detail 内（app 内容区右列；实测父级=${geo.shellChild}）`);
+ok(Math.abs(geo.zTop - geo.qTop) < 1, `R4 几何：fzone.top==queue.top（工作区顶=内容区顶，实测 fz=${geo.zTop} / queue=${geo.qTop}）`);
+ok(geo.hRight <= geo.dRight + 1 && geo.hRight < geo.zLeft, `R4 几何：会话头只在会话列（head.right=${Math.round(geo.hRight)} ≤ detail.right=${Math.round(geo.dRight)} 且 < fz.left=${Math.round(geo.zLeft)}——不压工作区）`);
+ok(geo.cRight <= geo.zLeft + 1 && geo.cW > 300, `R4 几何：输入框完整可见（composer.right=${Math.round(geo.cRight)} ≤ fz.left=${Math.round(geo.zLeft)}，宽 ${Math.round(geo.cW)}px）`);
+await shot("fz-r4-wide-dark");
+
 // ⑪b 切会话清空（W-FZONE-B1-R1 P2-①）：resetForSession 异 sid → tab 全清+开合态不动+空态卡回归；同 sid 重入幂等
 const hidB = await ev(`document.getElementById("fzone").hidden`);
 await ev(`window.ccDeckFzone.resetForSession("fz-other")`); await wait(250);
@@ -219,7 +237,71 @@ await clickRow('.art-row[data-path="reports/w-p2batch4.md"]', (t) => t.md);
 const s13 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 ok(s13.md, "亮色主题 md 预览渲染在场");
 await shot("fz-5-md-light");
+await shot("fz-r4-wide-light"); // W-FZONE-R4：亮色宽窗对照（面板开态几何同 fz-r4-wide-dark）
 await ev(`(() => { const b = document.querySelector('[data-theme-toggle]'); if (b) b.click(); })()`); await wait(300);
+
+// ⑫b W-FZONE-R4-R1 刀二：跨入 1200 窄域边沿（1440→1150）→自动收起+toast 示众（NARROW_W 1000→1200
+// 随审二第五轮直答①「细条可用」带；静默再收 P2-② 根治——仅自动收起弹，手动收/开不弹）
+await send("Emulation.setDeviceMetricsOverride", { width: 1150, height: 940, deviceScaleFactor: 1, mobile: false });
+await wait(800); // resize 防抖 120ms+缓冲
+const sN = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+const toastN = await ev(`(() => { const t = document.getElementById("toast"); return { show: t ? t.classList.contains("show") : false, txt: t ? t.textContent : "" }; })()`);
+ok(sN.hidden && sN.tabs.length >= 1, `跨入 1150（<NARROW_W=1200）：自动收起（hidden=${sN.hidden}，tab ${sN.tabs.length} 个保留不丢）`);
+ok(toastN.show && toastN.txt.includes("已收起") && toastN.txt.includes("工作区"), `自动收起 toast 示众（「${toastN.txt.slice(0, 44)}」——「我自己开的拖下窗口就没了」静默病根除）`);
+await shot("fz-r4r1-1150-autocollapse-toast");
+
+// ⑫b2 W-FZONE-R4-R1 刀三：窄域手动再开→面板护栏收窄保对话列（审二 P2-① 1000px 档 215px 细条+composer 按钮溢出绝迹）
+await ev(`window.ccDeckFzone.toggle()`); await wait(400);
+const geoN = await ev(`(() => {
+  const z = document.getElementById("fzone").getBoundingClientRect();
+  const ci = document.querySelector("#d-session .composer-input").getBoundingClientRect();
+  const cb = document.querySelector("#d-session .composer-bottom") || document.querySelector("#d-session .composer");
+  return { pos: getComputedStyle(document.getElementById("fzone")).position, zL: Math.round(z.left), zW: Math.round(z.width),
+    convW: Math.round(z.left - ci.left), ciR: Math.round(ci.right), ciW: Math.round(ci.width),
+    overflow: cb ? cb.scrollWidth > cb.clientWidth + 1 : null };
+})()`);
+ok(geoN.pos !== "absolute" && geoN.ciR <= geoN.zL + 1, `窄域 1150 手动再开：fzone 真实列非浮层（position=${geoN.pos}）+输入框完整（right=${geoN.ciR} ≤ fz.left=${geoN.zL}）`);
+ok(geoN.convW >= 356, `刀三护栏：对话列保底 ≥360px（实测可用 ${geoN.convW}px——面板自动收窄至 ${geoN.zW}px，215px 细条形态绝迹）`);
+ok(geoN.overflow === false, `composer 按钮行零溢出（overflow=${geoN.overflow}——审二 P2-① 一钮被挤掉病根除）`);
+await shot("fz-r4r1-1150-guard");
+
+// ⑫c W-FZONE-R4-R1：深窄 960（1150→960 同窄域无边沿不误收）开态护栏随 resize 重钳；跨回宽窗不弹收+宽度回钳
+await send("Emulation.setDeviceMetricsOverride", { width: 960, height: 940, deviceScaleFactor: 1, mobile: false });
+await wait(800); // resize 防抖 120ms+缓冲
+const sX = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+ok(!sX.hidden && sX.w >= 339 && sX.w <= 341, `深窄 960 开态护栏重钳至面板下限（hidden=${sX.hidden}，面板 ${Math.round(sX.w)}px=340 下限——护栏值 217<下限时下限优先；对话列 319px 保底；同窄域无边沿不误收；939-1071 手动再开带 composer 仍挤=面板下限语义备案）`);
+
+// ⑫c-2 极窄再开自洽（审 B P1-2 修锚，R4-R1 合流保留）：960 视口+预置记忆宽 800 → 头部钮再开 →
+// 面板被 availMax 重钳（CHAT_FIT 442 口径下 960 档 avail=217→340 下限）、会话列 ≥300 不被压 0
+await ev('localStorage.setItem("ccd_fzone_w", "800")');
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(400); // 先收（本序 960 下面板为开态——归位到 ⑫c-2 的「收起后再开」前提）
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(600);
+const sRe = await ev(`(() => { const z = document.getElementById("fzone"); const d = document.querySelector("#d-session .session-detail"); const c = document.querySelector("#d-session .composer-input"); return JSON.stringify({ hidden: z.hidden, zw: Math.round(z.getBoundingClientRect().width), dw: Math.round(d.getBoundingClientRect().width), cw: Math.round(c.getBoundingClientRect().width) }); })()`);
+const rRe = JSON.parse(sRe);
+ok(!rRe.hidden, "极窄 960：头部钮再开生效（单向收起不剥夺用户主动再开——头部钮可再开承诺）");
+ok(rRe.zw <= 341 && rRe.dw >= 300 && rRe.cw > 150, `极窄 960：记忆宽 800 被 availMax（queue 右缘含 rail 实算）重钳为 ${rRe.zw}px（≤341=min-width 硬限）、会话列 ${rRe.dw}px ≥300 不被压 0、输入框 ${rRe.cw}px 完整（P1-2 修）`);
+await shot("fz-r4-narrow-reopen");
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(400); // 用户主动收起——恢复「跨回不弹回」断言前提（面板关着跨出窄域）
+await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 940, deviceScaleFactor: 1, mobile: false });
+await wait(700);
+const sW2 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+ok(sW2.hidden && sW2.tabs.length >= 1, "跨回宽窗 1440：不自动弹回（单向收起——头部钮可再开）");
+// R4-R1 刀三补充：跨回后手动再开 → 记忆 800 被 avail 钳（1440 档 avail=1440-297-4-442=697——保 composer 全按钮零溢出；≥1561 窗才放满 800）
+await ev(`document.querySelector("#session-head-actions [data-fzone-toggle]").click()`); await wait(500);
+const sW3 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
+ok(!sW3.hidden && sW3.w >= 690 && sW3.w <= 800, `跨回再开：宽度回钳记忆档（${Math.round(sW3.w)}px=1440 档 avail≈697——护栏上限随窗宽放坡，composer 全按钮优先于记忆宽）`);
+
+// ⑫d 冷启 reload：预置 OPEN_KEY=1（模拟用户上次开着离开）→ 冷启必收起（R4 病灶「空面板冷启复活=切不掉」根除）
+await ev('localStorage.setItem("ccd_fzone_open", "1")');
+await send("Page.reload");
+await wait(2800);
+for (let i = 0; i < 5; i++) {
+  const st = await ev(`JSON.stringify({ rs: document.readyState, fz: !!document.getElementById("fzone") })`).catch(() => null);
+  if (st && JSON.parse(st).fz && JSON.parse(st).rs === "complete") break;
+  await wait(1000);
+}
+const sCold = await ev(`(() => { const z = document.getElementById("fzone"); const sash = document.querySelector("#d-session .fz-sash"); return { hidden: z.hidden, sashHidden: sash ? sash.hidden : null }; })()`);
+ok(sCold.hidden && sCold.sashHidden === true, `冷启 reload 必收起（OPEN_KEY=1 不回灌：fzone.hidden=${sCold.hidden}、sash.hidden=${sCold.sashHidden}——空面板冷启复活病灶根除）`);
 
 ok(consoleErrs.length === 0, `console 零错（${consoleErrs.length} 条${consoleErrs.length ? "：" + consoleErrs.slice(0, 2).join(" | ") : ""}）`);
 console.log(`\nfzone probe：${pass} ok / ${fail} FAIL`);
