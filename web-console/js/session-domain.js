@@ -5792,23 +5792,11 @@
                     const p = panes[i];
                     p.removeAttribute("data-stub");
                     p.classList.add("tabpage-pane");
-                    const name = ((UI.tabs[i] && (UI.tabs[i].querySelector(".tab-txt") || UI.tabs[i]))?.textContent || "").trim();
-                    const head = document.createElement("div");
-                    head.className = "tabpage-head";
-                    const tTitle = document.createElement("strong");
-                    tTitle.className = "tabpage-title";
-                    tTitle.textContent = name;
-                    const back = document.createElement("button");
-                    back.type = "button";
-                    back.className = "tabpage-back";
-                    back.setAttribute("data-tabpage-back", "1");
-                    back.title = "返回对话";
-                    back.setAttribute("aria-label", "返回对话");
-                    back.textContent = "⟵ 返回对话";
-                    head.append(tTitle, back);
+                    // #165（1115 用户令「页头多余移除」）：.tabpage-head（页名+⟵返回对话）退役——
+                    // tab 栏已标当前页、「对话」tab 即返回（含滚动 memo），页头冗余；pane 直挂内容滚动层
                     const scroll = document.createElement("div");
                     scroll.className = "tabpage-scroll";
-                    p.replaceChildren(head, scroll);
+                    p.replaceChildren(scroll);
                     workspace.insertBefore(p, body); // DOM 序=panes 在 #session-body 之前（~ 选择器前提）；dock/agbox/footer 兄弟不动（非对话页保留=改前同行为）
                   }
                   setupRowMenu(); // ⑥a-1 右键行菜单（容器级绑定，不随行重建销毁）
