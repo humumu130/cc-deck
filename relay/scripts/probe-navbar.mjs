@@ -56,7 +56,7 @@ ok(s1.transDur === "0.343s" && s1.transFn.includes("cubic-bezier(0.45, 0, 0.3, 1
 ok(s1.panelH >= 5 * 22 && s1.panelH <= 5 * 22 + 16, `③高度对照（W-UIP2 期三收紧）：面板折叠高=${s1.panelH}px=5×22+padding（期二 26px→22px——用户 #169「整体高度太高了」）`);
 
 // ② hover 展开（等 .543s 过渡完）+呼出方向动效参数
-await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))`);
+await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false, clientX: document.querySelector(".msg-navbar").getBoundingClientRect().right - 20 }))`);
 await wait(700);
 const s2 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); const p = nb.querySelector(".msg-navbar__panel"); const cs = getComputedStyle(p); return { open: nb.classList.contains("open"), ariaExp: nb.getAttribute("aria-expanded"), clip: cs.clipPath, bg: cs.backgroundColor, border: cs.borderColor, transDur: cs.transitionDuration.split(", ")[0], transFn: cs.transitionTimingFunction.split(", ")[0], firstTxt: (p.querySelector(".msg-navbar__item .txt")||{}).textContent?.slice(0, 12), role: p.getAttribute("role") }; })())`));
 ok(s2.open && s2.ariaExp === "true" && /inset\(0px( 0px)* round 12px\)/.test(s2.clip), `② hover 展开：clip 全开=${s2.clip}（Chromium 归一化省略零——裁剪框左缘右移擦显，原版机制）`);
@@ -88,7 +88,7 @@ ok(s9.noBtn || s9.inter === 0, `⑨ 避让归零（W-UIP2 期三口径：贴底�
 
 // ⑥ 亮色+console 零错
 await ev(`document.documentElement.setAttribute("data-theme", "light")`);
-await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))`);
+await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false, clientX: document.querySelector(".msg-navbar").getBoundingClientRect().right - 20 }))`);
 await wait(700);
 await shot("p2-open-light");
 ok(consoleErrs.length === 0, `⑥ 全程 console 零错（${consoleErrs.length} 条${consoleErrs.length ? "：" + consoleErrs[0] : ""}）`);

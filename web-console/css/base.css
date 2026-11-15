@@ -491,6 +491,11 @@
        fzone 收起自动还原（autoYielded 记账防抢用户手动收）；fzone 工具行「⟨ 列表」钮随时呼出。 */
     #d-session .queue { transition: width .25s ease, padding .25s ease, min-width .25s ease; }
     #d-session .queue.fz-yield { width: 0; min-width: 0; padding-left: 0; padding-right: 0; border-right-width: 0; }
+    /* UIP2-R2（审 P1-b）：让位必须落到 grid 轨道——.fz-yield 只缩元素不缩 var(--queue-w) 定长
+       轨道=235px 死列+工作区零获益（审查 CDP 实证 gridTemplateColumns 不变）。:has 本仓既有
+       用法；--queue-w 是 body 级跨域共享不可动，故 :has 局部覆写轨道。resizer 同步隐藏防悬空。 */
+    .desktop-screen.active:has(#d-session .queue.fz-yield) { grid-template-columns: 0px minmax(0, 1fr); }
+    .desktop-screen.active:has(#d-session .queue.fz-yield) .queue-resizer { display: none; }
     #d-session .queue-card + .queue-card { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); } /* #193 P1：微信行间 1px 低对比分隔（rgba 约 #E0E0E0@.55；暗色自动随 --line） */ /* #193 W-WXSTYLE：微信平色列表区（渐变+侧投影退役；--surface1 亮=#EDEDED/暗=暗系原值，分隔=1px 细线） */
     /* W-TOPBAR ⑤：第二列拖宽把手——7px 热区骑在列界上（视觉同 inspector-resizer：悬停/拖动
        显 1px 短线）；挂 screen 层而非 queue 内——notify 等域会 replaceChildren 重建 queue，
