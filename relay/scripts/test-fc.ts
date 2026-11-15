@@ -271,7 +271,9 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(nav.includes('addEventListener("scroll", syncActive, { passive: true })') && nav.includes("requestAnimationFrame") && css.includes(".msg-navbar__item--active"), "NAV4 滚动同步（passive 监听+rAF 节流+active 样式类——可视区顶部用户消息高亮）");
     ok(nav.includes('"历史提问"') && nav.includes('aria-expanded') && nav.includes('"option"') && nav.includes('ev.key === "Escape"'), "NAV5 a11y（aria-label 历史提问+aria-expanded+展开 listbox/option+Escape 关）");
     ok(nav.includes("ENTER_MS = 60") && nav.includes("LEAVE_MS = 180") && nav.includes("MutationObserver") && nav.includes("msg-echo"), "NAV6 交互参数与自治重建（enter 60ms 防抖/leave 180ms 延迟/MutationObserver 切会话重建/排除 .msg-echo 待发占位）");
-    ok(css.includes(".msg-navbar__panel") && css.includes("backdrop-filter: blur(8px)") && css.includes("mask-image") && css.includes("@media (max-width: 879px)") && css.includes(".msg-navbar[hidden] { display: none; }"), "NAV7 CSS 同构（毛玻璃 panel blur8+渐隐 mask+窄窗 879 零占位双保险+门槛态 hidden 零占位）");
+    ok(css.includes("clip-path: inset(24px 0 24px calc(100% - 44px) round 12px)") && css.includes("clip-path .543s cubic-bezier(.16, 1, .3, 1)") && css.includes("clip-path .343s cubic-bezier(.45, 0, .3, 1)") && css.includes("background-color: var(--surface1)") && css.includes("prefers-reduced-motion") && css.includes("@media (max-width: 879px)") && css.includes(".msg-navbar[hidden] { display: none; }"), "NAV7 CSS 期二同构（clip-path 裁剪展开原版机制+呼出 .543s/收起 .343s 原参数+surface1 实底 token 融合+reduced-motion 降级+窄窗 879 零占位双保险+门槛 hidden 零占位）");
+    ok(nav.includes("MAX_LINES = 28") && nav.includes("function sample(") && nav.includes("active") && css.includes("height: 26px"), "NAV8 期二加高与采样（行高 26px 单套 DOM+>28 条均匀采样 28+采样必含 active——WorkBuddy V=min(len,28) 同款）");
+    ok(css.includes("right: 34px") && nav.includes("MAX_LINES"), "NAV9 期二避让（right 10→34px 让开 inspector-expand 抽屉钮带——CDP 归零数字在探针）");
   }
 
   // ============ TAB. W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 tab 独立整页 ============
