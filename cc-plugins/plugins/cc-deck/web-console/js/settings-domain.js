@@ -5042,7 +5042,11 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       // P0 视觉接线：原型手动视口切换工具条退役——按视口宽度自动切桌面/手机形态（720px 分界，
       // 随窗口变化动态切；老 Safari 无 addEventListener 时退 addListener）
       const viewportQuery = window.matchMedia("(max-width: 720px)");
-      const applyViewportMode = () => setMode(viewportQuery.matches ? "mobile" : "desktop");
+      // W-MSGLAYOUT 刀一（1114 用户实锤「消息居中」病灶溯源收口）：桌面壳（Tauri/Nova）
+      // 恒 desktop 形态——窄窗拖到 ≤720 不得切手机舞台（用户 784px 视口实拍=桌面 App 窄窗
+      // 被当手机切 #m-detail 旧渲染形态）。浏览器/真手机无壳标记照切不受影响。
+      const shellDesktop = () => !!(window.__ccDeck005DesktopForm && window.__ccDeck005DesktopForm()) || !!(window.__TAURI__ || window.ccDeck);
+      const applyViewportMode = () => setMode(!shellDesktop() && viewportQuery.matches ? "mobile" : "desktop");
       applyViewportMode();
       if (typeof viewportQuery.addEventListener === "function") viewportQuery.addEventListener("change", applyViewportMode);
       else if (typeof viewportQuery.addListener === "function") viewportQuery.addListener(applyViewportMode);
