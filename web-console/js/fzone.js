@@ -65,13 +65,19 @@
       return w && typeof w.setSize === "function" && typeof w.outerSize === "function" && typeof w.outerPosition === "function" ? w : null;
     } catch (_) { return null; }
   }
-  const SHELL_MIN_WIN = 1200; // tauri.conf minWidth（logical）——缩窗下限（OS 侧同拦，双保险；收合压到下限时 chat 只多不少）
+  const SHELL_MIN_WIN = 1200; // mac conf minWidth（Windows conf=960——JS 地板取严平台最大值；Windows 960-1199 冷载手动开面为 R4 既有行为，R5-R1 P3 注释对齐）——缩窗下限（OS 侧同拦双保险；收合压到下限时 chat 只多不少）
+  // R5-R1 P0（review2 实锤）：currentMonitor 是 **模块级函数**（tauri-2.11.5 bundle.global.js
+  // 实核——getCurrentWindow() 返回的 Window 实例 56 个 async 方法里无 currentMonitor，全 bundle
+  // 仅 __TAURI__.window.currentMonitor 一处）——在 Window 实例上取该方法在真实壳必抛
+  // TypeError→catch→false：外扩整链哑火（呼出=R4 挤压复现）而 shrink 照跑=开收循环净缩窗。模块级取用。
+  const monOf = async (t) => { try { return t && t.window && typeof t.window.currentMonitor === "function" ? await t.window.currentMonitor() : null; } catch (_) { return null; } };
   const lsize = (t, w, h) => (t.dpi && typeof t.dpi.LogicalSize === "function") ? new t.dpi.LogicalSize(w, h) : { width: w, height: h }; // 平面对象兜底=v2 api 构造器同解析形（bundle.global.js 实核：1 参对象 {width,height} 判 Logical）
   const ppos = (t, x, y) => (t.dpi && typeof t.dpi.PhysicalPosition === "function") ? new t.dpi.PhysicalPosition(x, y) : { x: x, y: y };
   let winOpQ = Promise.resolve();
   const winOp = (fn) => { winOpQ = winOpQ.then(fn).catch(() => {}); return winOpQ; };
   function clampShellW(w) { return Math.max(340, Math.min(800, Math.round(w))); } // 壳模式宽钳：只受面板档位界 [340,800]（屏缘由外扩梯子消化，不受视口内 avail 钳——外扩后 avail 恒富余）
   function readWShell() { const v = Number(localStorage.getItem(W_KEY)); return Number.isFinite(v) && v >= 340 ? clampShellW(v) : 440; } // 壳模式记忆读口（缺省 440 同 readW 口径）
+  let lastGrowShift = null; // R5-R1 P2-5：grow 左移量记账（{fromX, y, shift}）——shrink 后回移窗位（开移 N 收回 N 净零，贴右缘钉死态收敛：不再每开重溢 144-244px）；回移前读现位幂等守卫（用户已手动挪窗则不回移）
   function shellGrow(growL) { // 呼出外扩（growL=CSS px）；resolve false=不可外扩（无壳/最大化/全屏/通道断）→调用方回落挤压护栏
     return winOp(async () => {
       const t = TAU(), win = shellWin();
@@ -79,17 +85,19 @@
       try {
         if (await win.isMaximized() || await win.isFullscreen()) return false;
         const scale = await win.scaleFactor();
-        const o = await win.outerSize(), p = await win.outerPosition(); // physical
+        const o = await win.outerSize(), p = await win.outerPosition(); // physical（屏缘 room/窗位系——outer 才是窗物理全幅）
+        const iw = await win.innerSize(); // R5-R1 P1-b：宽账读 inner 写 inner 对称（set_size→set_inner_size——Windows decorations:true 外框不进账，每开收循环 +2b≈+28-32px 膨胀链根除；Mac/Nova outer=inner 零影响。顺刀：目标高也改 inner 高——旧码把 outer 高（含 titlebar）写进 inner 高的隐患同根消除）
         const growPhys = Math.round(growL * scale);
-        const mon = await win.currentMonitor();
+        const mon = await monOf(t); // R5-R1 P0：模块级（实例法在真壳必抛=外扩哑火主根）
         if (mon) {
           const room = mon.position.x + mon.size.width - (p.x + o.width);
-          if (room < growPhys && p.x > 0) { // 屏缘不够→左移补位（仍不够=允许溢出屏；chat 恒不变优先于贴屏）
-            const shift = Math.min(p.x, growPhys - room);
+          if (room < growPhys && p.x > mon.position.x) { // R5-R1 P2-6：门改 p.x>mon.position.x（左外屏负坐标域——旧 p.x>0 把外屏左移补位整段跳过=溢出整段出屏）
+            const shift = Math.min(p.x - mon.position.x, growPhys - room);
             await win.setPosition(ppos(t, p.x - shift, p.y));
-          }
+            lastGrowShift = { fromX: p.x, y: p.y, shift }; // P2-5 收合回移记账
+          } else lastGrowShift = null;
         }
-        await win.setSize(lsize(t, (o.width + growPhys) / scale, o.height / scale));
+        await win.setSize(lsize(t, (iw.width + growPhys) / scale, iw.height / scale));
         return true;
       } catch (_) { return false; }
     });
@@ -99,11 +107,19 @@
       const t = TAU(), win = shellWin();
       if (!t || !win) return;
       try {
+        if (await win.isMaximized() || await win.isFullscreen()) return; // R5-R1 P1-a：最大化/全屏态禁缩（tao set_inner_size 会把 zoomed 窗拉出最大化——review2 C12 实测 2560→2116）
         const scale = await win.scaleFactor();
-        const o = await win.outerSize();
-        const target = Math.max(SHELL_MIN_WIN, (o.width - Math.round(pxL * scale)) / scale);
-        if (target >= o.width / scale) return;
-        await win.setSize(lsize(t, target, o.height / scale));
+        const iw = await win.innerSize(); // R5-R1 P1-b：宽账读 inner（与 grow 对称）
+        const target = Math.max(SHELL_MIN_WIN, (iw.width - Math.round(pxL * scale)) / scale);
+        if (target >= iw.width / scale) return;
+        await win.setSize(lsize(t, target, iw.height / scale));
+        if (lastGrowShift) { // R5-R1 P2-5：grow 左移的回移（开移 N 收回 N 净零——贴右缘/钉死态每开重溢收敛）；现位守卫=用户已挪窗则放弃
+          try {
+            const p2 = await win.outerPosition();
+            if (p2.x === lastGrowShift.fromX - lastGrowShift.shift) await win.setPosition(ppos(t, lastGrowShift.fromX, lastGrowShift.y));
+          } catch (_) {}
+          lastGrowShift = null;
+        }
       } catch (_) {}
     });
   }
@@ -111,7 +127,7 @@
     const wasOpen = !root.hidden;
     if (on && !wasOpen && shellWin()) { // R5 真第四列：壳内呼出=窗口外扩 sash+面板宽（w0=面板目标宽直取——hidden 期 rect=0 不可读；grow 异步落地，chat 布局链自动恒不变）。!wasOpen 门=已开时重复 setOpen(true)（open() 点文件聚焦路径）不二次外扩
       const w0 = readWShell();
-      applyW(w0);
+      root.style.width = w0 + "px"; // R5-R1 P1-c：壳分支绕过 clampW（旧视口 avail/72vw 钳）直写档位宽——与 shellGrow(4+w0) 同源同拍（旧 applyW(w0) 钳后面板 657 vs 窗按 804 全扩=快开快收 +143/循环漂移根，review2 C9；readWShell 已 clampShellW）
       shellGrow(4 + w0);
     } else if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口（R5：无壳/最大化回落同口）
     else if (!on && wasOpen && shellWin()) shellShrink(4 + Math.round(root.getBoundingClientRect().width)); // R5：收合=窗口缩回（隐藏前读面板现宽——重钳窄过同步少缩）
@@ -395,13 +411,16 @@
       ev.preventDefault();
       const startX = ev.clientX, startW = root.getBoundingClientRect().width;
       const shell = !!shellWin(); // R5：壳内拖宽=窗口再外扩（面板增量=窗宽增量，chat 恒不变）；无壳=R3 老形态原样（面板在视口内伸缩）
-      const drag = { t: TAU(), win: shellWin(), scale: 1, hL: 0, maxGrow: Infinity, baseWinW: window.innerWidth, target: 0 };
+      const drag = { t: TAU(), win: shellWin(), scale: 1, hL: 0, maxGrow: Infinity, baseWinW: window.innerWidth, target: 0, ready: false };
       if (drag.win) (async () => { // 拖前异步取窗高/屏缘（首帧未就绪只动面板宽，就绪后追平——不阻塞手势；拖中不左移窗=防抖动，屏缘不够只钳宽）
         try {
-          const scale = await drag.win.scaleFactor(), o = await drag.win.outerSize(), p = await drag.win.outerPosition(), mon = await drag.win.currentMonitor();
+          const scale = await drag.win.scaleFactor(), o = await drag.win.outerSize(), p = await drag.win.outerPosition();
+          const mon = await monOf(drag.t); // R5-R1 P0：模块级（实例法在真壳必抛=拖宽链同死）
           drag.scale = scale || 1; drag.hL = o.height / drag.scale; drag.baseWinW = o.width / drag.scale;
           if (mon) drag.maxGrow = Math.max(0, (mon.position.x + mon.size.width - (p.x + o.width)) / drag.scale);
         } catch (_) {}
+        drag.ready = true; // R5-R1 P2-7：就绪标志——取数异步窗内（快甩）move 只累计 target 不 setSize（旧 !drag.hL 门挡 push=窗不涨面板已涨→chat 被压 120px 残留），就绪后追补（then 异步执行时 push 常量已初始化）
+        if (drag.target) push();
       })();
       rz.setPointerCapture(ev.pointerId);
       rz.classList.add("dragging");
@@ -409,7 +428,7 @@
       document.body.style.userSelect = "none";
       let pushing = false, lastPushed = 0; // rAF+在飞标志双节流：setSize 串行链只背最新目标（追平收口在 up）
       const push = () => {
-        if (pushing || !drag.hL || Math.round(drag.target) === lastPushed) return;
+        if (pushing || !drag.ready || Math.round(drag.target) === lastPushed) return; // R5-R1 P2-7：ready 门（就绪前挂起目标，取数 then 追补 push0）
         pushing = true; lastPushed = Math.round(drag.target);
         const tgt = lastPushed;
         winOp(async () => { try { await drag.win.setSize(lsize(drag.t, Math.max(SHELL_MIN_WIN, tgt), Math.round(drag.hL))); } finally { pushing = false; if (Math.round(drag.target) !== lastPushed) push(); } });
