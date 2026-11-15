@@ -230,9 +230,9 @@
       }
     }
     renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）
-    const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 22)); // W-P3SWEEP：26→22 对齐期三行高（MAX_H 预算按实际行距——高估致 max-height 恒过大无视觉病，档位对齐）
-    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 22 + 12) + "px");
-    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 22 + 12) + "px");
+    const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 16)); // NAVR5：22→16 密度档（用户 #173）——预算常数随行高同步
+    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 16 + 12) + "px");
+    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 16 + 12) + "px");
     root.style.setProperty("--msg-navbar-open-h", Math.min(Math.round(window.innerHeight * 0.6), 520) + "px"); // 展开卡全量滚动上限（60vh/520 封顶）
     syncActive();
   }
