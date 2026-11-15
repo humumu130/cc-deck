@@ -5353,7 +5353,14 @@
                       ev.stopPropagation();
                       const fzReg = fp.dataset.p ? frefResolvePath(String(fp.dataset.p)) : null;
                       if (fzReg) { openFzoneTab(fzReg); return; }
-                      copyText(fp.dataset.p || ""); b2Toast("已复制路径 · " + (fp.dataset.p || ""));
+                      // W-UIP2 件三（#171 用户原话「会话中出现的文件，都应该能够直接在工作区中打开呀」）：
+                      // 登记面未命中的**绝对路径形态**（/ 开头=本机可读根；~/ 用 homedir 展开）直接开
+                      // 工作区 tab——fetchArtifact 按 path 拉真文件（拉不到落 errCard 重试形态，非静默）；
+                      // 相对名/URL 等真外部引用保持复制兜底+toast 文案差异化（原「已复制路径」）。
+                      const raw = String(fp.dataset.p || "");
+                      const abs = raw.startsWith("/") ? raw : (raw.startsWith("~/") && S.homedir ? S.homedir.replace(/[\\/]+$/, "") + raw.slice(1) : null);
+                      if (abs) { openFzoneTab(abs); return; }
+                      copyText(raw); b2Toast("外部路径已复制 · " + raw);
                       return;
                     }
                     const xEl = ev.target.closest(".x-full[data-x], .th-head[data-x], .am-head[data-x]"); // W-AUTOMSG：am-head=自动注入折叠头（复用 expanded 切换链）

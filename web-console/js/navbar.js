@@ -25,8 +25,10 @@
   let enterT = 0, leaveT = 0, raf = 0, mo = null, buildT = 0;
   let fishY = 0, fishT = 0; // 期二 R1 fisheye：光标 Y+在飞 rAF 帧号（mouseleave 复位见 fishReset）
 
-  // fisheye 鼠标跟随放大：刻度 --fz = 1 + 0.9·exp(−d²/2σ²)（σ=46px，峰值 1.9×）
-  // ——WorkBuddy 原版 dock 放大同款观感；rAF 合帧（mousemove 高频不逐条写样式）
+  // fisheye 鼠标跟随放大（W-UIP2 期三强化·1115 test.18 用户 #169「选中那条变长不明显」）：
+  // 刻度 --fz = 1 + 2.2·exp(−d²/2σ²)（σ=40px，峰值 3.2×——期二 1.9× 观感不足）——命中行
+  // tick 12×3.2≈38px ≥36px 要求；σ 46→40 邻域衰减更聚焦（命中突出=选中感）；亮度随 --fz
+  // 插值在 CSS tick 行（color-mix calc）。rAF 合帧不变。
   function fishApply() {
     fishT = 0;
     if (!panelEl) return;
@@ -34,7 +36,7 @@
       const rc = r.getBoundingClientRect();
       if (!rc.height) continue;
       const d = fishY - (rc.top + rc.height / 2);
-      const s = 1 + 0.9 * Math.exp(-(d * d) / 4232); // 2σ²=2·46²=4232
+      const s = 1 + 2.2 * Math.exp(-(d * d) / 3200); // 2σ²=2·40²=3200（W-UIP2：峰值 1.9→3.2×，σ 46→40）
       r.style.setProperty("--fz", s.toFixed(3));
     }
   }
@@ -46,6 +48,9 @@
 
   const bodyEl = () => document.getElementById("session-body");
   const hostEl = () => document.querySelector("#d-session .workspace");
+  // UIP2-R1：可见条带门——光标 x 在（轨右缘-64px, 轨右缘] 内才算「直接放在导航条上」
+  // （44px 折叠条带+20px 容差）；条带左边的隐形区（aside 整盒）一律不算
+  const onStrip = (cx) => { if (!root) return false; const r = root.getBoundingClientRect(); return cx > r.right - 64 && cx <= r.right + 2; };
 
   function collect() {
     const b = bodyEl();
@@ -144,17 +149,22 @@
       panelEl.className = "msg-navbar__panel";
       panelEl.setAttribute("aria-hidden", "false");
       root.appendChild(panelEl);
-      root.addEventListener("mouseenter", () => schedule(true));
+      // UIP2-R1（1115 用户令「鼠标在导航条左侧离得远也展开——只有直接放在导航条上才展开」）：
+      // 根因=aside 按面板 max-content（≤320px）整盒接收 mouseenter，clip-path 只裁视觉不裁
+      // 外层命中。双保险闸：①CSS 侧 .msg-navbar pointer-events:none+panel auto（命中面收
+      // 敛到被裁剪的可见窄条）；②JS 侧 enter/move 均过「可见条带」门（右缘起 64px 内才认
+      // hover——44px 条带+20px 容差），条带外一律按离开处理（开着的状态移出条带即收）
+      root.addEventListener("mouseenter", (ev) => { if (open || onStrip(ev.clientX)) schedule(true); }); // UIP2-R2（审 P1-a）：open 态回入卡任意位=取消待收（条带门只在折叠态守）
       root.addEventListener("mouseleave", () => { schedule(false); fishReset(); });
       // 期二 R1（1115 用户令「跟随鼠标滚动的悬浮放大特效」）：fisheye——光标纵向扫过时
       // 刻度按距离高斯衰减放大（σ=46px 峰值 1.9×，WorkBuddy 原版 dock 放大同款观感），
       // 跟手走 rAF 合帧（mousemove 高频不逐帧写样式）；离场全复位。CSS 侧 --fz 因子消费
       // （tick 宽/高同乘，transition .12s 圆滑）；reduced-motion 由 CSS 降级闸兜底（直切）
       root.addEventListener("mousemove", (ev) => {
+        if (!open && !onStrip(ev.clientX)) { schedule(false); return; } // UIP2-R2（审 P1-a）：条带门仅折叠态生效——展开态滑到卡中部读文不误收
         fishY = ev.clientY;
         if (!fishT) fishT = requestAnimationFrame(fishApply);
       });
-      root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       host.appendChild(root);
     }
