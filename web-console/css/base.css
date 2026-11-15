@@ -767,7 +767,7 @@
     .fz-sash { cursor: col-resize; z-index: 10; flex-shrink: 0; width: 4px; position: relative; } /* =WorkBuddy __detail-sash{cursor:col-resize;z-index:10;flex-shrink:0;width:4px;position:relative} */
     .fz-sash:hover, .fz-sash.dragging { background: color-mix(in srgb, var(--brand, #EC9A73) 60%, transparent); } /* =__detail-sash:hover 品牌色 60% */
     .fz-sash[hidden] { display: none; }
-    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: var(--surface1); overflow: hidden; } /* =WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]——localStorage 记忆沿用） */
+    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden; } /* 结构=WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]）；底色 W-FZONE-R5 融合（1115 用户「底色也不对」）：--surface1（=左列列表档，fzone 被读作列表列）退役→主面板同源面 workspace-top→bg1 梯度（与 .workspace 逐 token 同构）+左缘 1px line-soft 列界（与 .queue border-right 同节奏）——工作区=主面板延续，双主题自动随 token，不自创色 */
     .fzone[hidden] { display: none; }
     .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
 
@@ -2106,6 +2106,10 @@
        原 12px 圆角+渐变底退役，对齐 #d-session .queue-card（2020 行族） */
     #d-session .workspace-head { background: var(--brand); background: linear-gradient(180deg, color-mix(in srgb, var(--workspace-top) 96%, var(--brand) 4%), var(--workspace-top)); }
     #d-session .workspace-head, #d-team .workspace-head { border-bottom-color: transparent; border-bottom-color: color-mix(in srgb, var(--line) 72%, transparent); }
+    /* W-FZONE-R5 件二（#168 用户令 1115）：主面板顶栏下边缘分割线退役——纯颜色分割（head 底=
+       workspace-top 与内容区梯顶同源，靠底色差分层；segment-bar active 品牌下划线保留为唯一点缀）
+       ——仅会话域（后位覆盖上两行同特异性的继承边），团队/项目等其余域 head 边线不动 */
+    #d-session .workspace-head { border-bottom: 0; }
     .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 0; margin-bottom: 15px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
     .metric { min-width: 0; padding: 10px 12px; border: 0; border-left: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
     .metric:first-child { border-left: 0; }
