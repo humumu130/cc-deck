@@ -53,7 +53,7 @@ const s1 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.quer
 ok(!s1.none && s1.hidden === false && s1.rows === 5 && s1.ticks === 5, `① 门槛渲染：5 行单套 DOM+5 tick 线（rows=${s1.rows}）`);
 ok(s1.clip.includes("calc(100% - 44px)") && s1.bg === "rgba(0, 0, 0, 0)", `①b 折叠态=纯线轨（clip 只露右侧 44px 线区+卡面透明 bg=${s1.bg}——原版机制）`);
 ok(s1.transDur === "0.343s" && s1.transFn.includes("cubic-bezier(0.45, 0, 0.3, 1)", ) === false ? s1.transFn.includes("cubic-bezier(0.45") : true, `①c 收起方向动效参数=${s1.transDur} ${s1.transFn.slice(0, 30)}（原版 .343s cubic-bezier(.45,0,.3,1)）`);
-ok(s1.panelH >= 5 * 26 && s1.panelH <= 5 * 26 + 16, `③高度对照（期二）：面板折叠高=${s1.panelH}px=5×26+padding（期一线列实测 32px——纵向加高 ${Math.round(s1.panelH / 32 * 10) / 10}×）`);
+ok(s1.panelH >= 5 * 22 && s1.panelH <= 5 * 22 + 16, `③高度对照（W-UIP2 期三收紧）：面板折叠高=${s1.panelH}px=5×22+padding（期二 26px→22px——用户 #169「整体高度太高了」）`);
 
 // ② hover 展开（等 .543s 过渡完）+呼出方向动效参数
 await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))`);
@@ -84,7 +84,7 @@ ok(!s5.open && s5.clip.includes("calc(100% - 44px)") && s5.bg === "rgba(0, 0, 0,
 
 // ⑨ 避让：navbar 与 inspector-expand 抽屉钮交集=0
 const s9 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar").getBoundingClientRect(); const btn = document.querySelector("#d-session .inspector-expand"); if (!btn) return { noBtn: true }; const ib = btn.getBoundingClientRect(); const ix = Math.max(0, Math.min(nb.right, ib.right) - Math.max(nb.left, ib.left)); const iy = Math.max(0, Math.min(nb.bottom, ib.bottom) - Math.max(nb.top, ib.top)); return { nbRight: Math.round(nb.right), btnX: Math.round(ib.x), inter: Math.round(ix * iy), gap: Math.round(ib.x - nb.right) }; })())`));
-ok(s9.noBtn || (s9.inter === 0 && s9.gap > 0), `⑨ 避让归零：轨右缘 ${s9.nbRight ?? "?"} vs 抽屉钮 x=${s9.btnX ?? "?"}——交集 ${s9.inter ?? "?"}px²（间距 ${s9.gap ?? "?"}px）`);
+ok(s9.noBtn || s9.inter === 0, `⑨ 避让归零（W-UIP2 期三口径：贴底右缘=垂直分离——交集面积=0 即达标；期二「水平让位 gap>0」形态随 right 34→8 贴边退役）：轨右缘 ${s9.nbRight ?? "?"} vs 抽屉钮 x=${s9.btnX ?? "?"}——交集 ${s9.inter ?? "?"}px²（间距 ${s9.gap ?? "?"}px）`);
 
 // ⑥ 亮色+console 零错
 await ev(`document.documentElement.setAttribute("data-theme", "light")`);

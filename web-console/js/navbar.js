@@ -25,8 +25,10 @@
   let enterT = 0, leaveT = 0, raf = 0, mo = null, buildT = 0;
   let fishY = 0, fishT = 0; // 期二 R1 fisheye：光标 Y+在飞 rAF 帧号（mouseleave 复位见 fishReset）
 
-  // fisheye 鼠标跟随放大：刻度 --fz = 1 + 0.9·exp(−d²/2σ²)（σ=46px，峰值 1.9×）
-  // ——WorkBuddy 原版 dock 放大同款观感；rAF 合帧（mousemove 高频不逐条写样式）
+  // fisheye 鼠标跟随放大（W-UIP2 期三强化·1115 test.18 用户 #169「选中那条变长不明显」）：
+  // 刻度 --fz = 1 + 2.2·exp(−d²/2σ²)（σ=40px，峰值 3.2×——期二 1.9× 观感不足）——命中行
+  // tick 12×3.2≈38px ≥36px 要求；σ 46→40 邻域衰减更聚焦（命中突出=选中感）；亮度随 --fz
+  // 插值在 CSS tick 行（color-mix calc）。rAF 合帧不变。
   function fishApply() {
     fishT = 0;
     if (!panelEl) return;
@@ -34,7 +36,7 @@
       const rc = r.getBoundingClientRect();
       if (!rc.height) continue;
       const d = fishY - (rc.top + rc.height / 2);
-      const s = 1 + 0.9 * Math.exp(-(d * d) / 4232); // 2σ²=2·46²=4232
+      const s = 1 + 2.2 * Math.exp(-(d * d) / 3200); // 2σ²=2·40²=3200（W-UIP2：峰值 1.9→3.2×，σ 46→40）
       r.style.setProperty("--fz", s.toFixed(3));
     }
   }

@@ -232,8 +232,15 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
       ok(iDetail < iHead && iHeadEnd >= 0 && iHeadEnd < iDetailEnd && iHeadEnd < iWsOpen, "R4-6 会话头只在会话列：head 在 session-detail 内、会话体之上（head.right≤session-detail.right 不横跨工作区；workspace 只包消息/状态条/输入框）");
     }
     ok(!css.includes("max-width: 1199px") && !css.includes(".session-split > .fzone") && !css.includes("top: 0; right: 0; bottom: 0; z-index: 7"), "R4-7 窄窗禁浮层负向锚（<1200 覆盖媒体查询+fzone absolute 浮层规则不得回归——任何宽度都是真实列，用户口径④「tab 内容跑到对话面板来了」病灶）");
+    // W-UIP2（1115 test.18 用户 #169/#170/#171 三件）专项锚
+    const nbSrc = readFileSync(join(root, "web-console", "js", "navbar.js"), "utf-8");
+    ok(nbSrc.includes("1 + 2.2 * Math.exp(-(d * d) / 3200)") && !nbSrc.includes("1 + 0.9 *"), "UIP2-1 fisheye 强化（峰值 1.9→3.2×/σ 46→40——命中 tick 12×3.2≈38px ≥36；旧 0.9 因子负向锚）");
+    ok(css.includes("height: 22px; padding: 0 12px 0 14px") && css.includes("padding: 4px 0; scrollbar-width: none") && css.includes("right: 8px") && css.includes("calc(22% + 26% * (var(--fz, 1) - 1) / 2.2)"), "UIP2-2 导航条四修（行高 26→22+行距 6→4+贴边 right 34→8+亮度随 --fz 插值 22→48%）");
+    ok(css.includes("#d-session .workspace-body { padding-right: 66px; }") && css.includes("#d-session .queue.fz-yield"), "UIP2-3 让位双面（消息区右距 22→66px=轨道独立带重叠根治+会话列表 fz-yield 收起类）");
+    ok(fz.includes("autoYielded") && fz.includes('data-fz-recall-queue') && fz.includes("窄屏：会话列表已自动收起给工作区让位") && fz.includes("if (!narrow && wasNarrow && autoYielded) yieldQueue(false, false)"), "UIP2-4 小屏让位链（fzone 开+<1200→列表 yield+toast；收起→autoYielded 记账还原；跨阈值 resize 同链；「☰ 列表」呼出钮清记账）");
+    ok(web.includes('外部路径已复制') && web.includes("raw.startsWith(\"/\") ? raw") && web.includes('S.homedir.replace'), "UIP2-5 .fpath 直开工作区（绝对路径 / 直开+~/ homedir 展开→openFzoneTab 同链；外部引用复制 toast 文案差异化）");
     ok(!fz.includes("if (remembered) setOpen(true") && fz.includes("const NARROW_W = 1200") && fz.includes("narrow && !wasNarrow && !root.hidden"), "R4-8 冷启必收起（OPEN_KEY 自动展开不得回潮——用户口径④「切不掉」病灶）+窄域 <1200 单向自动收起（R4-R1 刀二 1000→1200——审二第五轮直答①「细条可用」带；窄域内 resize 不抢用户手动再开）");
-    ok(fz.includes("const CHAT_FIT = 442") && fz.includes("function availMax") && fz.includes("Math.min(800, availMax()") && fz.includes("if (on) applyW(readW())") && fz.includes("if (!root.hidden) applyW(readW())") && fz.includes('toast("窗口过窄，文件工作区已收起'), "R4-9 极窄再开自洽+R4-R1 刀二/刀三合流：clampW 并入可用空间上限 availMax（视口−queue 右缘含 rail−sash−CHAT_FIT 442=审 B CHAT_MIN 360 列保底+列内 chrome≈68 实测超集）+setOpen 展开与 resize 双口重钳（变宽回弹记忆宽）+自动收起 toast 示众（静默再收根治）");
+    ok(fz.includes("const CHAT_FIT = 442") && fz.includes("function availMax") && fz.includes("Math.min(800, availMax()") && fz.includes("if (on) applyW(readW())") && fz.includes("if (!root.hidden) applyW(readW())") && !fz.includes('toast("窗口过窄，文件工作区已收起') && fz.includes('function yieldQueue') && fz.includes("classList.toggle(\"fz-yield\", on)"), "R4-9 极窄再开自洽+R4-R1 刀二/刀三合流：clampW 并入可用空间上限 availMax（视口−queue 右缘含 rail−sash−CHAT_FIT 442=审 B CHAT_MIN 360 列保底+列内 chrome≈68 实测超集）+setOpen 展开与 resize 双口重钳（变宽回弹记忆宽）+窄域让位 toast 示众（W-UIP2 件二反转：旧「收 fzone」toast 负向锚不得回潮——窄窗让位列表新链 yieldQueue/fz-yield 在场）");
   }
 
   // ============ F10/F11：W-FZONE-B1-R1 双审 P2×3 返修（1111 PM 终检 P2-① 升级必修；P2-③ sheet 已由 W-P2TAIL 修=F4b） ============
