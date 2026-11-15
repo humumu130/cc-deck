@@ -140,6 +140,7 @@
     // 收起态=采样 28 概览轨——clip-path 动效元素不变，内容行集随态切换（行数几百级 DOM 可承受）
     renderRows(on ? items : shown);
     if (!on) panelEl.scrollTop = 0; // 收起归位（下次展开从顶部进）
+    syncActive(); // NAVR4-R2 ③（审 P2）：renderRows 重建行后 active 高亮丢失——补同步
   }
 
   function renderRows(list) {
@@ -198,11 +199,22 @@
     if (!ok) { items = []; return; }
     shown = sample(items);
     // NAVR4-①（1115 用户令「会和输入框有重叠」）：宿主 .workspace 含 workspace-footer（composer），
-    // bottom:28px 落进输入区（实测压 92px）——lift=composer 实高+16 间隙，随 rebuild 跟随
-    // agbox/排队提示等高度变化（resize/消息流重建均触发 build）
-    const foot = host.querySelector(":scope > .workspace-footer");
-    const lift = foot && foot.offsetHeight ? Math.round(foot.offsetHeight) + 16 : 144;
+    // bottom:28px 落进输入区（实测压 92px）。NAVR4-R2（审 P1）：lift 改**底栈全距**测量式
+    // （host 底 − 消息流底 = dock+agbox+footer 全家，基线 150 对上）——单量 footer 会漏
+    // dock/agbox（agbox 展开 226px 时压 210px 实测）；三兄弟挂 ResizeObserver 任一变高即
+    // scheduleBuild 去颤重建（MO 只盯 #session-body 看不见兄弟）
+    const body = bodyEl();
+    const lift = body ? Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 16 : 144;
     root.style.setProperty("--msg-navbar-lift", lift + "px");
+    // NAVR4-R2 ②：三兄弟（footer/agbox/dock）任一尺寸变 → scheduleBuild 去颤重建（lift 跟随）
+    if (typeof ResizeObserver === "function") {
+      root._ro = root._ro || new ResizeObserver(scheduleBuild);
+      root._ro.disconnect();
+      for (const sel of [".workspace-footer", ".agbox", ".session-state-dock"]) {
+        const el = host.querySelector(":scope > " + sel);
+        if (el) root._ro.observe(el);
+      }
+    }
     renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）
     const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 22)); // W-P3SWEEP：26→22 对齐期三行高（MAX_H 预算按实际行距——高估致 max-height 恒过大无视觉病，档位对齐）
     root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 22 + 12) + "px");
