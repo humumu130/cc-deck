@@ -1,22 +1,48 @@
-// W-NAVBAR（1112 用户拍板·期一）：历史提问索引轨——消息流右缘导航条。
-// 逆向规格=~/.cc-deck/artifacts/w-fzone-nav.md（WorkBuddy ConversationHistoryNavigation
-// 定谳：右缘 40px 短横线轨→hover 展开 96~320px 毛玻璃面板列用户提问文本→点击平滑跳转
-// +滚动双向同步 active）。期一减配（调研 §五.2）：轨道+hover 展开+点击跳转+滚动同步，
-// 开合 width/opacity 过渡——免 WorkBuddy 的 clip-path 双布局插值+scrollTop 补偿链（期二候选）。
-// 交互参数照抄规格 §三：enter 防抖 60ms / leave 延迟 180ms / 行高 26 / 折叠线距 5px /
-// 高上限 400+上下渐隐 mask / 文本截 160 字 / 门槛 ≥5 条用户消息 ∧ 视口 ≥880px /
-// a11y（aria-label「历史提问」+展开 listbox/option+aria-selected+Escape 关）。
-// 自治组件：数据源=DOM 扫描（.msg-user-row[data-x] 排除 .msg-echo 待发占位），MutationObserver
-// 监听 #session-body 重建（切会话/新消息/回放自适应）+resize 门槛复检；零数据面零挂口依赖
-//（session-domain 零改动——与 fzone 的挂口模式分立：本组件纯只读 DOM）。
+// W-NAVBAR（1112 期一→1115 期二 t-f206eddc）：历史提问索引轨——消息流右缘导航条。
+// 逆向规格=~/.cc-deck/artifacts/w-fzone-nav.md（WorkBuddy ConversationHistoryNavigation）。
+// 期二四修（用户 #166 实锤）：
+//   ①动效对标原版：呼出 .543s cubic-bezier(.16,1,.3,1)/收起 .343s cubic-bezier(.45,0,.3,1)
+//    （规格 §三原参数）——形态改 **clip-path 裁剪展开**（原版机制：面板恒 max-content，
+//    折叠态裁到只露右侧 44px 线区+卡面透明，展开=裁剪框左移擦显+卡面渐入）；期一的
+//    opacity/translateX 过渡退役。reduced-motion 降级直切（CSS 段）。
+//   ②悬浮窗融合：卡面走 cc-deck token（--surface1 实底/--line 描边/--radius-lg/轻阴影
+//    ——fz 树抽屉同款卡面语言），去期一 blur+color-mix（丑源=与全站实底风格不融）。
+//   ③加高：单套行 DOM 行高 26px（期一线列 gap 5px 双 DOM 退役——合并即原版「一套 DOM
+//    双视图」）；>28 条均匀采样 28 行（原版 V=min(len,28) 同款）+采样必含首/尾/active。
+//   ④避让：右移 right 34px 让开 inspector-expand 抽屉呼出钮（实测钮带 x[视口-20,视口]×
+//    y[409,481] 与期一 right:10px 线区正撞——CDP 数字见回执）。
+// 自治组件不变：DOM 扫描+MutationObserver 去颤重建+resize 门槛复检（期一架构）。
+// W-NAVHIT（审一批）教训保留：命中层 ::before 必须 z-index:-1（定位伪元素默认绘于且
+// hit-test 于内容之上——线中心真点击被吞，NAVHIT-R1 实锤）。
 (function () {
   "use strict";
   const MIN_ITEMS = 5, MIN_VW = 880, TEXT_MAX = 160, MAX_H = 400;
-  const ENTER_MS = 60, LEAVE_MS = 180;
-  let root = null, linesEl = null, panelEl = null;
-  let items = [];            // [{ key, el, text }]
+  const ENTER_MS = 60, LEAVE_MS = 180, MAX_LINES = 28; // MAX_LINES=折叠轨显示上限（WorkBuddy V=min(len,28) 同款）
+  let root = null, panelEl = null;
+  let items = [];            // 全量 [{ key, el, text }]
+  let shown = [];            // 采样后（≤28，必含首/尾/active）
   let open = false, activeKey = null;
-  let enterT = 0, leaveT = 0, raf = 0, mo = null, ro = null, buildT = 0;
+  let enterT = 0, leaveT = 0, raf = 0, mo = null, buildT = 0;
+  let fishY = 0, fishT = 0; // 期二 R1 fisheye：光标 Y+在飞 rAF 帧号（mouseleave 复位见 fishReset）
+
+  // fisheye 鼠标跟随放大：刻度 --fz = 1 + 0.9·exp(−d²/2σ²)（σ=46px，峰值 1.9×）
+  // ——WorkBuddy 原版 dock 放大同款观感；rAF 合帧（mousemove 高频不逐条写样式）
+  function fishApply() {
+    fishT = 0;
+    if (!panelEl) return;
+    for (const r of panelEl.querySelectorAll(".msg-navbar__item")) {
+      const rc = r.getBoundingClientRect();
+      if (!rc.height) continue;
+      const d = fishY - (rc.top + rc.height / 2);
+      const s = 1 + 0.9 * Math.exp(-(d * d) / 4232); // 2σ²=2·46²=4232
+      r.style.setProperty("--fz", s.toFixed(3));
+    }
+  }
+  function fishReset() {
+    fishY = 0;
+    if (fishT) { cancelAnimationFrame(fishT); fishT = 0; }
+    if (panelEl) panelEl.querySelectorAll(".msg-navbar__item").forEach((r) => r.style.removeProperty("--fz"));
+  }
 
   const bodyEl = () => document.getElementById("session-body");
   const hostEl = () => document.querySelector("#d-session .workspace");
@@ -33,6 +59,20 @@
       .filter((it) => it.key && it.text);
   }
 
+  // >28 条均匀采样至 28（原版窗口化的轻量替身——非虚拟化全挂载，跳转链不受采样影响：
+  // 采样行点击跳本行；中间未采样行的跳转由滚动同步/面板滚动达成）。必含首/尾/active
+  // （原版窗口化「保 active」同语义——active 恒可见=折叠轨的跟手锚）。
+  function sample(list) {
+    if (list.length <= MAX_LINES) return list.slice();
+    const out = [];
+    const step = (list.length - 1) / (MAX_LINES - 1);
+    for (let i = 0; i < MAX_LINES; i++) out.push(list[Math.round(i * step)]);
+    const dedup = out.filter((it, i) => i === 0 || it !== out[i - 1]);
+    const active = list.find((it) => it.key === activeKey);
+    if (active && !dedup.includes(active)) dedup[Math.max(1, Math.floor(dedup.length / 2))] = active;
+    return dedup;
+  }
+
   function eligible() {
     return items.length >= MIN_ITEMS && window.innerWidth >= MIN_VW;
   }
@@ -43,13 +83,11 @@
     root.querySelectorAll("[data-nav-key]").forEach((n) => {
       const on = n.dataset.navKey === key;
       n.classList.toggle("msg-navbar__item--active", on);
-      n.classList.toggle("msg-navbar__line--active", on && n.classList.contains("msg-navbar__line"));
       n.setAttribute("aria-selected", on ? "true" : "false");
     });
   }
 
   // 滚动同步（rAF 节流·passive 监听）：可视区顶部最后一条已越过的用户消息=active
-  //（对位 WorkBuddy visibleRequestId 语义的 DOM 版——非虚拟化全挂载直接量 rect）
   function syncActive() {
     if (raf) return;
     raf = requestAnimationFrame(() => {
@@ -68,8 +106,6 @@
   }
 
   function jump(it) {
-    // cc-deck 消息流非虚拟化全挂载——scrollIntoView 直达（调研定谳：WorkBuddy 的
-    // ensureLoaded 虚拟加载链整层不需要）
     it.el.scrollIntoView({ behavior: "smooth", block: "start" });
     setActive(it.key);
   }
@@ -90,7 +126,7 @@
     root.classList.toggle("open", on);
     root.setAttribute("aria-expanded", on ? "true" : "false");
     panelEl.setAttribute("role", on ? "listbox" : "presentation");
-    root.querySelectorAll("[data-nav-key].msg-navbar__item").forEach((n) => n.setAttribute("role", on ? "option" : "presentation"));
+    panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", on ? "option" : "presentation"));
   }
 
   function build() {
@@ -102,32 +138,32 @@
       root.className = "msg-navbar";
       root.setAttribute("aria-label", "历史提问");
       root.setAttribute("aria-expanded", "false");
-      linesEl = document.createElement("div");
-      linesEl.className = "msg-navbar__lines";
-      linesEl.setAttribute("aria-hidden", "true");
+      // 期二：单容器（panel 承载折叠轨+展开文本双视图——clip-path 裁剪切换，原版机制）；
+      // ::before 命中层（W-NAVHIT）：z-index:-1 教训见文件头注
       panelEl = document.createElement("div");
       panelEl.className = "msg-navbar__panel";
-      root.append(panelEl, linesEl);
+      panelEl.setAttribute("aria-hidden", "false");
+      root.appendChild(panelEl);
       root.addEventListener("mouseenter", () => schedule(true));
-      root.addEventListener("mouseleave", () => schedule(false));
+      root.addEventListener("mouseleave", () => { schedule(false); fishReset(); });
+      // 期二 R1（1115 用户令「跟随鼠标滚动的悬浮放大特效」）：fisheye——光标纵向扫过时
+      // 刻度按距离高斯衰减放大（σ=46px 峰值 1.9×，WorkBuddy 原版 dock 放大同款观感），
+      // 跟手走 rAF 合帧（mousemove 高频不逐帧写样式）；离场全复位。CSS 侧 --fz 因子消费
+      // （tick 宽/高同乘，transition .12s 圆滑）；reduced-motion 由 CSS 降级闸兜底（直切）
+      root.addEventListener("mousemove", (ev) => {
+        fishY = ev.clientY;
+        if (!fishT) fishT = requestAnimationFrame(fishApply);
+      });
+      root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       host.appendChild(root);
     }
     const ok = eligible();
     root.hidden = !ok;
     if (!ok) { items = []; return; }
-    // 双视图同构渲染：折叠轨（短横线列）+展开面板（文本行）——同 key 双份，active 双写
-    linesEl.textContent = "";
+    shown = sample(items);
     panelEl.textContent = "";
-    for (const it of items) {
-      const line = document.createElement("button");
-      line.type = "button";
-      line.className = "msg-navbar__line";
-      line.dataset.navKey = it.key;
-      line.title = it.text;
-      line.tabIndex = -1; // 轨线不占 Tab 序（面板行是可聚焦主入口）
-      line.addEventListener("click", () => jump(it));
-      linesEl.appendChild(line);
+    for (const it of shown) {
       const row = document.createElement("button");
       row.type = "button";
       row.className = "msg-navbar__item";
@@ -139,7 +175,9 @@
       row.addEventListener("click", () => jump(it));
       panelEl.appendChild(row);
     }
-    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, items.length * 26 + 16) + "px");
+    const rowsN = Math.min(shown.length, Math.ceil(MAX_H / 26));
+    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 26 + 12) + "px");
+    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 26 + 12) + "px");
     syncActive();
   }
 
@@ -160,7 +198,7 @@
     build();
   }
 
-  window.ccDeckNavbar = { rebuild: scheduleBuild, items: () => items.length, isOpen: () => open }; // 诊断/探针口
+  window.ccDeckNavbar = { rebuild: scheduleBuild, items: () => items.length, shown: () => shown.length, isOpen: () => open }; // 诊断/探针口
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();

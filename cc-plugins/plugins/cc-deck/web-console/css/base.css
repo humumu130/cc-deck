@@ -767,7 +767,7 @@
     .fz-sash { cursor: col-resize; z-index: 10; flex-shrink: 0; width: 4px; position: relative; } /* =WorkBuddy __detail-sash{cursor:col-resize;z-index:10;flex-shrink:0;width:4px;position:relative} */
     .fz-sash:hover, .fz-sash.dragging { background: color-mix(in srgb, var(--brand, #EC9A73) 60%, transparent); } /* =__detail-sash:hover 品牌色 60% */
     .fz-sash[hidden] { display: none; }
-    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: var(--surface1); overflow: hidden; } /* =WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]——localStorage 记忆沿用） */
+    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden; } /* 结构=WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]）；底色 W-FZONE-R5 融合（1115 用户「底色也不对」）：--surface1（=左列列表档，fzone 被读作列表列）退役→主面板同源面 workspace-top→bg1 梯度（与 .workspace 逐 token 同构）+左缘 1px line-soft 列界（与 .queue border-right 同节奏）——工作区=主面板延续，双主题自动随 token，不自创色 */
     .fzone[hidden] { display: none; }
     .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
 
@@ -824,24 +824,26 @@
        来了，而且切不掉」病灶：浮层盖掉对话区右 54% 含输入框右半）。任何宽度工作区都是真实列
        （对话列 flex 收缩），永不全高盖对话/输入框；极窄 <1000 自动收起由 fzone.js NARROW_W 承载
        （resize 防抖+单向收起不自动弹回——CSS 层无需规则）。 */
-/* ═══ W-NAVBAR（1112 用户拍板·期一）：历史提问索引轨——消息流右缘导航条（WorkBuddy
-       ConversationHistoryNavigation 逆向规格=~/.cc-deck/artifacts/w-fzone-nav.md §三；期一
-       减配：开合 opacity/translate 过渡，免 clip-path 双布局插值+补偿链——期二候选） ═══ */
-    .msg-navbar { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); z-index: 5; display: flex; align-items: flex-end; flex-direction: column; }
+/* ═══ W-NAVBAR 期二（1115 用户 #166 四修）：动效对标 WorkBuddy 原版（clip-path 裁剪展开
+   .543s cubic-bezier(.16,1,.3,1)/收起 .343s cubic-bezier(.45,0,.3, 1)——w-fzone-nav.md §三原参数）
+   +悬浮窗 cc-deck token 融合（--surface1 实底/--line 描边——fz 树抽屉同款卡面语言，去期一 blur/color-mix）
+   +加高（单套行 DOM 行高 26px，>28 条采样）+避让（right 34px 让开 inspector-expand 抽屉钮带） ═══ */
+    .msg-navbar { position: absolute; top: 50%; right: 34px; transform: translateY(-50%); z-index: 5; } /* 期二④：right 10→34px——inspector-expand 钮带（实测 x[视口-20,视口]×y[409,481]）与期一 right:10px 线区正撞，右移让开（CDP 归零数字见回执） */
     .msg-navbar[hidden] { display: none; } /* 门槛态零占位（<5 条用户消息 / <880px 视口） */
-    .msg-navbar__lines { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding: 6px 2px; position: relative; } /* 折叠轨：短横线列（对位 WorkBuddy indicator 12×1.5px）；W-NAVHIT：position:relative 承 ::before 命中层（padding 方案实测线列左移 12px 破「视觉零变化」，弃） */
-    .msg-navbar__lines::before { content: ""; position: absolute; inset: -6px -12px; z-index: -1; } /* W-NAVHIT（审一 P2 顺刀）：40px rail-hit 常驻命中带——两侧各扩 12px（非 active 容器 16px+24px=40px 精确达标，active 态 48px），垂直 ±6px 缓冲，零布局位移线位不动。W-NAVHIT-R1（审一 P1 返修）：z-index:-1 必备——定位伪元素默认绘于且 hit-test 于静态流内线按钮之上（原注「::before 先绘线后绘」画反了），线中心真点击被吞（实测五线 1290→1290 全 NOOP，且有合成层状态漂移=间歇复现）；负 z 绘于宿主内容之下——线按钮复位其上恢复点击/hover，带缓冲区无按钮处伪元素仍最顶→带命中不丢 */
-    .msg-navbar__line { width: 12px; height: 1.5px; padding: 0; background: color-mix(in srgb, var(--text) 20%, transparent); border: 0; cursor: pointer; transition: width .18s ease, background-color .18s ease; } /* 悬停命中区偏小——轨线间 gap 5px 由容器补 */
-    .msg-navbar__line:hover, .msg-navbar__line--active { width: 20px; background: var(--text); } /* active 加宽（对位 WorkBuddy 12→20px 同款） */
-    .msg-navbar__panel { position: absolute; top: 50%; right: 0; transform: translateY(-50%) translateX(8px); width: max-content; min-width: 96px; max-width: 320px; max-height: var(--msg-navbar-max-h, 400px); overflow: hidden auto; padding: 8px 0; opacity: 0; visibility: hidden; pointer-events: none; scrollbar-width: thin; background: color-mix(in srgb, var(--surface1) 90%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: .5px solid var(--line-strong); border-radius: var(--radius-lg, 14px); box-shadow: -5px 0 18px var(--panel-shadow, rgba(0, 0, 0, .18)); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%); transition: opacity .2s ease, transform .2s ease, visibility 0s linear .2s; } /* 毛玻璃 surface（对位 WorkBuddy popover 90%+blur8+2xl 圆角）+上下渐隐 mask（对位 fade-top/bottom） */
-    .msg-navbar.open .msg-navbar__panel { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(-50%); transition: opacity .2s ease, transform .2s ease, visibility 0s; }
-    .msg-navbar__item { display: flex; align-items: center; justify-content: flex-end; gap: 10px; box-sizing: border-box; width: 100%; min-width: 0; height: 26px; padding: 0 14px 0 12px; background: none; border: 0; color: var(--dim); font-size: var(--fs-B); font-family: inherit; text-align: right; cursor: pointer; }
-    .msg-navbar__item .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .msg-navbar__item .tick { flex: none; width: 4px; height: 4px; border-radius: 50%; background: transparent; }
-    .msg-navbar__item:hover { color: var(--text); }
-    .msg-navbar__item--active { color: var(--text); font-weight: 600; }
-    .msg-navbar__item--active .tick { background: var(--brand); } /* active 短横线/圆点双视图同亮 */
-    @media (max-width: 879px) { .msg-navbar { display: none; } } /* 窄窗零占位双保险（JS 门槛兜 CSS） */
+    .msg-navbar__panel { position: relative; display: flex; flex-direction: column; width: max-content; min-width: 96px; max-width: 320px; max-height: var(--msg-navbar-fold-h, 400px); overflow: hidden auto; padding: 6px 0; scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%); clip-path: inset(24px 0 24px calc(100% - 44px) round 12px); background-color: transparent; border: 1px solid transparent; border-radius: var(--radius-lg, 12px); box-shadow: none; transition: clip-path .343s cubic-bezier(.45, 0, .3, 1), background-color .343s cubic-bezier(.45, 0, .3, 1), border-color .343s cubic-bezier(.45, 0, .3, 1), box-shadow .343s cubic-bezier(.45, 0, .3, 1), max-height .343s cubic-bezier(.45, 0, .3, 1); } /* 期二①：clip-path 裁剪展开（原版机制——折叠=只露右侧 44px 线区+卡面要素全隐=纯线轨观感；展开=裁剪框左缘右移擦显+卡面渐入）；期二②：卡面 token（--surface1 实底/--line 描边/轻阴影——展开态见 .open 行） */
+    .msg-navbar__panel::-webkit-scrollbar { display: none; }
+    .msg-navbar.open .msg-navbar__panel { clip-path: inset(0 0 0 0 round 12px); background-color: var(--surface1); border-color: var(--line); box-shadow: 0 8px 22px rgba(0, 0, 0, .12); transition: clip-path .543s cubic-bezier(.16, 1, .3, 1), background-color .543s cubic-bezier(.16, 1, .3, 1), border-color .543s cubic-bezier(.16, 1, .3, 1), box-shadow .543s cubic-bezier(.16, 1, .3, 1), max-height .543s cubic-bezier(.16, 1, .3, 1); } /* 呼出 .543s 弹性缓动（原版 §三） */
+    .msg-navbar__panel::before { content: ""; position: absolute; inset: -6px -10px; z-index: -1; } /* W-NAVHIT 命中带（期二随容器迁移）：两侧扩 10px+垂直 6px 缓冲；z-index:-1 必备——定位伪元素默认绘于且 hit-test 于内容之上，线中心真点击会被吞（NAVHIT-R1 实锤），负 z 绘于宿主内容之下恢复点击 */
+    .msg-navbar__item { display: flex; align-items: center; justify-content: flex-end; gap: 10px; box-sizing: border-box; width: 100%; min-width: 0; height: 26px; padding: 0 12px 0 14px; background: none; border: 0; color: var(--dim); font-size: var(--fs-B); font-family: inherit; text-align: right; cursor: pointer; } /* 期二③：行高 26px 单套 DOM（折叠=clip 只露 tick 线区；期一线列 gap 5px 双 DOM 退役——对齐 WorkBuddy「一套 DOM 双视图」） */
+    .msg-navbar__item .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0; transform: translateX(12px); transition: opacity .343s cubic-bezier(.45, 0, .3, 1), transform .343s cubic-bezier(.45, 0, .3, 1); } /* 文本随开合渐显/渐隐（折叠态在裁剪区外本就不可见，双保险隐） */
+    .msg-navbar.open .msg-navbar__item .txt { opacity: 1; transform: translateX(0); transition: opacity .543s cubic-bezier(.16, 1, .3, 1), transform .543s cubic-bezier(.16, 1, .3, 1); }
+    .msg-navbar__item .tick { flex: none; width: calc(12px * var(--fz, 1)); height: calc(2px * var(--fz, 1)); border-radius: 1px; background: color-mix(in srgb, var(--text) 22%, transparent); transition: width .12s ease-out, height .12s ease-out, background-color .18s ease; } /* tick=折叠轨短横线本体（期一 4px 圆点退役——单元素双视图：折叠=露区内 12px 线，展开=行尾 12px 线）；--fz=期二 R1 fisheye 鼠标跟随放大因子（navbar.js mousemove 按光标距离高斯衰减注入，1~1.9） */
+    .msg-navbar__item:hover .tick { background: var(--text); }
+    .msg-navbar__item:hover .txt { color: var(--text); }
+    .msg-navbar__item--active .tick { width: calc(20px * var(--fz, 1)); background: var(--brand); } /* active 加宽 12→20px+品牌色（原版 12→20 同宽）——滑轨跟手（.18s 快档=原版 settled 后交互同款）；fisheye 因子同乘保持 active 视觉锚 */
+    .msg-navbar__item--active .txt { color: var(--text); font-weight: 600; }
+    @media (prefers-reduced-motion: reduce) { .msg-navbar__panel, .msg-navbar.open .msg-navbar__panel, .msg-navbar__item .txt, .msg-navbar.open .msg-navbar__item .txt, .msg-navbar__item .tick { transition: none !important; } } /* 期二①：动效降级直切（原版 prefers-reduced-motion 同款口径） */
+    @media (max-width: 879px) { .msg-navbar { display: none; } } /* 窄窗零占位双保险（JS 门槛兑 CSS）——期二保留
 
 
     /* B17 底栏线条精简（军规①一界一分隔）：底栈唯一横线留在 footer 顶缘，dock 顶线与 footer 投影退役 */
@@ -2104,6 +2106,10 @@
        原 12px 圆角+渐变底退役，对齐 #d-session .queue-card（2020 行族） */
     #d-session .workspace-head { background: var(--brand); background: linear-gradient(180deg, color-mix(in srgb, var(--workspace-top) 96%, var(--brand) 4%), var(--workspace-top)); }
     #d-session .workspace-head, #d-team .workspace-head { border-bottom-color: transparent; border-bottom-color: color-mix(in srgb, var(--line) 72%, transparent); }
+    /* W-FZONE-R5 件二（#168 用户令 1115）：主面板顶栏下边缘分割线退役——纯颜色分割（head 底=
+       workspace-top 与内容区梯顶同源，靠底色差分层；segment-bar active 品牌下划线保留为唯一点缀）
+       ——仅会话域（后位覆盖上两行同特异性的继承边），团队/项目等其余域 head 边线不动 */
+    #d-session .workspace-head { border-bottom: 0; }
     .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 0; margin-bottom: 15px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
     .metric { min-width: 0; padding: 10px 12px; border: 0; border-left: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
     .metric:first-child { border-left: 0; }
