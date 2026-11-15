@@ -24,6 +24,18 @@
   const loadFn = () => (typeof window.__ccDeck005FzoneLoad === "function" ? window.__ccDeck005FzoneLoad : null);
   const iconHtml = (name) => (typeof window.__ccDeck005ArtIconHtml === "function" ? window.__ccDeck005ArtIconHtml(name) : "");
 
+  // W-UIP2 件二：窄窗阈值提前定义（setOpen 的 yield 链引用——原 :473 区 const 提升不可达）
+  const NARROW_W = 1200; // 1200=939-1071 备案带外沿+composer 全按钮零溢出实测下界（R4-R1 九档扫描）
+  let autoYielded = false; // 列表让位来源记账：true=本进程自动收起（fzone 收起时可还原）；用户手动收/呼出置 false
+  function yieldQueue(on, announce) {
+    const q = document.querySelector("#d-session .queue");
+    if (!q) return;
+    q.classList.toggle("fz-yield", on);
+    autoYielded = on ? true : false;
+    if (on && announce) { try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast("窄屏：会话列表已自动收起给工作区让位（工作区工具行「列表」可呼出）"); } catch (_) {} }
+    renderTools();
+  }
+
   // ---------- 宽度/收起（记忆：localStorage 持久——任务书「收起/展开记忆」） ----------
   // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
   // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
@@ -135,6 +147,11 @@
     root.classList.toggle("open", on);
     const sash = document.querySelector("#d-session .fz-sash");
     if (sash) sash.hidden = !on; // sash 随面板开合（WorkBuddy：面板关=整组不渲染，我方 hidden 等价）
+    // W-UIP2 件二（1115 test.18 PM 定案）：窄窗(<NARROW_W)策略反转——不收 fzone 收列表：
+    // 开面板时窄窗→会话列表自动让位（.queue.fz-yield）+一次性 toast；关面板→本次系自动
+    // 让位才还原（autoYielded 记账——用户手动收过列表的不抢）。「⟨ 列表」呼出钮见 renderTools。
+    if (on && window.innerWidth < NARROW_W) yieldQueue(true, true);
+    if (!on && autoYielded) yieldQueue(false, false);
     // R4：旧 fz-on 类随 session-split 退役删除（CSS 全仓零消费=vestigial）
     // 头部常驻开关钮状态回显（面板收起后=唯一再展开入口——静态 conv-mini 钮，data-fzone-toggle 不随对话重建）
     document.querySelectorAll("[data-fzone-toggle]").forEach((b) => {
@@ -148,7 +165,9 @@
     if (!toolsEl) return;
     const n = state.tabs.length;
     const freshN = state.tabs.filter((t) => t.fresh).length;
-    toolsEl.innerHTML = '<button type="button" class="fz-tool" data-fz-collapse title="' + (root.hidden ? "展开文件工作区" : "收起文件工作区（保留全部 tab）") + '">' + (root.hidden ? "⟨ 展开" : "收起 ⟩") + "</button>" +
+    const qEl = document.querySelector("#d-session .queue");
+    const yieldBtn = qEl && qEl.classList.contains("fz-yield") ? '<button type="button" class="fz-tool" data-fz-recall-queue title="呼出会话列表（窄屏自动收起让位）">☰ 列表</button>' : "";
+    toolsEl.innerHTML = '<button type="button" class="fz-tool" data-fz-collapse title="' + (root.hidden ? "展开文件工作区" : "收起文件工作区（保留全部 tab）") + '">' + (root.hidden ? "⟨ 展开" : "收起 ⟩") + "</button>" + yieldBtn +
       '<button type="button" class="fz-tool" data-fz-tree-btn title="工作空间树（本会话产物按目录分组）">▤ 树</button>' +
       '<span class="fz-spring"></span><span class="fz-state">' + (n ? n + " tab" + (n > 1 ? "s" : "") + (freshN ? ' · <b class="fz-freshn">' + freshN + " 新</b>" : "") : "空") + "</span>";
   }
@@ -363,6 +382,8 @@
     if (fp && typeof window.__ccDeck005FzoneOpenByToken === "function") { window.__ccDeck005FzoneOpenByToken(fp.dataset.p); return; }
     const co = ev.target.closest("[data-fz-collapse]");
     if (co) { setOpen(root.hidden); return; }
+    // W-UIP2 件二：列表呼出钮（yield 态在场）——用户主动呼出=让位记账清零（此后 fzone 收起不再自动还原抢意愿）
+    if (ev.target.closest("[data-fz-recall-queue]")) { yieldQueue(false, false); return; }
     // W-FZONE-B2 件③：树抽屉（钮=开/关切换；树内文件=OpenByToken 路由开 tab；树外点击=收树）
     if (ev.target.closest("[data-fz-tree-close]")) { closeTree(); return; }
     const tf = ev.target.closest("[data-fz-tree-open]");
@@ -470,17 +491,17 @@
   // 通道示众（静默再收=审二实录病——「我自己开的拖下窗口就没了」），仅自动收起边沿弹（手动
   // 收/开、跨出窄域不弹）。
   // 1200=939-1071 备案带外沿+composer 全按钮零溢出实测下界（R4-R1 九档扫描 ≥1071）
-  const NARROW_W = 1200;
+  // NARROW_W 已提前定义（W-UIP2 件二——setOpen 引用域）
   let wasNarrow = window.innerWidth < NARROW_W;
   let rzTid = 0;
   window.addEventListener("resize", () => {
     clearTimeout(rzTid);
     rzTid = setTimeout(() => {
       const narrow = window.innerWidth < NARROW_W;
-      if (narrow && !wasNarrow && !root.hidden) {
-        setOpen(false);
-        try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") window.__ccDeck005B4.toast("窗口过窄，文件工作区已收起（头部 ▤ 工作区 可再开）"); } catch (_) {}
-      }
+      // W-UIP2 件二反转（1115 test.18 PM 定案）：窄窗不再收 fzone——fzone 开着跨入窄域→列表
+      // 让位（+toast）；跨出→本次系自动让位则还原；窄域内 resize 不重弹（wasNarrow 边沿语义）。
+      if (narrow && !wasNarrow && !root.hidden) yieldQueue(true, true);
+      if (!narrow && wasNarrow && autoYielded) yieldQueue(false, false);
       wasNarrow = narrow;
       // R4 P1-2 修（审 B）+ R4-R1 刀三合流：面板开着时视口变化（不跨窄域如 1200→1100，或跨出变宽）
       // 同样重钳——变窄收进 avail 护栏（1200-1399 带 800px 面板挤对话同治），变宽回弹到记忆宽
