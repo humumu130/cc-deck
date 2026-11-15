@@ -119,7 +119,9 @@
       const t = TAU(), win = shellWin();
       if (!t || !win) return;
       try {
-        if (await win.isMaximized() || await win.isFullscreen()) return; // R5-R1 P1-a：最大化/全屏态禁缩（tao set_inner_size 会把 zoomed 窗拉出最大化——review2 C12 实测 2560→2116）
+        if (await win.isMaximized() || await win.isFullscreen()) { // R5-R1 P1-a：最大化/全屏态禁缩（tao set_inner_size 会把 zoomed 窗拉出最大化——review2 C12 实测 2560→2116）
+          lastGrowShift = null; // W-P3SWEEP N1（1115 R5 复核）：早退清账——最大化门下窗位语境已失效，grow 记账悬挂跨会话（回移侧有 fromX 精确匹配守卫不可误移，此处显式终结账面——不留「守卫兜底」的隐式依赖）
+          return; }
         const scale = await win.scaleFactor();
         const iw = await win.innerSize(); // R5-R1 P1-b：宽账读 inner（与 grow 对称）
         const target = Math.max(SHELL_MIN_WIN, (iw.width - Math.round(pxL * scale)) / scale);
@@ -136,6 +138,10 @@
     });
   }
   function setOpen(on) {
+    // W-P3SWEEP N2 备案（1115 R5 复核·观感项·不动逻辑）：下方 grow 为 await win.setSize 异步
+    // 落地——落地前一拍 chat 列已被 flex 预让位（面板 DOM 先 hidden=false 占宽），瞬时低于
+    // CHAT_FIT 护栏数十 ms 后回弹（grow 到位=chat 恢复）。pre-apply 最小面板宽可消此拍但引入
+    // 宽度抖动双形态——按审查口径注释备案+装机轮观察，真机可感知再议。
     const wasOpen = !root.hidden;
     if (on && !wasOpen && shellWin()) { // R5 真第四列：壳内呼出=窗口外扩 sash+面板宽（w0=面板目标宽直取——hidden 期 rect=0 不可读；grow 异步落地，chat 布局链自动恒不变）。!wasOpen 门=已开时重复 setOpen(true)（open() 点文件聚焦路径）不二次外扩
       const w0 = readWShell();

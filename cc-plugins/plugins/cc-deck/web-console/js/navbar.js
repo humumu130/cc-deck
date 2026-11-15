@@ -85,6 +85,10 @@
   function setActive(key) {
     if (key === activeKey) return;
     activeKey = key;
+    // W-P3SWEEP（1115 审 P3）：>28 条时 sample 仅 build 时跑——滚动中 active 落到未采样行
+    // （折叠轨无 active 锚=跟丢）。activeKey 先落账再检测：命中不在 shown → build() 重采样
+    // （sample 读 activeKey 补位进 dedup 中位——首/尾保留不破；时序反了会补旧 active 白采）。
+    if (key && !shown.some((it) => it.key === key) && items.length) build(); // 重采样后落入下方类循环（新建行上 --active 锚——return 会跳过=有行无锚）
     root.querySelectorAll("[data-nav-key]").forEach((n) => {
       const on = n.dataset.navKey === key;
       n.classList.toggle("msg-navbar__item--active", on);
@@ -132,6 +136,31 @@
     root.setAttribute("aria-expanded", on ? "true" : "false");
     panelEl.setAttribute("role", on ? "listbox" : "presentation");
     panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", on ? "option" : "presentation"));
+    // NAVR4-②（1115 用户令「无法往上滚动，只能固定那些消息」）：展开态=全量行+真滚动，
+    // 收起态=采样 28 概览轨——clip-path 动效元素不变，内容行集随态切换（行数几百级 DOM 可承受）
+    renderRows(on ? items : shown);
+    if (!on) panelEl.scrollTop = 0; // 收起归位（下次展开从顶部进）
+    syncActive(); // NAVR4-R2 ③（审 P2）：renderRows 重建行后 active 高亮丢失——补同步
+  }
+
+  function renderRows(list) {
+    panelEl.textContent = "";
+    for (const it of list) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "msg-navbar__item";
+      row.dataset.navKey = it.key;
+      row.title = it.text;
+      row.setAttribute("aria-selected", "false");
+      row.innerHTML = '<span class="txt"></span><span class="tick" aria-hidden="true"></span>';
+      row.querySelector(".txt").textContent = it.text; // textContent 赋值——消息文本零 HTML 注入面
+      row.addEventListener("click", () => jump(it));
+      // NAVR4-R3 ③（审 R2 复核红）：建行时直接落 active 类——setActive 首行身份卫者
+      // （key===activeKey 早退）挡回 syncActive 补挂（renderRows 重建丢类而模块态未变）
+      if (it.key === activeKey) { row.classList.add("msg-navbar__item--active"); row.setAttribute("aria-selected", "true"); }
+      panelEl.appendChild(row);
+    }
+    panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", open ? "option" : "presentation"));
   }
 
   function build() {
@@ -172,22 +201,39 @@
     root.hidden = !ok;
     if (!ok) { items = []; return; }
     shown = sample(items);
-    panelEl.textContent = "";
-    for (const it of shown) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "msg-navbar__item";
-      row.dataset.navKey = it.key;
-      row.title = it.text;
-      row.setAttribute("aria-selected", "false");
-      row.innerHTML = '<span class="txt"></span><span class="tick" aria-hidden="true"></span>';
-      row.querySelector(".txt").textContent = it.text; // textContent 赋值——消息文本零 HTML 注入面
-      row.addEventListener("click", () => jump(it));
-      panelEl.appendChild(row);
+    // NAVR4-①（1115 用户令「会和输入框有重叠」）：宿主 .workspace 含 workspace-footer（composer），
+    // bottom:28px 落进输入区（实测压 92px）。NAVR4-R2（审 P1）：lift 改**底栈全距**测量式
+    // （host 底 − 消息流底 = dock+agbox+footer 全家，基线 150 对上）——单量 footer 会漏
+    // dock/agbox（agbox 展开 226px 时压 210px 实测）；三兄弟挂 ResizeObserver 任一变高即
+    // scheduleBuild 去颤重建（MO 只盯 #session-body 看不见兄弟）
+    const body = bodyEl();
+    const lift = body ? Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 16 : 144;
+    root.style.setProperty("--msg-navbar-lift", lift + "px");
+    // NAVR4-R2 ②→R3 ④（审 R2 复核新 P1：RO 重挂永动）：三兄弟静态 DOM 恒不替换——
+    // 只建一次+只观察一次（build 里 disconnect+observe 每次 observe 都发初始通知→
+    // scheduleBuild→build 自循环 4.8 次/s churn）；尺寸 memo 过滤未变通知（dock 过渡中
+    // 的连续通知只放行真实变化）
+    if (typeof ResizeObserver === "function" && !root._ro) {
+      root._ro = new ResizeObserver((ents) => {
+        for (const e of ents) {
+          const w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
+          const prev = root._roMemo.get(e.target);
+          if (prev && prev.w === w && prev.h === h) continue; // 未变（初始/重复通知）
+          root._roMemo.set(e.target, { w, h });
+          scheduleBuild();
+        }
+      });
+      root._roMemo = new Map();
+      for (const sel of [".workspace-footer", ".agbox", ".session-state-dock"]) {
+        const el = host.querySelector(":scope > " + sel);
+        if (el) { root._roMemo.set(el, { w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) }); root._ro.observe(el); }
+      }
     }
-    const rowsN = Math.min(shown.length, Math.ceil(MAX_H / 26));
-    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 26 + 12) + "px");
-    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 26 + 12) + "px");
+    renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）
+    const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 22)); // W-P3SWEEP：26→22 对齐期三行高（MAX_H 预算按实际行距——高估致 max-height 恒过大无视觉病，档位对齐）
+    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 22 + 12) + "px");
+    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 22 + 12) + "px");
+    root.style.setProperty("--msg-navbar-open-h", Math.min(Math.round(window.innerHeight * 0.6), 520) + "px"); // 展开卡全量滚动上限（60vh/520 封顶）
     syncActive();
   }
 
