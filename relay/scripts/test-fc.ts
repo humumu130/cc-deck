@@ -235,7 +235,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     // W-UIP2（1115 test.18 用户 #169/#170/#171 三件）专项锚
     const nbSrc = readFileSync(join(root, "web-console", "js", "navbar.js"), "utf-8");
     ok(nbSrc.includes("1 + 2.2 * Math.exp(-(d * d) / 3200)") && !nbSrc.includes("1 + 0.9 *"), "UIP2-1 fisheye 强化（峰值 1.9→3.2×/σ 46→40——命中 tick 12×3.2≈38px ≥36；旧 0.9 因子负向锚）");
-    ok(css.includes("height: 22px; padding: 0 12px 0 14px") && css.includes("padding: 4px 0; scrollbar-width: none") && css.includes("right: 8px") && css.includes("calc(22% + 26% * (var(--fz, 1) - 1) / 2.2)"), "UIP2-2 导航条四修（行高 26→22+行距 6→4+贴边 right 34→8+亮度随 --fz 插值 22→48%）");
+    ok(css.includes("height: 16px; padding: 0 12px 0 14px") && css.includes("padding: 4px 0; scrollbar-width: none") && css.includes("right: 8px") && css.includes("calc(22% + 26% * (var(--fz, 1) - 1) / 2.2)"), "UIP2-2 导航条四修（行高 26→22→16 NAVR5 密度档+行距 6→4+贴边 right 34→8+亮度随 --fz 插值 22→48%）");
     ok(css.includes("#d-session .workspace-body { padding-right: 66px; }") && css.includes("#d-session .queue.fz-yield"), "UIP2-3 让位双面（消息区右距 22→66px=轨道独立带重叠根治+会话列表 fz-yield 收起类）");
     ok(fz.includes("autoYielded") && fz.includes('data-fz-recall-queue') && fz.includes("窄屏：会话列表已自动收起给工作区让位") && fz.includes("if (!narrow && wasNarrow && autoYielded) yieldQueue(false, false)"), "UIP2-4 小屏让位链（fzone 开+<1200→列表 yield+toast；收起→autoYielded 记账还原；跨阈值 resize 同链；「☰ 列表」呼出钮清记账）");
     ok(web.includes('外部路径已复制') && web.includes("raw.startsWith(\"/\") ? raw") && web.includes('S.homedir.replace'), "UIP2-5 .fpath 直开工作区（绝对路径 / 直开+~/ homedir 展开→openFzoneTab 同链；外部引用复制 toast 文案差异化）");
