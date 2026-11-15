@@ -85,6 +85,10 @@
   function setActive(key) {
     if (key === activeKey) return;
     activeKey = key;
+    // W-P3SWEEP（1115 审 P3）：>28 条时 sample 仅 build 时跑——滚动中 active 落到未采样行
+    // （折叠轨无 active 锚=跟丢）。activeKey 先落账再检测：命中不在 shown → build() 重采样
+    // （sample 读 activeKey 补位进 dedup 中位——首/尾保留不破；时序反了会补旧 active 白采）。
+    if (key && !shown.some((it) => it.key === key) && items.length) build(); // 重采样后落入下方类循环（新建行上 --active 锚——return 会跳过=有行无锚）
     root.querySelectorAll("[data-nav-key]").forEach((n) => {
       const on = n.dataset.navKey === key;
       n.classList.toggle("msg-navbar__item--active", on);
@@ -185,9 +189,9 @@
       row.addEventListener("click", () => jump(it));
       panelEl.appendChild(row);
     }
-    const rowsN = Math.min(shown.length, Math.ceil(MAX_H / 26));
-    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 26 + 12) + "px");
-    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 26 + 12) + "px");
+    const rowsN = Math.min(shown.length, Math.ceil(MAX_H / 22)); // W-P3SWEEP：26→22 对齐期三行高（MAX_H 预算按实际行距——高估致 max-height 恒过大无视觉病，档位对齐）
+    root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 22 + 12) + "px");
+    root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 22 + 12) + "px");
     syncActive();
   }
 
