@@ -136,6 +136,27 @@
     root.setAttribute("aria-expanded", on ? "true" : "false");
     panelEl.setAttribute("role", on ? "listbox" : "presentation");
     panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", on ? "option" : "presentation"));
+    // NAVR4-②（1115 用户令「无法往上滚动，只能固定那些消息」）：展开态=全量行+真滚动，
+    // 收起态=采样 28 概览轨——clip-path 动效元素不变，内容行集随态切换（行数几百级 DOM 可承受）
+    renderRows(on ? items : shown);
+    if (!on) panelEl.scrollTop = 0; // 收起归位（下次展开从顶部进）
+  }
+
+  function renderRows(list) {
+    panelEl.textContent = "";
+    for (const it of list) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "msg-navbar__item";
+      row.dataset.navKey = it.key;
+      row.title = it.text;
+      row.setAttribute("aria-selected", "false");
+      row.innerHTML = '<span class="txt"></span><span class="tick" aria-hidden="true"></span>';
+      row.querySelector(".txt").textContent = it.text; // textContent 赋值——消息文本零 HTML 注入面
+      row.addEventListener("click", () => jump(it));
+      panelEl.appendChild(row);
+    }
+    panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", open ? "option" : "presentation"));
   }
 
   function build() {
@@ -176,22 +197,17 @@
     root.hidden = !ok;
     if (!ok) { items = []; return; }
     shown = sample(items);
-    panelEl.textContent = "";
-    for (const it of shown) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "msg-navbar__item";
-      row.dataset.navKey = it.key;
-      row.title = it.text;
-      row.setAttribute("aria-selected", "false");
-      row.innerHTML = '<span class="txt"></span><span class="tick" aria-hidden="true"></span>';
-      row.querySelector(".txt").textContent = it.text; // textContent 赋值——消息文本零 HTML 注入面
-      row.addEventListener("click", () => jump(it));
-      panelEl.appendChild(row);
-    }
-    const rowsN = Math.min(shown.length, Math.ceil(MAX_H / 22)); // W-P3SWEEP：26→22 对齐期三行高（MAX_H 预算按实际行距——高估致 max-height 恒过大无视觉病，档位对齐）
+    // NAVR4-①（1115 用户令「会和输入框有重叠」）：宿主 .workspace 含 workspace-footer（composer），
+    // bottom:28px 落进输入区（实测压 92px）——lift=composer 实高+16 间隙，随 rebuild 跟随
+    // agbox/排队提示等高度变化（resize/消息流重建均触发 build）
+    const foot = host.querySelector(":scope > .workspace-footer");
+    const lift = foot && foot.offsetHeight ? Math.round(foot.offsetHeight) + 16 : 144;
+    root.style.setProperty("--msg-navbar-lift", lift + "px");
+    renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）
+    const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 22)); // W-P3SWEEP：26→22 对齐期三行高（MAX_H 预算按实际行距——高估致 max-height 恒过大无视觉病，档位对齐）
     root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 22 + 12) + "px");
     root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 22 + 12) + "px");
+    root.style.setProperty("--msg-navbar-open-h", Math.min(Math.round(window.innerHeight * 0.6), 520) + "px"); // 展开卡全量滚动上限（60vh/520 封顶）
     syncActive();
   }
 
