@@ -155,6 +155,9 @@
       row.innerHTML = '<span class="txt"></span><span class="tick" aria-hidden="true"></span>';
       row.querySelector(".txt").textContent = it.text; // textContent 赋值——消息文本零 HTML 注入面
       row.addEventListener("click", () => jump(it));
+      // NAVR4-R3 ③（审 R2 复核红）：建行时直接落 active 类——setActive 首行身份卫者
+      // （key===activeKey 早退）挡回 syncActive 补挂（renderRows 重建丢类而模块态未变）
+      if (it.key === activeKey) { row.classList.add("msg-navbar__item--active"); row.setAttribute("aria-selected", "true"); }
       panelEl.appendChild(row);
     }
     panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", open ? "option" : "presentation"));
@@ -206,13 +209,24 @@
     const body = bodyEl();
     const lift = body ? Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 16 : 144;
     root.style.setProperty("--msg-navbar-lift", lift + "px");
-    // NAVR4-R2 ②：三兄弟（footer/agbox/dock）任一尺寸变 → scheduleBuild 去颤重建（lift 跟随）
-    if (typeof ResizeObserver === "function") {
-      root._ro = root._ro || new ResizeObserver(scheduleBuild);
-      root._ro.disconnect();
+    // NAVR4-R2 ②→R3 ④（审 R2 复核新 P1：RO 重挂永动）：三兄弟静态 DOM 恒不替换——
+    // 只建一次+只观察一次（build 里 disconnect+observe 每次 observe 都发初始通知→
+    // scheduleBuild→build 自循环 4.8 次/s churn）；尺寸 memo 过滤未变通知（dock 过渡中
+    // 的连续通知只放行真实变化）
+    if (typeof ResizeObserver === "function" && !root._ro) {
+      root._ro = new ResizeObserver((ents) => {
+        for (const e of ents) {
+          const w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
+          const prev = root._roMemo.get(e.target);
+          if (prev && prev.w === w && prev.h === h) continue; // 未变（初始/重复通知）
+          root._roMemo.set(e.target, { w, h });
+          scheduleBuild();
+        }
+      });
+      root._roMemo = new Map();
       for (const sel of [".workspace-footer", ".agbox", ".session-state-dock"]) {
         const el = host.querySelector(":scope > " + sel);
-        if (el) root._ro.observe(el);
+        if (el) { root._roMemo.set(el, { w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) }); root._ro.observe(el); }
       }
     }
     renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）
