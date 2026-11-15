@@ -23,6 +23,26 @@
   let shown = [];            // 采样后（≤28，必含首/尾/active）
   let open = false, activeKey = null;
   let enterT = 0, leaveT = 0, raf = 0, mo = null, buildT = 0;
+  let fishY = 0, fishT = 0; // 期二 R1 fisheye：光标 Y+在飞 rAF 帧号（mouseleave 复位见 fishReset）
+
+  // fisheye 鼠标跟随放大：刻度 --fz = 1 + 0.9·exp(−d²/2σ²)（σ=46px，峰值 1.9×）
+  // ——WorkBuddy 原版 dock 放大同款观感；rAF 合帧（mousemove 高频不逐条写样式）
+  function fishApply() {
+    fishT = 0;
+    if (!panelEl) return;
+    for (const r of panelEl.querySelectorAll(".msg-navbar__item")) {
+      const rc = r.getBoundingClientRect();
+      if (!rc.height) continue;
+      const d = fishY - (rc.top + rc.height / 2);
+      const s = 1 + 0.9 * Math.exp(-(d * d) / 4232); // 2σ²=2·46²=4232
+      r.style.setProperty("--fz", s.toFixed(3));
+    }
+  }
+  function fishReset() {
+    fishY = 0;
+    if (fishT) { cancelAnimationFrame(fishT); fishT = 0; }
+    if (panelEl) panelEl.querySelectorAll(".msg-navbar__item").forEach((r) => r.style.removeProperty("--fz"));
+  }
 
   const bodyEl = () => document.getElementById("session-body");
   const hostEl = () => document.querySelector("#d-session .workspace");
@@ -125,7 +145,16 @@
       panelEl.setAttribute("aria-hidden", "false");
       root.appendChild(panelEl);
       root.addEventListener("mouseenter", () => schedule(true));
-      root.addEventListener("mouseleave", () => schedule(false));
+      root.addEventListener("mouseleave", () => { schedule(false); fishReset(); });
+      // 期二 R1（1115 用户令「跟随鼠标滚动的悬浮放大特效」）：fisheye——光标纵向扫过时
+      // 刻度按距离高斯衰减放大（σ=46px 峰值 1.9×，WorkBuddy 原版 dock 放大同款观感），
+      // 跟手走 rAF 合帧（mousemove 高频不逐帧写样式）；离场全复位。CSS 侧 --fz 因子消费
+      // （tick 宽/高同乘，transition .12s 圆滑）；reduced-motion 由 CSS 降级闸兜底（直切）
+      root.addEventListener("mousemove", (ev) => {
+        fishY = ev.clientY;
+        if (!fishT) fishT = requestAnimationFrame(fishApply);
+      });
+      root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       host.appendChild(root);
     }
