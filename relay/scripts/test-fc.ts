@@ -262,6 +262,20 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   ok(fz.includes("(ev.metaKey || ev.ctrlKey)") && fz.includes("parseInt(ev.key, 10)") && fz.includes("n >= 1 && n <= 8"), "F18 ⌘/Ctrl+1..8 直达第 N tab（件⑤批一 P3——Nova 壳内生效口径）");
   ok(web.includes('img.addEventListener("error"') && web.includes("浏览器不支持解码该图片格式"), "F19 heic/tiff 破图兜底（onerror→降级卡+回收 blob url——件⑤批一 P3）");
 
+  // ============ F-R5. W-FZONE-R5 真第四列（1115 用户五轮定谳 #167+#168）：壳内呼出=窗口外扩不压缩 chat+底色融合+顶栏分割线退役 ============
+  {
+    const caps = readFileSync(join(root, "desktop-tauri", "src-tauri", "capabilities", "default.json"), "utf-8");
+    ok(fz.includes("W-FZONE-R5") && fz.includes("function shellWin") && fz.includes("function shellGrow") && fz.includes("function shellShrink") && fz.includes("const winOp = (fn)"), "F-R5-1 壳外扩机制（shellWin 门=setSize/outerSize/outerPosition 三在才认壳；grow/shrink 外扩缩回；winOp 串行链=开合/拖拽 setSize 竞态收口）");
+    ok(fz.includes("await win.isMaximized() || await win.isFullscreen()") && fz.includes("return false;") && fz.includes("applyW(readW())"), "F-R5-2 不可外扩回落（最大化/全屏/无壳/通道断→R4 页内挤压护栏 availMax/CHAT_FIT 老路径保留=浏览器现行形态零回归；护栏语义=chat≥442 下限而非被挤目标）");
+    ok(fz.includes('if (on && !wasOpen && shellWin()) {') && fz.includes("const w0 = readWShell();") && fz.includes("applyW(w0);") && fz.includes("shellGrow(4 + w0);") && fz.includes("shellShrink(4 + Math.round(root.getBoundingClientRect().width));") && fz.includes("!wasOpen 门"), "F-R5-3 setOpen 壳分支接线（呼出=w0 定宽直取外扩 sash+面板宽——hidden 期 rect=0 不可读；收合=按面板现宽缩回（重钳窄过同步少缩自愈对账）；!wasOpen 门=重复 setOpen(true) 不二次外扩）");
+    ok(fz.includes("function clampShellW(w)") && fz.includes("function readWShell()") && fz.includes("const SHELL_MIN_WIN = 1200"), "F-R5-4 壳模式宽钳独立（clampShellW 只受 [340,800] 档位界——屏缘由外扩梯子消化不受视口 avail 钳；SHELL_MIN_WIN=tauri.conf minWidth 缩窗下限）");
+    ok(fz.includes("mon.position.x + mon.size.width - (p.x + o.width)") && fz.includes("win.setPosition(ppos(t, p.x - shift, p.y))") && fz.includes("const shift = Math.min(p.x, growPhys - room);"), "F-R5-5 屏缘外扩梯子（余量够直接长宽→不够先左移补位→仍不够允许溢出屏——chat 恒不变优先，绝不回头压缩 chat）");
+    ok(fz.includes("const nf = Math.max(340, Math.min(800, startW + drag.maxGrow, startW + (startX - e2.clientX)));") && fz.includes("drag.target = drag.baseWinW + (nf - startW);") && fz.includes("let pushing = false, lastPushed = 0;") && fz.includes("if (!shell) { applyW(startW + (startX - e2.clientX)); return; }"), "F-R5-6 拖宽=窗口再外扩（壳分支：面板增量=窗宽目标基准追平+屏缘余量钳+在飞标志节流只背最新目标；无壳分支=老形态原样保留）");
+    ok(caps.includes('"core:window:allow-set-size"') && caps.includes('"core:window:allow-set-position"'), "F-R5-7 壳权限双增（set-size/set-position——读口 outer-size/outer-position/current-monitor 等已在 core:window:default，未重复授）");
+    ok(css.includes("background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden;") && !css.includes("max-width: 800px; background: var(--surface1)"), "F-R5-8 fzone 底色融合（--surface1 列表列档退役→主面板同源面 workspace-top→bg1 梯度=与 .workspace 逐 token 同构+左缘 1px line-soft 列界同 .queue 节奏；负向锚=surface1 主规则形态不得回归）");
+    ok(css.includes("#d-session .workspace-head { border-bottom: 0; }") && css.includes("#d-session .workspace-head, #d-team .workspace-head { border-bottom-color:"), "F-R5-9 #168 顶栏分割线退役（#d-session head border-bottom 归零=纯颜色分割，后位覆盖继承边；团队域边线族原样在——仅会话域收口）");
+  }
+
   // ============ NAV. W-NAVBAR 期一（1112 用户拍板）：历史提问索引轨（WorkBuddy 逆向规格 §三直用） ============
   {
     const nav = readFileSync(join(root, "web-console", "js", "navbar.js"), "utf-8");

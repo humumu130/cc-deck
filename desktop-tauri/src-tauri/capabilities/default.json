@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口最小暴露面：core:default 打通 IPC 通道；updater:default 供 ⚙ 设置抽屉检查/安装更新；dialog:default 供新建会话表单原生目录选择（#168）；窗口控制（#365）：无边框拖拽区 + 最小化/最大化/关闭/主题同步需逐项授权（core:default 不含这些，Tauri 2 ACL 默认拒绝——此前拖不动/按钮无效的根因）",
+  "description": "主窗口最小暴露面：core:default 打通 IPC 通道；updater:default 供 ⚙ 设置抽屉检查/安装更新；dialog:default 供新建会话表单原生目录选择（#168 旧编号）；窗口控制（#365）：无边框拖拽区 + 最小化/最大化/关闭/主题同步需逐项授权（core:default 不含这些，Tauri 2 ACL 默认拒绝——此前拖不动/按钮无效的根因）；W-FZONE-R5（1115 #167）：文件工作区真第四列=呼出/收合/拖宽时窗口外扩/缩回，补 set-size/set-position 两写权限（读口 outer-size/outer-position/current-monitor/scale-factor/is-maximized 等已在 core:window:default 内）",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -14,6 +14,8 @@
     "core:window:allow-unmaximize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position"
   ]
 }
