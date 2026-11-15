@@ -276,7 +276,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
 
   // ============ TAB. W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 tab 独立整页 ============
   {
-    ok(web.includes('p.classList.add("tabpage-pane")') && web.includes('scroll.className = "tabpage-scroll"') && web.includes("p.replaceChildren(head, scroll)") && web.includes("tabpageBody(1)") && web.includes("tabpageBody(2)") && web.includes("tabpageBody(3)") && web.includes('function tabpageBody(i)'), "TAB1 三 pane 迁出 #session-body（ready 收编段：tabpage 类+页头/滚动体两件常驻子；三渲染器写点走 tabpageBody 单口=.tabpage-scroll——页头行不被 paneSigWrite innerHTML 冲掉）");
+    ok(web.includes('p.classList.add("tabpage-pane")') && web.includes('scroll.className = "tabpage-scroll"') && web.includes("p.replaceChildren(scroll)") && web.includes("tabpageBody(1)") && web.includes("tabpageBody(2)") && web.includes("tabpageBody(3)") && web.includes('function tabpageBody(i)'), "TAB1 三 pane 迁出 #session-body（ready 收编段：tabpage 类+滚动体常驻子；三渲染器写点走 tabpageBody 单口=.tabpage-scroll——#165 页头退役后 pane 直挂滚动体）");
     {
       // 字符串序锚：panes 收编（body.children）必须先于迁移（insertBefore(p, body)）——
       // 且迁移落点=workspace 在 body 之前（CSS ~ 兄弟选择器让位前提）
@@ -284,7 +284,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
       const iMove = web.indexOf("workspace.insertBefore(p, body)");
       ok(iGrab >= 0 && iMove > iGrab, "TAB2 迁移时序与落点（panes 先从 #session-body 收编再前插 .workspace——DOM 序=三 pane 在 #session-body 之前）");
     }
-    ok(web.includes('back.setAttribute("data-tabpage-back", "1")') && web.includes('back.textContent = "⟵ 返回对话"') && web.includes('const tabBack = ev.target.closest("[data-tabpage-back]");') && web.includes("if (UI.tabs && UI.tabs[0]) UI.tabs[0].click(); return;"), "TAB3 页头「⟵ 返回对话」快捷钮（section 委托分支→segment-bar tab0 同链——ctxMeter 跳「更多」同款 tabs.click 口径）");
+    ok(!web.includes('back.setAttribute("data-tabpage-back", "1")') && !web.includes('back.textContent = "⟵ 返回对话"') && web.includes('const tabBack = ev.target.closest("[data-tabpage-back]");') && web.includes("if (UI.tabs && UI.tabs[0]) UI.tabs[0].click(); return;"), "TAB3 页头「⟵ 返回对话」钮退役（#165 用户令：页头整行移除——负向锚=生产码不得再建钮；委托分支存续=防御性死码（head 删除后 closest 恒 null 穿透），返回走 segment-bar tab0 同链不变）");
     ok(css.includes("#d-session .workspace > .tabpage-pane.active { display: flex; flex-direction: column; flex: 1 1 0; }") && css.includes("#d-session .workspace > .tabpage-pane.active ~ #session-body { display: none; }") && css.includes(".tabpage-scroll { flex: 1 1 auto; min-height: 0; overflow: auto;"), "TAB4 独立整页 CSS（激活=flex 列占满 head 之下整幅+own scroll 滚动体+非对话页 #session-body 兄弟选择器整列让位——零 JS 切换钩）");
     ok(css.includes(".tabpage-head { flex: 0 0 auto;") && css.includes(".tabpage-head .tabpage-back") && !html.includes("tabpage"), "TAB5 页头行样式（轻量页名+回锚钮）+静态 HTML 零 tabpage 标记负向锚（页面结构纯 JS 装配——index-005 的 workspace 四件套 body/dock/agbox/footer 骨架不动）");
     ok(web.includes('section.querySelector(".segment-bar")?.addEventListener("click"') && web.includes("S.tabChatMemo = { sid: S.selected, top: el.scrollTop"), "TAB6 #124 往返滚动 memo 原样（捕获段记账+回对话恢复链零改——#session-body 让位后的 scrollTop clamp 正是该 memo 护的场景）");
