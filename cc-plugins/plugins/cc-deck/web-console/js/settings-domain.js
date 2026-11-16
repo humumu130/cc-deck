@@ -1533,9 +1533,14 @@ function connectLan(ctx) {
               // 服务器域（sdelServerRows/空态引导行——与 cloudSettingsRows 空态同文案），身份域归槽。
               if (remoteLive) {
                 const entries0 = cloudSharedCloudServers();
-                // W-ACCOUNT：同账号行组恒追加（SNAPSHOT acct_relays 驱动——云/LAN 双形态同位）
+                // W-ACCOUNT：云形态同步视觉审查修（空态登录态分叉+acct 行紧随——与 cloudSettingsRows 同口径）
+                const acctHtml0 = acctRelayRows();
                 liveSetHtml(remoteLive, (entries0.length ? sdelServerRows(false)
-                  : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>') + acctRelayRows());
+                  : (!entries0.length && !acctHtml0
+                    ? (acctCred()
+                      ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑上线</strong><p>在对方电脑上登录同一账号，它会自动出现在这里（免配对码）</p></div></div>'
+                      : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>')
+                    : "")) + acctHtml0);
               }
               liveSetHtml(connLive, '<div data-cloud-settings-slot></div>');
               renderCloudUI();
@@ -1569,7 +1574,7 @@ function connectLan(ctx) {
                   : ""));
               // W-SDEL 远程源区（多条+连接/编辑/删除；死条目清理不依赖云链激活态）——
               // withName=false：源名编辑归本机 relay 卡，云形态槽内仍自带（cloudSettingsRows() 缺省 true）
-              liveSetHtml(remoteLive, cloudSettingsRows(false) + acctRelayRows()); // W-ACCOUNT：+同账号行组（服务器行后）
+              liveSetHtml(remoteLive, cloudSettingsRows(false)); // W-ACCOUNT：acct 行组已内插 cloudSettingsRows 清单区（视觉审查 P1-2 位序修）
               if (shellDiag) void refreshRelayDiag();
             }
           }
@@ -3962,7 +3967,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         pop.setAttribute("aria-modal", "true");
         pop.setAttribute("aria-label", "用配对码添加");
         pop.innerHTML = '<h3>用配对码添加</h3>'
-          + '<p class="create-sub">在对方电脑的「这台电脑」卡里点「出示配对码」，把得到的 8 位码填到这里</p>'
+          + '<p class="create-sub">在对方电脑的「这台电脑」卡里点「出示配对码」，把得到的 8 位码填到这里；两台电脑都登录同一账号的话可免配对码自动互连</p>'
           + '<div class="create-label">对方的配对码</div>'
           + '<div class="pair-link-row"><input class="create-field" data-cloud-pair-input type="text" inputmode="numeric" maxlength="8" placeholder="对方的 8 位配对码" aria-label="对方的 8 位配对码"><button class="primary-btn" type="button" data-add-submit>连接</button></div>'
           + '<details class="add-adv"><summary>高级 · 服务器地址与令牌</summary>'
@@ -4274,12 +4279,12 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       function accountSettingsRows() {
         const c = acctCred();
         if (!c) {
-          return '<div class="settings-row"><span class="avatar">👤</span><div><strong>登录 CC Deck</strong><p>同一账号的电脑自动互联，不用配对码</p></div>'
+          return '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-user"></use></svg></span><div><strong>登录 CC Deck</strong><p>同一账号的电脑自动互联，不用配对码</p></div>'
             + '<button class="row-share" data-acct-login type="button">登录</button>'
             + '<button class="row-share" data-acct-register type="button" title="创建新账号">没有账号？注册</button></div>';
         }
-        const relays = acctAcctRelays();
-        return '<div class="settings-row"><span class="avatar">👤</span><div><strong>' + esc(c.user || "已登录") + '</strong><p>' + (relays.length ? '已登录 · ' + relays.length + ' 台同账号设备在线' : '已登录 · 对方电脑上线后会自动出现在「其他电脑」') + '</p></div>'
+        const relays = acctAcctRelays().filter((r) => r.online !== false); // 一致性路 P2-4 防御过滤
+        return '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-user"></use></svg></span><div><strong>' + esc(c.user || "已登录") + '</strong><p>' + (relays.length ? '已登录 · 另有 ' + relays.length + ' 台同账号设备在线' : '已登录 · 对方电脑上线后会自动出现在「其他电脑」') + '</p></div>'
           + '<button class="row-share" data-acct-logout type="button">退出登录</button></div>';
       }
       function openAcctAuthUI(register) {
@@ -4291,38 +4296,45 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         pop.innerHTML = '<h3>' + (register ? "创建账号" : "登录") + '</h3>'
           + '<p class="create-sub">' + (register ? "注册一次，所有设备用同一账号即可自动互联" : "同一账号的电脑自动互联") + '</p>'
           + '<div class="create-label">用户名</div>'
-          + '<div class="pair-link-row"><input class="create-field" data-acct-user type="text" maxlength="24" placeholder="字母数字._-" aria-label="用户名"></div>'
+          + '<div class="pair-link-row"><input class="create-field" data-acct-user type="text" maxlength="24" placeholder="3-24 位，字母 / 数字 / . _ -" aria-label="用户名" autocomplete="username"></div>'
           + '<div class="create-label">密码</div>'
-          + '<div class="pair-link-row"><input class="create-field" data-acct-pass type="password" maxlength="64" placeholder="至少 8 位" aria-label="密码"></div>'
-          + '<div class="pair-foot"><span class="add-hint" data-acct-err></span><button class="secondary-btn" type="button" data-acct-close>取消</button><button class="primary-btn" type="button" data-acct-submit>' + (register ? "创建账号" : "登录") + '</button></div>';
+          + '<div class="pair-link-row"><input class="create-field" data-acct-pass type="password" maxlength="64" placeholder="至少 8 位" aria-label="密码" autocomplete="new-password"><button class="row-share" type="button" data-acct-eye="pass" title="显示 / 隐藏密码" aria-label="显示或隐藏密码"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></button></div>'
+          + (register ? '<div class="create-label">确认密码</div>' + '<div class="pair-link-row"><input class="create-field" data-acct-pass2 type="password" maxlength="64" placeholder="再输一次密码" aria-label="确认密码" autocomplete="new-password"><button class="row-share" type="button" data-acct-eye="pass2" title="显示 / 隐藏密码" aria-label="显示或隐藏密码"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></button></div>' : '') // 视觉审查修（uxcopy P1-2）：注册无确认密码=敲错一位 409 占坑死账号（无找回路径），双字段前置拦截
+          + '<div class="pair-foot"><span class="create-err-note" data-acct-err></span><span style="display:flex;gap:8px"><button class="secondary-btn" type="button" data-acct-close>取消</button><button class="primary-btn" type="button" data-acct-submit>' + (register ? "创建账号" : "登录") + '</button></span></div>'; // 审美 P1-1：按钮簇包裹（家族先例）+err 红警示
         const close = () => { pop.remove(); back.remove(); };
         back.addEventListener("click", close);
+        pop.addEventListener("keydown", (kev) => { if (kev.key === "Escape") { kev.stopPropagation(); close(); } }); // 视觉审查 P2：Esc 关闭（家族先例）
         pop.addEventListener("click", async (ev) => {
+          const eye = ev.target.closest("[data-acct-eye]");
+          if (eye) { const f = pop.querySelector("[data-acct-" + eye.getAttribute("data-acct-eye") + "]"); if (f) f.type = f.type === "password" ? "text" : "password"; return; } // 审美 P2：密码可见性切换
           if (ev.target.closest("[data-acct-close]")) { close(); return; }
           if (!ev.target.closest("[data-acct-submit]")) return;
           const user = (pop.querySelector("[data-acct-user]") || {}).value || "";
           const pass = (pop.querySelector("[data-acct-pass]") || {}).value || "";
+          const pass2El = pop.querySelector("[data-acct-pass2]");
           const err = pop.querySelector("[data-acct-err]");
-          if (!/^[\w.\-]{3,24}$/.test(user)) { if (err) err.textContent = "用户名 3-24 位字母数字._-"; return; }
-          if (pass.length < 8) { if (err) err.textContent = "密码至少 8 位"; return; }
+          const markErr = (sel, msg) => { pop.querySelectorAll(".create-field").forEach((f) => f.classList.remove("create-err")); if (sel) { const f = pop.querySelector(sel); if (f) f.classList.add("create-err"); } if (err) err.textContent = msg; }; // 视觉审查 P2：错误=红框红字（create-err 家族体系）
+          if (!/^[\w.\-]{3,24}$/.test(user)) { markErr("[data-acct-user]", "用户名需 3-24 位，可用字母、数字和 . _ -"); return; }
+          if (pass.length < 8) { markErr("[data-acct-pass]", "密码至少 8 位"); return; }
+          if (pass2El && pass2El.value !== pass) { markErr("[data-acct-pass2]", "两次输入的密码不一致"); return; }
           try {
             const post = (path) => fetch("https://cc.humumu.online/auth/" + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ user, pass }) });
             if (register) { // 注册成功即自动登录（少一步手动；限流同 IP 池——5/min 够用）
               const rr = await post("register");
-              if (rr.status === 409) { if (err) err.textContent = "该用户名已注册，请直接登录"; return; }
-              if (rr.status === 429) { if (err) err.textContent = "尝试次数过多，请稍后再试"; return; }
-              if (!rr.ok) { if (err) err.textContent = "网络异常，请重试"; return; }
+              if (rr.status === 409) { markErr("[data-acct-user]", "该用户名已被注册（若忘了密码，请换个用户名重新注册）"); return; }
+              if (rr.status === 429) { markErr(null, "尝试次数过多，请稍后再试"); return; }
+              if (!rr.ok) { markErr(null, "网络异常，请重试"); return; }
             }
             const r = await post("login");
-            if (r.status === 429) { if (err) err.textContent = "尝试次数过多，请稍后再试"; return; }
-            if (!r.ok) { if (err) err.textContent = r.status === 401 ? "用户名或密码不对" : "网络异常，请重试"; return; }
+            if (r.status === 429) { markErr(null, "尝试次数过多，请稍后再试"); return; }
+            if (!r.ok) { markErr(r.status === 401 ? "[data-acct-pass]" : null, r.status === 401 ? "用户名或密码不对" : "网络异常，请重试"); return; }
             const d = await r.json();
             acctSet(d.account_token, user);
             const bound = await acctApiSet(d.account_token, user);
             if (!bound) showToast("已登录，但绑定本机 relay 失败——请重试登录或检查本机 CC Deck 是否在运行");
             close(); showToast("已登录 · 同账号设备将自动出现在「其他电脑」");
             try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
-          } catch { if (err) err.textContent = "网络异常，请重试"; }
+          } catch { markErr(null, "网络异常，请重试"); }
         });
         document.body.appendChild(back); document.body.appendChild(pop);
         setTimeout(() => { const el = pop.querySelector("[data-acct-user]"); if (el) { try { el.focus(); } catch {} } }, 60);
@@ -4388,11 +4400,19 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         // +裸 ID 降级 conn-dev-id 副行；输码表单=「输入对方的配对码」+对端指路（与「出示配对码」两动词闭环）
         const entries = cloudSharedCloudServers();
         let html = "";
-        if (!entries.length) {
-          html += '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>'; /* conn-page-v2 ⑦语义svg；P2-5a：徽章退役；CONNV3：动作行退役后空态引导行=唯一列表内入口 */
+        // W-ACCOUNT 视觉审查修（uxcopy P1-1/aesthetic P1-2）：空态按登录态分叉——已登录且无同账号
+        // 电脑=账号体系引导（不再指路配对码，双叙事割裂根除）；未登录=配对码单路径（现状）
+        const acctRelayHtml0 = acctRelayRows();
+        if (!entries.length && !acctRelayHtml0) {
+          html += acctCred()
+            ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑上线</strong><p>在对方电脑上登录同一账号，它会自动出现在这里（免配对码）</p></div></div>'
+            : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>'; /* conn-page-v2 ⑦语义svg；P2-5a：徽章退役；CONNV3：动作行退役后空态引导行=唯一列表内入口 */
         } else {
-          html += sdelServerRows(false);
+          if (entries.length) html += sdelServerRows(false);
         }
+        // W-ACCOUNT 视觉审查修（aesthetic P1-2）：acct 行紧随清单区（原先在 LAN 形态被拼到
+        // 「本设备/输码」尾块之后——「还没有其他电脑」与同卡第 5 行躺着的同账号行自相矛盾）
+        html += acctRelayHtml0;
         if (withName) html += relayNameRowHtml(false); // #272 源名编辑（云形态槽内恒显；桌面形态=relaystat ghost 钮——test-272 B8/test-280 I3b 双落点锚保）
         if (cloudUIOn()) {
           const peer = cloudPeerOf(cloudCtx.cfg);

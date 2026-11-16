@@ -45,6 +45,14 @@ await ev(`document.querySelector("[data-acct-login]").click()`);
 await wait(300);
 const g2 = JSON.parse(await ev(`JSON.stringify((() => { const pop = document.querySelector("[data-acct-pop]"); return { open: !!pop, title: pop?.querySelector("h3")?.textContent || "", user: !!pop?.querySelector("[data-acct-user]"), pass: !!pop?.querySelector("[data-acct-pass]"), submit: !!pop?.querySelector("[data-acct-submit]"), cancel: !!pop?.querySelector("[data-acct-close]") }; })())`));
 ok(g2.open && g2.title === "登录" && g2.user && g2.pass && g2.submit, "②a 登录弹窗开（create-pop 形态两字段+提交）");
+// ②a-2 注册弹窗三件修（视觉审查修批锚：确认密码/可见切换眼睛/按钮右簇）
+await ev(`document.querySelector("[data-acct-close]")?.click(); document.querySelector("[data-acct-register]")?.click()`);
+await wait(300);
+const g2r = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector("[data-acct-pop]"); return { open: !!p, title: p?.querySelector("h3")?.textContent || "", pass2: !!p?.querySelector("[data-acct-pass2]"), eyes: p?.querySelectorAll("[data-acct-eye]").length || 0, cluster: !!p?.querySelector('span[style*="display:flex"]'), errNote: !!p?.querySelector(".create-err-note") }; })())`));
+ok(g2r.open && g2r.title === "创建账号" && g2r.pass2, "②a-2 注册弹窗带确认密码字段（uxcopy P1-2 修锚）");
+ok(g2r.eyes >= 2 && g2r.cluster && g2r.errNote, "②a-3 密码眼睛×2+按钮右簇+红警示 errNote（审美 P1-1/P2 修锚 eyes=" + g2r.eyes + "）");
+await ev(`document.querySelector("[data-acct-close]")?.click(); document.querySelector("[data-acct-pop]")?.remove(); document.querySelector(".pair-pop-backdrop")?.remove()`);
+await ev(`document.querySelector("[data-acct-login]")?.click()`); await wait(250); // 复开登录弹窗——后续 ②b 在登录态校验（原流程保持）
 await ev(`pop = document.querySelector("[data-acct-pop]"); pop.querySelector("[data-acct-user]").value = "ab"; pop.querySelector("[data-acct-pass]").value = "12345678"; pop.querySelector("[data-acct-submit]").click()`);
 await wait(400);
 const g2b = await ev(`document.querySelector("[data-acct-err]")?.textContent || ""`);
