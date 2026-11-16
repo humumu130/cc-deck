@@ -5,7 +5,7 @@
 // localStorage → acct_bound → 自动登录态）。
 // 用法：node scripts/e2e-account.mjs <account_user> <account_pass>
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -32,9 +32,10 @@ ok(/^[a-f0-9]{64}$/.test(login.account_token), "① 生产桥 /auth register+log
 const tmpA = mkdtempSync(join(tmpdir(), "e2e-acct-A-")), tmpB = mkdtempSync(join(tmpdir(), "e2e-acct-B-"));
 const relays = [];
 function spawnRelay(dir, port, name) {
+  try { writeFileSync(join(dir, "relay-name"), name, "utf8"); } catch {} // #100 自定义名文件——rn 上报单源（双 relay 同机=同主机名，靠它区分 SmokeMac/SmokeWin）
   const r = spawn("npx", ["tsx", "src/index.ts"], {
-    cwd: new URL("..", import.meta).pathname,
-    env: { ...process.env, CCR_DATA_DIR: dir, CCR_PORT: String(port), CCR_TOKEN: "e2etoken" + port, CCR_CWD: dir, CCR_NO_TITLE_GEN: "1", CCR_ACCOUNT_TOKEN: login.account_token, CCR_CLOUD_URL: "wss://cc.humumu.online/cloud", CCR_CLOUD_TOKEN: "ccdeck-public-9f3k2m7v", CCR_EMPLOYEE_CONFIG_DIR: "", CC_DECK_PLUGIN: "" },
+    cwd: new URL("..", import.meta.url).pathname,
+    env: { ...process.env, CCR_DATA_DIR: dir, CCR_PORT: String(port), CCR_TOKEN: "e2etoken" + port, CCR_CWD: dir, CCR_NO_TITLE_GEN: "1", CCR_ACCOUNT_TOKEN: login.account_token, CCR_CLOUD_URL: "wss://cc.humumu.online/cloud", CCR_CLOUD_TOKEN: "ccdeck-public-9f3k2m7v", CCR_EMPLOYEE_CONFIG_DIR: "", CC_DECK_PLUGIN: "", CCR_PARENT_PID: "" }, // CCR_PARENT_PID 清空——本 E2E 挂在 cc-deck 会话下跑，继承的父 pid 会让 relay 误判孤儿自退（#324 门）
     stdio: ["ignore", "pipe", "pipe"],
   });
   r.stdout.on("data", (d) => { const s = String(d); if (/acct|RELAYS|paired|bridge connected|listen/.test(s)) console.log(`  [${name}] ` + s.trim().slice(0, 110)); });
@@ -42,8 +43,8 @@ function spawnRelay(dir, port, name) {
   relays.push(r);
   return r;
 }
-spawnRelay(tmpA, 8811, "A");
-spawnRelay(tmpB, 8812, "B");
+spawnRelay(tmpA, 8811, "SmokeMac"); // name=rn 上报显示名（relay-name 文件）；日志标签同用
+spawnRelay(tmpB, 8812, "SmokeWin");
 ok(await waitFor(async () => { try { const r = await fetch("http://127.0.0.1:8811/health"); return r.ok; } catch { return false; } }, 40000), "② relay A 起（8811·test.24·带账号）");
 ok(await waitFor(async () => { try { const r = await fetch("http://127.0.0.1:8812/health"); return r.ok; } catch { return false; } }, 40000), "② relay B 起（8812·同账号）");
 // rn 名直注（等桥侧 rn 生效路径之外，双保险同名显示——生产实走 relayName 单源）
@@ -54,7 +55,7 @@ ok(true, "③ 双 relay account-set 绑定（API 口真路径）");
 // ---------- ③ headless 控制台 A（fresh profile=零 ccr_acct → 再水化真链路） ----------
 async function driveConsole(port, label, peerName, doClickConnect) {
   const P = 9300 + port % 500;
-  const c2 = spawn(CHROME, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${P}`, "--user-data-dir=/tmp/e2eacct-" + port + "-" + Date.now(), "--window-size=1440,940", `http://127.0.0.1:${port}/index-005.html`], { stdio: "ignore" });
+  const c2 = spawn(CHROME, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${P}`, "--user-data-dir=/tmp/e2eacct-" + port + "-" + Date.now(), "--window-size=1440,940", `http://127.0.0.1:${port}/`], { stdio: "ignore" });
   relays.push(c2);
   await wait(2600);
   let tab = null;
