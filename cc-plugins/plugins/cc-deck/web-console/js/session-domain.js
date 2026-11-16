@@ -5854,6 +5854,12 @@
                         if (!memo || memo.sid !== S.selected) return; // 期间换过会话：不恢复（选中链自会定位）
                         const el = UI.body;
                         el.scrollTop = memo.bottom ? el.scrollHeight : Math.max(0, Math.min(memo.top, el.scrollHeight - el.clientHeight));
+                        // NAVR7-⑥（探针实锤）：切 tab 离开对话 → #session-body 被 .tabpage-pane.active~
+                        // 兄弟选择器 display:none → navbar collect()=[] → root.hidden；切回对话 display
+                        // 恢复但 childList 未变 → navbar 的 MutationObserver 不触发 → **导航条消失不复活**
+                        // （直到下一条消息/resize）。tab 切换链显式 rebuild 补活（navbar.rebuild=
+                        // scheduleBuild 200ms 去颤——幂等，多调无害）
+                        try { if (window.ccDeckNavbar && typeof window.ccDeckNavbar.rebuild === "function") window.ccDeckNavbar.rebuild(); } catch (_) {}
                       }, 0);
                     }
                   }, true); // 捕获阶段：先于 target/冒泡上的 activate

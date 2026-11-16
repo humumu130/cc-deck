@@ -194,6 +194,19 @@
         fishY = ev.clientY;
         if (!fishT) fishT = requestAnimationFrame(fishApply);
       });
+      // NAVR7-③（1116 用户令「支持鼠标上下滚动查看更多消息——滑动跟滚动不一样」）：
+      // 显式 wheel 滚动兜底——原生 overflow:auto 滚动依赖 WebView 滚动链策略（壳内
+      // WKWebView/Windows WebView2 手势路由不一），preventDefault+手动 scrollTop 全引擎
+      // 行为一致（触控板两指=逐帧 wheel，跟手等效）；deltaMode 1（行单位，Firefox 族）×16 归一。
+      // 反方审 P2（死区回归守卫）：无溢出（折叠态行≤可视高）或已滚到头=放行原生链——旧态此区域
+      // wheel 本可冒泡滚消息流，无守卫 preventDefault 会把它掐成「导航条不滚+消息流也不滚」死区
+      panelEl.addEventListener("wheel", (ev) => {
+        const canScroll = panelEl.scrollHeight > panelEl.clientHeight + 1;
+        const atTop = panelEl.scrollTop <= 0, atEnd = panelEl.scrollTop + panelEl.clientHeight >= panelEl.scrollHeight - 1;
+        if (!canScroll || (ev.deltaY < 0 && atTop) || (ev.deltaY > 0 && atEnd)) return; // 放行原生滚动链（到头回链消息流=标准溢出语义）
+        ev.preventDefault();
+        panelEl.scrollTop += (ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY);
+      }, { passive: false });
       root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       host.appendChild(root);
     }
@@ -207,7 +220,7 @@
     // dock/agbox（agbox 展开 226px 时压 210px 实测）；三兄弟挂 ResizeObserver 任一变高即
     // scheduleBuild 去颤重建（MO 只盯 #session-body 看不见兄弟）
     const body = bodyEl();
-    const lift = body ? Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 16 : 144;
+    const lift = body ? Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 44 : 172; // NAVR7-④：基线 +16→+44（用户 1116「整体位置太靠下」——底栈全距之上再抬 28px）；fallback 144→172 同步
     root.style.setProperty("--msg-navbar-lift", lift + "px");
     // NAVR4-R2 ②→R3 ④（审 R2 复核新 P1：RO 重挂永动）：三兄弟静态 DOM 恒不替换——
     // 只建一次+只观察一次（build 里 disconnect+observe 每次 observe 都发初始通知→
