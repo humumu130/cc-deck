@@ -48,7 +48,7 @@ ok(g2.open && g2.title === "登录" && g2.user && g2.pass && g2.submit, "②a �
 await ev(`pop = document.querySelector("[data-acct-pop]"); pop.querySelector("[data-acct-user]").value = "ab"; pop.querySelector("[data-acct-pass]").value = "12345678"; pop.querySelector("[data-acct-submit]").click()`);
 await wait(400);
 const g2b = await ev(`document.querySelector("[data-acct-err]")?.textContent || ""`);
-ok(g2b.includes("用户名"), "②b 前置校验（短用户名拒绝：" + g2b + "）");
+ok(g2b.includes("用户名需"), "②b 前置校验（短用户名拒绝+红警示：" + g2b + "）");
 await ev(`document.querySelector("[data-acct-close]")?.click(); document.querySelector("[data-acct-back]")?.click(); document.querySelector("[data-acct-pop]")?.remove(); document.querySelector("[data-acct-backdrop], .pair-pop-backdrop")?.remove()`);
 await wait(200);
 ok(!(await ev(`!!document.querySelector("[data-acct-pop]")`)), "②c 弹窗关净");
@@ -59,7 +59,7 @@ const snap2 = { type: "SNAPSHOT", payload: Object.assign({}, snap.payload, { acc
 await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "lan", frame: ${JSON.stringify(snap2)} })`);
 await wait(700);
 const g3 = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector('[data-settings-panel="connections"]'); const a = p?.querySelector('[data-conn-section="account"]'); const rows = [...(p?.querySelectorAll(".acct-relay-row") || [])]; return { text: a?.textContent || "", logout: !!a?.querySelector("[data-acct-logout]"), n: rows.length, first: rows[0]?.textContent || "", firstBtn: rows[0]?.querySelector("[data-acct-relay-connect]")?.getAttribute("data-acct-relay-connect") || "", firstInCard: !!(rows[0] && p.querySelector('[data-settings-live="remote-sources"]')?.contains(rows[0])), second: rows[1]?.textContent || "", secondBtn: !!rows[1]?.querySelector("[data-acct-relay-connect]"), secondGrey: rows[1]?.querySelector(".tag")?.textContent || "" }; })())`));
-ok(g3.text.includes("nightowl") && g3.text.includes("2 台同账号设备在线") && g3.logout, "③a 已登录态（用户名+2 台在线+退出登录）");
+ok(g3.text.includes("nightowl") && g3.text.includes("另有 1 台同账号设备在线") && g3.logout, "③a 已登录态（用户名+另有 1 台在线=计数过滤离线行（一致性 P2-4）+退出登录）");
 ok(g3.n === 2, "③b acct 行 2 条（SNAPSHOT acct_relays 驱动）");
 ok(g3.firstInCard && g3.first.includes("HomeWin") && g3.firstBtn === "rl-aaa111", "③c 在线行渲染进「其他电脑」卡+点连钮锚 dev");
 ok(g3.second.includes("OfficeMac") && !g3.secondBtn && g3.secondGrey.includes("离线"), "③d 离线行置灰无钮（tag=" + g3.secondGrey + "）");
