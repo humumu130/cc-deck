@@ -72,16 +72,16 @@ console.log("#280-A 连接页重设计——失焦根修（行为级）+ IA/视�
 }
 
 // ---------- I 信息架构（硬要求 2） ----------
-ok(sd.includes('data-settings-panel="connections"') && sd.includes("<h5>本机 relay</h5>") && sd.includes("<h5>远程源</h5>") && sd.includes("<h5>本设备与配对</h5>"),
-  "I1 三卡 IA：本机 relay / 远程源 / 本设备与配对（原单列混排四类关注点拆分）");
+ok(sd.includes('data-settings-panel="connections"') && sd.includes("<h5>其他电脑</h5>") && sd.includes("<h5>这台电脑</h5>") && sd.includes("data-conn-section=\"sources\"") && sd.includes("data-conn-section=\"this-machine\""),
+  "I1 四区 IA：其他电脑 / 这台电脑（CONNV3 改名——原三卡混排拆分定稿）");
 ok(sd.includes('data-conn-remote-card') && sd.includes('data-settings-live="remote-sources"'),
   "I2 远程源独立容器+云形态整卡隐藏（云槽自渲染防双份）");
 ok(sd.includes("liveSetHtml(remoteLive, cloudSettingsRows(false))"),
   "I3 桌面远程卡 withName=false（源名编辑归本机 relay 卡=同主体同卡）");
 ok(sd.includes("function cloudSettingsRows(withName = true)") && sd.includes("if (withName) html += relayNameRowHtml(false)"),
   "I3 云形态槽内源名行保留（缺省 true，云源改名能力不变）");
-ok(sd.includes("＋ 配对新设备") && sd.includes("本设备与配对"),
-  "I4 配对按钮归入本设备卡（原孤立页脚 → 操作与对象同卡）");
+ok(sd.includes("出示配对码") && sd.includes("data-conn-section=\"this-machine\""),
+  "I4 配对按钮归入这台电脑卡（原孤立页脚 → 操作与对象同卡——CONNV3 改「出示配对码」）");
 
 // ---------- V 视觉（硬要求 3，5.3Flash 审查对账） ----------
 {

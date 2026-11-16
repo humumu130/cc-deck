@@ -62,7 +62,7 @@ async function main() {
   const css = readFileSync(join(repoRoot, "web-console/css/base.css"), "utf-8");
   {
     assert(css.includes("#d-settings .workspace-head { display: none; }"), "①窄条退役：设置域 workspace-head 隐藏（六面板统一）");
-    assert(js.includes('<div class="s">本机服务 · 远程数据源 · 已连客户端</div>'), "①层级感替代：连接页主标+副题");
+    assert(js.includes('<div class="s">连到别的电脑 · 让别的设备连到本机</div>'), "①层级感替代：连接页主标+副题");
     assert((js.match(/<div class="v8-sethead"><div class="t">[^<]+<\/div><div class="s">/g) || []).length >= 6, "①六面板副题全覆盖（统一层级语言）");
     assert(css.includes("#d-settings .workspace-footer { display: none; }"), "②底部独立按钮区退役");
     assert(js.includes('data-settings-verify type="button" title="逐项探测'), "②验证收纳本机 relay 卡（ghost 小钮）");
@@ -81,8 +81,8 @@ async function main() {
     assert(js.includes('<use href="#icon-cloud"></use>') && !remoteSeg.includes(">☁</span>"), "⑦字符图标退役（桌面/云槽远程源行 ☁→icon-cloud）");
     assert(css.includes(".settings-list > :last-child { border-bottom: none; }"), "⑨卡内尾行底线清零");
     assert(html.includes('symbol id="icon-phone"') && html.includes('symbol id="icon-cloud"'), "⑦icon sprite 增补（phone/cloud）");
-    assert(js.includes("客户端 · 连到本机的终端"), "模块③命名（以本机为源的客户端清单）");
-    assert(readFileSync(join(repoRoot, "web-console/js/mobile.js"), "utf-8").includes("mobileDevicesLane") && readFileSync(join(repoRoot, "web-console/js/mobile.js"), "utf-8").includes("客户端 · 连到本机的终端"), "⑧移动端同源：连接与设备详情含客户端 lane（relay_devices）");
+    assert(js.includes("连进来的设备"), "模块3命名（以本机为源的客户端清单——CONNV3 改名");
+    assert(readFileSync(join(repoRoot, "web-console/js/mobile.js"), "utf-8").includes("mobileDevicesLane") && readFileSync(join(repoRoot, "web-console/js/mobile.js"), "utf-8").includes("连进来的设备"), "⑧移动端同源：连接与设备详情含客户端 lane（relay_devices）——CONNV3 改名");
     assert(!js.includes("本设备与配对</h5>"), "旧「本设备与配对」模块名退役");
   }
 

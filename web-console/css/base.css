@@ -2308,9 +2308,32 @@
     .v8-setcard .settings-list > :last-child { border-bottom: none; }
     /* ② 底部独立按钮区退役（验证收纳本机 relay 卡、帮助收纳远程源卡尾文字链） */
     #d-settings .workspace-footer { display: none; }
-    .conn-foot-link { margin-top: 2px; }
+    .conn-foot-link { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line-soft); }
     .conn-foot-link a { color: var(--faint); text-decoration: none; font-size: var(--fs-C); }
     .conn-foot-link a:hover { color: var(--brand-strong, var(--brand)); text-decoration: underline; text-underline-offset: 3px; }
+    /* =============== W-CONNV3（1116 用户实锤三路审查 v2）：连接页四区重设计配套 ===============
+       词汇表：电脑=能看会话的机器（其他电脑卡）；设备=连进来的客户端含手机（这台电脑卡）。
+       全部复用 v8 token（#d-settings 作用域防 .tag 外溢）；控件 24px 档归一；行基座去双描边。 */
+    .v8-setcard .setcard-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 2px; } /* 卡头带动作钮（h5 视觉零改动——「＋ 添加」恒在卡头） */
+    .v8-setcard .setcard-head h5 { margin: 0; }
+    .v8-setcard .setcard-head .row-share { flex: none; margin-left: auto; }
+    #d-settings .settings-row .row-share, #d-settings .settings-row .row-edit, #d-settings .settings-row .row-del, #d-settings .settings-row > .tag { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; } /* 控件档归一：右列动作钮/徽标锁 24px（视觉审查①——三档高度混排根治；开关 21px 不拉齐=状态控件另册） */
+    #d-settings .settings-row .row-edit, #d-settings .settings-row .row-del { border-radius: 8px; } /* 圆角 7→8 归一（ghost 批「radius 统一 8」漏网两枚） */
+    #d-settings .settings-row .row-edit, #d-settings .settings-row .row-del { opacity: 0; visibility: hidden; transition: opacity .12s ease, visibility .12s ease; } /* CONNV3 行内动作简化：编辑/删除 hover+focus 显形（.art-row 先例；visibility 同切防 opacity 盲区命中） */
+    #d-settings .settings-row:hover .row-edit, #d-settings .settings-row:hover .row-del, #d-settings .settings-row:focus-within .row-edit, #d-settings .settings-row:focus-within .row-del { opacity: 1; visibility: visible; }
+    @media (hover: none) { #d-settings .settings-row .row-edit, #d-settings .settings-row .row-del { opacity: 1; visibility: visible; } } /* 触屏恒显 */
+    #d-settings .conn-dev-id { font-family: var(--mono); font-size: var(--fs-C); color: var(--faint); letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 裸 wb-/rl- ID 降级副行（mono/降权/截断——原「本页设备 · wb-16位」粗体标题病根除） */
+    #d-settings [data-settings-live="remote-sources"] > .settings-row { border: 0; border-bottom: 1px dashed var(--line-soft); border-radius: 0; background: none; padding: var(--setrow-py, 8px) 2px; gap: 10px; } /* 行基座去双描边兜底（视觉审查最大漏项——v8 卡内行迁虚线分隔语言，v8-swrow 同构） */
+    #d-settings [data-settings-live="remote-sources"] > .settings-row:last-child { border-bottom: 0; }
+    .conn-diagbar { padding: 8px 14px 10px; border-top: 1px dashed var(--line-soft); } /* 面板级诊断 bar（非卡——IA 裁决：跨源健康度不进任何实体卡） */
+    .conn-diag-line { display: flex; align-items: center; gap: 8px; font-size: var(--fs-C); color: var(--faint); line-height: 1.5; }
+    .conn-diag-line .conn-diag-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--done); }
+    .conn-diag-line .conn-diag-dot.warn { background: var(--warn); }
+    .conn-diag-line .conn-diag-dot.err { background: var(--error); }
+    .conn-diag-line [data-diag="ok"] { color: var(--done); }
+    .conn-diag-line [data-diag="err"] { color: var(--error); }
+    .conn-diag-line .n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 400; }
+    .conn-diag-detail { margin-top: 8px; }
     /* ⑤ relaystat 一行紧凑：动作钮组右侧归位（分享/编辑/验证同 ghost 规格） */
     .v8-relaystat { align-items: center; }
     .v8-relaystat .st { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

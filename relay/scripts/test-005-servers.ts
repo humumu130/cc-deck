@@ -158,7 +158,7 @@ console.log("-- C. UI 列表化与三锚委托 --");
 {
   const body = blockFrom("function cloudMobileLaneInner() {");
   ok(body.includes("sdelServerRows(true)"), "C3 移动 lane 桌面同构列表");
-  ok(body.includes("远程源 · "), "C3 lane 头改「远程源 · N」（云桥从唯一固定项降级为条目之一）");
+  ok(body.includes("其他电脑 · "), "C3 lane 头改「其他电脑 · N」（云桥从唯一固定项降级为条目之一）");
   ok(body.includes("data-cloud-pair-input"), "C3 移动配对表单锚保留");
 }
 
