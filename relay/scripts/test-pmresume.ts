@@ -71,7 +71,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8797, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null,
+      cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "",
     };
     const eventsPath = join(DATA, "events.ndjson");
     const bus = new EventBus({ persistPath: eventsPath });

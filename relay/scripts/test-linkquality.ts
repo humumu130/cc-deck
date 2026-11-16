@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
     try {
       const port = 18300 + Math.floor(Math.random() * 500);
-      const cfg: RelayConfig = { port, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null };
+      const cfg: RelayConfig = { port, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "" };
       const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
       const mgr = new SessionManager(bus, cfg);
       const server = startServer(bus, mgr, cfg, {});

@@ -37,7 +37,7 @@ ok(!g.none && g.sources && g.srcHeadAdd, "①a 其他电脑卡：setcard-head + 
 ok(g.head.includes("连到别的电脑"), "①b 副题改写：" + g.head);
 ok(g.thisM && g.pairBtn && g.pairLabel.includes("出示配对码"), "①c 这台电脑卡 + 「出示配对码」钮（" + g.pairLabel + "）");
 ok(g.devicesIn, "①d 连进来的设备台账归宿（data-settings-live=devices 入卡）");
-ok(g.diagbar && g.account === true && g.nearby === true && g.hiddenAcct, "①e 诊断 bar + account/nearby hidden 锚");
+ok(g.diagbar && g.account === true && g.nearby === true && g.hiddenAcct === false, "①e 诊断 bar + account 卡升顶可见（非 hidden）+ nearby hidden 锚（W-ACCOUNT 件三翻面）");
 ok(g.emptyText.includes("还没有其他电脑") && g.emptyText.includes("出示配对码"), "①f 空态单路径指路");
 
 // ② 全页旧词扫描（连接面板范围内）

@@ -84,7 +84,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8796, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
     const anchor = join(DATA, "proj-pr");
     mkdirSync(anchor, { recursive: true });

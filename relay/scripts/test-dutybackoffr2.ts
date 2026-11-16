@@ -34,7 +34,7 @@ function sandbox(tag: string) {
   process.env.CCR_NO_TITLE_GEN = "1";
   process.env.CCR_COLLAB_MODE = "";
   delete process.env.CCR_COLLAB_MODE;
-  const cfg: RelayConfig = { port: 8890 + Math.floor(Math.random() * 60), token: "t", tokenGenerated: false, defaultCwd: "", model: "test-model", bridgeToken: "bt", dataDir, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null };
+  const cfg: RelayConfig = { port: 8890 + Math.floor(Math.random() * 60), token: "t", tokenGenerated: false, defaultCwd: "", model: "test-model", bridgeToken: "bt", dataDir, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "" };
   const bus = new EventBus({ persistPath: join(dataDir, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);
   return { dataDir, orgDir, mgr, cleanup: () => { for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } } };

@@ -148,7 +148,7 @@ console.log("F. P1 链闭活性闸（SessionManager 真链双场景——审查 
   const cfg: RelayConfig = {
     port: 8890 + Math.floor(Math.random() * 60), token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);

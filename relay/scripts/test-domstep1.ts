@@ -111,7 +111,7 @@ async function main() {
 
     // ============ B 入口幂等（真 SessionManager 链） ============
     console.log("B 入口幂等（同键双发拒+回退口）:");
-    const cfg: RelayConfig = { port: 8801, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null };
+    const cfg: RelayConfig = { port: 8801, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" };
     const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
     const mgr = new SessionManager(bus, cfg);
     mgr.setAgentFactory(makeStuckFactory());

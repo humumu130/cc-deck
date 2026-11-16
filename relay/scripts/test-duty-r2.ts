@@ -56,7 +56,7 @@ async function main() {
   delete process.env.CCR_CWD;
   delete process.env.CCR_PM_DUTY; // 值守保持开启（本批对象——显式清掉继承面）
   try {
-    const cfg: RelayConfig = { port: 8797, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null };
+    const cfg: RelayConfig = { port: 8797, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" };
     const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
     const mgr = new SessionManager(bus, cfg);
     mgr.setAgentFactory(makeFakeFactory());

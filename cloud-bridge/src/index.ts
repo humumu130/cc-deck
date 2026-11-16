@@ -245,7 +245,13 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         router.handleFrame(connId, data.toString());
       });
       try {
-        router.register(connId, dev, rk || undefined);
+        // W-ACCOUNT 审查修实落（security P2-3 复审记账①：前笔提交语有门实现无门）：rn 透传
+        //（显示名纯展示）；acct 默认剥——自建桥无 verifyAccountToken，共桥攻击者知用户名即可
+        // 算 acct id 自报 sa:1 绕码配对，「账号功能=CF 托管桥专属」从注释变协议事实。
+        // CCR_BRIDGE_TRUST_ACCT=1=单运营者内网桥显式信任开关（sa 语义=运营者担保；test-account 用）
+        const acct = process.env.CCR_BRIDGE_TRUST_ACCT === "1" ? url.searchParams.get("acct") ?? "" : "";
+        const rn = (url.searchParams.get("rn") ?? "").slice(0, 24);
+        router.register(connId, dev, rk || undefined, acct || undefined, rn || undefined);
       } catch (e) {
         // T1a：revoked 设备 register 抛（触点①）——握手后立即掐线
         console.log(`[cloud-bridge] register rejected dev=${dev}: ${e instanceof Error ? e.message : e}`);

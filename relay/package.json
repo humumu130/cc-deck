@@ -188,7 +188,8 @@
     "test:boardv2": "tsx scripts/test-boardv2.ts",
     "test:laneflip": "tsx scripts/test-laneflip.ts",
     "test:dutybackoffr2": "tsx scripts/test-dutybackoffr2.ts",
-    "test:leader-dispatch": "tsx scripts/test-leader-dispatch.ts"
+    "test:leader-dispatch": "tsx scripts/test-leader-dispatch.ts",
+    "test:account": "tsx scripts/test-account.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

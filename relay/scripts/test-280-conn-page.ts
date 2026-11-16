@@ -76,7 +76,7 @@ ok(sd.includes('data-settings-panel="connections"') && sd.includes("<h5>其他�
   "I1 四区 IA：其他电脑 / 这台电脑（CONNV3 改名——原三卡混排拆分定稿）");
 ok(sd.includes('data-conn-remote-card') && sd.includes('data-settings-live="remote-sources"'),
   "I2 远程源独立容器+云形态整卡隐藏（云槽自渲染防双份）");
-ok(sd.includes("liveSetHtml(remoteLive, cloudSettingsRows(false))"),
+ok(sd.includes("liveSetHtml(remoteLive, cloudSettingsRows(false) + acctRelayRows())"), // W-ACCOUNT 件三锚迁移：追加 acct 行组（withName=false 语义不变）
   "I3 桌面远程卡 withName=false（源名编辑归本机 relay 卡=同主体同卡）");
 ok(sd.includes("function cloudSettingsRows(withName = true)") && sd.includes("if (withName) html += relayNameRowHtml(false)"),
   "I3 云形态槽内源名行保留（缺省 true，云源改名能力不变）");

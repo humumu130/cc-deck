@@ -133,7 +133,7 @@ async function eChild(): Promise<number> {
   const cfg: RelayConfig = {
     port, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);
@@ -193,7 +193,7 @@ async function integrationTests(): Promise<void> {
     const cfg: RelayConfig = {
       port: 8795, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
     const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
     const frames: PendingUserAction[][] = [];
@@ -411,7 +411,7 @@ function watcherTests(): void {
   // emitUserNote 单元（mgr 直测：liveFrontends 注入面——ws-server 装配真值的同源行为）
   {
     const bus2 = new EventBus({ persistPath: join(DATA, "ev-r1.ndjson") });
-    const cfg2: RelayConfig = { port: 8811, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null };
+    const cfg2: RelayConfig = { port: 8811, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" };
     const mgr2 = new SessionManager(bus2, cfg2);
     let fired = 0;
     bus2.subscribe((env) => { if (env.type === "USER_NOTE") fired++; });

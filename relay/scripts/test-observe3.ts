@@ -240,7 +240,7 @@ async function main() {
       const smSrcF = readFileSync(join(process.cwd(), "src", "session-manager.ts"), "utf-8");
       assert(smSrcF.includes("resolveObserveAdvisories") && smSrcF.includes("observe-converge"), "P2⑦：SessionManager 收口方法在（前缀判族+离档 resolved）");
       // 行为：真 SessionManager 上 observe-patrol-* 行在档位转 auto 后被收口
-      const cfgF: RelayConfig = { port: 8801, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null };
+      const cfgF: RelayConfig = { port: 8801, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" };
       const busF = new EventBus({ persistPath: join(DATA, "events-f.ndjson") });
       const mgrF = new SessionManager(busF, cfgF);
       mgrF.setAgentFactory(() => ({ id: "x", startedAt: 0, ended: true, sendMessage: () => {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => {}, setPermissionMode: async () => {} }) as never);

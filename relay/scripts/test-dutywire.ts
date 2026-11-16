@@ -37,7 +37,7 @@ function assert(cond: boolean, name: string, extra = ""): void {
 const mkCfg = (port: number, dataDir: string): RelayConfig => ({
   port, token: "t", tokenGenerated: false, defaultCwd: "",
   model: "test-model", bridgeToken: "bt", dataDir,
-  cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+  cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
 });
 
 // events.ndjson 注帧（外部会话活跃度凭证的夹具形态——PM 心跳帧同款）

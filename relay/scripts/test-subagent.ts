@@ -88,7 +88,7 @@ async function main() {
   if (gr.ok && gr.group?.status === "pending") sg(gr.group.id, "active");
   const gid = gr.ok && gr.group ? gr.group.id : "";
   ok(!!gid, "E0 测试组建组 active");
-  const cfg = { port: 8798, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [] as string[], cloudToken: "", cloudUrl: "", employeeConfigDir: null } as never;
+  const cfg = { port: 8798, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [] as string[], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" } as never;
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);
   const reg = mgr.orgAction("subagent-report", { op: "register", kind: "research", title: "对比 A/B 两条链路", parent_sid: "pm-9", gid }) as { ok: boolean; data?: { id?: string }; error?: string };

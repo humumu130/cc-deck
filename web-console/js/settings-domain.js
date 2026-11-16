@@ -1242,7 +1242,7 @@ function connectLan(ctx) {
 <div class="v8-setcard"><h5>会话列表</h5><div class="v8-swrow"><div class="v8-swtxt">会话卡状态行<div class="v8-swd">关闭后卡片只显标题行且高度收小；异常/错误信息仍显示</div></div><button class="toggle-switch${settingsToggleState("statusline") ? " active" : ""}" data-settings-toggle="statusline" type="button" aria-pressed="${settingsToggleState("statusline")}" title="切换会话卡状态行"></button></div><div class="v8-swrow"><div class="v8-swtxt">已隐藏的远程会话卡<div class="v8-swd">删除远程卡时选「仅本机隐藏」的记录（本机不显，源端仍在）</div></div></div><div class="settings-list" data-settings-live="hidden-remote"></div></div>
 <div class="v8-setcard"><h5>维护</h5><div class="v8-swrow"><div class="v8-swtxt">清理退休会话<div class="v8-swd">一键删除已退休成员的会话卡（会话列表归档组一并清空）；路由档案保留，复拉走成员管理</div></div><button class="secondary-btn" type="button" data-retired-purge>清理</button></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">各引擎接入与登录状态 · 引擎 = 可用于派单干活的 AI 编程工具（Claude/Codex/Trae…）</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><div class="v8-setcard"><h5>徽章配色</h5><div class="v8-escape">自定义各引擎/来源徽章的底色——全端（会话卡/团队域/新建弹窗/详情）同步生效；不设则用默认配色。</div><div class="settings-list" data-settings-live="badge-colors"></div></div></div>
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">连到别的电脑 · 让别的设备连到本机</div></div><div class="v8-setcard" data-conn-remote-card data-conn-section="sources"><div class="setcard-head"><h5>其他电脑</h5><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">＋ 添加</button></div><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard" data-conn-section="this-machine"><h5>这台电脑</h5><div class="settings-list" data-settings-live="connections"></div><div class="v8-swrow"><div class="v8-swtxt">连进来的设备<div class="v8-swd">手机配对后出现在这里 · 踢出后需重新配对</div></div><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，让手机或另一台电脑连到这台电脑">出示配对码</button></div><div class="settings-list" data-settings-live="devices"></div></div><div class="conn-diagbar" data-conn-section="diag" data-cloud-diag hidden></div><div class="v8-setcard" data-conn-section="account" hidden></div><!-- CONNV3：test.24 账号卡锚——上线时空态升回双路径文案+探针断言翻面 --><div class="v8-setcard" data-conn-section="nearby" hidden></div><div class="v8-setcard" data-review-seat-card><h5>评审席 · 全局评审池</h5><div class="settings-list" data-review-seat-live></div><div class="conn-card-foot"><span class="v8-escape">路由：worker 互审 → 团队专属席 → 全局池（异构优先）→ PM 兜底；席位增删走 org member-add（组=评审池）</span></div></div></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">连到别的电脑 · 让别的设备连到本机</div></div><div class="v8-setcard" data-conn-section="account"><h5>账号</h5><div class="settings-list" data-settings-live="account"></div></div><!-- CONNV3 test.24 账号卡启用（升顶——发现层插顶叙事） --><div class="v8-setcard" data-conn-remote-card data-conn-section="sources"><div class="setcard-head"><h5>其他电脑</h5><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">＋ 添加</button></div><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard" data-conn-section="this-machine"><h5>这台电脑</h5><div class="settings-list" data-settings-live="connections"></div><div class="v8-swrow"><div class="v8-swtxt">连进来的设备<div class="v8-swd">手机配对后出现在这里 · 踢出后需重新配对</div></div><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，让手机或另一台电脑连到这台电脑">出示配对码</button></div><div class="settings-list" data-settings-live="devices"></div></div><div class="conn-diagbar" data-conn-section="diag" data-cloud-diag hidden></div><div class="v8-setcard" data-conn-section="nearby" hidden></div><div class="v8-setcard" data-review-seat-card><h5>评审席 · 全局评审池</h5><div class="settings-list" data-review-seat-live></div><div class="conn-card-foot"><span class="v8-escape">路由：worker 互审 → 团队专属席 → 全局池（异构优先）→ PM 兜底；席位增删走 org member-add（组=评审池）</span></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">建团时的角色缺省引擎</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">模板只是初始值 · 开团可逐成员覆盖。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">随软件发行的内建能力</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载 · 停用开关待注册表就绪后生效。</div></div><details class="v8-setcard" style="padding:12px 14px"><summary style="cursor:pointer;font-weight:650;font-size:12.5px">权限声明（只读）</summary><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div></div></div></div></details>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 开源</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div><div class="v8-swd" style="margin-top:4px" data-settings-render-probe title="字体渲染环境探针（win-font-aa 批）：分数 DPR=Chromium 禁用 ClearType 子像素抗锯齿（Windows 125%/150% 缩放典型态）——发毛报告请连此行一起回报"></div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录</div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页</div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App</div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置</div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">覆盖现有设置</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><!-- 件H3：旧关于页图纸卡退役（无 live 渲染接线恒隐藏）；现行图纸入口=项目域第七 tab（W-SRCMENU2 ⑥） --></div>`;
@@ -1533,8 +1533,9 @@ function connectLan(ctx) {
               // 服务器域（sdelServerRows/空态引导行——与 cloudSettingsRows 空态同文案），身份域归槽。
               if (remoteLive) {
                 const entries0 = cloudSharedCloudServers();
-                liveSetHtml(remoteLive, entries0.length ? sdelServerRows(false)
-                  : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>');
+                // W-ACCOUNT：同账号行组恒追加（SNAPSHOT acct_relays 驱动——云/LAN 双形态同位）
+                liveSetHtml(remoteLive, (entries0.length ? sdelServerRows(false)
+                  : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他电脑</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>') + acctRelayRows());
               }
               liveSetHtml(connLive, '<div data-cloud-settings-slot></div>');
               renderCloudUI();
@@ -1568,7 +1569,7 @@ function connectLan(ctx) {
                   : ""));
               // W-SDEL 远程源区（多条+连接/编辑/删除；死条目清理不依赖云链激活态）——
               // withName=false：源名编辑归本机 relay 卡，云形态槽内仍自带（cloudSettingsRows() 缺省 true）
-              liveSetHtml(remoteLive, cloudSettingsRows(false));
+              liveSetHtml(remoteLive, cloudSettingsRows(false) + acctRelayRows()); // W-ACCOUNT：+同账号行组（服务器行后）
               if (shellDiag) void refreshRelayDiag();
             }
           }
@@ -1599,6 +1600,10 @@ function connectLan(ctx) {
                   '<div class="v8-escape">当前 relay 版本未下发客户端台账（升级 relay 后此处显示已连终端清单）。</div>';
             liveSetHtml(devLive, rows);
           }
+          // W-ACCOUNT 件三：账号卡（登录/注册+已登录态+设备计数）——写口同 liveSetHtml（#280-A 失焦保护同享）
+          acctMaybeRehydrate(snap); // 件三补：无凭据但 relay 已绑→拉取再水化（异步，回帧后下轮 render 生效）
+          const acctLive = section.querySelector('[data-settings-live="account"]');
+          if (acctLive) liveSetHtml(acctLive, accountSettingsRows());
           const provLive = section.querySelector('[data-settings-live="provider"]');
           if (provLive) {
             // W-ZCODE-C（1111 拍板 C）：zcode 产品化标注——短句升格+完整口径进 title。
@@ -2626,6 +2631,31 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       }
       // 切换连接：选中哪条源就连哪台（旧壳点行设活动源语义）。ACTIVE_CLOUD_KEY 先行，再断当前
       // 云链换 cfg 重连——switchToCloudSource 仅首启 bootstrap，已激活态需显式换 cfg（见上删除链同款）。
+      // W-ACCOUNT 件三：同账号电脑点连——临时 cfg（不写 ACTIVE_CLOUD_KEY、不落共享库）。
+      // 配对走免码流：pendingPair.acct 标记 → sendPairReq 携 pubkey 单播目标 relay →
+      // 桥信封 sa:1 → relay 免码 addPeer + 密封 ack（E2E 不省）。视角 ephemeral：回本机走
+      // 源切换器；刷新后回本机视角（不持久化=换号/登出零残留）。bootstrapCloud 不走——
+      // 它按共享库/ACTIVE 重建 cfg 会覆盖本临时源（深链分支同款思路：cfg 先行直连）。
+      function activateAcctRelay(dev) {
+        const hit = acctAcctRelays().find((r) => r && r.dev === dev);
+        if (!hit || !hit.rk) { showToast("对方电脑刚下线——它上线后会自动出现在这里"); return; }
+        const id = "acct:" + dev;
+        cloudDisconnect();
+        cloudCtx.sessions.clear(); cloudCtx.hasSnapshot = false; cloudCtx.lastSeq = 0;
+        cloudCtx.cfg = { id, name: hit.name || hit.dev, kind: "cloud", wsUrl: BAKED_BRIDGE_URL, token: BAKED_BRIDGE_TOKEN,
+          cloud: { url: BAKED_BRIDGE_URL, token: BAKED_BRIDGE_TOKEN, rd: dev, rk: hit.rk, paired: false }, acct: true };
+        cloudCtx.pendingPair = { rd: dev, rk: hit.rk, pc: "", acct: true };
+        setPendingPair(id, cloudCtx.pendingPair); // 闪断自愈/看门狗重连期从 sessionStorage 复原（源隔离键）
+        connectCloudFor(cloudCtx, false);
+        if (!cloudMode) {
+          if (!shellCloud) { shellCloud = true; try { localStorage.setItem(SHELL_CLOUD_KEY, "1"); } catch {} }
+          setSourceView("cloud"); // 视角切云（命令面随视角接管——setSourceView 内处理）
+        }
+        renderCloudUI(); refreshSourceSwitchers();
+        try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+        showToast("正在连接 " + (hit.name || "同账号电脑") + "（免配对码）");
+      }
+
       function activateCloudServer(id) {
         const hit = sharedCloudEntryOf(id);
         if (!hit) return;
@@ -2796,7 +2826,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         // 手填 https://…/cloud 也能连：统一归一到 ws/wss scheme（https 页面恒 wss——混合内容硬约束）
         const wsBase = base.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
         const url = wsBase + (wsBase.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(serverBridgeToken(cfg)) +
-          "&dev=" + encodeURIComponent(dev);
+          "&dev=" + encodeURIComponent(dev) + acctQuery(); // W-ACCOUNT：wb- 桥连带 acct（桥升级口验证→我们的帧获 sa:1 信封→对端 relay 免码）
         let opened = false;
         const w = new WebSocket(url);
         ctx.ws = w;
@@ -2885,7 +2915,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       function isSelfPairCodeHint() { return !!localRelayDevOf(); } // 本机 relay 云身份在场（提示面非拦截面）
       function sendPairReq(ctx, pair, dev) {
         const body = { t: "pair_req", code: pair.pc, name: "web-" + dev.slice(3, 11) };
-        if (pair.pc) body.pubkey = ckp.publicKey;
+        if (pair.pc || pair.acct) body.pubkey = ckp.publicKey; // W-ACCOUNT：免码 pair（acct 标记）也携公钥——relay 侧 dev=devId(pubkey) 自洽门 + addPeer 需要；空码+无标记=纯在场信标仍不带（#29 口径不破）
         try {
           const ua = navigator.userAgent;
           const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "浏览器";
@@ -2939,7 +2969,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         const httpBase = base.replace(/^ws:\/\//i, "http://").replace(/^wss:\/\//i, "https://").replace(/\/cloud\/?$/, "");
         ctx.pollSid = cloudUuid();
         ctx.pollBase = httpBase + "/cloud-poll?token=" + encodeURIComponent(token) +
-          "&dev=" + encodeURIComponent(dev) + "&sid=" + ctx.pollSid;
+          "&dev=" + encodeURIComponent(dev) + "&sid=" + ctx.pollSid + acctQuery(); // W-ACCOUNT：轮询降级传输同带 acct
         ctx.reconnectDelay = CLOUD_RETRY_BASE_MS; // 连上即归零退避
         const peer = cloudPeerOf(ctx.cfg);
         if (!peer || pair) {
@@ -3254,7 +3284,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             return;
           }
           cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };
-          cloudPersistPaired(cfg); // 决策 1：配对成功才落写共享库（旧壳 /app 免配对直连的锚点）
+          if (cfg.acct) setPendingPair(cfg.id, null); // W-ACCOUNT：同账号临时源不落共享库（换号残留/双行重复双雷）——会话内有效，回本机走源切换器
+          else cloudPersistPaired(cfg); // 决策 1：配对成功才落写共享库（旧壳 /app 免配对直连的锚点）
           setPendingPair(cfg.id, null);
           ctx.pendingPair = null;
           ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #258 成功即清：配对退避归零，下次配对满速（看门狗 tick 路径之外补齐——ack 到达即清 timer，tick 不再跑）
@@ -4190,6 +4221,129 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       // #280-A v2（5.3Flash 审查逐条修）：①当前值独立行加重（现状≠规则分层）②规则压一句
       // 自然语言放输入框下（去「=」「回落」术语）③「≤12」只在计数器出现一次（去占位符重复）
       // ④保存钮紧邻输入框（主操作 primary 档）⑤加实时字数计数 n/12 ⑥左对齐三线合一
+      // ---------- W-ACCOUNT 件三：账号卡（登录/注册+已登录态+acct_relays 行组） ----------
+      // ccr_acct={user,account_token}（localStorage）；登录→/api/account-set 下发 relay→重连桥带 acct。
+      // acct 行=纯 SNAPSHOT acct_relays 驱动（不落 ccd_servers——五处 kind==="cloud" 硬过滤断裂
+      // +换号残留双雷根除）；点击=临时 cfg 走 activateAcctRelay 内部链（不写 ACTIVE_CLOUD_KEY）。
+      // 作用域注记：本段所在域无外围 bridge 常量——按 conn 域惯例（:1916）就地取 window 挂口
+      //（render/liveSetHtml 同款），localRelayInfo/render 亦走守卫口防跨域 ReferenceError（件三探针实锤）。
+      const acctBridge = () => window.__ccDeck005B4;
+      const acctAcctRelays = () => { const b = acctBridge(); const relays = b && b.snapshot && Array.isArray(b.snapshot.acct_relays) ? b.snapshot.acct_relays : []; return relays; };
+      function acctCred() { try { return JSON.parse(localStorage.getItem("ccr_acct") || "null"); } catch { return null; } }
+      function acctSet(token, user) { try { if (token) localStorage.setItem("ccr_acct", JSON.stringify({ user, account_token: token })); else localStorage.removeItem("ccr_acct"); } catch {} }
+      // 审查修（review-account-ux P0-1/P1-2 + security P1-1②③）：①原 \$ 转义吞插值=URL 恒坏
+      // ②token 源=B4 桥对象（无 token 字段）——改 __ccDeck005Token 全局（:1782 canonical）③base
+      // 复用 :1867 模式——壳形态（tauri.localhost/file）回环+探测端口，浏览器形态 location.origin
+      function acctApiBase() {
+        if (/^https?:/.test(location.protocol) && !/tauri\.localhost/i.test(location.host)) return location.origin;
+        return "http://127.0.0.1:" + ((typeof localRelayInfo !== "undefined" && localRelayInfo && localRelayInfo.port) || "8787");
+      }
+      function acctLanToken() { return String(window.__ccDeck005Token || ""); } // :1782 全局（壳探测命中后更新）
+      function acctQuery() { const c = acctCred(); return c && c.account_token ? "&acct=" + encodeURIComponent(c.account_token) : ""; } // wb- 桥连带（E1 两口消费）
+      async function acctApiSet(token, user) {
+        try {
+          const r = await fetch(acctApiBase() + "/api/account-set?token=" + encodeURIComponent(acctLanToken()), { method: "POST", body: JSON.stringify({ token: token || "", user: user || "" }) }); // 无 content-type=简单请求免预检（pair-code 同款——tauri.localhost 跨源预检无 OPTIONS 处理必拦）
+          return r.ok;
+        } catch { return false; }
+      }
+      // 件三补·凭据再水化：SNAPSHOT.acct_bound=relay 已绑账号但本页无 ccr_acct（清存储/
+      // 新浏览器/SSH 装机只写 relay 文件）→ LAN token 拉 {token,user} 重建——绑定是事实源，
+      // localStorage 只是缓存。每页一次（flag），https 云形态 fetch 回环必败=静默一次无害
+      let acctRehydrated = false;
+      function acctMaybeRehydrate(snap) {
+        if (acctRehydrated || acctCred() || !snap || !snap.acct_bound) return;
+        acctRehydrated = true;
+        void (async () => {
+          try {
+            const r = await fetch(acctApiBase() + "/api/account-set?token=" + encodeURIComponent(acctLanToken()));
+            if (!r.ok) return;
+            const d = await r.json();
+            if (d && d.token && /^[a-f0-9]{64}$/.test(d.token)) {
+              acctSet(d.token, d.user || "已登录");
+              try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+            }
+          } catch { /* https 云形态/relay 未起：静默，账号卡照常可手登 */ }
+        })();
+      }
+      function acctRelayRows() {
+        const relays = acctAcctRelays();
+        if (!acctCred() || !relays.length) return "";
+        return relays.map((r) => '<div class="settings-row acct-relay-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>' + esc(String(r.name || r.dev)) + '</strong><div class="v8-swd conn-dev-id">' + esc(String(r.dev)) + '</div></div>'
+          + (r.online === false ? '<span class="tag" title="对方电脑离线">离线</span>' : '<button class="row-share" data-acct-relay-connect="' + esc(String(r.dev)) + '" type="button" title="切换到这台电脑的视角">连接</button>') + '</div>').join("");
+      }
+      function accountSettingsRows() {
+        const c = acctCred();
+        if (!c) {
+          return '<div class="settings-row"><span class="avatar">👤</span><div><strong>登录 CC Deck</strong><p>同一账号的电脑自动互联，不用配对码</p></div>'
+            + '<button class="row-share" data-acct-login type="button">登录</button>'
+            + '<button class="row-share" data-acct-register type="button" title="创建新账号">没有账号？注册</button></div>';
+        }
+        const relays = acctAcctRelays();
+        return '<div class="settings-row"><span class="avatar">👤</span><div><strong>' + esc(c.user || "已登录") + '</strong><p>' + (relays.length ? '已登录 · ' + relays.length + ' 台同账号设备在线' : '已登录 · 对方电脑上线后会自动出现在「其他电脑」') + '</p></div>'
+          + '<button class="row-share" data-acct-logout type="button">退出登录</button></div>';
+      }
+      function openAcctAuthUI(register) {
+        closeTransientOverlays();
+        if (document.querySelector("[data-acct-pop]")) return;
+        const back = document.createElement("div"); back.className = "pair-pop-backdrop"; back.dataset.acctBack = "";
+        const pop = document.createElement("div"); pop.className = "create-pop add-server-pop"; pop.dataset.acctPop = "";
+        pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-label", register ? "创建账号" : "登录");
+        pop.innerHTML = '<h3>' + (register ? "创建账号" : "登录") + '</h3>'
+          + '<p class="create-sub">' + (register ? "注册一次，所有设备用同一账号即可自动互联" : "同一账号的电脑自动互联") + '</p>'
+          + '<div class="create-label">用户名</div>'
+          + '<div class="pair-link-row"><input class="create-field" data-acct-user type="text" maxlength="24" placeholder="字母数字._-" aria-label="用户名"></div>'
+          + '<div class="create-label">密码</div>'
+          + '<div class="pair-link-row"><input class="create-field" data-acct-pass type="password" maxlength="64" placeholder="至少 8 位" aria-label="密码"></div>'
+          + '<div class="pair-foot"><span class="add-hint" data-acct-err></span><button class="secondary-btn" type="button" data-acct-close>取消</button><button class="primary-btn" type="button" data-acct-submit>' + (register ? "创建账号" : "登录") + '</button></div>';
+        const close = () => { pop.remove(); back.remove(); };
+        back.addEventListener("click", close);
+        pop.addEventListener("click", async (ev) => {
+          if (ev.target.closest("[data-acct-close]")) { close(); return; }
+          if (!ev.target.closest("[data-acct-submit]")) return;
+          const user = (pop.querySelector("[data-acct-user]") || {}).value || "";
+          const pass = (pop.querySelector("[data-acct-pass]") || {}).value || "";
+          const err = pop.querySelector("[data-acct-err]");
+          if (!/^[\w.\-]{3,24}$/.test(user)) { if (err) err.textContent = "用户名 3-24 位字母数字._-"; return; }
+          if (pass.length < 8) { if (err) err.textContent = "密码至少 8 位"; return; }
+          try {
+            const post = (path) => fetch("https://cc.humumu.online/auth/" + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ user, pass }) });
+            if (register) { // 注册成功即自动登录（少一步手动；限流同 IP 池——5/min 够用）
+              const rr = await post("register");
+              if (rr.status === 409) { if (err) err.textContent = "该用户名已注册，请直接登录"; return; }
+              if (rr.status === 429) { if (err) err.textContent = "尝试次数过多，请稍后再试"; return; }
+              if (!rr.ok) { if (err) err.textContent = "网络异常，请重试"; return; }
+            }
+            const r = await post("login");
+            if (r.status === 429) { if (err) err.textContent = "尝试次数过多，请稍后再试"; return; }
+            if (!r.ok) { if (err) err.textContent = r.status === 401 ? "用户名或密码不对" : "网络异常，请重试"; return; }
+            const d = await r.json();
+            acctSet(d.account_token, user);
+            const bound = await acctApiSet(d.account_token, user);
+            if (!bound) showToast("已登录，但绑定本机 relay 失败——请重试登录或检查本机 CC Deck 是否在运行");
+            close(); showToast("已登录 · 同账号设备将自动出现在「其他电脑」");
+            try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+          } catch { if (err) err.textContent = "网络异常，请重试"; }
+        });
+        document.body.appendChild(back); document.body.appendChild(pop);
+        setTimeout(() => { const el = pop.querySelector("[data-acct-user]"); if (el) { try { el.focus(); } catch {} } }, 60);
+      }
+      // 四口点击委托（行内按钮随行组重渲——挂 document 级不走重挂）
+      document.addEventListener("click", async (ev) => {
+        const t = ev.target;
+        if (!t || !t.closest) return;
+        if (t.closest("[data-acct-login]")) { openAcctAuthUI(false); return; }
+        if (t.closest("[data-acct-register]")) { openAcctAuthUI(true); return; }
+        if (t.closest("[data-acct-logout]")) {
+          acctSet(null);
+          acctRehydrated = true; // 审查修（ux P2-6）：登出即烧再水化——解绑在途窗口内 GET 回旧 token 复活登录态的竞态封死
+          const ok = await acctApiSet("");
+          showToast(ok ? "已退出登录" : "已退出登录（本机解绑未生效——请再点一次退出登录）");
+          try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
+          return;
+        }
+        const con = t.closest("[data-acct-relay-connect]");
+        if (con) { activateAcctRelay(con.getAttribute("data-acct-relay-connect") || ""); }
+      });
       function relayNameRowHtml(mobile) {
         const srcCloud = cloudMode || viewSource() === "cloud";
         const srcCtx = srcCloud ? cloudCtx : ctx;

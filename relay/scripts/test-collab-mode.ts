@@ -40,7 +40,7 @@ function mkManager(tag: string) {
   const cfg: RelayConfig = {
     port: 8797, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const frames: ModeFrame[] = [];
@@ -151,7 +151,7 @@ section("\nS5 跨实例读回（relay 重启 = 文件即真相）");
   const cfg2: RelayConfig = {
     port: 8798, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const bus2 = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr2 = new SessionManager(bus2, cfg2);

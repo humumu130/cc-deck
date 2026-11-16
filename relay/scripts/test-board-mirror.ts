@@ -176,7 +176,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8797, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
     const spawned: SpawnRec[] = [];
     const mgr = new SessionManager(new EventBus({ persistPath: join(DATA, "events.ndjson") }), cfg);

@@ -100,7 +100,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8791, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
 
     // ---------- L0 CCR_NO_LEADER 禁用（#21 隔离缺陷批） ----------

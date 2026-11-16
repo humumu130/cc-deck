@@ -34,6 +34,7 @@ export interface RelayConfig {
   cloudUrls: string[];       // 云桥地址列表（CCR_CLOUD_URL 逗号分隔），空 = 云桥禁用
   cloudUrl: string;          // 主桥（首地址）：PAIR_ACK 下发给新配对设备
   cloudToken: string;        // 云桥层连接 token（CCR_CLOUD_TOKEN，所有桥共用）
+  accountToken: string;      // W-ACCOUNT：账号 token（CCR_ACCOUNT_TOKEN → data/account-token → 空=未登录同账号互联）
   // 雇员独立家目录（#17）：null = 关闭（行为与从前一致）；路径 = 启用，relay
   // spawn 的雇员会话（Leader/worker/随手办）CLI 子进程 CLAUDE_CONFIG_DIR 指到
   // 该目录，transcript/任务清单与用户默认家（~/.claude）物理隔离。
@@ -142,6 +143,15 @@ export function loadConfig(): RelayConfig {
   }
   if (!cloudToken) cloudToken = DEFAULT_CLOUD_TOKEN;
 
+  // W-ACCOUNT 件二：账号 token 三级回退（env → data/account-token 文件 → 空=未登录）。
+  // 空串视为未设置回落下一档（cloud-token 同款守卫——空 token 发出去必 401）。
+  let accountToken = (process.env.CCR_ACCOUNT_TOKEN ?? "").trim();
+  if (!accountToken) {
+    try {
+      accountToken = readFileSync(join(dataDir, "account-token"), "utf-8").trim();
+    } catch { /* 无文件/读失败 → 未登录 */ }
+  }
+
   // #17 雇员独立家三态解析（见 RelayConfig.employeeConfigDir 注释；纯函数抽至
   // parseEmployeeConfigDir 供 settings.ts 产品层复用）
   const envRaw = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
@@ -154,6 +164,6 @@ export function loadConfig(): RelayConfig {
 
   return {
     port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir, freshInstall,
-    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken, employeeConfigDir,
+    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken, employeeConfigDir, accountToken,
   };
 }

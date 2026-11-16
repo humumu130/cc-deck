@@ -149,7 +149,7 @@ console.log("E P1 撤单驱逐（矛盾链根除）:");
     const { loadDispatchQueue } = await import("../src/dispatch-queue.js");
     const mgr = new SessionManager(new EventBus({ persistPath: join(DATA, "events.ndjson") }), {
       port: 8791, token: "t", tokenGenerated: false, defaultCwd: DATA, model: "m", bridgeToken: "bt",
-      dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     } as never);
     const hack = mgr as unknown as { dispatchQueueItems: Array<{ dispatch_id: string; enqueued_at: number; input: Record<string, unknown> }>; drainDispatchQueue(gid: string): void };
     // ① evictQueuedDispatch：驱逐内存+落盘

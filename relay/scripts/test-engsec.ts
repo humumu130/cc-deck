@@ -65,7 +65,7 @@ async function main() {
 
   // ---------- B 托管面 ----------
   console.log("B 托管面（真 SessionManager）：");
-  const cfg = { port: 8795, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [] as string[], cloudToken: "", cloudUrl: "", employeeConfigDir: null } as never;
+  const cfg = { port: 8795, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [] as string[], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" } as never;
   const mk = (engine: string | undefined, mode: string | undefined) => {
     const bus = new EventBus();
     const mgr = new SessionManager(bus, cfg);

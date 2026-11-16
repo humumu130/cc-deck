@@ -187,7 +187,7 @@ try {
     const cfg: RelayConfig = {
       port: 8795, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: mkdtempSync(join(tmpdir(), "ccr-data-75r-")),
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", accountToken: "", employeeConfigDir: null, 
     };
     setLightConfirmTrusted(true); // create 即 active（C12 既有范式，orchestration 先例）
     const mgr = new SessionManager(bus, cfg);

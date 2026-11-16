@@ -35,7 +35,7 @@ const bus = new EventBus();
 const cfg: RelayConfig = {
   port: 18996, token: "t", tokenGenerated: false, defaultCwd: "", model: "m",
   bridgeToken: "bt", dataDir: mkdtempSync(join(tmpdir(), "ccr-injectprobe-")),
-  cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+  cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
 };
 const mgr = new SessionManager(bus, cfg);
 mgr.setAgentFactory((_c: string, _m: string, cb: AgentCallbacks): AgentLike => ({

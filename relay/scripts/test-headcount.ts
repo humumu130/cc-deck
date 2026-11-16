@@ -91,7 +91,7 @@ const ORG = mkdtempSync(join(tmpdir(), "ccr-org-hc-"));
     const cfg: RelayConfig = {
       port: 8794, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
     const anchor = join(ORG, "anchor-repo");
     mkdirSync(anchor, { recursive: true });

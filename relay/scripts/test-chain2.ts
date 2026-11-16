@@ -35,7 +35,7 @@ process.env.CCR_ORG_DIR = ORG;
 process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_STORAGE_READ_MODE = "json";
 try {
-  const cfg: RelayConfig = { port: 8797, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null };
+  const cfg: RelayConfig = { port: 8797, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "" };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);
   mgr.setAgentFactory((() => ({ id: "x", startedAt: 0, ended: false, sendMessage() {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => {}, setPermissionMode: async () => {} })) as never);

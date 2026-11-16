@@ -46,7 +46,7 @@ try {
   const cfg: RelayConfig = {
     port: 8799, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "m", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const mgr = new SessionManager(bus, cfg);
   mgr.setAgentFactory(fakeFactory);

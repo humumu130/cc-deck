@@ -338,7 +338,7 @@ section("\nS7 端到端：CLI 免卡直写→派单注入（Legion 断言）→a
   const cfg: RelayConfig = {
     port: 8798, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);

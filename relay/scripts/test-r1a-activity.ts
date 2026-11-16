@@ -62,7 +62,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8793, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
     const bus = new EventBus({ persistPath: ndjson });
     const transient: SessionActivityPayload[] = [];

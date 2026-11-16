@@ -101,7 +101,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8794, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", accountToken: "", employeeConfigDir: null, 
     };
     const sentinel = mkdtempSync(join(tmpdir(), "ccr-schedfix2-sentinel-"));
     writeFileSync(join(DATA, "last-cwd"), sentinel, "utf-8");

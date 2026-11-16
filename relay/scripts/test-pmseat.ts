@@ -73,7 +73,7 @@ function mkCfg(port: number, dataDir: string): RelayConfig {
   return {
     port, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
 }
 

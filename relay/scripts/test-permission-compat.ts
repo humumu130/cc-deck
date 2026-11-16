@@ -153,7 +153,7 @@ try {
   const cfg: RelayConfig = {
     port: 8796, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: join(root, "data"),
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const spawned: { cwd: string; permissionMode: string | undefined; engine?: string }[] = [];
   const mgr = new SessionManager(new EventBus(), cfg);

@@ -181,6 +181,7 @@ export class CloudClient {
   // 同样不该绑架换桥——hello 是「设备还活着」的唯一铁证）
   private lastHelloAt = new Map<string, number>();
   private hbTimer: ReturnType<typeof setInterval> | null = null;
+  private acctDiscTimer: ReturnType<typeof setInterval> | null = null; // W-ACCOUNT：30min 周期重发现（acctRelays 新鲜度兜底）
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   private resumeOnOpen = new Set<string>();
   // #384b 近 60s 内 grant 过的登录设备：桥断连丢 ack 后重连补发（定时整体清空）
@@ -204,6 +205,17 @@ export class CloudClient {
   start(): void {
     this.connect();
     this.startHeartbeat();
+    this.ensureAcctDiscTimer();
+  }
+  // W-ACCOUNT：30min 周期重发现（对端后上线/桥 DO 休眠唤醒丢内存账后自愈——事件驱动
+  // relay-online 之外的新鲜度兜底）。审查修（P3①）：运行时经 /api/account-set 登录走
+  // reconnect() 不经 start()——ensure 化，start/reconnect 两路都建
+  private ensureAcctDiscTimer(): void {
+    if (!this.cfg.accountToken || this.acctDiscTimer) return;
+    this.acctDiscTimer = setInterval(() => {
+      try { if (this.ws?.readyState === WebSocket.OPEN) this.send({ to: "*", data: { t: "disc" } }); } catch { /* 下一周期兜底 */ }
+    }, 30 * 60_000);
+    this.acctDiscTimer.unref?.();
   }
 
   private bridgeUrl(): string {
@@ -214,6 +226,12 @@ export class CloudClient {
     // T1a 租户登录态：已登录设备带 dtok（桥验签绑租户——revoked/伪造即 401）
     const cred = this.identity.loadTenantCred();
     if (cred) u += `&dtok=${encodeURIComponent(cred.token)}`;
+    // W-ACCOUNT 件二：账号 token 在场即带 acct（桥验签→RELAYS/pair_req 同账号过滤+sa 信封——免码互连）
+    if (this.cfg.accountToken) u += `&acct=${encodeURIComponent(this.cfg.accountToken)}`;
+    // W-ACCOUNT：显示名上报（#100 relayName 单源——自定义名缺省主机名；RELAYS 条目携带，
+    // 同账号「其他电脑」行免 dev 裸串）
+    const rn = (this.extra?.relayName?.() ?? "").slice(0, 24);
+    if (rn) u += `&rn=${encodeURIComponent(rn)}`;
     return u;
   }
 
@@ -241,6 +259,12 @@ export class CloudClient {
     if (peers.length) console.log(`[cloud] tenant peers_report sent (${peers.length} devices, pending bridge-owner approval)`);
   }
 
+  /** W-ACCOUNT：账号绑定变更后的手动重连（account-set 口触发——立即断旧建新带 acct） */
+  reconnect(): void {
+    this.ensureAcctDiscTimer(); // W-ACCOUNT 审查修（P3①）：运行时登录后周期发现兜底同建
+    try { this.ws?.close(1000, "account changed"); } catch { /* 已关 */ }
+    this.connect();
+  }
   private connect(): void {
     if (this.stopped) return;
     let ws: WebSocket;
@@ -315,6 +339,10 @@ export class CloudClient {
       if (process.env.CCR_XMSG === "1") {
         this.send({ to: "*", data: { t: "disc" } });
         try { this.mgr.xmsgFlush?.(); } catch { /* 尽力而为 */ }
+      } else if (this.cfg.accountToken) {
+        // W-ACCOUNT 件二补（件三实施审查实锤）：账号模式开门即发现——acctRelays 全靠
+        // RELAYS sa 条目驱动，不发 disc=同账号互见死链（XMSG 门外的账号 relay 零发现）
+        this.send({ to: "*", data: { t: "disc" } });
       }
     });
     ws.on("message", (raw) => {
@@ -606,6 +634,7 @@ export class CloudClient {
         review_seat: reviewSeatSnapshotPayload(), // W-REVIEWSEAT：云通道快照同键（#117 教训——云桥手机同享评审池配置面）：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
+        acct_relays: [...this.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk, online: true })), // W-ACCOUNT：phone 云通道同键（#117 教训——与 LAN 口同源；rk 供手机端点连免码配对）
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
@@ -790,6 +819,12 @@ export class CloudClient {
       }
     }
     // X1 disc 应答：在线 relay 清单（T1a 触点③租户过滤后下发）——xmsg 发送侧公钥发现源
+    // W-ACCOUNT：同桥 relay 上线广播=刷新信号（#34 广播复用——30min 周期之外对端
+    // 上线即刻可见）。无账号模式零行为变化（纯旁路）
+    if (f.type === "relay-online" && this.cfg.accountToken) {
+      try { this.send({ to: "*", data: { t: "disc" } }); } catch { /* 下一周期兜底 */ }
+      return;
+    }
     if (f.type === "RELAYS") {
       const relays = (f as unknown as { relays?: unknown }).relays;
       if (Array.isArray(relays)) {
@@ -803,6 +838,21 @@ export class CloudClient {
       const waiters = this.discWaiters;
       this.discWaiters = [];
       for (const w of waiters) w();
+      // W-ACCOUNT 件二：sa 条目（同账号 relay，桥算标记）→ acctRelays 内存表 + 总线增量帧
+      //（console/手机 SNAPSHOT 或 ACCT_RELAYS 增量驱动「其他电脑」自动出现）
+      {
+        const relaysArr = relays as unknown[];
+        const next = new Map<string, { dev: string; rk: string; name: string; ts: number }>();
+        for (const r of relaysArr) {
+          const e = r as { dev?: unknown; rk?: unknown; name?: unknown; sa?: unknown };
+          if (e && e.sa === 1 && typeof e.dev === "string" && e.dev.startsWith("rl-")) next.set(e.dev, { dev: e.dev, rk: typeof e.rk === "string" ? e.rk : "", name: typeof e.name === "string" ? e.name.slice(0, 24) : "", ts: Date.now() });
+        }
+        const prevKeys = new Set(this.acctRelays.keys());
+        let changed = false;
+        for (const k of prevKeys) if (!next.has(k)) { this.acctRelays.delete(k); changed = true; }
+        for (const [k, v] of next) if (!prevKeys.has(k) || this.acctRelays.get(k)?.rk !== v.rk || this.acctRelays.get(k)?.name !== v.name) { this.acctRelays.set(k, v); changed = true; }
+        if (changed) this.bus.emitTransient("ACCT_RELAYS", { relays: [...this.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk })) });
+      }
       return;
     }
     // #373 /wan 手表明文透传信封（桥可信通道）：{t:"wan", from, frame:"<relay协议明文JSON文本>"}
@@ -856,6 +906,25 @@ export class CloudClient {
       if (this.wbSightings.size > 200) {
         const sweep = Date.now();
         for (const [d, ts] of this.wbSightings) if (sweep - ts > SIGHTING_TTL_MS) this.wbSightings.delete(d);
+      }
+      // W-ACCOUNT 件二（P0-1 定案；件三实施审查修正两处）：信封 sa=1（桥侧算的同账号
+      // 标记——帧内自报不可信）且发起方为 wb-（同账号电脑的浏览器视角）→ 跳码验直入
+      // addPeer。修正①：分支必须在下方 !code 空码门前——空码 account pair_req 原先
+      // 死于该门永不可达；安全不降（sa=1=桥升级口 token 验证+dev 公钥自洽双门已过）。
+      // 修正②：必须 sendSealed 回发 pair_ack——对端配对看门狗等的是 ack 帧，addPeer
+      // 副作用对端不可见（grant 密封回发=E2E 不削弱：同账号只省码不省密钥交换）。
+      // PAIRED_DEVICE 广播保留（自动配对持有者屏幕可见）
+      if ((f as unknown as { sa?: unknown }).sa === 1 && dev.startsWith("wb-")) {
+        this.identity.addPeer(dev, {
+          pubkey,
+          name: typeof pr.name === "string" ? pr.name : "电脑",
+          paired_at: Date.now(),
+          meta: { via: "account" },
+        });
+        console.log(`[cloud] account-paired web dev=${dev}${bc ? " via broadcast" : ""}`);
+        this.bus.emitTransient("PAIRED_DEVICE", { dev, name: typeof pr.name === "string" ? pr.name : "电脑", action: "add" });
+        this.sendSealed(f.from, { t: "pair_ack", relay_dev: this.identity.relayDev, relay_pubkey: this.identity.keypair.publicKey });
+        return;
       }
       if (!String(pr.code ?? "")) return;
       const now = Date.now();
@@ -1036,6 +1105,8 @@ export class CloudClient {
   }
 
   // ---------- X1 密封 xmsg 传输面（策略在 commands/xmsg-commands.ts；本层只做密封/发现/帧收发） ----------
+  // W-ACCOUNT：同账号 relay 内存表（RELAYS sa 条目驱动；SNAPSHOT acct_relays 数据源——不落盘，会话态）
+  public acctRelays = new Map<string, { dev: string; rk: string; name: string; ts: number }>();
   // disc/RELAYS 发现的 rl- 公钥缓存（桥 register 时上报 rk；T1a 触点③租户过滤下发）
   private relayKeys = new Map<string, string>();
   private discWaiters: (() => void)[] = [];
@@ -1215,6 +1286,7 @@ export class CloudClient {
     this.unsubscribe();
     if (this.timer) clearTimeout(this.timer);
     if (this.hbTimer) clearInterval(this.hbTimer);
+    if (this.acctDiscTimer) clearInterval(this.acctDiscTimer);
     for (const t of this.routeRetryTimers.values()) clearTimeout(t);
     this.routeRetryTimers.clear();
     this.ws?.close();

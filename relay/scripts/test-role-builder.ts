@@ -60,7 +60,7 @@ async function main() {
   process.env.CCR_PERMISSION_POLICY = "off"; // P81 kill-switch off：自定义 role（visual-reviewer）不被 unknown_role_mapping 闸拒——岗位轴与权限轴正交的前提（词表外 role=岗位引用）
   delete process.env.CCR_CWD;
   try {
-    const cfg: RelayConfig = { port: 8797, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null };
+    const cfg: RelayConfig = { port: 8797, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" };
     const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
     const mgr = new SessionManager(bus, cfg);
     mgr.setAgentFactory(makeFakeFactory());

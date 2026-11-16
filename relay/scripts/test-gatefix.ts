@@ -23,7 +23,7 @@ ok(sm.includes('if (status === "done" || status === "failed") this.scheduleRecei
 // 沙盒集成（G3/G4/G5）
 const DATA = mkdtempSync(join(tmpdir(), "ccr-gatefix-"));
 process.env.CCR_RECEIPT_CHECK_MS = "300";
-const cfg: RelayConfig = { port: 18997, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null };
+const cfg: RelayConfig = { port: 18997, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "" };
 const mgr = new SessionManager(new EventBus(), cfg);
 // 伪造 openDispatch + 直调 closeOpenDispatches 不可行（私有）——改走 runReceiptCheck 公开语义面：
 // 通过 (mgr as any) 触达（测试面特权，同 replay-cf3 惯例）

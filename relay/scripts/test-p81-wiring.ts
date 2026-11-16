@@ -96,7 +96,7 @@ try {
   const mgrCfg: RelayConfig = {
     port: 8795, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: join(root, "data"),
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const spawned: { cwd: string; prompt: string | undefined; permissionMode: string | undefined; engine?: string; cb?: AgentCallbacks; agent?: AgentLike }[] = [];
   const makeFakeFactory = () =>

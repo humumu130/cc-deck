@@ -33,7 +33,7 @@ function mkEnv(extra: Record<string, string> = {}) {
   const cfgDir = mkdtempSync(join(tmpdir(), "seatlive-cfg-")); dirs.push(cfgDir);
   process.env.CCR_CONFIG_FILE = join(cfgDir, "config.json");
   for (const [k, v] of Object.entries(extra)) process.env[k] = v;
-  const cfg: RelayConfig = { port: 8930 + Math.floor(Math.random() * 40), token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null };
+  const cfg: RelayConfig = { port: 8930 + Math.floor(Math.random() * 40), token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "" };
   writeCollabMode(DATA, "no-leader"); // env CCR_NO_LEADER 不被 readCollabMode 认（pmseat 先例：设置文件面）
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);

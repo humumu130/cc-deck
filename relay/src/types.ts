@@ -691,6 +691,7 @@ export type EventType =
   | "PAIR_REQUEST"
   | "PAIR_RESOLVED"
   | "PAIRED_DEVICE"
+  | "ACCT_RELAYS"
   | "USER_NOTE"
   | "ACCEPTANCES_UPDATED"
   | "ALLOW_RULES_UPDATED"
@@ -739,6 +740,7 @@ export type EventPayloadMap = {
   PAIR_REQUEST: PairRequestPayload;
   PAIR_RESOLVED: PairResolvedPayload;
   PAIRED_DEVICE: PairedDevicePayload;
+  ACCT_RELAYS: { relays: { dev: string; name: string }[] }; // W-ACCOUNT：同账号 relay 增量（SNAPSHOT acct_relays 同源）
   USER_NOTE: UserNotePayload;
   // #184 验收单状态推送（瞬态：seq:0 不落 ndjson；LAN 直播 + 云桥 onEnv 转发）——
   // payload.acceptances 与 SNAPSHOT.acceptances 同源同构（listAcceptances() 全量）
@@ -995,6 +997,7 @@ export interface PeerMeta {
   platform?: string;  // App：OS+型号（"android·Pixel 8"）；浏览器：平台（"Windows"）
   ua?: string;        // 浏览器 UA 截断摘要（"Chrome·Windows" 式；App 不报）
   app?: string;       // 应用标识+版本（"CC Deck 0.3.35" / 网页控制台标识）
+  via?: string;       // 配对来源（W-ACCOUNT："account"=同账号免码；缺省=配对码）
 }
 
 // COMMAND_PEERS 返回的设备条目（议题①）：kind 按 dev 前缀派生（rl- 是 relay 自己，

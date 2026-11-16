@@ -455,7 +455,7 @@ section("\nS8 端到端：造条目→派单注入→回执申报→入库→bum
   const cfg: RelayConfig = {
     port: 8797, token: "t", tokenGenerated: false, defaultCwd: "",
     model: "test-model", bridgeToken: "bt", dataDir: DATA,
-    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+    cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
   };
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const frames: { type: string; payload: Record<string, unknown> }[] = [];

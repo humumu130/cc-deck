@@ -75,7 +75,7 @@ try {
     return a;
   };
   const bus = new EventBus();
-  const cfg: RelayConfig = { port: 18999, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null };
+  const cfg: RelayConfig = { port: 18999, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "" };
   const mgr = new SessionManager(bus, cfg);
   mgr.setAgentFactory(factory);
   let seq = 0;

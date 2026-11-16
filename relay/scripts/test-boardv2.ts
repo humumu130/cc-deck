@@ -100,7 +100,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8795, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null, accountToken: "",
     };
     const sticky = mkdtempSync(join(tmpdir(), "ccr-sentinel-bv2-"));
     writeFileSync(join(DATA, "last-cwd"), sticky, "utf-8");

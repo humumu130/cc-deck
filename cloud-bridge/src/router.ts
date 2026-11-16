@@ -36,6 +36,8 @@ export class CloudRouter {
   private devOf = new Map<string, string>();  // connId → dev
   private connOf = new Map<string, string>(); // dev → connId（一设备一连接）
   private keyOf = new Map<string, string>();  // dev → 公钥（relay 连接时上报，发现帧用；公钥本身公开无害）
+  private acctOf = new Map<string, string>(); // dev → account_id（W-ACCOUNT：升级口 acct 验证后由 adapter 注入——RELAYS/pair_req 广播同账号过滤；桥只见 id 不见帧密文）
+  private nameOf = new Map<string, string>(); // dev → relay 显示名（W-ACCOUNT：升级口 rn 上报——RELAYS 条目携带，同账号「其他电脑」行用；纯显示字段，同账号内互信）
 
   constructor(private opts: RouterOptions) {}
 
@@ -66,7 +68,7 @@ export class CloudRouter {
 
   // 登记（token 鉴权在适配器层完成）。同 dev 新连接顶替旧连接并踢掉，
   // 避免设备闪断重连期间双连接重复投递。rk 为可选公钥（relay 连接上报）。
-  register(connId: string, dev: string, rk?: string): void {
+  register(connId: string, dev: string, rk?: string, acct?: string, rn?: string): void {
     if (dev.length < 1 || dev.length > MAX_DEV) throw new Error("bad dev");
     // T1a 触点①：吊销设备拒绝注册（B2 踢出四缺口之「同钥拒重入」——活线断后
     // 同 dev 重连在此被拒；adapter 升级口另有一层 admission，双保险）
@@ -81,6 +83,10 @@ export class CloudRouter {
     this.connOf.set(dev, connId);
     if (rk) this.keyOf.set(dev, rk);
     else this.keyOf.delete(dev);
+    // W-ACCOUNT：账号域登记（无 acct=删除——登出重连不带 acct 时清旧账）
+    if (acct) this.acctOf.set(dev, acct);
+    else this.acctOf.delete(dev);
+    if (rn) this.nameOf.set(dev, rn); // W-ACCOUNT：显示名登记（无 rn=wb- 客户端/老 relay，保旧值不删）
     this.opts.log?.(`register dev=${dev} conn=${connId}`);
     // #34 relay 上线广播：新 relay 连接（首连/顶替重连/DO 休眠唤醒重建）时通知
     // 全体在线连接——手机「待唤醒」态（relay 死但桥 ws 未断）收到 rd 匹配的
@@ -97,6 +103,7 @@ export class CloudRouter {
     }
   }
 
+  acctOfDev(dev: string): string | undefined { return this.acctOf.get(dev); } // W-ACCOUNT：信封 sa 标记/过滤共用读口
   unregister(connId: string): void {
     const dev = this.devOf.get(connId);
     if (dev === undefined) return;
@@ -157,11 +164,17 @@ export class CloudRouter {
       // keypair 后失配，ROUTE_MISS 前先发现真实身份
       if (d.t === "disc") {
         // T1a 触点③：RELAYS 按租户矩阵过滤（问者只见同租户+迁移窗 null；G6 消费面）
+        // W-ACCOUNT：账号第二合取维（visible=tenantVisible&&acctVisible——A↔B 互不可见；
+        // 问者无 acct=现状全可见（渐进零回归）；对方同账号条目打 sa:1 信封标记（relay 免码分支
+        // 只认桥算标记——帧内自报 acct 不可信，P0-1 定案；account_id 不出桥）
         const tenant = this.opts.tenant;
+        const myAcct = this.acctOfDev(from);
         const relays = this.devs()
           .filter((dev) => dev.startsWith("rl-"))
+          .filter((dev) => dev !== from) // W-ACCOUNT：问者自身出列（relay 问 relay 场景——自见自=acctRelays 幽灵行，手机/网页问者本不在列零变化）
           .filter((dev) => !tenant || tenant.visible(from, dev))
-          .map((dev) => ({ dev, rk: this.keyOf.get(dev) ?? "" }));
+          .filter((dev) => { const a = this.acctOfDev(dev); return !myAcct || !a || a === myAcct; })
+          .map((dev) => { const sa = this.acctOfDev(dev) && this.acctOfDev(dev) === myAcct; return { dev, rk: this.keyOf.get(dev) ?? "", ...(sa ? { name: this.nameOf.get(dev) ?? "", sa: 1 } : {}) }; }); // 审查修（P2-1）：name 与 sa 同门——公共桥 disc 不再向任意问者枚举全桥主机名（pre-account 只露 dev+公钥口径保持）
         this.reply(connId, { type: "RELAYS", relays });
         return;
       }
@@ -174,6 +187,8 @@ export class CloudRouter {
           if (!dev.startsWith("rl-") || target === connId) continue;
           // T1a 触点④：配对定位广播按租户矩阵过滤（跨租户收不到）
           if (this.opts.tenant && !this.opts.tenant.visible(from, dev)) continue;
+          // W-ACCOUNT：广播同过账号滤（A↔B 互不可见——账号设备收不到异账号 pair_req）
+          { const fa = this.acctOfDev(from), ta = this.acctOfDev(dev); if (fa && ta && fa !== ta) continue; }
           this.opts.hooks.send(target, JSON.stringify({ to: dev, from, data: m.data }));
         }
         return;
@@ -192,7 +207,9 @@ export class CloudRouter {
       this.reply(connId, { type: "ROUTE_MISS", to: m.to });
       return;
     }
-    this.opts.hooks.send(target, JSON.stringify({ to: m.to, from, data: m.data }));
+    // W-ACCOUNT：定向帧信封 sa 标记（同账号→1）——relay 侧 pair_req 免码分支只认此桥算标记；
+    // account_id 不出桥（数据面仍只有密文）。跨账号定向已在触点⑥笼统 ROUTE_MISS
+    { const fa = this.acctOfDev(from), ta = this.acctOfDev(m.to); const sa = fa && ta && fa === ta ? 1 : 0; this.opts.hooks.send(target, JSON.stringify({ to: m.to, from, ...(sa ? { sa } : {}), data: m.data })); }
   }
 
   private reply(connId: string, obj: Record<string, unknown>): void {

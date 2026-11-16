@@ -83,7 +83,7 @@ async function main() {
     const DATA2 = mkdtempSync(join(tmpdir(), "agg2-prod-data-"));
     const prev2 = { CCR_ORG_DIR: process.env.CCR_ORG_DIR, CCR_DATA_DIR: process.env.CCR_DATA_DIR, CCR_CONFIG_FILE: process.env.CCR_CONFIG_FILE };
     process.env.CCR_ORG_DIR = ORG; process.env.CCR_DATA_DIR = DATA2; process.env.CCR_CONFIG_FILE = join(ORG, "c2.json");
-    const cfg2 = { port: 8978, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA2, cloudUrls: [] as string[], cloudUrl: "", cloudToken: "", employeeConfigDir: null } as never;
+    const cfg2 = { port: 8978, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA2, cloudUrls: [] as string[], cloudUrl: "", cloudToken: "", accountToken: "", employeeConfigDir: null } as never;
     const mgr2 = new SessionManager(new EventBus({ persistPath: join(DATA2, "e.ndjson") }), cfg2);
     mgr2.setAgentFactory(() => ({ id: randomUUID(), startedAt: Date.now(), ended: true, sendMessage: () => {}, allow: () => false, deny: () => false, answer: () => false, stop: async () => {}, setPermissionMode: async () => {} }) as never);
     trust(true);

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, type Dirent } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, rmSync, type Dirent } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
@@ -760,6 +760,57 @@ export function startServer(
             res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, name: clean }));
           } catch { res.writeHead(400).end(); }
         });
+        return;
+      }
+    }
+    // W-ACCOUNT 件二：账号绑定口（LAN token 鉴权，relay-name 先例；P2-3 三合规：
+    // ①写 data/account-token 文件 ②运行时 cfg 即时更新 ③触发重连——CloudClient 重挂
+    // 读新 token 才带 acct 上桥。POST {token:""}=登出（空串清除绑定）
+    if (url.pathname === "/api/account-set") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end(); return; }
+      // W-ACCOUNT 件三补（自审 P0）：Nova 壳（tauri.localhost）跨源读写本口——pair-code
+      // 同款可信 origin CORS（#397/#411 先例；console 侧同时去掉 content-type 免预检）
+      const acctOrigin = (req.headers.origin ?? "").trim();
+      const acctIps = localIps();
+      const acctHostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || acctIps.has(h);
+      let acctAcao = "";
+      if (acctOrigin) {
+        try {
+          const au = new URL(acctOrigin);
+          if (TRUSTED_WEB_ORIGINS.includes(au.origin) || acctHostOk(au.hostname)) acctAcao = acctOrigin;
+        } catch { /* 非法 origin 不放行 */ }
+      }
+      const acctHeaders: Record<string, string> = { "content-type": "application/json" };
+      if (acctAcao) acctHeaders["access-control-allow-origin"] = acctAcao;
+      if (req.method === "POST") {
+        let body = "";
+        req.setEncoding("utf8");
+        req.on("data", (c) => { body += c; });
+        req.on("end", () => {
+          try {
+            const { token: acct, user } = JSON.parse(body) as { token?: string; user?: string };
+            const clean = (acct ?? "").trim();
+            if (clean && !/^[a-f0-9]{64}$/.test(clean)) { res.writeHead(400).end('{"error":"账号 token 格式不对"}'); return; }
+            const file = join(cfg.dataDir, "account-token");
+            // 凭据再水化配套：显示名同文件对（data/account-user——纯显示，LAN token 已鉴权面）
+            const userFile = join(cfg.dataDir, "account-user");
+            try {
+              if (clean) { writeFileSync(file, clean, "utf8"); writeFileSync(userFile, String(user ?? "").slice(0, 24), "utf8"); }
+              else { try { rmSync(file); } catch {} try { rmSync(userFile); } catch {} }
+            } catch { res.writeHead(500).end(); return; }
+            cfg.accountToken = clean; // ②运行时即时更新（loadConfig 只启动读——不更新=重连仍带旧值）
+            (globalThis as any).__ccAccountChanged?.(); // ③重连触发口（index.ts 挂：cloudClients forEach reconnect）
+            res.writeHead(200, acctHeaders).end(JSON.stringify({ ok: true, bound: !!clean }));
+          } catch { res.writeHead(400).end(); }
+        });
+        return;
+      }
+      if (req.method === "GET") {
+        // 凭据再水化（件三补）：console 侧 localStorage 清空/新装浏览器时按 relay 绑定
+        // 重建 ccr_acct——LAN token 鉴权内回吐（持 LAN token 者本就全权，无新增面）
+        let user = "";
+        try { user = readFileSync(join(cfg.dataDir, "account-user"), "utf8").slice(0, 24); } catch { /* 未写名 */ }
+        res.writeHead(200, { ...acctHeaders, "cache-control": "no-store" }).end(JSON.stringify({ ok: true, bound: !!cfg.accountToken, token: cfg.accountToken || "", user }));
         return;
       }
     }
@@ -1523,6 +1574,8 @@ export function startServer(
           // conn-page-v2 件③：客户端台账随快照（设置页「客户端」模块渲染源；旧端
           // 无消费面零影响——端上以字段存在性判能力）
           relay_devices: listDevices(cfg.dataDir, new Set([...onlineDeviceIds.values()])),
+          acct_relays: ((globalThis as any).__ccAcctRelays?.() ?? []), // W-ACCOUNT：同账号电脑（其他电脑卡自动行数据源——index.ts 挂口注入 CloudClient.acctRelays）
+          acct_bound: !!cfg.accountToken, // W-ACCOUNT 件三补：relay 已绑账号标记（console 无 localStorage 凭据时触发再水化——SSH 装机/清存储/新浏览器免手登）
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),

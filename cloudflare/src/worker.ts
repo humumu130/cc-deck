@@ -5,6 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { CloudRouter } from "../../cloud-bridge/src/router.ts";
 import { TenantService, type TenantDb, type TenantStore } from "../../cloud-bridge/src/tenant.ts";
+import { handleAuth, verifyAccountToken } from "./auth.ts"; // W-ACCOUNT 件一：账号层（注册/登录/acct 验证）
 
 interface Env {
   CLOUD_TOKEN: string;
@@ -143,6 +144,26 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
     }
     // #36 URL 正名：/download/ 为规范路径，/dl/ 保留为永久别名（已烘进 0.3.33 各端的旧链接零破坏）
     if (url.pathname.startsWith("/download/")) url.pathname = "/dl/" + url.pathname.slice(10);
+
+    // W-ACCOUNT 件一：账号注册/登录口（POST JSON，per-IP 限流在 auth.ts 内——PBKDF2 前置）
+    if ((url.pathname === "/auth/register" || url.pathname === "/auth/login") && req.method === "OPTIONS") {
+      // W-ACCOUNT 审查修（security P1-1③）：账密公共 API 预检放行——Tauri 壳（tauri.localhost）
+      // /新主域/任意控制台源的登录 POST 带自定义头时预检必经；无凭证概念（body 自含），ACAO:* 无损
+      return new Response(null, { status: 204, headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+        "access-control-max-age": "86400",
+      } });
+    }
+    if ((url.pathname === "/auth/register" || url.pathname === "/auth/login") && req.method === "POST") {
+      {
+        // W-ACCOUNT 审查修：跨源控制台（Tauri 壳/新主域）可读响应——ACAO:*（公共账密 API 无凭证面）
+        const r = await handleAuth(req, env as { DL?: KVNamespace });
+        const h = new Headers(r.headers); h.set("access-control-allow-origin", "*");
+        return new Response(r.body, { status: r.status, headers: h });
+      }
+    }
 
     if (url.pathname === "/health") {
       // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
@@ -423,9 +444,11 @@ export class RouterDO extends DurableObject {
   // HTTP 长轮询会话（connId = "poll:"+sid）没有 WebSocket，下行帧入队等 GET 来取
   private polls = new Map<string, { dev: string; queue: string[]; resolver: (() => void) | null; lastSeen: number; closed: boolean }>();
   // T1a 租户服务（ADMIN_KEY 在场才装配）：constructor 里建（router 字段就绪后）
+  declare env: Env; // W-ACCOUNT：原 ctor 参数属性 private env 与基类 public env 冲突（TS2415）——改显式字段
   private tenantSvc: TenantService | null = null;
-  constructor(ctx: DurableObjectState, private env: Env) {
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.env = env;
     if (this.env.ADMIN_KEY) {
       this.tenantSvc = new TenantService({
         store: new DoStore(ctx),
@@ -533,6 +556,21 @@ export class RouterDO extends DurableObject {
       return new Response("bridge busy", { status: 429 });
     }
 
+    // W-ACCOUNT 审查修（security P2-2）：acct 验证上移到一切传输分支之前——poll 口原在
+    // 验证块之前 return，带 acct 的 poll 升级被静默忽略（违反本批「401 硬拒不静默」契约，
+    // poll 降级形态下免码配对死）。无效 token 此处 401；有效则 acct 常量在下方 ws/poll 两路共用
+    let acct: string | undefined;
+    {
+      const acctTok = url.searchParams.get("acct");
+      if (acctTok) {
+        try {
+          acct = await verifyAccountToken(acctTok, this.env as { DL?: KVNamespace });
+        } catch (e) {
+          console.log(`[cloud-bridge] reject acct dev=${dev}: ${e instanceof Error ? e.message : e}`);
+          return new Response("invalid account token", { status: 401 });
+        }
+      }
+    }
     // HTTP 长轮询兜底传输：公司 TLS 解密代理掐 WS 升级（返回 200 非 101）时，
     // 浏览器退化为 POST 上行 + GET 长挂下行，路由/顶替/E2E 协议与 ws 完全一致
     if (url.pathname === "/cloud-poll") {
@@ -548,7 +586,7 @@ export class RouterDO extends DurableObject {
         const cl = Number(req.headers.get("content-length") ?? "0");
         if (cl > 8 << 20) return new Response("too large", { status: 413 });
         if (!this.rateOk(ip)) return new Response("rate limited", { status: 429 });
-        if (!this.ensurePoll(dev, sid)) return new Response("dev busy via websocket", { status: 409 });
+        if (!this.ensurePoll(dev, sid, acct)) return new Response("dev busy via websocket", { status: 409 });
         const body = await req.text();
         if (body.length > 8 << 20) return new Response("too large", { status: 413 });
         this.router.handleFrame("poll:" + sid, body);
@@ -558,7 +596,7 @@ export class RouterDO extends DurableObject {
       // 仅新建会话扣令牌：流式期间浏览器收帧即重 GET（sid 不变）不该被限流，
       // 而占坑攻击必须不断换新 sid——正好逐次扣
       if (!this.polls.has(sid) && !this.rateOk(ip)) return new Response("rate limited", { status: 429 });
-      const s = this.ensurePoll(dev, sid);
+      const s = this.ensurePoll(dev, sid, acct);
       if (!s) return new Response("dev busy via websocket", { status: 409 });
       const waitMs = Math.min(Number(url.searchParams.get("wait") ?? "20") || 20, 25) * 1000;
       if (s.queue.length === 0 && !s.closed) {
@@ -601,12 +639,14 @@ export class RouterDO extends DurableObject {
         return new Response("device rejected", { status: 401 });
       }
     }
+    // W-ACCOUNT 件一：acct 验证已上移至传输分支前（见上 poll 修）；此处仅 rn+附件
+    const rn = (url.searchParams.get("rn") ?? "").slice(0, 24); // W-ACCOUNT：relay 显示名（纯显示，休眠唤醒随附件重建）
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], [dev, connId]);
     // rk 进 attachment：DO 休眠唤醒 rehydrate 重建路由表时带回，发现帧不因唤醒丢公钥
-    pair[1].serializeAttachment(JSON.stringify({ dev, connId, rk, wanTo: wanTo || undefined, ip: req.headers.get("CF-Connecting-IP") }));
+    pair[1].serializeAttachment(JSON.stringify({ dev, connId, rk, wanTo: wanTo || undefined, ip: req.headers.get("CF-Connecting-IP"), acct, rn: rn || undefined }));
     try {
-      this.router.register(connId, dev, rk || undefined);
+      this.router.register(connId, dev, rk || undefined, acct, rn || undefined);
     } catch (e) {
       // T1a：revoked register 抛（触点①）——accept 后立即掐线
       try { pair[1].close(4003, "device revoked"); } catch { /* 已关 */ }
@@ -653,7 +693,7 @@ export class RouterDO extends DurableObject {
   // 的顶替语义会把它 4000 踢下线，持 token 者 POST 猜中 dev 即可免费踢任意在线
   // 设备（poll 创建本该是纯兜底动作）。浏览器只有 WS 升级失败才降级 poll（彼时
   // WS 已断，无冲突）；返回 null 由调用方回 409
-  private ensurePoll(dev: string, sid: string): { dev: string; queue: string[]; resolver: (() => void) | null; lastSeen: number; closed: boolean } | null {
+  private ensurePoll(dev: string, sid: string, acct?: string): { dev: string; queue: string[]; resolver: (() => void) | null; lastSeen: number; closed: boolean } | null {
     let p = this.polls.get(sid);
     if (!p) {
       const cur = this.router.connOfDev(dev);
@@ -663,7 +703,8 @@ export class RouterDO extends DurableObject {
     }
     p.lastSeen = Date.now();
     try {
-      this.router.register("poll:" + sid, p.dev);
+      // W-ACCOUNT 复审记账②：poll 会话注册带 acct——免码配对（sa 信封）在轮询降级形态同活
+      this.router.register("poll:" + sid, p.dev, undefined, acct);
     } catch {
       // T1a：revoked 设备 poll 会话同样拒（同钥拒重入——poll 兜底传输不是绕道口）
       return null;
@@ -742,7 +783,7 @@ export class RouterDO extends DurableObject {
       const a = this.attachOf(ws);
       if (a?.dev && a.connId) {
         try {
-          this.router.register(a.connId, a.dev, a.rk || undefined);
+          this.router.register(a.connId, a.dev, a.rk || undefined, (a as { acct?: string }).acct, (a as { rn?: string }).rn); // W-ACCOUNT：附件 acct/rn 重建（休眠唤醒）
         } catch {
           // T1a：revoked 设备休眠唤醒重建时 register 抛——掐线（同钥拒重入）
           try { ws.close(4003, "device revoked"); } catch { /* 已关 */ }

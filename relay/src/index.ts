@@ -697,6 +697,10 @@ if (cfg.cloudUrls.length) {
       });
       cloudClients.push(c);
       c.start();
+      // W-ACCOUNT：acctRelays 读口挂 globalThis（ws-server SNAPSHOT acct_relays 数据源——
+      // phone 云通道同键；LAN 直连口同读此挂口，三出口同源）
+      (globalThis as any).__ccAcctRelays = () => [...c.acctRelays.values()].map((x: { dev: string; name?: string; rk?: string }) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk || "", online: true }));
+      (globalThis as any).__ccAccountChanged = () => { for (const cc of cloudClients) { try { (cc as any).reconnect?.(); } catch {} } }; // account-set 重连口（CloudClient 公开 reconnect——无则重连走看门狗自愈）
     }
   }
   // X1 多机编排：xmsg 传输面装配（跨桥聚合——多桥并行时发送/回执逐桥全发，对端

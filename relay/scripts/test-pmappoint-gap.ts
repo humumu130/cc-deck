@@ -36,7 +36,7 @@ async function main() {
   const { EventBus } = await import("../src/event-bus.js");
 
   writeCollabMode(DATA, "no-leader");
-  const cfg = { port: 8799, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [] as string[], cloudToken: "", cloudUrl: "", employeeConfigDir: null } as never;
+  const cfg = { port: 8799, token: "t", tokenGenerated: false, defaultCwd: "", model: "m", bridgeToken: "bt", dataDir: DATA, cloudUrls: [] as string[], cloudToken: "", cloudUrl: "", employeeConfigDir: null, accountToken: "" } as never;
   const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
   const mgr = new SessionManager(bus, cfg);
   const propose = () => (mgr as unknown as { maybeProposePmAppointment(): void }).maybeProposePmAppointment();
