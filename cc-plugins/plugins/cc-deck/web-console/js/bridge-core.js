@@ -326,6 +326,14 @@
                     // loading 期连入的端不再需要重连，banner「已连接，数据加载中」就地清位
                     const bp = frame.payload || {};
                     if (typeof bp.phase === "string") { bridge.bootPhase = bp.phase; bridge.bootLoaded = typeof bp.loaded === "number" ? bp.loaded : (bridge.bootLoaded || 0); changed = true; }
+                  } else if (frame.type === "ACCT_RELAYS") {
+                    // W-ACCOUNT 审查修（ux P1-1）：同账号电脑表增量帧合并进快照缓存——
+                    // LAN ws 快路径（replay ≤ REPLAY_FAST_MAX）不回 SNAPSHOT，不消费本帧
+                    // =「其他电脑」行冷启可见/刷新即没/对端上线永不出现（brief 明令根除项）。
+                    // 订阅者 fan-out（changed）触发设置域 live 重渲
+                    const relays = frame.payload && Array.isArray(frame.payload.relays) ? frame.payload.relays.filter((r) => r && typeof r.dev === "string") : [];
+                    if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.acct_relays = relays.map((r) => ({ dev: r.dev, name: typeof r.name === "string" ? r.name : "", rk: typeof r.rk === "string" ? r.rk : "", online: true }));
+                    changed = true;
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
                     if (session && frame.payload && typeof frame.payload === "object") {

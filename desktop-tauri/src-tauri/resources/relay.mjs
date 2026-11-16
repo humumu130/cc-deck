@@ -14134,7 +14134,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir28, hostname as hostname2, tmpdir as tmpdir6 } from "node:os";
 import { join as join72, sep as sep9 } from "node:path";
-import { writeFileSync as writeFileSync40, openSync as openSync9, readFileSync as readFileSync62, rmSync as rmSync12, existsSync as existsSync49, readdirSync as readdirSync24, statSync as statSync25 } from "node:fs";
+import { writeFileSync as writeFileSync40, openSync as openSync9, readFileSync as readFileSync62, rmSync as rmSync13, existsSync as existsSync49, readdirSync as readdirSync24, statSync as statSync25 } from "node:fs";
 import { execSync as execSync2 } from "node:child_process";
 import { spawn as spawn8, execFileSync as execFileSync8 } from "node:child_process";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
@@ -14509,6 +14509,13 @@ function loadConfig() {
     }
   }
   if (!cloudToken) cloudToken = DEFAULT_CLOUD_TOKEN;
+  let accountToken = (process.env.CCR_ACCOUNT_TOKEN ?? "").trim();
+  if (!accountToken) {
+    try {
+      accountToken = readFileSync2(join2(dataDir3, "account-token"), "utf-8").trim();
+    } catch {
+    }
+  }
   const envRaw = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
   if (envRaw && !isAbsolute(envRaw) && envRaw !== "auto") {
     console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR \u9700\u7EDD\u5BF9\u8DEF\u5F84\u6216 "auto"\uFF08~ \u8BF7\u5C55\u5F00\u4E3A $HOME/...\uFF09\uFF0C\u6536\u5230\u76F8\u5BF9\u8DEF\u5F84 "${envRaw}"\uFF0C\u96C7\u5458\u72EC\u7ACB\u5BB6\u4FDD\u6301\u5173\u95ED`);
@@ -14526,7 +14533,8 @@ function loadConfig() {
     cloudUrls,
     cloudUrl: cloudUrls[0] ?? "",
     cloudToken,
-    employeeConfigDir
+    employeeConfigDir,
+    accountToken
   };
 }
 
@@ -69367,7 +69375,7 @@ ${experienceBlock}
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID15 } from "node:crypto";
-import { readFileSync as readFileSync58, writeFileSync as writeFileSync36, mkdirSync as mkdirSync34, existsSync as existsSync45, readdirSync as readdirSync22, statSync as statSync23 } from "node:fs";
+import { readFileSync as readFileSync58, writeFileSync as writeFileSync36, mkdirSync as mkdirSync34, existsSync as existsSync45, readdirSync as readdirSync22, statSync as statSync23, rmSync as rmSync11 } from "node:fs";
 import { join as join68, dirname as dirname17, sep as sep8 } from "node:path";
 import { homedir as homedir24, networkInterfaces as networkInterfaces2 } from "node:os";
 
@@ -75131,7 +75139,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.23";
+  const verRelay = "0.7.1-test.24";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -75370,6 +75378,77 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             res.writeHead(400).end();
           }
         });
+        return;
+      }
+    }
+    if (url.pathname === "/api/account-set") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end();
+        return;
+      }
+      const acctOrigin = (req.headers.origin ?? "").trim();
+      const acctIps = localIps();
+      const acctHostOk = (h) => h === "localhost" || h === "127.0.0.1" || h === "tauri.localhost" || acctIps.has(h);
+      let acctAcao = "";
+      if (acctOrigin) {
+        try {
+          const au = new URL(acctOrigin);
+          if (TRUSTED_WEB_ORIGINS.includes(au.origin) || acctHostOk(au.hostname)) acctAcao = acctOrigin;
+        } catch {
+        }
+      }
+      const acctHeaders = { "content-type": "application/json" };
+      if (acctAcao) acctHeaders["access-control-allow-origin"] = acctAcao;
+      if (req.method === "POST") {
+        let body = "";
+        req.setEncoding("utf8");
+        req.on("data", (c) => {
+          body += c;
+        });
+        req.on("end", () => {
+          try {
+            const { token: acct, user } = JSON.parse(body);
+            const clean = (acct ?? "").trim();
+            if (clean && !/^[a-f0-9]{64}$/.test(clean)) {
+              res.writeHead(400).end('{"error":"\u8D26\u53F7 token \u683C\u5F0F\u4E0D\u5BF9"}');
+              return;
+            }
+            const file = join68(cfg2.dataDir, "account-token");
+            const userFile = join68(cfg2.dataDir, "account-user");
+            try {
+              if (clean) {
+                writeFileSync36(file, clean, "utf8");
+                writeFileSync36(userFile, String(user ?? "").slice(0, 24), "utf8");
+              } else {
+                try {
+                  rmSync11(file);
+                } catch {
+                }
+                try {
+                  rmSync11(userFile);
+                } catch {
+                }
+              }
+            } catch {
+              res.writeHead(500).end();
+              return;
+            }
+            cfg2.accountToken = clean;
+            globalThis.__ccAccountChanged?.();
+            res.writeHead(200, acctHeaders).end(JSON.stringify({ ok: true, bound: !!clean }));
+          } catch {
+            res.writeHead(400).end();
+          }
+        });
+        return;
+      }
+      if (req.method === "GET") {
+        let user = "";
+        try {
+          user = readFileSync58(join68(cfg2.dataDir, "account-user"), "utf8").slice(0, 24);
+        } catch {
+        }
+        res.writeHead(200, { ...acctHeaders, "cache-control": "no-store" }).end(JSON.stringify({ ok: true, bound: !!cfg2.accountToken, token: cfg2.accountToken || "", user }));
         return;
       }
     }
@@ -76051,6 +76130,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // conn-page-v2 件③：客户端台账随快照（设置页「客户端」模块渲染源；旧端
           // 无消费面零影响——端上以字段存在性判能力）
           relay_devices: listDevices(cfg2.dataDir, /* @__PURE__ */ new Set([...onlineDeviceIds.values()])),
+          acct_relays: globalThis.__ccAcctRelays?.() ?? [],
+          // W-ACCOUNT：同账号电脑（其他电脑卡自动行数据源——index.ts 挂口注入 CloudClient.acctRelays）
+          acct_bound: !!cfg2.accountToken,
+          // W-ACCOUNT 件三补：relay 已绑账号标记（console 无 localStorage 凭据时触发再水化——SSH 装机/清存储/新浏览器免手登）
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
@@ -76443,7 +76526,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/patrol.ts
-import { statfsSync, writeFileSync as writeFileSync37, readFileSync as readFileSync59, readdirSync as readdirSync23, existsSync as existsSync46, rmSync as rmSync11 } from "node:fs";
+import { statfsSync, writeFileSync as writeFileSync37, readFileSync as readFileSync59, readdirSync as readdirSync23, existsSync as existsSync46, rmSync as rmSync12 } from "node:fs";
 import { join as join69 } from "node:path";
 import { statSync as statSync24 } from "node:fs";
 import { execFileSync as execFileSync7 } from "node:child_process";
@@ -76603,7 +76686,7 @@ var PatrolModule = class {
           let freed = 0;
           for (const d2 of hit) {
             try {
-              rmSync11(d2, { recursive: true, force: true });
+              rmSync12(d2, { recursive: true, force: true });
               freed++;
             } catch {
             }
@@ -77563,6 +77646,8 @@ var CloudClient = class {
   // 同样不该绑架换桥——hello 是「设备还活着」的唯一铁证）
   lastHelloAt = /* @__PURE__ */ new Map();
   hbTimer = null;
+  acctDiscTimer = null;
+  // W-ACCOUNT：30min 周期重发现（acctRelays 新鲜度兜底）
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   resumeOnOpen = /* @__PURE__ */ new Set();
   // #384b 近 60s 内 grant 过的登录设备：桥断连丢 ack 后重连补发（定时整体清空）
@@ -77571,6 +77656,20 @@ var CloudClient = class {
   start() {
     this.connect();
     this.startHeartbeat();
+    this.ensureAcctDiscTimer();
+  }
+  // W-ACCOUNT：30min 周期重发现（对端后上线/桥 DO 休眠唤醒丢内存账后自愈——事件驱动
+  // relay-online 之外的新鲜度兜底）。审查修（P3①）：运行时经 /api/account-set 登录走
+  // reconnect() 不经 start()——ensure 化，start/reconnect 两路都建
+  ensureAcctDiscTimer() {
+    if (!this.cfg.accountToken || this.acctDiscTimer) return;
+    this.acctDiscTimer = setInterval(() => {
+      try {
+        if (this.ws?.readyState === wrapper_default.OPEN) this.send({ to: "*", data: { t: "disc" } });
+      } catch {
+      }
+    }, 30 * 6e4);
+    this.acctDiscTimer.unref?.();
   }
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
@@ -77578,6 +77677,9 @@ var CloudClient = class {
     let u = `${base}${sep10}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
     const cred = this.identity.loadTenantCred();
     if (cred) u += `&dtok=${encodeURIComponent(cred.token)}`;
+    if (this.cfg.accountToken) u += `&acct=${encodeURIComponent(this.cfg.accountToken)}`;
+    const rn2 = (this.extra?.relayName?.() ?? "").slice(0, 24);
+    if (rn2) u += `&rn=${encodeURIComponent(rn2)}`;
     return u;
   }
   // T1a 租户握手（PRD §4.4/§4.5，G6 密钥发现配套）：CCR_TENANT=1 才活动。
@@ -77601,6 +77703,15 @@ var CloudClient = class {
     const peers = [...this.identity.peers.entries()].map(([dev, e]) => ({ dev, pubkey: e.pubkey, name: e.name }));
     this.send({ to: "*", data: { t: "peers_report", peers } });
     if (peers.length) console.log(`[cloud] tenant peers_report sent (${peers.length} devices, pending bridge-owner approval)`);
+  }
+  /** W-ACCOUNT：账号绑定变更后的手动重连（account-set 口触发——立即断旧建新带 acct） */
+  reconnect() {
+    this.ensureAcctDiscTimer();
+    try {
+      this.ws?.close(1e3, "account changed");
+    } catch {
+    }
+    this.connect();
   }
   connect() {
     if (this.stopped) return;
@@ -77667,6 +77778,8 @@ var CloudClient = class {
           this.mgr.xmsgFlush?.();
         } catch {
         }
+      } else if (this.cfg.accountToken) {
+        this.send({ to: "*", data: { t: "disc" } });
       }
     });
     ws2.on("message", (raw) => {
@@ -77928,6 +78041,8 @@ var CloudClient = class {
         // W-REVIEWSEAT：云通道快照同键（#117 教训——云桥手机同享评审池配置面）：云通道快照补 boot 相位（#117 同步教训——云桥手机/网页同享 loading 可感）
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
+        acct_relays: [...this.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk, online: true })),
+        // W-ACCOUNT：phone 云通道同键（#117 教训——与 LAN 口同源；rk 供手机端点连免码配对）
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
@@ -78084,6 +78199,13 @@ var CloudClient = class {
         if (handled) return;
       }
     }
+    if (f.type === "relay-online" && this.cfg.accountToken) {
+      try {
+        this.send({ to: "*", data: { t: "disc" } });
+      } catch {
+      }
+      return;
+    }
     if (f.type === "RELAYS") {
       const relays = f.relays;
       if (Array.isArray(relays)) {
@@ -78097,6 +78219,25 @@ var CloudClient = class {
       const waiters = this.discWaiters;
       this.discWaiters = [];
       for (const w2 of waiters) w2();
+      {
+        const relaysArr = relays;
+        const next = /* @__PURE__ */ new Map();
+        for (const r of relaysArr) {
+          const e = r;
+          if (e && e.sa === 1 && typeof e.dev === "string" && e.dev.startsWith("rl-")) next.set(e.dev, { dev: e.dev, rk: typeof e.rk === "string" ? e.rk : "", name: typeof e.name === "string" ? e.name.slice(0, 24) : "", ts: Date.now() });
+        }
+        const prevKeys = new Set(this.acctRelays.keys());
+        let changed = false;
+        for (const k3 of prevKeys) if (!next.has(k3)) {
+          this.acctRelays.delete(k3);
+          changed = true;
+        }
+        for (const [k3, v] of next) if (!prevKeys.has(k3) || this.acctRelays.get(k3)?.rk !== v.rk || this.acctRelays.get(k3)?.name !== v.name) {
+          this.acctRelays.set(k3, v);
+          changed = true;
+        }
+        if (changed) this.bus.emitTransient("ACCT_RELAYS", { relays: [...this.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk })) });
+      }
       return;
     }
     const wanEnv = f.data;
@@ -78128,6 +78269,18 @@ var CloudClient = class {
       if (this.wbSightings.size > 200) {
         const sweep = Date.now();
         for (const [d2, ts2] of this.wbSightings) if (sweep - ts2 > SIGHTING_TTL_MS) this.wbSightings.delete(d2);
+      }
+      if (f.sa === 1 && dev.startsWith("wb-")) {
+        this.identity.addPeer(dev, {
+          pubkey,
+          name: typeof pr2.name === "string" ? pr2.name : "\u7535\u8111",
+          paired_at: Date.now(),
+          meta: { via: "account" }
+        });
+        console.log(`[cloud] account-paired web dev=${dev}${bc2 ? " via broadcast" : ""}`);
+        this.bus.emitTransient("PAIRED_DEVICE", { dev, name: typeof pr2.name === "string" ? pr2.name : "\u7535\u8111", action: "add" });
+        this.sendSealed(f.from, { t: "pair_ack", relay_dev: this.identity.relayDev, relay_pubkey: this.identity.keypair.publicKey });
+        return;
       }
       if (!String(pr2.code ?? "")) return;
       const now = Date.now();
@@ -78266,6 +78419,8 @@ var CloudClient = class {
     return true;
   }
   // ---------- X1 密封 xmsg 传输面（策略在 commands/xmsg-commands.ts；本层只做密封/发现/帧收发） ----------
+  // W-ACCOUNT：同账号 relay 内存表（RELAYS sa 条目驱动；SNAPSHOT acct_relays 数据源——不落盘，会话态）
+  acctRelays = /* @__PURE__ */ new Map();
   // disc/RELAYS 发现的 rl- 公钥缓存（桥 register 时上报 rk；T1a 触点③租户过滤下发）
   relayKeys = /* @__PURE__ */ new Map();
   discWaiters = [];
@@ -78438,6 +78593,7 @@ var CloudClient = class {
     this.unsubscribe();
     if (this.timer) clearTimeout(this.timer);
     if (this.hbTimer) clearInterval(this.hbTimer);
+    if (this.acctDiscTimer) clearInterval(this.acctDiscTimer);
     for (const t of this.routeRetryTimers.values()) clearTimeout(t);
     this.routeRetryTimers.clear();
     this.ws?.close();
@@ -78612,7 +78768,7 @@ process.on("unhandledRejection", (reason) => {
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync62(lockPath2, "utf8").trim()) === process.pid) rmSync12(lockPath2);
+      if (Number(readFileSync62(lockPath2, "utf8").trim()) === process.pid) rmSync13(lockPath2);
     } catch {
     }
   };
@@ -78753,7 +78909,7 @@ if (cliArgs.has("--stop")) {
     console.log("\u672A\u53D1\u73B0\u8FD0\u884C\u4E2D\u7684 CC Deck Relay");
   }
   try {
-    rmSync12(pidFile);
+    rmSync13(pidFile);
   } catch {
   }
   process.exit(0);
@@ -78777,7 +78933,7 @@ function sweepTmpImages(dir) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join72(dir, f);
       try {
-        if (Date.now() - statSync25(p).mtimeMs > 7 * 864e5) rmSync12(p, { force: true });
+        if (Date.now() - statSync25(p).mtimeMs > 7 * 864e5) rmSync13(p, { force: true });
       } catch {
       }
     }
@@ -79049,6 +79205,15 @@ void (async () => {
         });
         cloudClients.push(c);
         c.start();
+        globalThis.__ccAcctRelays = () => [...c.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk || "", online: true }));
+        globalThis.__ccAccountChanged = () => {
+          for (const cc2 of cloudClients) {
+            try {
+              cc2.reconnect?.();
+            } catch {
+            }
+          }
+        };
       }
     }
     mgr.setXmsgTransport({
