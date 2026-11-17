@@ -52,11 +52,8 @@ ok(ssd.includes("ccDeck.openExternal(url)") && ssd.includes('window.open(url, "_
 ok(ssd.includes('matchMedia("(pointer: coarse)").matches') && ssd.includes("ev.ctrlKey || ev.metaKey"), "D3 触屏直接点 / 桌面 Ctrl/Cmd+点击修饰键语义");
 ok(ssd.includes("⌘点击在浏览器打开"), "D4 hover 提示文案");
 
-console.log("件E 徽章底色自定义：");
-ok(bc.includes("__ccDeck005ApplyBadgeColors") && bc.includes("cc-badge-custom-style"), "E1 应用器+动态 style 覆写链");
-ok(bc.includes('window.__ccDeck005BadgeColorsKey = "cc-deck-005-badge-colors"') && bc.includes("data-badge-custom"), "E2 存储键+总闸属性");
-ok(st.includes('data-settings-live="badge-colors"') && st.includes("data-badge-color-input") && st.includes("data-badge-color-reset"), "E3 设置面配色行（input+重置）");
-ok(bc.includes("__ccDeck005BadgeFgOf") && bc.includes("0.2126"), "E4 底色亮度自动配黑/白字（双主题同底色可用）");
+console.log("件E 徽章底色自定义（1117 用户令整功能移除）：");
+ok(!bc.includes("window.__ccDeck005ApplyBadgeColors =") && !st.includes('data-settings-live="badge-colors"') && !st.includes("data-badge-color-input"), "E1 徽章配色退役负向锚：应用器定义/模板卡/行控件零残留（清理行字面量豁免——removeItem/getElementById 一次性清数据所需）");
 ok(st.includes("data-src-slug") && td.includes("data-src-slug") && mj.includes("data-src-slug"), "E5 源徽章 slug 三渲染点接入");
 
 console.log("件F 滚动条统一滚动才显：");

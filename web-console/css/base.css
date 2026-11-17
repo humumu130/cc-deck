@@ -3893,9 +3893,7 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
     #b2-engine-menu .ep-dot { flex: none; }
     #d-session .engine-picker { gap: 8px; } /* 件C：触发钮内元素间距统一（旧密排） */
 
-    /* ---- 件E：徽章底色自定义消费端——JS 注入 #cc-badge-custom-style 逐引擎/逐源 !important 覆写
-       （!important 压 r3/head identity 语境的 color-mix 特异度；html[data-badge-custom] 总闸，
-       未自定义时零规则零影响） ---- */
+    /* 件E 徽章配色：1117 用户令整功能移除 */
 
     /* ---- 件F：滚动条「滚动才显」——已被 dev 微信式滚动条（.wx-sb-*，1101 用户令，
        session-scrollbar.js 自绘 6px 轨+hover/scrolling/dragging 三态编排）取代：
