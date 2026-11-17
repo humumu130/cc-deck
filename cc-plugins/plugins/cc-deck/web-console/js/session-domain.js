@@ -2716,26 +2716,25 @@
                 // W-UIFB ⑧：子 Agent 活性面板（W-TOPBAR ⑥ test.8 同构移植 + i=10 修正入形）——
                 // 防御同旧壳：ended_at>0 才算结束（ended_at:0 falsy 坑）；>4 条溢出提示；
                 // 折叠态模块级记忆（renderDock 高频重建不丢态）
-                let agCollapsed = false;
+                // W-DENSD 批三⑥（1117 用户令）：subAgent 两代样式归一——多行列表（aghead 折叠+
+                // agrow×4 逐行 ✓/时长+more 收起行）退役，与 mobile.js 同构的**单行摘要**：
+                // 「⑂N 子任务 · M 运行 · 最新动作」；逐条明细/时长进 title 悬浮（信息零删——
+                // 军规「功能零删只删重复」：折叠钮/逐行计时面退役，明细 title 可查）。
                 function renderSubagents(s) {
                   const box = document.getElementById("session-agbox");
                   if (!box) return;
                   const subs = s && Array.isArray(s.subagents) ? s.subagents : [];
                   if (!subs.length) { box.hidden = true; box.textContent = ""; return; }
                   box.hidden = false;
-                  const shown = subs.slice(-4);
-                  const more = subs.length - shown.length;
-                  box.innerHTML = '<span class="aghead" data-ag-toggle role="button" tabindex="0">subAgent ' + subs.length + ' <span class="caret">' + (agCollapsed ? "▸" : "▾") + "</span></span>" +
-                    (agCollapsed ? "" : shown.map((a) => {
-                      const run = !(a.ended_at > 0);
-                      const dur = a.started_at > 0 ? fmtDur(Math.max(0, (a.ended_at > 0 ? a.ended_at : Date.now()) - a.started_at)) : "";
-                      return '<div class="agrow' + (run ? "" : " done") + '">' + (run ? '<i class="agdot"></i>' : '<span class="ag-done-mark">✓</span>') +
-                        '<span class="ad">' + esc(a.desc || a.kind || "子任务") + "</span>" +
-                        (a.act && run ? '<span class="aa" title="当前动作">' + esc(a.act) + "</span>" : "") +
-                        '<span class="at" data-ag-at data-started="' + (a.started_at || 0) + '" data-ended="' + (a.ended_at || 0) + '">' + dur + "</span></div>";
-                    }).join("") + (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : ""));
+                  const running = subs.filter((a) => !(a.ended_at > 0));
+                  const last = running[running.length - 1] || subs[subs.length - 1];
+                  const detail = subs.slice(-6).map((a) => {
+                    const run = !(a.ended_at > 0);
+                    const dur = a.started_at > 0 ? fmtDur(Math.max(0, (a.ended_at > 0 ? a.ended_at : Date.now()) - a.started_at)) : "";
+                    return (run ? "▶ " : "✓ ") + (a.desc || a.kind || "子任务") + (a.act && run ? " · " + a.act : "") + (dur ? " · " + dur : "");
+                  }).join("\n");
+                  box.innerHTML = '<span class="ag-line" data-ag-line title="' + esc(detail) + '">⑂' + subs.length + " 子任务 · " + running.length + " 运行" + (last && last.act ? " · " + esc(String(last.act).slice(0, 30)) : last ? " · " + esc(String(last.desc || last.kind || "子任务").slice(0, 30)) : "") + "</span>";
                 }
-                function toggleSubagents() { agCollapsed = !agCollapsed; renderSubagents(curSession()); }
                 function dockLiveLine(s) { return !!s && s.status === "WORKING" && String(s.action_summary || "").startsWith("\u200B"); }
                 // B#133 终态收口：DONE ✓ 停留 8s 后整条淡出收起（高度+透明动画）；ERROR ⚠ 常驻不收。
                 // 键 = sid+status：同一终态的后续心跳/重渲不重启计时、不闪复原。
@@ -3933,7 +3932,7 @@
                     }
                     const desired = [];
                     // #168 汇总条简化：N 文件 · M 文件夹 + 全部下载（cwd 已在 workspace 头，不再挂 chip）
-                    desired.push(["cap", '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>']);
+                    // W-DENSD 批三⑤：af-cap 四段说明行退役（页顶静文字删——预览/下载语义行内按钮 title 自释）
                     desired.push(["sum", '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>"]);
                     if (s.artifacts_truncated) desired.push(["trunc", '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>']);
                     layout.groups.forEach((g) => desired.push(["g:" + g.dir, artGroupNode(g, s.cwd, artOpenDirs.has(g.dir)).outerHTML]));
@@ -3943,13 +3942,13 @@
                       for (const a of layout.loose) loose.appendChild(artFileNode(a, s.cwd, false));
                       desired.push(["loose", loose.outerHTML]);
                     }
-                    desired.push(["foot", '<div class="af-foot">仅收录文档、表格、图片与安装包等交付物 · ' + layout.files.length + " 项已登记 · 清单来自来源会话实时同步</div>"]);
+                    // W-DENSD 批三⑤：af-foot 说明段退役（keyed 路径）
                     rk(host, desired);
                     return;
                   }
                   const wrap = document.createElement("div");
                   wrap.className = "artifact-browser";
-                  wrap.innerHTML = '<div class="af-cap">会话写入的交付物自动登记 · 单击行在线预览 · 悬停行尾下载 · 可按目录批量下载</div>' +
+                  wrap.innerHTML = 
                     '<div class="af-sum"><span class="af-sum-n">' + layout.files.length + " 个文件" + (layout.groups.length ? ' <small>· ' + layout.groups.length + " 个文件夹</small>" : "") + '</span><span class="af-sum-sp"></span><button class="secondary-btn" type="button" data-af-all-dl>' + svgUse("download") + " 全部下载</button></div>" +
                     (s.artifacts_truncated ? '<div class="af-trunc">清单曾被 relay 截断，仅显示最近条目</div>' : "");
                   layout.groups.forEach((g) => wrap.appendChild(artGroupNode(g, s.cwd, artOpenDirs.has(g.dir))));
@@ -3959,7 +3958,7 @@
                     for (const a of layout.loose) loose.appendChild(artFileNode(a, s.cwd, false));
                     wrap.appendChild(loose);
                   }
-                  wrap.insertAdjacentHTML("beforeend", '<div class="af-foot">仅收录文档、表格、图片与安装包等交付物 · ' + layout.files.length + " 项已登记 · 清单来自来源会话实时同步</div>");
+                  // W-DENSD 批三⑤：af-foot 说明段退役（回落路径）
                   pane.textContent = "";
                   pane.appendChild(wrap);
                 }
@@ -5416,6 +5415,28 @@
                     // B11 data-group-toggle 折叠链同批退役（零生产者）。
                     const tabBack = ev.target.closest("[data-tabpage-back]");
                     if (tabBack) { ev.stopPropagation(); if (UI.tabs && UI.tabs[0]) UI.tabs[0].click(); return; } // W-TABPAGE 页头「⟵ 返回对话」：与 segment-bar tab0 同链（ctxMeter 跳「更多」同款 tabs.click 口径）
+                    // W-DENSD 批三④（1117）：会话 head 8→4——过程/思考/工作区三钮入溢出菜单
+                    //（⋯ 开合；菜单项沿用原 data 属性=既有委托零改接；菜单常驻 DOM 但 hidden，
+                    //探锚 #session-head-actions [data-fzone-toggle] 兼容）。ctx 行开时现读。
+                    const hmBtn = ev.target.closest("[data-head-menu]");
+                    if (hmBtn) {
+                      ev.stopPropagation();
+                      const pop = document.querySelector("#session-head-actions [data-head-menu-pop]");
+                      if (pop) {
+                        pop.hidden = !pop.hidden;
+                        if (!pop.hidden) {
+                          const pct = document.querySelector("#session-ctx-meter [data-ctx-mini-pct]");
+                          const dir = document.querySelector("#session-head-sub [data-sub-dir]");
+                          const ctxRow = pop.querySelector("[data-hmenu-ctx]");
+                          if (ctxRow) ctxRow.textContent = (pct && pct.textContent ? "上下文 " + pct.textContent.trim() : "上下文 —") + (dir && dir.textContent ? " · " + dir.textContent.trim() : "");
+                        }
+                      }
+                      return;
+                    }
+                    if (!ev.target.closest("[data-head-menu-pop]") && !ev.target.closest("[data-head-menu]")) {
+                      const openPop = document.querySelector("#session-head-actions [data-head-menu-pop]:not([hidden])");
+                      if (openPop) openPop.hidden = true; // 点外收菜单（同 lane-menu 口径）
+                    }
                     const taskHide = ev.target.closest("[data-task-hide]");
                     if (taskHide) { ev.stopPropagation(); const cs = curSession(); if (cs) { hiddenTaskKeys.add(cs.session_id + "#" + taskHide.dataset.taskHide); renderTasks(); } return; } // #B3-9
                     const taskJump = ev.target.closest("[data-task-jump]");
@@ -5888,14 +5909,7 @@
                   if (UI.listTools) UI.listTools.dataset.stub = "B2b";
                   bindEvents();
                   updateConvCtrl(); // B12 head 开关初值上色
-                  // W-UIFB ⑧：子 Agent 面板折叠开关（标题行点击/键盘；agCollapsed 模块级记忆）
-                  const agbox = document.getElementById("session-agbox");
-                  if (agbox) {
-                    agbox.addEventListener("click", (ev) => { if (ev.target.closest("[data-ag-toggle]")) toggleSubagents(); });
-                    agbox.addEventListener("keydown", (ev) => {
-                      if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest("[data-ag-toggle]")) { ev.preventDefault(); toggleSubagents(); }
-                    });
-                  }
+                  // W-DENSD 批三⑥：折叠开关监听退役（单行摘要无折叠态——title 悬浮即明细）
                   renderAll();
                 }
                 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);

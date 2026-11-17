@@ -13,8 +13,10 @@
                 const doneOf = bridge.doneOfNotification;
                 const panel = section.querySelector("[data-notify-panel]");
                 const panelBody = section.querySelector("[data-notify-panel-body]");
-                const headSub = section.querySelector("[data-notify-panel-sub]");
                 const railBadge = document.querySelector('.rail-btn[data-domain="notify"] [data-notify-badge]');
+                // DENSN（批三①）：面板统计墙四项退役（「最早需行动/注意/动态/归档」headSub 拼串
+                // 与 nsub DOM 一并删）——数字全留组头 cnt（单源）与 rail 徽章；头部时间信息归零
+                // =行内 nrow-time 成为唯一时间源（标题/时间单一来源）。
                 const flight = new Set();
                 // FB18 通知清除：本页会话内已清除键（不落盘——通知账权威在 relay，落盘键集会随
                 // relay 重启漂移成脏过滤；actionable 行清除时另发 ACK 同步权威账面）。
@@ -271,9 +273,15 @@
                 //     （点击展开其余子项 .nrow.sub；子项含独立 dismiss/act——逐条处置不拦）。
                 //   ②B2 active 行整行可点=执行 jump（click 代理卡身分支；×/chip/agg 钮
                 //     天然 stopPropagation——button 先命中）。
+                // DENSN（批三②）：awaitu chip 同屏 ≤1 枚——渲染期「首枚预算」机制：每轮渲染
+                // 前按可见 pending 真数定预算文案（N>1 折「等你拍板 ×N」——数字诚实），rowMarkup
+                // 首个非子项 pending 行耗尽预算，其余 pending 行 chip 不出（l1 只剩时间）。
+                let awaituBudget = null;
                 function rowMarkup(row, isSub) {
                   const jump = jumpOf(row) || (row.kind === "acceptance" && row.source && row.source.id ? { acceptance: row.source.id, label: "打开验收单" } : null); /* W-NOTIFYFIX：过时验收单按钮保留——退役≠不可查（jumpOf 对非 active 恒 null 的旁路） */
                   const km = kindMetaOf(row.kind);
+                  let awaituTxt = null; // DENSN：首枚预算消费（同屏 chip ≤1）
+                  if (row.userPending && !isSub && awaituBudget !== null) { awaituTxt = awaituBudget; awaituBudget = null; }
                   const cls = row.active ? "alert" : row.unresolved ? "warn" : "read";
                   // W-INBOX-V1 刀2 联动：canAck 扩「键归一的 synth 行」（ledgerKey=通知账
                   // stableKey 在场——ACK 可落账）；旧回落键（confirm:/acceptance: 前缀无
@@ -312,7 +320,7 @@
                   // A6 行栅格 12px：内容列（L1 badge+agg+时间右贴 / L2 标题 clamp2+tooltip /
                   // L3 摘要+内联操作）+右侧 act/× 列
                   return '<div class="nrow ' + cls + (isSub ? " sub" : "") + (row.isNew ? " enter" : "") + '" data-notify-card data-notify-key="' + escapeHtml(row.key) + '" data-notify-active="' + (row.active ? "true" : "false") + '">'
-                    + '<div class="t"><div class="l1">' + (row.userPending ? "" : '<span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + "</span>") + (row.staleWhy ? '<span class="nbadge stale-chip" title="' + (row.staleWhy === "version" ? "验收单对应版本已被新版取代——已退役归档，不计需行动" : row.staleWhy === "dup" ? "同名单的早期重复生成——已归档" : "超过 7 天未处理的陈年通知——已归档，不计需行动") + '">过时</span>' : "") + (row.userPending ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>等你拍板</span>' : "") + engMark + aggBtn + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
+                    + '<div class="t"><div class="l1">' + (row.userPending ? "" : '<span class="nbadge nbadge-' + km.badge + '">' + escapeHtml(km.label) + "</span>") + (row.staleWhy ? '<span class="nbadge stale-chip" title="' + (row.staleWhy === "version" ? "验收单对应版本已被新版取代——已退役归档，不计需行动" : row.staleWhy === "dup" ? "同名单的早期重复生成——已归档" : "超过 7 天未处理的陈年通知——已归档，不计需行动") + '">过时</span>' : "") + (awaituTxt ? '<span class="nbadge awaitu-chip" title="在等你拍板——处理完自动消失"><i class="awaitu-dot" aria-hidden="true"></i>' + escapeHtml(awaituTxt) + '</span>' : "") + engMark + aggBtn + '<span class="nrow-time">' + escapeHtml(notifyRelTime(row.ts)) + "</span></div>"
                     + '<b title="' + escapeHtml(row.title) + '">' + monoWrap(row.title) + '</b><div class="s">' + '<span class="s-txt">' + monoWrap(sub) + "</span>" + ((act || snoozeBtn || restoreBtn) ? '<span class="act-slot">' + act + snoozeBtn + restoreBtn + "</span>" : "") + "</div></div>" /* 复审P1-2：摘要包 s-txt（ellipsis 归位），act-slot 不再被整体裁剪；W-INBOX-V1 刀1/刀3：act+稍后+恢复 同槽并排 */
                     + x + "</div>";
                 }
@@ -324,19 +332,7 @@
                 }
 
                 let lastCount = -1;
-                function syncCounts(count, earliestTs, brief) {
-                  // W-NOTIFYPOLISH ③A3+B3：头部计数 pill 退役——843 双显口径不一（头部不封顶
-                  // vs rail 99+）且与组头计数三处两零差；计数单源=组头 cnt+rail（99+ 封顶）。
-                  // 头部腾位改增量信息：最早一条需行动距现在多久（「最早 16 小时前」——
-                  // 用户不看数字也能感知积压深度）。
-                  // P2BATCH6 件5（A-P2-13）：追加组摘要段——需行动组长列表占满首屏时，
-                  // 注意/动态/归档三组在滚动区下方「去向不明」；头部一行预告各组条数
-                  //（非零才出段），面板一打开全貌可见。
-                  if (headSub) {
-                    const briefTxt = brief ? " · " + brief : "";
-                    const next = earliestTs ? "最早需行动 " + notifyRelTime(earliestTs) + briefTxt : (count ? briefTxt.replace(/^ · /, "") : "无待办");
-                    if (headSub.textContent !== next) headSub.textContent = next;
-                  }
+                function syncCounts(count) { /* DENSN：earliestTs/brief 两参与 headSub 统计墙（最早需行动/注意/动态/归档四段拼串）一并退役——数字单源=组头 cnt+rail 徽章；头部时间归零=行内 nrow-time 唯一时间源 */
                   if (railBadge) {
                     railBadge.textContent = count > 9 ? "9+" : String(count) /* visualfix（1104 V-P2-5）→W-WBARSLIM 顺刀再收紧：99+→9+（C 路 1109 权重再平衡——它是全图唯一高饱和色；aria/title 保真全数不变） */;
                     railBadge.hidden = count === 0;
@@ -373,6 +369,9 @@
                   // W-INBOX-V1 刀1/刀3：可见性三态入过滤（archived=×/知道了过、snoozed=稍后
                   // 暂避）——主分组与归档分区按此分流；sig 计数同口径（跳帧判定不撒谎）。
                   const visible = (r) => !r.archived && !r.snoozed;
+                  // DENSN（批三②）：awaitu 首枚预算——可见 pending 真数（数字诚实）：N>1 折
+                  // 「等你拍板 ×N」单行摘要随首行（同屏 chip ≤1 枚），N≤1 原样单枚。
+                  { const pn = rows.filter((r) => r.userPending && visible(r)).length; awaituBudget = pn ? (pn > 1 ? "等你拍板 ×" + pn : "等你拍板") : null; }
                   const actionRows0 = rows.filter((r) => r.active && visible(r));
                   const attentionRows0 = rows.filter((r) => !r.active && r.unresolved && visible(r));
                   const dynamicRows0 = rows.filter((r) => !r.unresolved && visible(r));
@@ -415,7 +414,6 @@
                   const attentionRows = rows.filter((r) => !r.active && r.unresolved && visible(r));
                   const dynamicRows = rows.filter((r) => !r.unresolved && visible(r));
                   const archivedRows = rows.filter((r) => r.archived && !r.snoozed); // W-INBOX-V1 刀3：已归档分区数据源（账本 handled/dismissed 未 resolved + 本地 ×）
-                  const groupsBrief = [attentionRows.length ? "注意 " + attentionRows.length : "", dynamicRows.length ? "动态 " + dynamicRows.length : "", archivedRows.length ? "归档 " + archivedRows.length : ""].filter(Boolean).join(" · "); // P2BATCH6 件5：非零组摘要（headSub 预告去向）
                   // W-NOTIFYPOLISH ①B1+B6：组内同质聚合（kind+title 同簇——843 重复单实锤形态）。
                   // 代表行=簇内最新（rows 已 ts 降序，首见即最新）；aggN 入 L1 ×N 展开钮；
                   // 时间归聚=代表行时刻即簇最新（同簇同刻的逐行重复时间列随之消解）；
@@ -485,7 +483,7 @@
                       // 头部计数恒停旧值。收口两分支共用尾部（counts/seen/首见标记）
                       for (const r of rows) seenNotifyKeys.add(r.key);
                       notifySeenInit = true;
-                      syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0), groupsBrief); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发；件5：组摘要随行 */
+                      syncCounts(actionRows.length); /* DENSN：单参（最早需行动/组摘要随统计墙退役） */
                       return;
                     }
                     panelBody.replaceChildren(nodesFrom(flatHtml));
@@ -494,7 +492,7 @@
                   }
                   for (const r of rows) seenNotifyKeys.add(r.key);
                   notifySeenInit = true;
-                  syncCounts(actionRows.length, actionRows.reduce((m, r) => (r.ts && (!m || r.ts < m) ? r.ts : m), 0), groupsBrief); /* W-NOTIFYPOLISH ③：最早需行动时刻随行下发；件5：组摘要随行 */
+                  syncCounts(actionRows.length); /* DENSN：单参（最早需行动/组摘要随统计墙退役） */
                 }
 
                 // #018-W1b 轻动作：COMMAND_NOTIFICATION_ACK{notification_key, action:"handled"}。

@@ -978,6 +978,15 @@
     /* #201 VISFIX②：composer 边框肉眼可见——border-strong 在三列提白后仍浅，升实色
     深灰档+focus 态品牌色（bg 保持透明一体化）；grid footer 行透明不遮边框 */
     #d-session .workspace-footer .composer { border-color: rgba(0,0,0,0.22); }
+    /* W-DENSD 批三④（1117 用户令）：会话 head 溢出菜单（⋯）——过程/思考/工作区/上下文收纳（可见 8→4） */
+    #session-head-actions { position: relative; }
+    #session-head-actions .head-menu-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; display: flex; flex-direction: column; min-width: 200px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+    #session-head-actions .head-menu-pop[hidden] { display: none; }
+    #session-head-actions .hmenu-ctx { padding: 6px 10px 4px; color: var(--faint); font-size: var(--fs-B); line-height: 1.5; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #session-head-actions .hmenu-item { border: 0; background: none; padding: 7px 10px; border-radius: 7px; color: var(--text-strong); font-size: var(--fs-C); text-align: left; cursor: pointer; white-space: nowrap; }
+    #session-head-actions .hmenu-item:hover { background: color-mix(in srgb, var(--text-strong) 7%, transparent); }
+    /* W-DENSD 批三②⑥：成员卡水位条退役（数值降卡 title）+ subAgent 单行摘要 */
+    #session-agbox .ag-line { display: inline-block; color: var(--faint); font-size: var(--fs-B); line-height: 1.5; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
     html:not([data-theme="light"]) #d-session .workspace-footer .composer { border-color: rgba(255,255,255,0.22); }
     #d-session .composer:focus-within { border-color: var(--brand); } /* #201③：边框恢复可见（#195⑥ 一体化误删边框语义→恢复 token 边框升 border-strong 档：微信档三列提白后 --line 与面底近同色不可辨；bg 保持透明一体化不变） */
     .composer:focus-within { border-color: var(--brand); }
@@ -1998,7 +2007,12 @@
     #d-team .queue-card[data-team-project] .team-counts { gap: 8px; }
     #d-team .task-title { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
     #d-team .task-title > strong { flex: 1 1 auto; min-width: 0; }
-    #d-team .task-verify { display: inline-flex; align-items: center; flex: none; gap: 2px; padding-top: 2px; color: var(--info); }
+    #d-team .task-verify { display: inline-flex; align-items: center; flex: none; gap: 2px; padding-top: 2px; padding-left: 0; padding-right: 0; border: 0; background: none; font: inherit; font-size: var(--fs-micro); cursor: pointer; color: var(--info); } /* DENSN 批三⑦：span 点墙→button 折叠行（默认「自验 P/T · 全过/N 未过」摘要，点开才展 dots；title 保全量） */
+    #d-team .task-verify .tv-label { white-space: nowrap; }
+    #d-team .task-verify .tv-dots { display: none; align-items: center; gap: 2px; }
+    #d-team .task-verify.tv-open .tv-dots { display: inline-flex; }
+    #d-team .task-verify.tv-open .tv-label { display: none; }
+    #d-team .task-verify:hover .tv-label { text-decoration: underline; text-underline-offset: 3px; }
     #d-team .task-verify-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--faint) 20%, transparent); }
     #d-team .task-verify-dot.pass { background: var(--done); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--done) 22%, transparent); }
     #d-team .task-verify-dot.fail { background: var(--error); box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--error) 22%, transparent); }
@@ -3350,12 +3364,7 @@
       border-bottom: 1px solid var(--line-soft);
       font-size: 14px; font-weight: 600; color: var(--text-strong);
     }
-    .notifpanel .np-head .nsub {
-      /* W-NOTIFYPOLISH ③A3：计数 pill 退役（843 双显口径不一+三处计数两零差）——
-         降纯文字承载增量信息（「最早需行动 16 小时前」），计数单源=组头+rail 99+ */
-      margin-left: auto; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums;
-      color: var(--dim); background: none; border: 0; padding: 0; line-height: 16px; white-space: nowrap;
-    }
+    /* DENSN 批三①：.np-head .nsub 规则随统计墙 DOM 退役删除 */
     .notifpanel .np-head .n-x { flex: none; margin-left: 4px; }
     /* A8 滚动容器：上下渐隐 mask + 主题滚动条（宽 8/thumb 14% hover 24%） */
     .notifpanel .np-body {
@@ -3440,7 +3449,7 @@
        W-NOTIFYPOLISH ④A1：userPending 行 kind 徽章不输出（rowMarkup 门控）——chip 独扛
        紧急度语义，双胶囊堆叠零信息熵根修。W-NOTIFYPOLISH ⑧A5：dot 静态实点——脉冲
        只留组点（6 脉冲源违反「唯一脉冲位」纪律；reduced 钳闸随 animation 删除自愈） */
-    .awaitu-chip { color: #FBBF24; background: rgba(245, 158, 11, .18); border: 1px solid rgba(245, 158, 11, .38); gap: 5px; }
+    .awaitu-chip { color: var(--working); background: color-mix(in srgb, var(--working) 18%, transparent); border: 1px solid color-mix(in srgb, var(--working) 38%, transparent); gap: 5px; } /* DENSN 批三⑤：琥珀硬编码归语义 token——与 ndot.y（--working）同族不二值，双主题随 tokens.css 自动 */
     .stale-chip { color: var(--faint); background: transparent; border: 1px solid var(--line); } /* W-NOTIFYFIX：过时徽章（版本退役/重复/陈年三因）——弱化灰系（过时≠行动） */
     /* W-AGGREGATE-V1：未入项目桶卡内联推荐条（主时机静默位）——一行紧凑：主钮+证据行+忽略 */
     .agg-hint { display: flex; align-items: center; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); flex-wrap: wrap; } /* W-PROJTEAM1 件③：两步入口加副钮后行内容超宽——wrap 换行代替裁切 */
@@ -3452,9 +3461,7 @@
     .agg-ignore { flex: 0 0 auto; padding: 2px 7px; border: 0; background: transparent; color: var(--faint); font-size: var(--fs-micro); cursor: pointer; }
     .agg-ignore:hover { color: var(--dim); text-decoration: underline; }
     .team-cand-ext .cand-ext-badge { flex: 0 0 auto; padding: 1px 6px; border: 1px solid rgba(245, 158, 11, .38); border-radius: 8px; background: rgba(245, 158, 11, .12); color: #D97706; font-size: var(--fs-micro); white-space: nowrap; } /* 野生会话·观察位徽（#279 纳管不管制语义自明） */
-    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: #FBBF24; }
-    html[data-theme="light"] .awaitu-chip { color: #B45309; }
-    html[data-theme="light"] .awaitu-chip .awaitu-dot { background: #B45309; }
+    .awaitu-chip .awaitu-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--working); }
     /* W-NOTIFYPOLISH ①：聚合 ×N 展开钮（小计数 chip——button 语义，非徽章） */
     .agg-n {
       border: 0; background: none; font: 600 11px/1 inherit; color: var(--dim); cursor: pointer;
@@ -3490,16 +3497,16 @@
     .nid { font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace); font-size: .92em; background: var(--hover); border-radius: 4px; padding: 0 4px; color: var(--dim); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
     /* A6 操作钮降权=文字链（12px/500 强调色 hover 下划线） */
     .nrow .act {
-      grid-column: 3; align-self: center; flex: none; font-size: 12px; font-weight: 500; color: var(--brand);
+      grid-column: 3; align-self: center; flex: none; font-size: 12px; font-weight: 500; color: var(--text-strong); /* DENSN 批三⑥：brand 链色退役——面板强调色族压 ≤2（红组点+琥珀 working 两族），主行动强调由 600 字重档（:3483）承载 */
       border: 0; background: none; padding: 4px 2px; margin: 0; cursor: pointer; font-family: inherit; white-space: nowrap;
       transition: opacity var(--dur-fast) var(--ease-out);
     }
     .nrow .act:hover, .nrow .act:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
     /* W-INBOX-V1 刀1/刀3：「稍后」「恢复」次级文字链（与主 act 同槽并排但降一档——
     主行动=brand 强调色，次级行动=faint 前景+hover 提亮；notifypolish 聚合语言同族） */
-    .nrow .act.act-snooze, .nrow .act.act-restore { color: var(--faint); font-weight: 400; }
+    .nrow .act.act-snooze, .nrow .act.act-restore { color: var(--faint); font-weight: 400; opacity: .55; } /* DENSN 批三③：次钮再压半档——恒态半隐让位主行动，hover/focus 全显（不隐藏：触屏/可发现性保功能） */
     .nrow .act.act-snooze:hover, .nrow .act.act-restore:hover,
-    .nrow .act.act-snooze:focus-visible, .nrow .act.act-restore:focus-visible { color: var(--text-strong); text-decoration: underline; text-underline-offset: 3px; }
+    .nrow .act.act-snooze:focus-visible, .nrow .act.act-restore:focus-visible { color: var(--text-strong); opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
     /* W-INBOX-V1 刀3：已归档组灰点（ndot.a——中性归档语义，r/y/n 三色之外第四点） */
     .ndot.a { background: var(--faint); opacity: 0.7; }
     .ngrp.ngrp-arch { opacity: 0.85; }
@@ -3523,7 +3530,6 @@
     /* B5 微交互：单卡关闭塌缩+计数 pop+组级红点脉冲（唯一脉冲位）+铃铛摆动 */
     .nrow.leaving { animation: nrow-collapse 160ms var(--ease-in) forwards; pointer-events: none; }
     @keyframes nrow-collapse { to { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; } }
-    .np-head .nsub.notify-badge-pop { animation: badge-pop 220ms var(--ease-spring); }
     /* ===== W-NOTIFYPOLISH ⑤C1+C4+⑥C2+C5（1105 三路审查·光主题材质与可读底线） =====
        ⑤C1 浮层亮度方向修正：光主题面板比底层亮（#FAFAF8 > 页面 #F7F7F5）+浅影
        (.06/.10/.12)+白内高光——旧值是暗主题材质漏光主题（#E5E5E5 更暗+煤烟影=灰贴纸）；
