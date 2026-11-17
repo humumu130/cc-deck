@@ -16,7 +16,9 @@ mkdirSync(join(dataDir, "org", "boards"), { recursive: true });
 
 // 动态 import（env 先行）
 const { projectBoard, clearBoardProjectionCache } = await import("../src/board-projection.js");
-const { saveBoardFile } = await import("../src/projects.js");
+// 巡检修（1117 CI 红）：saveBoardFile 是 projects.ts 模块私有函数（无 export），本测试
+// 夹具走 writeFileSync 自写板文件——该导入从未使用=死导入。运行时绿（tsx 不查类型+解构
+// namespace 缺属性不抛）、CI tsc --noEmit 红（TS2339）。删。
 type Proj = ReturnType<typeof projectBoard>;
 
 const GID = "pg-test";
