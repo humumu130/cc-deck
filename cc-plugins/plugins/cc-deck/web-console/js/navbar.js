@@ -18,7 +18,8 @@
   "use strict";
   const MIN_ITEMS = 5, MIN_VW = 880, TEXT_MAX = 160, MAX_H = 400;
   const ENTER_MS = 60, LEAVE_MS = 180, MAX_LINES = 28; // MAX_LINES=折叠轨显示上限（WorkBuddy V=min(len,28) 同款）
-  let root = null, panelEl = null;
+  let root = null, panelEl = null, listEl = null; // NAVR8：panel=卡壳（底色/描边/影），list=列表层（clip/mask/滚动）——壳列表分层
+  let swapT = 0; // NAVR8 mount-then-toggle：收起换血计时器（过渡播完 343ms 后再 renderRows——反向过渡真播不播在换血内容上）
   let items = [];            // 全量 [{ key, el, text }]
   let shown = [];            // 采样后（≤28，必含首/尾/active）
   let open = false, activeKey = null;
@@ -36,7 +37,7 @@
       const rc = r.getBoundingClientRect();
       if (!rc.height) continue;
       const d = fishY - (rc.top + rc.height / 2);
-      const s = 1 + 2.2 * Math.exp(-(d * d) / 3200); // 2σ²=2·40²=3200（W-UIP2：峰值 1.9→3.2×，σ 46→40）
+      const s = 1 + 1.2 * Math.exp(-(d * d) / 3200); // NAVR8（用户 1117 拍板）：峰值 3.2→2.2×（动效路测算——去果冻尾抢戏保呼吸感）；2σ²=3200 σ=40 不变；CSS tick 斜率分母同步 /1.2（峰值亮度恒 64%）
       r.style.setProperty("--fz", s.toFixed(3));
     }
   }
@@ -132,19 +133,27 @@
 
   function setOpen(on) {
     open = on;
-    root.classList.toggle("open", on);
     root.setAttribute("aria-expanded", on ? "true" : "false");
     panelEl.setAttribute("role", on ? "listbox" : "presentation");
-    panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", on ? "option" : "presentation"));
-    // NAVR4-②（1115 用户令「无法往上滚动，只能固定那些消息」）：展开态=全量行+真滚动，
-    // 收起态=采样 28 概览轨——clip-path 动效元素不变，内容行集随态切换（行数几百级 DOM 可承受）
-    renderRows(on ? items : shown);
-    if (!on) panelEl.scrollTop = 0; // 收起归位（下次展开从顶部进）
-    syncActive(); // NAVR4-R2 ③（审 P2）：renderRows 重建行后 active 高亮丢失——补同步
+    // NAVR8 mount-then-toggle（动效路 P0 根修——「参数抄对一行没播」）：旧序 classList 先切→
+    // renderRows 后行=重建 DOM 以终态首帧呈现，行高 16⟷28/文字滑显过渡全是死代码。新序：
+    // 展开=先 renderRows 挂新行（16px 折叠态初值）→双 rAF 后挂 .open——行级过渡与 clip 擦显
+    // 卡面渐入同拍真播；收起=先摘 .open（反向过渡在当前内容上真播）→343ms 播完再换血回采样轨。
+    if (on) {
+      if (swapT) { clearTimeout(swapT); swapT = 0; }
+      renderRows(items); // NAVR4-②：展开态=全量行+真滚动（收起态=采样 28 概览轨）
+      syncActive(); // renderRows 重建行后 active 高亮补同步（NAVR4-R2 ③）
+      updateFade();
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("open")));
+    } else {
+      root.classList.remove("open");
+      if (swapT) clearTimeout(swapT);
+      swapT = setTimeout(() => { swapT = 0; renderRows(shown); listEl.scrollTop = 0; updateFade(); }, 360); // > .343s 收起拍（含余量）——换血不等动画裸切
+    }
   }
 
   function renderRows(list) {
-    panelEl.textContent = "";
+    listEl.textContent = "";
     for (const it of list) {
       const row = document.createElement("button");
       row.type = "button";
@@ -158,9 +167,9 @@
       // NAVR4-R3 ③（审 R2 复核红）：建行时直接落 active 类——setActive 首行身份卫者
       // （key===activeKey 早退）挡回 syncActive 补挂（renderRows 重建丢类而模块态未变）
       if (it.key === activeKey) { row.classList.add("msg-navbar__item--active"); row.setAttribute("aria-selected", "true"); }
-      panelEl.appendChild(row);
+      listEl.appendChild(row);
     }
-    panelEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", open ? "option" : "presentation"));
+    listEl.querySelectorAll("[data-nav-key]").forEach((n) => n.setAttribute("role", open ? "option" : "presentation"));
   }
 
   function build() {
@@ -177,6 +186,10 @@
       panelEl = document.createElement("div");
       panelEl.className = "msg-navbar__panel";
       panelEl.setAttribute("aria-hidden", "false");
+      listEl = document.createElement("div"); // NAVR8 壳/列表分层（WB 原版架构）：clip/mask/滚动全在列表层
+      listEl.className = "msg-navbar__list";
+      panelEl.appendChild(listEl);
+      listEl.addEventListener("scroll", () => { if (open) updateFade(); }, { passive: true }); // 条件渐隐（滚动到头该端不压暗）
       root.appendChild(panelEl);
       // UIP2-R1（1115 用户令「鼠标在导航条左侧离得远也展开——只有直接放在导航条上才展开」）：
       // 根因=aside 按面板 max-content（≤320px）整盒接收 mouseenter，clip-path 只裁视觉不裁
@@ -200,12 +213,12 @@
       // 行为一致（触控板两指=逐帧 wheel，跟手等效）；deltaMode 1（行单位，Firefox 族）×16 归一。
       // 反方审 P2（死区回归守卫）：无溢出（折叠态行≤可视高）或已滚到头=放行原生链——旧态此区域
       // wheel 本可冒泡滚消息流，无守卫 preventDefault 会把它掐成「导航条不滚+消息流也不滚」死区
-      panelEl.addEventListener("wheel", (ev) => {
-        const canScroll = panelEl.scrollHeight > panelEl.clientHeight + 1;
-        const atTop = panelEl.scrollTop <= 0, atEnd = panelEl.scrollTop + panelEl.clientHeight >= panelEl.scrollHeight - 1;
+      listEl.addEventListener("wheel", (ev) => {
+        const canScroll = listEl.scrollHeight > listEl.clientHeight + 1; // NAVR8：滚动几何随迁列表层（scrollHeight/scrollTop 的宿主是 list——留 panel 会静默死区回归）
+        const atTop = listEl.scrollTop <= 0, atEnd = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 1;
         if (!canScroll || (ev.deltaY < 0 && atTop) || (ev.deltaY > 0 && atEnd)) return; // 放行原生滚动链（到头回链消息流=标准溢出语义）
         ev.preventDefault();
-        panelEl.scrollTop += (ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY);
+        listEl.scrollTop += (ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY);
       }, { passive: false });
       root.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setOpen(false); });
       host.appendChild(root);
@@ -219,9 +232,7 @@
     // （host 底 − 消息流底 = dock+agbox+footer 全家，基线 150 对上）——单量 footer 会漏
     // dock/agbox（agbox 展开 226px 时压 210px 实测）；三兄弟挂 ResizeObserver 任一变高即
     // scheduleBuild 去颤重建（MO 只盯 #session-body 看不见兄弟）
-    const body = bodyEl();
-    const lift = body ? Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 44 : 172; // NAVR7-④：基线 +16→+44（用户 1116「整体位置太靠下」——底栈全距之上再抬 28px）；fallback 144→172 同步
-    root.style.setProperty("--msg-navbar-lift", lift + "px");
+    updateLift();
     // NAVR4-R2 ②→R3 ④（审 R2 复核新 P1：RO 重挂永动）：三兄弟静态 DOM 恒不替换——
     // 只建一次+只观察一次（build 里 disconnect+observe 每次 observe 都发初始通知→
     // scheduleBuild→build 自循环 4.8 次/s churn）；尺寸 memo 过滤未变通知（dock 过渡中
@@ -233,6 +244,7 @@
           const prev = root._roMemo.get(e.target);
           if (prev && prev.w === w && prev.h === h) continue; // 未变（初始/重复通知）
           root._roMemo.set(e.target, { w, h });
+          updateLift(); // NAVR8：lift 同帧直更（不等 200ms 去颤）——迟滞根修
           scheduleBuild();
         }
       });
@@ -242,7 +254,8 @@
         if (el) { root._roMemo.set(el, { w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) }); root._ro.observe(el); }
       }
     }
-    renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）
+    renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）——NAVR8：mount-then-toggle 下 build 重建只发生在数据变化（MO/resize），开合不再经此路
+    updateFade();
     const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 16)); // NAVR5：22→16 密度档（用户 #173）——预算常数随行高同步
     root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 16 + 12) + "px");
     root.style.setProperty("--msg-navbar-fold-h", Math.min(MAX_H, shown.length * 16 + 12) + "px");
@@ -250,6 +263,24 @@
     syncActive();
   }
 
+  // NAVR8 lift 根修（动效路 P1：迟滞 229ms 单帧瞬跳）：lift 量测从 build() 抽出——旧路径 lift
+  // 写在 build 里、RO 回调只 200ms 去颤排队 scheduleBuild（不量 lift）=composer 高度变化后
+  // navbar 位置迟一拍+瞬跳。直挂 RO 回调同帧更新。
+  function updateLift() {
+    const host = hostEl(), body = bodyEl();
+    if (!root || !host || !body) return;
+    const lift = Math.round(host.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom) + 44; // NAVR7-④：底栈全距+44（基线口径不变）
+    root.style.setProperty("--msg-navbar-lift", lift + "px");
+  }
+  // NAVR8 条件渐隐：仅展开态且可滚动时按 scrollTop 挂 fade-top/fade-bottom（静置/到头=无 mask——静置税除根）
+  function updateFade() {
+    if (!listEl) return;
+    const can = listEl.scrollHeight > listEl.clientHeight + 1;
+    const t = can && listEl.scrollTop > 2;
+    const b = can && listEl.scrollTop + listEl.clientHeight < listEl.scrollHeight - 2;
+    listEl.classList.toggle("fade-top", t);
+    listEl.classList.toggle("fade-bottom", b);
+  }
   function scheduleBuild() {
     if (buildT) return;
     buildT = setTimeout(() => { buildT = 0; build(); }, 200); // 消息流渲染抖动去颤（回放/流式合并窗）
