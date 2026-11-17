@@ -1228,7 +1228,7 @@
                   const expHtml = experienceMarkup();
                   const rulesHtml = rulesMarkup();
                   // V8R：成员页尾 crewfoot（原型 .crewfoot）——顺带承载五色灯词表图例（用户定版）
-                  const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · watchdog 双信号（心跳+日志） · 点卡片直开成员会话</div>';
+                  const crewFoot = '<div class="crewfoot"><span class="lamp-key"><i style="background:var(--st-working)"></i>黄闪=工作中</span><span class="lamp-key"><i style="background:var(--st-idle)"></i>绿=空闲</span><span class="lamp-key"><i style="background:var(--st-blocked)"></i>橙=阻塞</span><span class="lamp-key"><i style="background:var(--st-error)"></i>红=出错</span><span class="lamp-key"><i style="background:var(--st-closed)"></i>灰=关闭</span> · 心跳/日志灰=例行 · 红字=失联 · 点卡片直开成员会话</div>';
                   tSigWrite(panes[2], "p2:" + tSigOf(memberHtml), '<div class="member-list">' + memberHtml + "</div>" + crewFoot); // #282 三批 M2
                   tSigWrite(panes[3], "p3:" + tSigOf(activityHtml), activityHtml);
                   tSigWrite(panes[4], "p4:" + tSigOf(teamOutputsHtml), teamOutputsHtml); // W-OUTTAB 团队输出物（活动后第五 tab，用户 1015 拍板独立于看板）

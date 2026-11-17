@@ -295,14 +295,14 @@
     .create-field::placeholder { color: var(--faint); font-size: var(--fs-B); opacity: .8; }
     /* W-UIB1（用户点名「眼睛太丑」）：密码可见性钮=输入框内嵌幽灵图标（原 row-share 白盒
        是全 app 亮度最高控件）。field-eye-row 作定位锚，input 右内距让位 30px，钮去底框、
-       灰 45% / hover 70%，revealed 态稍亮以示「正在明文」 */
+       faint→dim→text 三档 token（默认可辨 3:1 过线、hover 加深、revealed=text 示「正在明文」） */
     .field-eye-row { position: relative; }
     .field-eye-row .create-field { padding-right: 30px; }
-    .field-eye { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: none; background: none; border-radius: 5px; color: var(--dim); opacity: .55; cursor: pointer; }
-    .field-eye:hover { opacity: .85; }
+    .field-eye { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: none; background: none; border-radius: 5px; color: var(--faint); opacity: 1; cursor: pointer; } /* 审查 P2 修：opacity .55 叠加→token 三档（faint 4.85:1暗/4.54:1亮 过 3:1 非文字线；旧 .55=暗2.68/亮2.13 双不达+注释 45%/70% 漂移） */
+    .field-eye:hover { color: var(--dim); opacity: 1; }
     .field-eye:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-ring); }
     .field-eye .icon-inline { width: 14px; height: 14px; }
-    .field-eye.revealed { opacity: .8; color: var(--text); }
+    .field-eye.revealed { opacity: 1; color: var(--text); }
     /* W-UIFB 追加⑬：成员编制分组盒（与设置面板卡片分组同语言：surface1 底+细边），
        候选列表/添加按钮/手动行装同盒，字段区与编制区分层 */
     .create-group { margin: 6px 0 2px; padding: 9px 10px 9px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface1); }
@@ -440,8 +440,8 @@
     .create-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -5px -6px 0 0; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; line-height: 1; } /* W-TEAMPOPOLISH P3（C 路）：× 命中区 28px（macOS 弹窗惯例），负 margin 视觉盒不外扩 */
     /* W-UIB1（弹窗规范拉齐）：source-menu 家族头行也可容纳 create-x（出示配对码弹窗）——
        头行转 flex，X 负 margin 收进头行右缘 */
-    .source-menu-head.pair-head-row { display: flex; align-items: center; gap: 6px; }
-    .source-menu-head.pair-head-row .create-x { margin: -6px -6px 0 0; flex: none; }
+    .source-menu-head.pair-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-right: 10px; } /* 审查 P1 修：仅 flex 排队 X 跟在标签后距缘 310px=六弹窗拉齐自违约——space-between 推右上 */
+    .source-menu-head.pair-head-row .create-x { margin: -6px 0 0 0; flex: none; } /* 审查 P1 修：-6px 右距随 space-between 收回（否则 X 顶到 2px 圆角上），右距 10px≈create 族 11px 视觉对齐 */
     .create-x:hover { background: var(--hover); color: var(--text); }
     .create-inline { display: flex; gap: 6px; align-items: center; }
     .create-inline .create-field { flex: 1; min-width: 0; }
@@ -794,7 +794,7 @@
     .fz-sash { cursor: col-resize; z-index: 10; flex-shrink: 0; width: 4px; position: relative; } /* =WorkBuddy __detail-sash{cursor:col-resize;z-index:10;flex-shrink:0;width:4px;position:relative} */
     .fz-sash:hover, .fz-sash.dragging { background: color-mix(in srgb, var(--brand, #EC9A73) 60%, transparent); } /* =__detail-sash:hover 品牌色 60% */
     .fz-sash[hidden] { display: none; }
-    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden; } /* 结构=WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]）；底色 W-FZONE-R5 融合（1115 用户「底色也不对」）：--surface1（=左列列表档，fzone 被读作列表列）退役→主面板同源面 workspace-top→bg1 梯度（与 .workspace 逐 token 同构）+左缘 1px line-soft 列界（与 .queue border-right 同节奏）——工作区=主面板延续，双主题自动随 token，不自创色 */
+    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 1200px; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden; } /* 结构=WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，W-UIB0 clamp[340,1200]——JS/CSS 双面同步，max-width 必须跟 JS 上限同值否则内联 width 突不破类规则=审查 P0 教训）；底色 W-FZONE-R5 融合（1115 用户「底色也不对」）：--surface1（=左列列表档，fzone 被读作列表列）退役→主面板同源面 workspace-top→bg1 梯度（与 .workspace 逐 token 同构）+左缘 1px line-soft 列界（与 .queue border-right 同节奏）——工作区=主面板延续，双主题自动随 token，不自创色 */
     .fzone[hidden] { display: none; }
     .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
 
@@ -1198,10 +1198,11 @@
     .kv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 6px; border-radius: 6px; }
     .kv-row:hover { background: var(--hover); }
     .kv-row span { order: 1; flex: 0 0 auto; color: var(--dim); font-size: var(--fs-B); }
-    .kv-row b { order: 2; min-width: 0; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
+    .kv-row b { order: 2; min-width: 0; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; } /* 审查 P2 纠偏：右对齐+LTR 下超宽值溢出发生在行首（硬切、ellipsis 不渲染）——尾部恒可见，对路径/引擎名等「尾重要」值反而是正解（有意为之非缺陷；左截断指示器留批二 token 批再议） */
     .kv-row-copy { position: relative; padding-right: 34px; }
     .kv-row-copy b { max-width: 46%; } /* W-UIB1：翻面后值右贴，让位绝对定位的复制钮 */
     .kv-row.kv-flow { display: block; } /* W-UIB1：经验注入行=内容行非键值行，免翻面免截断（b 流式 span 随行） */
+    .kv-row.kv-flow b { white-space: normal; overflow-wrap: anywhere; } /* 审查 P1 修：.kv-row b 的 nowrap 对 block 化后的 inline b 仍在效——长经验文本成不可折行长线撑出 .tabpage-scroll 横滚（overflow/ellipsis 对 inline 失效唯 nowrap 活=半截护体反成祸） */
     .kv-copy-btn {position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .kv-copy-btn:hover { background: var(--hover); color: var(--text); border-color: var(--brand); }
     .more-section { margin-top: 18px; }
@@ -1948,10 +1949,7 @@
     #d-team .watchdog-signal { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font: var(--fs-C) var(--mono); }
     #d-team .watchdog-signal.bad { color: var(--error); }
     /* 1014 词表统一：watchdog 双信号 good=绿/warn=橙/bad=红/off=灰（--st-*） */
-    #d-team .watchdog-signal.good { --signal-color: var(--st-idle); }
-    #d-team .watchdog-signal.warn { --signal-color: var(--st-blocked); }
-    #d-team .watchdog-signal.bad { --signal-color: var(--st-error); }
-    #d-team .watchdog-signal.off { --signal-color: var(--st-closed); }
+
     #d-team .workspace-pane .team-activity { width: 100%; max-width: none; padding: 0 4px 12px; }
     #d-team .activity-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700; }
     #d-team .activity-head span { color: var(--faint); font-size: var(--fs-C); font-weight: 400; }
