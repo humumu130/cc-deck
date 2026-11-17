@@ -38,7 +38,7 @@ ok(g1.has && g1.hidden === false, "①a 账号卡存在且可见（升顶）");
 ok(g1.top === "account", "①b 账号卡=连接页首卡（发现层插顶叙事）");
 ok(g1.loginBtn && g1.regBtn, "①c 登录+注册双口在场");
 ok(g1.text.includes("同一账号的电脑自动互联") && g1.text.includes("不用配对码"), "①d 未登录主行文案（" + g1.text.replace(/\s+/g, " ").slice(0, 60) + "…）");
-ok(g1.acctRows === 0 && g1.empty.includes("还没有其他电脑"), "①e 未登录 acct 行零渲染 + 空态单路径（如旧）");
+ok(g1.acctRows === 0 && g1.empty.includes("还没有添加源"), "①e 未登录 acct 行零渲染 + 空态单路径（如旧）");
 
 // ② 登录/注册弹窗（开合+字段+前置校验——不点真提交，出网已断）
 await ev(`document.querySelector("[data-acct-login]").click()`);
@@ -69,7 +69,7 @@ await wait(700);
 const g3 = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector('[data-settings-panel="connections"]'); const a = p?.querySelector('[data-conn-section="account"]'); const rows = [...(p?.querySelectorAll(".acct-relay-row") || [])]; return { text: a?.textContent || "", logout: !!a?.querySelector("[data-acct-logout]"), n: rows.length, first: rows[0]?.textContent || "", firstBtn: rows[0]?.querySelector("[data-acct-relay-connect]")?.getAttribute("data-acct-relay-connect") || "", firstInCard: !!(rows[0] && p.querySelector('[data-settings-live="remote-sources"]')?.contains(rows[0])), second: rows[1]?.textContent || "", secondBtn: !!rows[1]?.querySelector("[data-acct-relay-connect]"), secondGrey: rows[1]?.querySelector(".tag")?.textContent || "" }; })())`));
 ok(g3.text.includes("nightowl") && g3.text.includes("另有 1 台同账号设备在线") && g3.logout, "③a 已登录态（用户名+另有 1 台在线=计数过滤离线行（一致性 P2-4）+退出登录）");
 ok(g3.n === 2, "③b acct 行 2 条（SNAPSHOT acct_relays 驱动）");
-ok(g3.firstInCard && g3.first.includes("HomeWin") && g3.firstBtn === "rl-aaa111", "③c 在线行渲染进「其他电脑」卡+点连钮锚 dev");
+ok(g3.firstInCard && g3.first.includes("HomeWin") && g3.firstBtn === "rl-aaa111", "③c 在线行渲染进「源列表」卡（W-COPYAUDIT 改名）+点连钮锚 dev");
 ok(g3.second.includes("OfficeMac") && !g3.secondBtn && g3.secondGrey.includes("离线"), "③d 离线行置灰无钮（tag=" + g3.secondGrey + "）");
 
 // ④ 空态双态（登录+acct_relays 空→引导文案）

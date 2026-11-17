@@ -734,7 +734,7 @@
                           }).join("");
                           const fails = Number(r.fails) || 0;
                           const stages = (r.stages || []);
-                          return '<div class="inspector-block"><div class="inspector-title"><span>收割检查 · ' + escape(String(r.dispatch_id || h.id || "").slice(0, 8)) + '</span><span class="tag ' + (fails ? "action" : "done") + '">' + (fails ? "机器闸 " + fails + " 项待处置" : "机器闸全绿") + '</span><span class="tag" role="button" tabindex="0" data-harvest-close title="收起">收起</span></div>'
+                          return '<div class="inspector-block"><div class="inspector-title"><span>收割检查 · 单号 ' + escape(String(r.dispatch_id || h.id || "").slice(-4)) + '</span><span class="tag ' + (fails ? "action" : "done") + '">' + (fails ? "机器闸 " + fails + " 项待处置" : "机器闸全绿") + '</span><span class="tag" role="button" tabindex="0" data-harvest-close title="收起">收起</span></div>'
                             + '<div class="inspector-copy"><b>机器闸 · ' + (r.checks || []).length + ' 项</b></div>' + rows
                             + (stages.length ? '<div class="inspector-copy"><b>阶段推进</b>：' + stages.map((st) => escape(st.stage + (st.detail ? "（" + st.detail + "）" : ""))).join(" → ") + "</div>" : "")
                             + '<div class="inspector-copy"><b>需你判断（不自动化）</b>：diff 抽查 ／ 自测证据 ／ 真机分级 ／ 是否收口合并</div>'
