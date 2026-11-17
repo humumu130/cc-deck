@@ -38,7 +38,7 @@
 
   // ---------- 宽度/收起（记忆：localStorage 持久——任务书「收起/展开记忆」） ----------
   // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）；W-UIB0 上限 1200
-  // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
+  // （Math.min(Math.max(w,340),1200) 同构——W-UIB0 放档）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
   // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
   // W-FZONE-R4 P1-2 修（审 B）：浮层退役后 72vw 护栏在 <1111px 区间护不住（0.72*1111≈800>可用）——
   // 真实列时代并入可用空间上限 availMax（视口 − queue 右缘(含 rail 实算) − sash − 会话列保底储备）：
@@ -178,7 +178,7 @@
     if (on && !wasOpen && shellWin()) { // R5 真第四列：壳内呼出=窗口外扩（R6：外扩优先+chat 压缩补足——见 shellOpenGrow 头注）。!wasOpen 门=已开时重复 setOpen(true)（open() 点文件聚焦路径）不二次外扩
       const w0 = readWShell();
       const chat0 = chatColW(); // 反方审 P0：chat0 必须在 fzone 仍 hidden 的同步段量（winOp 异步执行时面板已 hidden=false+预置宽占位——自量=账锚失真：富余让位永不生效+wtMax 双扣把面板压成 340 细条）
-      root.style.width = Math.max(340, Math.min(1200, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)), Math.round(window.innerWidth) - 4 - CHAT_FIT)) + "px"; // R6：同步先落「chat 空白富余已让」的目标宽（winOp 内互钳后可能再收窄——一拍微调可接受，方向一致不闪跳；W-UIB0 上限 1200）。审查 P3 修（预压钳）：CSS 上限放档后本拍瞬时目标宽不再被 800 意外兜住——加当前视口几何钳（chat≥CHAT_FIT；winOp 落地后终钳，防数十 ms 破底闪拍；Math.max 340 外兜=极窄视口不塌细条）
+      root.style.width = Math.max(340, Math.min(1200, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)), availMax())) + "px"; // R6：同步先落「chat 空白富余已让」的目标宽（winOp 内互钳后可能再收窄——一拍微调可接受，方向一致不闪跳；W-UIB0 上限 1200）。审查 P3 修（预压钳）：CSS 上限放档后本拍瞬时目标宽不再被 800 意外兜住——加 availMax() 视口几何钳（复审 P3 收口：自带 qRight 队列右缘扣减+340 地板，比裸 innerWidth-4-CHAT_FIT 更严——1200 宽窗也不会一拍压破 chat 下限；winOp 落地后终钳）
       shellOpenGrow(w0, chat0).then((grew) => { if (!grew) applyW(readW()); }); // P1-b：不可外扩回落挤压护栏接线（最大化/全屏/通道断——availMax/CHAT_FIT 护栏口径，头注合同兑现）
     } else if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口（R5/R6：无壳回落同口）
     else if (!on && wasOpen && shellWin()) shellShrink(openFromW != null ? Math.max(0, Math.round(window.innerWidth) - openFromW) : 0); // R6③：收合缩量=现宽−开前快照（手动改窄→0=保持用户态；无账→0 最保守不动窗——反方审 P1-a：旧「4+面板宽」回落在 R6 下面板宽≫窗增量必超缩）
@@ -478,7 +478,7 @@
       rz.classList.add("dragging");
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
-      const move = (e2) => { applyW(startW + (startX - e2.clientX)); }; // R6：纯占比（clampW 护栏=chat≥CHAT_FIT+档位 [340,800]；窗口不动）
+      const move = (e2) => { applyW(startW + (startX - e2.clientX)); }; // R6：纯占比（clampW 护栏=chat≥CHAT_FIT+档位 [340,1200]；窗口不动）
       const up = () => {
         rz.removeEventListener("pointermove", move); rz.removeEventListener("pointerup", up); rz.removeEventListener("pointercancel", up);
         document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
