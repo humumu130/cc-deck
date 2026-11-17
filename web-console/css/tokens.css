@@ -172,7 +172,7 @@
     html[data-theme="light"] {
       color-scheme: light;
       --bg0: #EDEDED; /* #201⑤：三列梯度中列（列表 #EDEDED） */
-      --bg1: #F7F7F5; /* #201⑤：主面板提白档（微信第三列最白） */
+      --bg1: #FAFAFA; /* 1117 用户令：第三列（消息面板）#F7F7F5→#FAFAFA——去微暖偏色、纯中性提白（WorkBuddy 对标舒适度）；微信第三列最白档语义不变 */
       --surface1: #EDEDED;
       --surface2: #FFFFFF;
       --hover: #E4E4E4;
@@ -211,7 +211,7 @@
       --chrome: #DEDEDE; /* #201⑤：三列梯度——rail/chrome 最深档（微信第一列） */
       --rail: #DEDEDE;
       --queue-deep: #EDEDED; /* 列表中灰档（微信第二列） */
-      --workspace-top: #F7F7F5;
+      --workspace-top: #FAFAFA; /* 1117 用户令：随 bg1 同改（面板梯度上下同值=平色，两 token 必须同步） */
       --footer: #EDEDED;
       --inspector-top: #F0F0F0;
       --phone-frame: #172636;
