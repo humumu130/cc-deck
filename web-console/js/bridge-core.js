@@ -215,6 +215,22 @@
                   if (dd) { bridge.designDocs = dd; bridge.designDocsSeen = true; }
                   bridge.relayName = typeof p.relay_name === "string" && p.relay_name ? p.relay_name : (location.host || "relay");
                   bridge.homedir = typeof p.homedir === "string" ? p.homedir : "";
+                  // W-ACCTMULTI P0（1117 用户三台实锤「连了公司的再连家里的，公司的行就没了」）：
+                  // acct_relays 的真相源=**本机视角表**（本机 relay 的同账号全集，去自见=去本机）。
+                  // 云口 SNAPSHOT 的同名键是「当前视角主体的去自见差集」（切到公司 Win 视角=公司
+                  // 表不含公司自己→行消失；cloud-client.ts:637 同键异义），对源列表是视角污染——
+                  // 丢弃不学习；LAN SNAPSHOT 携本机权威表=唯一更新口（union 合并，下线标灰不删——
+                  // 账号域无「删除设备」操作，表行消失=对端下线=灰显常驻语义）。缓存挂
+                  // bridge.acctRelaysCache 跨快照携带（ACCT_RELAYS 增量帧同规则合并，见下段）。
+                  if (Array.isArray(p.acct_relays) && p.acct_relays.length && evSource !== "cloud") {
+                    const fresh = p.acct_relays.filter((r) => r && typeof r.dev === "string");
+                    const prev = Array.isArray(bridge.acctRelaysCache) ? bridge.acctRelaysCache : [];
+                    const freshDevs = new Set(fresh.map((r) => r.dev));
+                    bridge.acctRelaysCache = fresh.map((r) => ({ dev: r.dev, name: typeof r.name === "string" ? r.name : "", rk: typeof r.rk === "string" ? r.rk : "", online: r.online !== false }))
+                      .concat(prev.filter((r) => !freshDevs.has(r.dev)).map((r) => ({ ...r, online: false })));
+                    p.acct_relays = bridge.acctRelaysCache; // 快照与缓存同源（union 后的下线保留项落进 snapshot——原始 payload 会把下线机挤掉）
+                  }
+                  if (evSource === "cloud" && Array.isArray(bridge.acctRelaysCache)) p.acct_relays = bridge.acctRelaysCache;
                   bridge.snapshot = p;
                   bridge.hasSnapshot = true;
                   // bootfast2（移交§三）：boot 相位记账——listen 先起后数据渐进加载，
@@ -332,7 +348,13 @@
                     // =「其他电脑」行冷启可见/刷新即没/对端上线永不出现（brief 明令根除项）。
                     // 订阅者 fan-out（changed）触发设置域 live 重渲
                     const relays = frame.payload && Array.isArray(frame.payload.relays) ? frame.payload.relays.filter((r) => r && typeof r.dev === "string") : [];
-                    if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.acct_relays = relays.map((r) => ({ dev: r.dev, name: typeof r.name === "string" ? r.name : "", rk: typeof r.rk === "string" ? r.rk : "", online: true }));
+                    // W-ACCTMULTI P0：union 合并（帧表=权威在线集；缓存旧项不在帧表=对端下线→
+                    // online:false 保留行不删——「行不该消失」验收；恢复在线=下帧回 true）。
+                    const prev = Array.isArray(bridge.acctRelaysCache) ? bridge.acctRelaysCache : [];
+                    const freshDevs = new Set(relays.map((r) => r.dev));
+                    bridge.acctRelaysCache = relays.map((r) => ({ dev: r.dev, name: typeof r.name === "string" ? r.name : "", rk: typeof r.rk === "string" ? r.rk : "", online: r.online !== false }))
+                      .concat(prev.filter((r) => !freshDevs.has(r.dev)).map((r) => ({ ...r, online: false })));
+                    if (bridge.snapshot && typeof bridge.snapshot === "object") bridge.snapshot.acct_relays = bridge.acctRelaysCache;
                     changed = true;
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;

@@ -72,6 +72,15 @@ ok(g3.n === 2, "③b acct 行 2 条（SNAPSHOT acct_relays 驱动）");
 ok(g3.firstInCard && g3.first.includes("HomeWin") && g3.firstBtn === "rl-aaa111", "③c 在线行渲染进「源列表」卡（W-COPYAUDIT 改名）+点连钮锚 dev");
 ok(g3.second.includes("OfficeMac") && !g3.secondBtn && g3.secondGrey.includes("离线"), "③d 离线行置灰无钮（tag=" + g3.secondGrey + "）");
 
+// ③e W-ACCTMULTI P0：云视角帧后 acct 行常驻（互踩根除——云 SNAPSHOT 同名键被本机缓存覆写）
+const snapCloud = { type: "SNAPSHOT", payload: Object.assign({}, snap.payload, { relay_name: "OfficeWin", acct_relays: [ { dev: "rl-ccc333", name: "MacBook", rk: "rkM", online: true }, { dev: "rl-aaa111", name: "HomeWin", rk: "rkA", online: true } ] }) };
+await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "cloud", frame: ${JSON.stringify(snapCloud)} })`);
+await wait(700);
+const g3e = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector('[data-settings-panel="connections"]'); const rows = [...(p?.querySelectorAll(".acct-relay-row") || [])]; return { n: rows.length, names: rows.map(r => (r.querySelector("strong")||{}).textContent || "") }; })())`));
+ok(g3e.n === 2 && g3e.names.includes("OfficeMac"), `③e 云视角帧后 OfficeMac 行常驻（names=${JSON.stringify(g3e.names)}——云差集键不学习，本机缓存覆写）`);
+await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "lan", frame: ${JSON.stringify(snap2)} })`);
+await wait(600);
+
 // ④ 空态双态（登录+acct_relays 空→引导文案）
 const snap3 = { type: "SNAPSHOT", payload: Object.assign({}, snap.payload, { acct_relays: [] }) };
 await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "lan", frame: ${JSON.stringify(snap3)} })`);
