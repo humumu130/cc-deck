@@ -306,6 +306,20 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(css.includes("right: 34px") && nav.includes("MAX_LINES"), "NAV9 期二避让（right 10→34px 让开 inspector-expand 抽屉钮带——CDP 归零数字在探针）");
   }
 
+  // ============ DENSN. 批三（1117 用户令「一次到底」）：通知面板密度+色彩收编+证据折叠 ============
+  {
+    const notify = readFileSync(join(root, "web-console", "js", "notify.js"), "utf-8");
+    ok(!html.includes("data-notify-panel-sub") && !css.includes(".np-head .nsub {") && !css.includes(".np-head .nsub.notify-badge-pop") && !notify.includes("data-notify-panel-sub"), "DENSN1 统计墙四项退役（nsub DOM+headSub 消费+CSS 规则三面零残留——数字单源=组头 cnt+rail 徽章）");
+    ok(!notify.includes("groupsBrief") && notify.includes("function syncCounts(count) {"), "DENSN1b 拼串链退役（groupsBrief 生成+earliestTs/brief 形参零残留，syncCounts 单参化）");
+    ok(notify.includes("let awaituBudget = null;") && notify.includes('"等你拍板 ×" + pn') && notify.includes("awaituTxt = awaituBudget; awaituBudget = null;"), "DENSN2 awaitu ≤1 枚（首枚预算机制：可见 pending 真数 N>1 折「等你拍板 ×N」单行摘要随首行，其余行 chip 不出）");
+    ok(css.includes(".awaitu-chip { color: var(--working); background: color-mix(in srgb, var(--working) 18%, transparent)") && !css.includes("#FBBF24") && !css.includes("#B45309"), "DENSN3 第四黄归语义 token（awaitu 全系 var(--working) 与 ndot.y 同族不二值+双主题随 tokens.css 自动+琥珀硬编码双值零残留）");
+    ok(css.includes("font-weight: 500; color: var(--text-strong); /* DENSN 批三⑥") && !css.includes("font-weight: 500; color: var(--brand);"), "DENSN4 面板强调色族 ≤2（act 链色 brand→中性 text-strong——红组点+琥珀 working 两族，主行动强调由 600 字重档承载）");
+    ok(css.includes("opacity: .55; } /* DENSN 批三③") && css.includes("opacity: 1; text-decoration: underline"), "DENSN5 「稍后/恢复」半隐让位（恒态 0.55 半隐+hover/focus 全显——不隐藏保触屏/可发现性）");
+    const team = readFileSync(join(root, "web-console", "js", "team-domain.js"), "utf-8");
+    ok(team.includes('data-verify-toggle="1"') && team.includes('class="tv-label"') && team.includes('tv.classList.toggle("tv-open")') && team.includes("title=\"' + escape(selfCheckLabel) + '\""), "DENSN6 自验点墙折叠（button 摘要行「自验 P/T · 全过/N 未过」默认+点开展 dots+title 全量细节保真无断链）");
+    ok(css.includes("#d-team .task-verify.tv-open .tv-dots { display: inline-flex; }"), "DENSN6b 折叠开合样式（tv-open 展 dots 隐 label）");
+  }
+
   // ============ TAB. W-TABPAGE（1112 用户拍板 A·cc-deck 自设计）：任务/输出物/更多三 tab 独立整页 ============
   {
     ok(web.includes('p.classList.add("tabpage-pane")') && web.includes('scroll.className = "tabpage-scroll"') && web.includes("p.replaceChildren(scroll)") && web.includes("tabpageBody(1)") && web.includes("tabpageBody(2)") && web.includes("tabpageBody(3)") && web.includes('function tabpageBody(i)'), "TAB1 三 pane 迁出 #session-body（ready 收编段：tabpage 类+滚动体常驻子；三渲染器写点走 tabpageBody 单口=.tabpage-scroll——#165 页头退役后 pane 直挂滚动体）");
