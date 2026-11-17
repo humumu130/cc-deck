@@ -168,7 +168,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   const detail = readFileSync(join(root, "expo-app", "src", "screens", "DetailScreen.tsx"), "utf-8");
   const css = readFileSync(join(root, "web-console", "css", "base.css"), "utf-8");
   const fz = readFileSync(join(root, "web-console", "js", "fzone.js"), "utf-8"); // W-FZONE-B1
-  const fzCss = readFileSync(join(root, "web-console", "css", "base.css"), "utf-8"); // W-UIB1 审查 P0 教训：CSS max-width 独立于 JS clamp——内联 width 突不破类规则，探针只锚 JS 面=放档假绿（800 截死三套探针全漏）
+  const fzCss = css; // W-UIB1 审查 P0 教训：CSS max-width 独立于 JS clamp——内联 width 突不破类规则，探针只锚 JS 面=放档假绿（800 截死三套探针全漏）；复审 P3：复用既有 css 读口免重复 IO
   const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8"); // W-FZONE-B1
 
   // relay

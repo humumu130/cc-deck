@@ -202,7 +202,7 @@ const s12 = JSON.parse(await ev(`JSON.stringify(${fzState})`));
 const hasRetry = await ev(`!!document.querySelector('#fzone [data-fz-retry]')`);
 const hasRz = await ev(`!!document.querySelector('#d-session .fz-sash[data-fz-resize]')`);
 ok(s12.tabs.length === 1 && hasRetry && (s12.fb || "").includes("拉取失败"), `失败态=tab 内错误卡+重试钮（「${(s12.fb || "").slice(0, 30)}」）`);
-ok(hasRz, "拖宽柄在场（R3：窗口级 4px sash，440 起可拖 clamp[340,800]——WorkBuddy 同构）");
+ok(hasRz, "拖宽柄在场（R3：窗口级 4px sash，440 起可拖 clamp[340,1200]——WorkBuddy 同构）");
 
 // ⑪c W-FZONE-R4 几何断言（宽窗 1440，面板开 1 tab）：工作区=app 内容区级右列——
 // fz.top==queue.top（顶=内容区顶）/head 只在会话列（不横跨工作区）/输入框完整不被盖
