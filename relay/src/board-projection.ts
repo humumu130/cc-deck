@@ -271,6 +271,12 @@ export function projectBoard(gid: string): BoardProjection {
     let lane: ProjectedLane = boardLane(entry.status);
     let lastEvent = `board:${entry.status}`;
     let lastTs = entry.updated_at ?? entry.ts ?? now;
+    // W-BOARDTRUTH7（1117 用户实锤第七现·终态吸收）：done 是吸收态——收割落账后迟到的
+    // 「交付申报族」行（worker-done/relay done/in_review/submitted/纯六态 done：dispatch:done
+    // 语义=worker 交付申报，非收割）不得把卡从 done 打回 submitted。第七现实锤：12 张已收割
+    // 老卡因 dispatch:done 行 ts 晚于收割 transition 永驻「审查中」。复活门=新一轮开工信号
+    //（queued/dispatched/failed→backlog、worker-start/running→claimed 族）：只有真开工才翻案。
+    let doneSinceTs: number | null = lane === "done" ? lastTs : null;
     for (const row of lifecycle) {
       // tie-break（同毫秒）：dispatch/transition/override 行恒可应用（后写赢，事件是
       // 细粒度真相）；base 兜底行只在严格更晚时参与（防同 ms 基线覆盖事件判定——
@@ -295,9 +301,15 @@ export function projectBoard(gid: string): BoardProjection {
         label = `board:${row.status}`;
       }
       if (candidate) {
+        // 吸收门：已 done 且本行是迟到的交付申报族（submitted/ready_to_install）→ 不翻案
+        if (doneSinceTs !== null && row.ts > doneSinceTs && (candidate === "submitted" || candidate === "ready_to_install")) {
+          continue;
+        }
         const changed = candidate !== lane;
         lane = candidate;
         lastTs = row.ts;
+        if (lane === "done") doneSinceTs = row.ts;
+        else if (candidate === "backlog" || candidate === "claimed" || candidate === "planned") doneSinceTs = null; // 新一轮开工=复活，吸收解除
         // last_event 语义=「当前态怎么来的」：事件词恒记（最细粒度）；无事件行只在
         // 泳道变化时记（防机械行洗掉更有信息量的事件词）；base 兜底行不洗事件词。
         // W-P2TAIL2：终态行（failed/done）恒记——queued→failed 同映 backlog（排队→打回）
