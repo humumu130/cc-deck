@@ -38,10 +38,10 @@ const zhLen = (s: string) => [...s].reduce((n, ch) => n + (/[\u2E80-\u9FFF\uF900
   };
   // loopback 可浏览（Tauri+loopback 双真）→ 本机文案与浏览钮真值联动
   const hintLoop = run({ __TAURI__: { dialog: {} }, __ccDeck005LocalRelayLoopback: () => true, __ccDeck005PlatformFor: () => "darwin" })("local");
-  ok(hintLoop === "路径在本机 relay 上，可点浏览直接选择", `B1 loopback 可浏览→联动文案（得「${hintLoop}」）`);
+  ok(hintLoop === "本机路径，可点浏览选择", `B1 loopback 可浏览→联动文案（W-DENSD 批三⑤砍短后改钉——得「${hintLoop}」）`); // 改钉忠实：原五段长文案退役，联动语义（可浏览→本机短句）不变
   // 非 loopback 本机（浏览器宿主）→ 宿主机文案（不再自相矛盾）
   const hintNo = run({ __ccDeck005PlatformFor: () => "darwin" })("local");
-  ok(hintNo.includes("relay 宿主机") && hintNo.includes("/Users/"), `B1 非浏览态→宿主机文案（得「${hintNo}」）`);
+  ok(hintNo.includes("relay 宿主机"), `B1 非浏览态→宿主机文案（W-DENSD 批三⑤改钉：平台示例句删——得「${hintNo}」）`);
   // 远程源恒不联动（浏览钮隐藏态文案不含「浏览」）
   const hintCloud = run({ __TAURI__: { dialog: {} }, __ccDeck005LocalRelayLoopback: () => true, __ccDeck005PlatformFor: () => "win32" })("cloud");
   ok(hintCloud.includes("那台电脑") && !hintCloud.includes("浏览"), `B1 远程源不误标可浏览（得「${hintCloud}」）`);
