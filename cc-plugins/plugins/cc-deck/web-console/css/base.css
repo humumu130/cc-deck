@@ -1958,7 +1958,7 @@
        仅真失联 bad 亮红字（红=错误） */
     #d-team .watchdog-signal { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font: var(--fs-C) var(--mono); }
     #d-team .watchdog-signal.bad { color: var(--error); }
-    html:not([data-theme="light"]) #d-team .watchdog-signal.bad { color: #D96A6E; } /* UIB2 收编：暗 #C84C51 对卡面 4.23 欠 AA 线→#D96A6E ≈5.2 过线（红=错误语义合规） */
+    html:not([data-theme="light"]) #d-team .watchdog-signal.bad { color: #D96A6E; } /* UIB2 收编（复审 P3 纠偏：--error 暗实值 #E5484D，4.23 系对 surface2 基线）：#D96A6E 对 surface2 ≈4.92 过 AA（红=错误语义合规） */
 
     #d-team .workspace-pane .team-activity { width: 100%; max-width: none; padding: 0 4px 12px; }
     #d-team .activity-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700; }
@@ -3527,6 +3527,7 @@
        ⑥C2 act 链光主题 --brand-strong（#96391A≈6.1:1——badge 族有 override 唯独 act 漏）；
        ⑥C5 11px 次级层（时间戳/摘要）光主题统一 70% text-strong（≈#686868 达 4.5:1）。
        暗主题零变化：本块全部 light-only override（材质恒等由探针 material.json 对照）。 */
+    html:not([data-theme="light"]) .notifpanel { border-color: color-mix(in srgb, var(--text) 12%, transparent); } /* UIB2 复审 P2-2：暗 --line 对新底 #1B2A3D 1.00:1 隐形（旧底 1.19）——照 NAVR8 navbar 卡同配方 */
     html[data-theme="light"] .notifpanel {
       background: var(--surface-popover); /* UIB2 收编：#FAFAF8→token（浅 #FFFFFF——原对页底 1.00:1 病同暗档） */
       box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.12), inset 0 1px 0 rgba(255, 255, 255, .9);
