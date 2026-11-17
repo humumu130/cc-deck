@@ -18764,6 +18764,7 @@ function projectBoard(gid) {
     let lane = boardLane(entry.status);
     let lastEvent = `board:${entry.status}`;
     let lastTs2 = entry.updated_at ?? entry.ts ?? now;
+    let doneSinceTs = lane === "done" ? lastTs2 : null;
     for (const row of lifecycle) {
       const isBase = row.kind === "base";
       const applicable = isBase ? row.ts > lastTs2 : row.ts >= lastTs2;
@@ -18784,9 +18785,14 @@ function projectBoard(gid) {
         label = `board:${row.status}`;
       }
       if (candidate) {
+        if (doneSinceTs !== null && row.ts > doneSinceTs && (candidate === "submitted" || candidate === "ready_to_install")) {
+          continue;
+        }
         const changed = candidate !== lane;
         lane = candidate;
         lastTs2 = row.ts;
+        if (lane === "done") doneSinceTs = row.ts;
+        else if (candidate === "backlog" || candidate === "claimed" || candidate === "planned") doneSinceTs = null;
         if (row.event) lastEvent = label;
         else if (changed && !isBase) lastEvent = label;
         else if (!isBase && (row.status === "failed" || row.status === "done")) lastEvent = label;

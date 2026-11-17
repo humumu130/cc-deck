@@ -55,7 +55,7 @@
     const qRight = q ? Math.round(q.getBoundingClientRect().right) : 297; // 缺省 62(rail)+235(queue)
     return Math.max(340, Math.floor(window.innerWidth - qRight - 4 - CHAT_FIT));
   }
-  function clampW(w) { return Math.max(340, Math.min(800, availMax(), Math.round(window.innerWidth * 0.72), w)); }
+  function clampW(w) { return Math.max(340, Math.min(1200, availMax(), Math.round(window.innerWidth * 0.85), w)); } // W-UIB0（1117 用户三令）：上限 800→1200+0.72vw→0.85vw——「工作区已调最大还不让调」解除
   function applyW(w) { root.style.width = clampW(w) + "px"; }
   function readW() {
     const v = Number(localStorage.getItem(W_KEY));
@@ -88,7 +88,7 @@
   let winOpQ = Promise.resolve();
   let winOpUntil = 0; // R6③：winOp 窗口操作的时间窗（链头开 4s + 链尾续 700ms 迟到事件豁免）——期间到达的 resize 不清开区账（grow/shrink 的 setSize 必触发 resize；布尔标志会漏迟到事件——finally 复位后事件才到=误清）
   const winOp = (fn) => { winOpQ = winOpQ.then(() => { winOpUntil = Date.now() + 4000; }).then(fn).catch(() => {}).then((v) => { winOpUntil = Math.max(winOpUntil, Date.now() + 700); return v; }); return winOpQ; }; // R6-R2 P1（常规审查 fake-shell 实测）：链尾必须 return v——无 return 则 resolve 值恒 undefined，调用方 .then((grew)=>!grew&&applyW) 会在**成功**开区后照跑=面板被弹回记忆宽（755→440 实录）；catch→undefined 语义保留（真失败仍回落）
-  function clampShellW(w) { return Math.max(340, Math.min(800, Math.round(w))); } // 壳模式宽钳：只受面板档位界 [340,800]（屏缘由外扩梯子消化，不受视口内 avail 钳——外扩后 avail 恒富余）
+  function clampShellW(w) { return Math.max(340, Math.min(1200, Math.round(w))); } // 壳模式宽钳：只受面板档位界 [340,1200]（W-UIB0 上限放档；屏缘由外扩梯子消化，不受视口内 avail 钳——外扩后 avail 恒富余）
   function readWShell() { const v = Number(localStorage.getItem(W_KEY)); return Number.isFinite(v) && v >= 340 ? clampShellW(v) : 440; } // 壳模式记忆读口（缺省 440 同 readW 口径）
   let lastGrowShift = null; // R5-R1 P2-5：grow 左移量记账（{fromX, y, shift}）——shrink 后回移窗位（开移 N 收回 N 净零，贴右缘钉死态收敛：不再每开重溢 144-244px）；回移前读现位幂等守卫（用户已手动挪窗则不回移）
   // ---------- W-FZONE-R6（1116 用户两条）：开区混合外扩（chat 可让位）+sash 纯占比拖动 ----------
@@ -109,7 +109,7 @@
   //   expectedW echo 对账（resize 比对 |现宽−最近 setSize 目标|>2 才清——时间窗盲区内的真改窗
   //   也能被 echo 抓到，纯时间窗 4s 内改窗漏网为 P2 备案）。grow 不可外扩（最大化/通道断）→
   //   无账（收合缩 0 不动窗）+调用方 applyW 回落挤压护栏（P1-b 合同接线）。
-  const CHAT_COMFORT = 900; // chat 舒适宽=centercol 阅读列基准（超此部分=纯空白可让）；CHAT_FIT=442 仍是硬下限（互钳口径）
+  const CHAT_COMFORT = 640; // W-UIB0（1117 用户实锤「消息面板太宽而工作区太窄」）：开区压缩目标 900→640——阅读列舒适带下沿（消息列 max(900) 居中显示不动，仅开工作区时让出两侧空白）；CHAT_FIT=442 仍是硬下限（互钳口径）
   let chatBase = null; // 开区时刻 chat 列宽（收合还原基准）；null=无账
   let openFromW = null; // 开区**前**窗宽快照（logical；收合缩量锚=max(0,现宽−此值)）；null=无账
   let expectedW = null; // 最近一次 winOp setSize 目标宽（logical；resize echo 对账锚——偏差>2=用户真改窗）
@@ -126,7 +126,7 @@
         const mon = await monOf(t); // R5-R1 P0：模块级（实例法在真壳必抛=外扩哑火主根）
         const winL = Math.round(iw.width / scale);
         const other = winL - chat0; // 开前窗内其他列+chrome 合计（chat0=hidden 期入参——fzone 关着无 sash，开区后恒等式 chat=winT-other-4-wt）
-        let wt = Math.max(340, Math.min(800, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)))); // ①chat 空白富余让给工作区
+        let wt = Math.max(340, Math.min(1200, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)))); // ①chat 空白富余让给工作区（W-UIB0 上限 1200）
         let winT = Math.min(winL + 4 + wt, Math.max(winL, mon ? Math.floor(mon.size.width / scale) : winL)); // 屏满钳（mon 缺失=零外扩纯压缩，不溢出屏）
         const wtMax = Math.round(winT - other - 4 - CHAT_FIT); // chat 硬下限互钳
         if (wt > wtMax) { wt = Math.max(340, wtMax); winT = Math.min(winL + 4 + wt, winT); } // 砍 wt 后 winT 只减不增（外扩需求同步少）
@@ -178,7 +178,7 @@
     if (on && !wasOpen && shellWin()) { // R5 真第四列：壳内呼出=窗口外扩（R6：外扩优先+chat 压缩补足——见 shellOpenGrow 头注）。!wasOpen 门=已开时重复 setOpen(true)（open() 点文件聚焦路径）不二次外扩
       const w0 = readWShell();
       const chat0 = chatColW(); // 反方审 P0：chat0 必须在 fzone 仍 hidden 的同步段量（winOp 异步执行时面板已 hidden=false+预置宽占位——自量=账锚失真：富余让位永不生效+wtMax 双扣把面板压成 340 细条）
-      root.style.width = Math.max(340, Math.min(800, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)))) + "px"; // R6：同步先落「chat 空白富余已让」的目标宽（winOp 内互钳后可能再收窄——一拍微调可接受，方向一致不闪跳）
+      root.style.width = Math.max(340, Math.min(1200, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)))) + "px"; // R6：同步先落「chat 空白富余已让」的目标宽（winOp 内互钳后可能再收窄——一拍微调可接受，方向一致不闪跳；W-UIB0 上限 1200）
       shellOpenGrow(w0, chat0).then((grew) => { if (!grew) applyW(readW()); }); // P1-b：不可外扩回落挤压护栏接线（最大化/全屏/通道断——availMax/CHAT_FIT 护栏口径，头注合同兑现）
     } else if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口（R5/R6：无壳回落同口）
     else if (!on && wasOpen && shellWin()) shellShrink(openFromW != null ? Math.max(0, Math.round(window.innerWidth) - openFromW) : 0); // R6③：收合缩量=现宽−开前快照（手动改窄→0=保持用户态；无账→0 最保守不动窗——反方审 P1-a：旧「4+面板宽」回落在 R6 下面板宽≫窗增量必超缩）
