@@ -33,12 +33,12 @@ await wait(800);
 let pass = 0, fail = 0; const ok = (c, m) => { if (c) { pass++; console.log("  ✓ " + m); } else { fail++; console.log("  ✗ " + m); } };
 // ① 四区骨架（LAN 形态）
 const g = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector('[data-settings-panel="connections"]'); if (!p) return { none: 1 }; return { head: p.querySelector(".v8-sethead .s")?.textContent || "", sources: !!p.querySelector('[data-conn-section="sources"]'), srcHeadAdd: !!p.querySelector('.setcard-head [data-settings-add]'), thisM: !!p.querySelector('[data-conn-section="this-machine"]'), pairBtn: !!p.querySelector('[data-conn-section="this-machine"] [data-settings-pair]'), pairLabel: (p.querySelector('[data-conn-section="this-machine"] [data-settings-pair]') || {}).textContent || "", devicesIn: !!p.querySelector('[data-conn-section="this-machine"] [data-settings-live="devices"]'), diagbar: !!p.querySelector('[data-conn-section="diag"]'), account: !!p.querySelector('[data-conn-section="account"]'), nearby: !!p.querySelector('[data-conn-section="nearby"]'), hiddenAcct: p.querySelector('[data-conn-section="account"]')?.hidden, emptyText: p.querySelector('[data-settings-live="remote-sources"]')?.textContent || "", oldWords: /远程源|本页设备|添加服务器/.test(p.textContent) && !/远程数据源/.test("") }; })())`));
-ok(!g.none && g.sources && g.srcHeadAdd, "①a 源列表卡：setcard-head + 卡头「＋ 添加」钮");
+ok(!g.none && g.sources && g.srcHeadAdd, "①a 源列表卡（W-COPYAUDIT 改名——原「其他电脑」）：setcard-head + 卡头「＋ 添加」钮");
 ok(g.head.includes("连到别的电脑"), "①b 副题改写：" + g.head);
 ok(g.thisM && g.pairBtn && g.pairLabel.includes("出示配对码"), "①c 这台电脑卡 + 「出示配对码」钮（" + g.pairLabel + "）");
 ok(g.devicesIn, "①d 连进来的设备台账归宿（data-settings-live=devices 入卡）");
 ok(g.diagbar && g.account === true && g.nearby === true && g.hiddenAcct === false, "①e 诊断 bar + account 卡升顶可见（非 hidden）+ nearby hidden 锚（W-ACCOUNT 件三翻面）");
-ok(g.emptyText.includes("还没有连接其他电脑") && g.emptyText.includes("出示配对码"), "①f 空态单路径指路");
+ok(g.emptyText.includes("还没有添加源") && g.emptyText.includes("出示配对码"), "①f 空态单路径指路（W-COPYAUDIT 文案锚随改钉）");
 
 // ② 全页旧词扫描（连接面板范围内）
 const olds = await ev(`(() => { const p = document.querySelector('[data-settings-panel="connections"]'); if (!p) return "[]"; const hits = []; if (p.textContent.includes("本页设备")) hits.push("本页设备"); if (p.textContent.includes("添加服务器")) hits.push("添加服务器"); if (p.textContent.includes("客户端 · 连到本机的终端")) hits.push("客户端lane"); if (p.textContent.includes("远程源")) hits.push("远程源"); return JSON.stringify(hits); })()`);

@@ -4703,7 +4703,7 @@
                 async function pickCreateCwd() {
                   if (!(window.__TAURI__ && window.__TAURI__.dialog)) return;
                   if (!(typeof window.__ccDeck005LocalRelayLoopback === "function" && window.__ccDeck005LocalRelayLoopback())) {
-                    b2Toast("当前新建目标是其他电脑的源，请直接输入那台电脑上的路径");
+                    b2Toast("当前新建目标是别的电脑上的源，请直接输入那台电脑上的路径");
                     return;
                   }
                   try {
