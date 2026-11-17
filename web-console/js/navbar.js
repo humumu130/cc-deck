@@ -27,9 +27,9 @@
   let fishY = 0, fishT = 0; // 期二 R1 fisheye：光标 Y+在飞 rAF 帧号（mouseleave 复位见 fishReset）
 
   // fisheye 鼠标跟随放大（W-UIP2 期三强化·1115 test.18 用户 #169「选中那条变长不明显」）：
-  // 刻度 --fz = 1 + 2.2·exp(−d²/2σ²)（σ=40px，峰值 3.2×——期二 1.9× 观感不足）——命中行
-  // tick 12×3.2≈38px ≥36px 要求；σ 46→40 邻域衰减更聚焦（命中突出=选中感）；亮度随 --fz
-  // 插值在 CSS tick 行（color-mix calc）。rAF 合帧不变。
+  // 刻度 --fz = 1 + 1.2·exp(−d²/2σ²)（σ=40px，NAVR8 峰值 2.2×——用户 1117 拍板：去果冻尾
+  // 保呼吸感；峰值亮度恒 64% 由 CSS 斜率分母 /1.2 配合）；亮度随 --fz 插值在 CSS tick 行
+  // （color-mix calc）。rAF 合帧不变。
   function fishApply() {
     fishT = 0;
     if (!panelEl) return;
@@ -254,7 +254,7 @@
         if (el) { root._roMemo.set(el, { w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) }); root._ro.observe(el); }
       }
     }
-    renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）——NAVR8：mount-then-toggle 下 build 重建只发生在数据变化（MO/resize），开合不再经此路
+    if (!swapT) renderRows(open ? items : shown); // NAVR4-②：展开态保持全量（rebuild 不打断浏览）——NAVR8：mount-then-toggle 下 build 重建只发生在数据变化（MO/resize），开合不再经此路。审查 P2 修（视觉路 build-during-collapse 竞态）：收起过渡中 swapT 在飞=跳过本轮回建直渲染——迟到换血回调读模块级 shown 自然拿新数据，「反向过渡播完再换血」契约不被流式 mutation 绕过
     updateFade();
     const rowsN = Math.min((open ? items : shown).length, Math.ceil(MAX_H / 16)); // NAVR5：22→16 密度档（用户 #173）——预算常数随行高同步
     root.style.setProperty("--msg-navbar-max-h", Math.min(MAX_H, rowsN * 16 + 12) + "px");
