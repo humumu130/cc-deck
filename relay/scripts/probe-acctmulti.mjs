@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 const WS = (await import("/Users/xdd/dev/cc-deck/relay/node_modules/ws/index.js")).default;
 const PORT = 9930 + Math.floor(Math.random()*40);
-const p = spawn("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", ["--headless=new","--disable-gpu","--disable-extensions",`--remote-debugging-port=${PORT}`,"--user-data-dir=/tmp/acctm-"+Date.now(),"--window-size=1440,940","file:///private/tmp/cc-deck-w-acctmulti/web-console/index-005.html"],{stdio:"ignore"});
+const p = spawn("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", ["--headless=new","--disable-gpu","--disable-extensions",`--remote-debugging-port=${PORT}`,"--user-data-dir=/tmp/acctm-"+Date.now(),"--window-size=1440,940","file://" + decodeURIComponent(new URL("../../web-console/index-005.html", import.meta.url).pathname)],{stdio:"ignore"});
 const wait = ms => new Promise(r=>setTimeout(r,ms));
 await wait(3400);
 const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
