@@ -520,7 +520,7 @@
       const sessionCtaMarkup = (item) => item.tagClass === "action" || item.tagClass === "danger" ? `<button type="button" class="srow-cta">处理</button>` : "";
       // W-WINPAIR-R6 件九：源徽章带 FB19 八色环源色（同名恒色——与头像回落色同环）；单源隐藏由
       // body[data-source-count="1"] CSS 管（B2 渲染拍维护，聚合两源自 >1 显形）
-      const sourceBadgeMarkup = (item) => `<span class="source-badge" data-src-slug="${window.__ccDeck005SrcSlug ? esc(window.__ccDeck005SrcSlug(item.source)) : esc(item.source)}" style="color:${sessionSourceColor(item.source)};border-color:${sessionSourceColor(item.source)};background:color-mix(in srgb, ${sessionSourceColor(item.source)} 14%, transparent)">${item.source}</span>`; // 件E：data-src-slug 供徽章配色自定义覆写定位
+      const sourceBadgeMarkup = (item) => `<span class="source-badge" style="color:${sessionSourceColor(item.source)};border-color:${sessionSourceColor(item.source)};background:color-mix(in srgb, ${sessionSourceColor(item.source)} 14%, transparent)">${item.source}</span>`; // 件E 徽章配色 1117 用户令移除（data-src-slug 随退）
       const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong></div><p>${item.summary}</p><div class="identity-cluster">${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${engineBadgeMarkup(item)}${sourceBadgeMarkup(item)}</div></div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><span class="srow-ava" style="--srow-ava-c:${sessionAvaColor(item)}">${(item.title || "·").trim().charAt(0).toUpperCase()}<i class="status-dot ${item.status}"></i></span><span class="srow-main"><span class="srow-r1"><strong title="${item.title}">${item.title}</strong>${item.time ? `<time class="srow-time">${item.time}</time>` : ""}</span><span class="srow-r2"><span class="srow-r2-t">${item.summary}</span>${item.status === "working" ? `<span class="srow-sec" data-work-sec="${item.workSecs || 0}">${item.workSecs || 0}s</span>` : ""}</span>${item.tag || item.source || item.pinned ? `<span class="srow-r3">${item.pinned ? `<span class="tag pin-flag">置顶</span>` : ""}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}${sourceBadgeMarkup(item)}</span>` : ""}</span>${sessionCtaMarkup(item)}</div>`;
 
 function connectLan(ctx) {
@@ -1241,7 +1241,7 @@ function connectLan(ctx) {
 <div class="settings-panel workspace-pane" data-settings-panel="general"><div class="v8-sethead"><div class="t">通用</div><div class="s">外观 · 快捷键 · 通知 · 工作方式 · 更多</div></div><div class="v8-setcard"><h5>外观</h5><div class="v8-swrow"><div class="v8-swtxt">界面字号</div><div class="density-control" role="group" aria-label="界面字号"><button type="button" data-ui-scale-option="90">小</button><button type="button" data-ui-scale-option="100">标准</button><button type="button" data-ui-scale-option="110">大</button><button type="button" data-ui-scale-option="125">特大</button></div></div><div class="v8-swrow"><div class="v8-swtxt">卡片密度</div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="v8-swrow"><div class="v8-swtxt">空闲置灰</div><select class="idle-dim-select" data-idle-dim-input aria-label="空闲置灰"><option value="15">15 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="-1">永不</option></select></div></div><div class="v8-setcard"><h5>快捷键</h5><div class="v8-swrow"><div class="v8-swtxt">全局搜索<span class="kbd-inline-chip">${escapeHtml(keyDisplay("search"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="search" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">新建会话<span class="kbd-inline-chip">${escapeHtml(keyDisplay("new"))}</span></div><button class="kbd-chip" type="button" data-keymap-chip="new" title="点击修改快捷键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">呼出 / 收起面板<span class="kbd-inline-chip">${escapeHtml(toggleHotkeyDisplay())}</span></div><button class="kbd-chip" type="button" data-keymap-chip="toggle" title="${window.ccDeck || window.__TAURI__ ? "点击修改全局快捷键" : "浏览器形态不支持全局快捷键"}">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换会话<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("↑↓"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="session" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">切换数据源<span class="kbd-inline-chip">${escapeHtml(kbmodDisplay("←→"))}</span></div><button class="kbd-chip" type="button" data-kbmod-chip="source" title="点击切换 Alt/Ctrl 修饰键">修改</button></div><div class="v8-swrow"><div class="v8-swtxt">恢复默认键位<div class="v8-swd">清除全部自定义键位</div></div><button class="secondary-btn" type="button" data-keymap-reset>重置</button></div></div><div class="v8-setcard"><h5>通知</h5><div class="v8-swrow"><div class="v8-swtxt">通知声音</div><button class="toggle-switch${settingsToggleState("sound") ? " active" : ""}" data-settings-toggle="sound" type="button" aria-pressed="${settingsToggleState("sound")}" title="切换通知声音"></button></div><div class="v8-swrow"><div class="v8-swtxt">桌面通知</div><button class="toggle-switch${settingsToggleState("notify") ? " active" : ""}" data-settings-toggle="notify" type="button" aria-pressed="${settingsToggleState("notify")}" title="切换桌面通知"></button></div><div class="v8-swrow"><div class="v8-swtxt">交付到达弹窗<div class="v8-swd">worker 交付类到达的右下角系统弹窗与提示音（默认关——面板条目与未读标不受影响）</div></div><button class="toggle-switch${deliverPopOn() ? " active" : ""}" data-settings-toggle="deliverpop" type="button" aria-pressed="${deliverPopOn()}" title="切换交付到达弹窗"></button></div></div>
 <div class="v8-setcard"><h5>会话列表</h5><div class="v8-swrow"><div class="v8-swtxt">会话卡状态行<div class="v8-swd">关闭后卡片只显标题行且高度收小；异常/错误信息仍显示</div></div><button class="toggle-switch${settingsToggleState("statusline") ? " active" : ""}" data-settings-toggle="statusline" type="button" aria-pressed="${settingsToggleState("statusline")}" title="切换会话卡状态行"></button></div><div class="v8-swrow"><div class="v8-swtxt">已隐藏的远程会话卡<div class="v8-swd">删除远程卡时选「仅本机隐藏」的记录（本机不显，源端仍在）</div></div></div><div class="settings-list" data-settings-live="hidden-remote"></div></div>
 <div class="v8-setcard"><h5>维护</h5><div class="v8-swrow"><div class="v8-swtxt">清理退休会话<div class="v8-swd">一键删除已退休成员的会话卡（会话列表归档组一并清空）；路由档案保留，复拉走成员管理</div></div><button class="secondary-btn" type="button" data-retired-purge>清理</button></div></div><div class="v8-setcard" data-review-seat-card><h5>评审席 · 全局评审池</h5><div class="settings-list" data-review-seat-live></div><div class="conn-card-foot"><span class="v8-escape">路由：worker 互审 → 团队专属席 → 全局池（异构优先）→ PM 兜底；席位随团队编制自动增减</span></div></div></div></div>
-<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">各引擎接入与登录状态 · 引擎 = 可用于派单干活的 AI 编程工具（Claude/Codex/Trae…）</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><div class="v8-setcard"><h5>徽章配色</h5><div class="v8-escape">自定义各引擎/来源徽章的底色——全端（会话卡/团队域/新建弹窗/详情）同步生效；不设则用默认配色。</div><div class="settings-list" data-settings-live="badge-colors"></div></div></div>
+<div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">各引擎接入与登录状态 · 引擎 = 可用于派单干活的 AI 编程工具（Claude/Codex/Trae…）</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><!-- 件E 徽章配色：1117 用户令整功能移除（放引擎页不合适+不要此功能） --></div>
 <div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">连到别的电脑 · 让别的设备连到本机</div></div><div class="v8-setcard" data-conn-section="account"><h5>账号</h5><div class="settings-list" data-settings-live="account"></div></div><!-- CONNV3 test.24 账号卡启用（升顶——发现层插顶叙事） --><div class="v8-setcard" data-conn-remote-card data-conn-section="sources"><div class="setcard-head"><h5>源列表</h5><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">＋ 添加</button></div><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard" data-conn-section="this-machine"><h5>这台电脑</h5><div class="settings-list" data-settings-live="connections"></div><div class="v8-swrow"><div class="v8-swtxt">连进来的设备<div class="v8-swd">手机配对后出现在这里 · 踢出后需重新配对</div></div><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，让手机或另一台电脑连到这台电脑">出示配对码</button></div><div class="settings-list" data-settings-live="devices"></div></div><div class="conn-diagbar" data-conn-section="diag" data-cloud-diag hidden></div><div class="v8-setcard" data-conn-section="nearby" hidden></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">建团时的角色缺省引擎</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">模板只是初始值 · 开团可逐成员覆盖。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">随软件发行的内建能力</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载 · 停用开关待注册表就绪后生效。</div></div><details class="v8-setcard" style="padding:12px 14px"><summary style="cursor:pointer;font-weight:650;font-size:12.5px">权限声明（只读）</summary><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div></div></div></div></details>
@@ -1256,39 +1256,15 @@ function connectLan(ctx) {
         body.addEventListener("change", (event) => {
           const f = event.target.closest("[data-settings-import-file]");
           if (f && f.files && f.files[0]) { importSettingsFile(f.files[0]); f.value = ""; }
-          // 件E：徽章配色 color input（delegated——live 渲染逐帧重建行，逐行绑定会重复）
-          const cp = event.target.closest("[data-badge-color-input]");
-          if (cp) {
-            const kind = cp.dataset.badgeKind === "source" ? "sources" : "engines";
-            const key = cp.dataset.badgeKey || "";
-            let map = {};
-            try { map = JSON.parse(lsGet(window.__ccDeck005BadgeColorsKey) || "{}") || {}; } catch (_) {}
-            map[kind] = map[kind] || {};
-            if (cp.value && /^#[0-9a-fA-F]{6}$/.test(cp.value)) map[kind][key] = cp.value; else delete map[kind][key];
-            try { lsSet(window.__ccDeck005BadgeColorsKey, JSON.stringify(map)); } catch (_) {}
-            if (window.__ccDeck005ApplyBadgeColors) window.__ccDeck005ApplyBadgeColors(map); // 即时生效（全端徽章同步换色）
-          }
         });
-        // 件E/件B：徽章配色恢复默认 + 已隐藏远程卡恢复（click 委托；行内钮逐帧重建）
+        // 件B：已隐藏远程卡恢复（click 委托；件E 徽章配色段 1117 用户令移除）
         body.addEventListener("click", (event) => {
-          const bcReset = event.target.closest("[data-badge-color-reset]");
-          if (bcReset) {
-            const kind = bcReset.dataset.badgeKind === "source" ? "sources" : "engines";
-            const key = bcReset.dataset.badgeKey || "";
-            let map = {};
-            try { map = JSON.parse(lsGet(window.__ccDeck005BadgeColorsKey) || "{}") || {}; } catch (_) {}
-            if (map[kind]) { delete map[kind][key]; try { lsSet(window.__ccDeck005BadgeColorsKey, JSON.stringify(map)); } catch (_) {} }
-            if (window.__ccDeck005ApplyBadgeColors) window.__ccDeck005ApplyBadgeColors(map);
-            showToast("已恢复默认配色");
-            return;
-          }
           const hr = event.target.closest("[data-hidden-restore]");
           if (hr && window.__ccDeck005RemoteHidden) {
             window.__ccDeck005RemoteHidden.remove(hr.dataset.hiddenRestore);
             showToast("已恢复显示（源机快照到达后回列表）");
             const live = body.querySelector('[data-settings-live="hidden-remote"]');
             if (live) renderHiddenRemoteLive(live);
-            return;
           }
         });
         // W-SETTINGS3 批1：V3 setnav foot——版本与连接态常驻导航底（活读壳版本/桥连接态）
@@ -1643,29 +1619,8 @@ function connectLan(ctx) {
           // 件B：已隐藏远程卡恢复行（renderHiddenRemoteLive 挂 window 供 click 委托复渲）
           const hiddenLive = section.querySelector('[data-settings-live="hidden-remote"]');
           if (hiddenLive) window.__ccDeck005RenderHiddenRemote(hiddenLive);
-          // 件E：徽章配色行——引擎固定表 + 已知源（快照/桥会话 relay_source 收敛，≤6 行）
-          const badgeLive = section.querySelector('[data-settings-live="badge-colors"]');
-          if (badgeLive) {
-            let curMap = {};
-            try { curMap = JSON.parse(lsGet(window.__ccDeck005BadgeColorsKey) || "{}") || {}; } catch (_) {}
-            const row = (kind, key, labelHtml) => {
-              const v = ((curMap[kind] || {})[key]) || "#888888";
-              return `<div class="v8-swrow"><span style="flex:none">${labelHtml}</span><div class="v8-swtxt"><div class="v8-swd">自定义底色（留空=默认）</div></div><input type="color" data-badge-color-input data-badge-kind="${kind === "sources" ? "source" : "engine"}" data-badge-key="${esc(key)}" value="${esc(v)}" title="选底色" style="width:34px;height:24px;padding:0;border:1px solid var(--line);border-radius:6px;background:transparent;cursor:pointer"><button class="row-share" data-badge-color-reset data-badge-kind="${kind === "sources" ? "source" : "engine"}" data-badge-key="${esc(key)}" type="button" title="恢复默认配色">重置</button></div>`;
-            };
-            const engHtml = (id, label, cls) => {
-              const brandSvg = (window.__ccDeck005EngineBrandSvg || {})[id];
-              return `<span class="engine-badge ${cls || ""}">${brandSvg ? `<span class="badge-brand">${brandSvg}</span>` : ""}${esc(label)}</span>`;
-            };
-            const engList = [["claude", "Claude"], ["codex", "Codex"], ["trae", "Trae"], ["qwen-code", "Qwen Code"], ["codebuddy", "CodeBuddy"], ["zcode", "ZCode"], ["glm", "GLM"]];
-            let bh = engList.map(([id, label]) => row("engines", id, engHtml(id, label, ENGINE_BADGE[id] || id))).join("");
-            const srcNames = new Set();
-            const b4 = window.__ccDeck005B4;
-            if (b4 && b4.relayName) srcNames.add(String(b4.relayName));
-            if (b4 && b4.sessions) for (const s of b4.sessions.values()) { if (s && typeof s.relay_source === "string" && s.relay_source) srcNames.add(s.relay_source); }
-            if (window.__ccDeck005SourceDisplayName) for (const n of [...srcNames]) srcNames.add(String(window.__ccDeck005SourceDisplayName(n)));
-            bh += [...srcNames].slice(0, 6).map((n) => row("sources", n, `<span class="source-badge" data-src-slug="${esc(window.__ccDeck005SrcSlug ? window.__ccDeck005SrcSlug(n) : "")}">${esc(n)}</span>`)).join("");
-            liveSetHtml(badgeLive, bh);
-          }
+          // 件E 徽章配色渲染：1117 用户令移除
+
           // 件H3（1029 用户 21:5x）：关于页「系统设计图纸」卡移除——空态常显不可点击无信息量；
           // 图纸正入口=项目域第七 tab（W-SRCMENU2 ⑥，能力位同源 SNAPSHOT.design_docs）
           const idLive = section.querySelector('[data-settings-live="identity"]');
