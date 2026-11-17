@@ -2377,6 +2377,11 @@
     #d-settings [data-settings-live="remote-sources"] > .settings-row { border: 0; border-bottom: 1px dashed var(--line-soft); border-radius: 0; background: none; padding: var(--setrow-py, 8px) 2px; gap: 10px; } /* 行基座去双描边兜底（视觉审查最大漏项——v8 卡内行迁虚线分隔语言，v8-swrow 同构） */
     #d-settings [data-settings-live="remote-sources"] > .settings-row:last-child { border-bottom: 0; }
     .conn-diagbar { padding: 8px 14px 10px; border-top: 1px dashed var(--line-soft); } /* 面板级诊断 bar（非卡——IA 裁决：跨源健康度不进任何实体卡） */
+    /* CONNV4 批A：源列表三态行——离线灰显+视角后台态（中性灰族，零新色——色预算立约合规） */
+    .src-offline { opacity: .55; }
+    .src-backdrop .v8-swd { color: var(--faint); }
+    .src-local-row { cursor: pointer; }
+    .src-local-row:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
     .conn-diag-line { display: flex; align-items: center; gap: 8px; font-size: var(--fs-C); color: var(--faint); line-height: 1.5; }
     .conn-diag-line .conn-diag-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--done); }
     .conn-diag-line .conn-diag-dot.warn { background: var(--warn); }

@@ -222,11 +222,15 @@
                   // 丢弃不学习；LAN SNAPSHOT 携本机权威表=唯一更新口（union 合并，下线标灰不删——
                   // 账号域无「删除设备」操作，表行消失=对端下线=灰显常驻语义）。缓存挂
                   // bridge.acctRelaysCache 跨快照携带（ACCT_RELAYS 增量帧同规则合并，见下段）。
+                  // CONNV4 批A：条目带 ts（该 dev 最后在线时刻）——fresh 命中即刷新 ts=现在
+                  //（在线真值时点）；下线保留项 ts 不动（「上次在线 N 分钟前」数据源——源列表
+                  // 离线行文案消费；PRD v2 批A 排序/灰显段的 ts 衔接点）。
                   if (Array.isArray(p.acct_relays) && p.acct_relays.length && evSource !== "cloud") {
                     const fresh = p.acct_relays.filter((r) => r && typeof r.dev === "string");
                     const prev = Array.isArray(bridge.acctRelaysCache) ? bridge.acctRelaysCache : [];
                     const freshDevs = new Set(fresh.map((r) => r.dev));
-                    bridge.acctRelaysCache = fresh.map((r) => ({ dev: r.dev, name: typeof r.name === "string" ? r.name : "", rk: typeof r.rk === "string" ? r.rk : "", online: r.online !== false }))
+                    const nowTs = Date.now();
+                    bridge.acctRelaysCache = fresh.map((r) => ({ dev: r.dev, name: typeof r.name === "string" ? r.name : "", rk: typeof r.rk === "string" ? r.rk : "", online: r.online !== false, ts: r.online !== false ? nowTs : (Number(r.ts) || 0) }))
                       .concat(prev.filter((r) => !freshDevs.has(r.dev)).map((r) => ({ ...r, online: false })));
                     p.acct_relays = bridge.acctRelaysCache; // 快照与缓存同源（union 后的下线保留项落进 snapshot——原始 payload 会把下线机挤掉）
                   }

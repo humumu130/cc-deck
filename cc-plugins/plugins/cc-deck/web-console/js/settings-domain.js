@@ -1242,7 +1242,7 @@ function connectLan(ctx) {
 <div class="v8-setcard"><h5>会话列表</h5><div class="v8-swrow"><div class="v8-swtxt">会话卡状态行<div class="v8-swd">关闭后卡片只显标题行且高度收小；异常/错误信息仍显示</div></div><button class="toggle-switch${settingsToggleState("statusline") ? " active" : ""}" data-settings-toggle="statusline" type="button" aria-pressed="${settingsToggleState("statusline")}" title="切换会话卡状态行"></button></div><div class="v8-swrow"><div class="v8-swtxt">已隐藏的远程会话卡<div class="v8-swd">删除远程卡时选「仅本机隐藏」的记录（本机不显，源端仍在）</div></div></div><div class="settings-list" data-settings-live="hidden-remote"></div></div>
 <div class="v8-setcard"><h5>维护</h5><div class="v8-swrow"><div class="v8-swtxt">清理退休会话<div class="v8-swd">一键删除已退休成员的会话卡（会话列表归档组一并清空）；路由档案保留，复拉走成员管理</div></div><button class="secondary-btn" type="button" data-retired-purge>清理</button></div></div><div class="v8-setcard" data-review-seat-card><h5>评审席 · 全局评审池</h5><div class="settings-list" data-review-seat-live></div><div class="conn-card-foot"><span class="v8-escape">路由：worker 互审 → 团队专属席 → 全局池（异构优先）→ PM 兜底；席位随团队编制自动增减</span></div></div></div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="v8-sethead"><div class="t">Agent 引擎</div><div class="s">各引擎接入与登录状态 · 引擎 = 可用于派单干活的 AI 编程工具（Claude/Codex/Trae…）</div></div><div class="v8-setcard"><h5>已接入引擎</h5><div class="settings-list" data-settings-live="provider"></div></div><!-- 件E 徽章配色：1117 用户令整功能移除（放引擎页不合适+不要此功能） --></div>
-<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">连到别的电脑 · 让别的设备连到本机</div></div><div class="v8-setcard" data-conn-section="account"><h5>账号</h5><div class="settings-list" data-settings-live="account"></div></div><!-- CONNV3 test.24 账号卡启用（升顶——发现层插顶叙事） --><div class="v8-setcard" data-conn-remote-card data-conn-section="sources"><div class="setcard-head"><h5>源列表</h5><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">＋ 添加</button></div><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard" data-conn-section="this-machine"><h5>这台电脑</h5><div class="settings-list" data-settings-live="connections"></div><div class="v8-swrow"><div class="v8-swtxt">连进来的设备<div class="v8-swd">手机配对后出现在这里 · 踢出后需重新配对</div></div><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，让手机或另一台电脑连到这台电脑">出示配对码</button></div><div class="settings-list" data-settings-live="devices"></div></div><div class="conn-diagbar" data-conn-section="diag" data-cloud-diag hidden></div><div class="v8-setcard" data-conn-section="nearby" hidden></div>
+<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="v8-sethead"><div class="t">连接与设备</div><div class="s">连到别的电脑 · 让别的设备连到本机</div></div><div class="v8-setcard" data-conn-section="account"><h5>账号</h5><div class="settings-list" data-settings-live="account"></div></div><!-- CONNV3 test.24 账号卡启用（升顶——发现层插顶叙事） --><div class="v8-setcard" data-conn-remote-card data-conn-section="sources"><div class="setcard-head"><h5>源列表</h5><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">＋ 添加</button></div><div class="settings-list" data-settings-live="remote-sources"></div><div class="v8-escape conn-foot-link"><a href="#" data-settings-help>查看连接帮助 ↗</a></div></div><div class="v8-setcard" data-conn-section="this-machine"><h5>这台电脑</h5><div class="settings-list" data-settings-live="connections"></div><div class="v8-swrow"><div class="v8-swtxt">连进来的设备<div class="v8-swd">手机配对后出现在这里 · 踢出后需重新配对</div></div><button class="row-share" data-settings-pair type="button" title="弹出配对码与二维码，让手机或另一台电脑连到这台电脑">出示配对码</button></div><div class="settings-list" data-settings-live="devices"></div><div class="conn-diagbar" data-conn-section="diag" data-cloud-diag hidden></div><!-- CONNV4 批A：诊断行迁「这台电脑」卡底（PRD R3 定案——源列表卡零诊断元素；.conn-diagbar 选择器/1Hz 刷新词表零改续喂） --></div><div class="v8-setcard" data-conn-section="nearby" hidden></div>
 <div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="v8-sethead"><div class="t">团队身份模板</div><div class="s">建团时的角色缺省引擎</div></div><div class="v8-setcard"><h5>预置角色</h5><div class="settings-list" data-settings-live="identity"></div></div><div class="v8-escape">模板只是初始值 · 开团可逐成员覆盖。</div></div>
 <div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="v8-sethead"><div class="t">扩展</div><div class="s">随软件发行的内建能力</div></div><div class="v8-setcard"><h5>内建扩展 · 随软件发行</h5><div class="v8-swrow"><span class="v8-swico ext-ico">✓</span><div class="v8-swtxt">acceptance · 验收体系<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">↗</span><div class="v8-swtxt">deliver · 输出物登记<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-swrow"><span class="v8-swico ext-ico">▧</span><div class="v8-swtxt">artifacts · 产物看板<span class="kbd-inline-chip">内建</span></div><span class="tag done">已启用</span></div><div class="v8-escape">内建不可卸载 · 停用开关待注册表就绪后生效。</div></div><details class="v8-setcard" style="padding:12px 14px"><summary style="cursor:pointer;font-weight:650;font-size:12.5px">权限声明（只读）</summary><div class="v8-swrow"><div class="v8-swtxt">acceptance<div class="v8-swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">deliver<div class="v8-swd">写输出物登记 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div><div class="v8-swrow"><div class="v8-swtxt">artifacts<div class="v8-swd">读输出物 · 读项目</div></div><span class="kbd-inline-chip">manifest v1</span></div></div></div></div></div></details>
 <div class="settings-panel workspace-pane" data-settings-panel="about"><div class="v8-sethead"><div class="t">关于</div><div class="s">版本 · 更新 · 开源</div></div><div class="v8-setcard about-hero"><div class="logo">cc-<b>deck</b></div><div class="ver"><span data-settings-version-tag>${escapeHtml((window.__shellVer || CONSOLE_VERSION) + " 通道")}</span></div><div style="margin-top:12px"><button class="primary-btn" data-update-check type="button">检查更新</button></div><div class="v8-swd" style="margin-top:8px" data-update-status>当前已是最新版本</div><div class="v8-swd" style="margin-top:4px" data-settings-render-probe title="字体渲染环境探针（win-font-aa 批）：分数 DPR=Chromium 禁用 ClearType 子像素抗锯齿（Windows 125%/150% 缩放典型态）——发毛报告请连此行一起回报"></div></div><div class="v8-setcard"><h5>开源</h5><div class="v8-swrow"><div class="v8-swtxt">源码与发版记录</div><a class="kbd-inline-chip" data-about-link="https://github.com/humumu130/cc-deck" style="text-decoration:none">github.com/humumu130/cc-deck</a></div><div class="v8-swrow"><div class="v8-swtxt">项目主页</div><a class="kbd-inline-chip" data-about-link="https://cc.humumu.online" style="text-decoration:none">cc.humumu.online</a></div></div><div class="v8-setcard"><h5>手机端</h5><div class="v8-swrow"><div class="v8-swtxt">下载手机 App</div><span class="qr-placeholder" aria-label="下载二维码占位">二维码占位</span></div></div><div class="v8-setcard"><h5>设置迁移</h5><div class="v8-swrow"><div class="v8-swtxt">导出设置</div><button class="secondary-btn" data-settings-export type="button">导出</button></div><div class="v8-swrow"><div class="v8-swtxt">导入设置<div class="v8-swd">覆盖现有设置</div></div><button class="secondary-btn" data-settings-import type="button">导入</button></div><input type="file" accept="application/json,.json" data-settings-import-file hidden></div><!-- 件H3：旧关于页图纸卡退役（无 live 渲染接线恒隐藏）；现行图纸入口=项目域第七 tab（W-SRCMENU2 ⑥） --></div>`;
@@ -1508,15 +1508,9 @@ function connectLan(ctx) {
               // 本设备/诊断/输码表单追加进「源列表」卡——与 connLive 槽 cloudSelfRows 双份。此处只注
               // 服务器域（sdelServerRows/空态引导行——与 cloudSettingsRows 空态同文案），身份域归槽。
               if (remoteLive) {
-                const entries0 = cloudSharedCloudServers();
-                // W-ACCOUNT：云形态同步视觉审查修（空态登录态分叉+acct 行紧随——与 cloudSettingsRows 同口径）
-                const acctHtml0 = acctRelayRows();
-                liveSetHtml(remoteLive, (entries0.length ? sdelServerRows(false)
-                  : (!entries0.length && !acctHtml0
-                    ? (acctCred()
-                      ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>同账号的电脑会自动出现在这里</p></div></div>'
-                      : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p></p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>')
-                    : "")) + acctHtml0);
+                // CONNV4 批A：云形态同源注入 sourceListRows（五段序——本机置顶+acct 三态+配对码源；
+                // 旧手拼 servers+acct 双段与空态分叉逻辑上收单口）
+                liveSetHtml(remoteLive, sourceListRows());
               }
               liveSetHtml(connLive, '<div data-cloud-settings-slot></div>');
               renderCloudUI();
@@ -1550,7 +1544,7 @@ function connectLan(ctx) {
                   : ""));
               // W-SDEL 远程源区（多条+连接/编辑/删除；死条目清理不依赖云链激活态）——
               // withName=false：源名编辑归本机 relay 卡，云形态槽内仍自带（cloudSettingsRows() 缺省 true）
-              liveSetHtml(remoteLive, cloudSettingsRows(false)); // W-ACCOUNT：acct 行组已内插 cloudSettingsRows 清单区（视觉审查 P1-2 位序修）
+              liveSetHtml(remoteLive, sourceListRows()); // CONNV4 批A：五段序单口（本机置顶+acct 三态+配对码源——cloudSettingsRows(false) 退役）
               if (shellDiag) void refreshRelayDiag();
             }
           }
@@ -4173,6 +4167,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             + (isCur ? cloudRetryBtn() : "")
             + '<button class="row-edit" data-srv-edit="' + s.id + '" type="button" title="编辑此电脑（名称 / 地址 / 令牌）">✎</button>'
             + '<button class="row-del" data-srv-delete="' + s.id + '" type="button" title="删除此电脑">✕</button>'
+            + '<span class="tag" title="来源：配对码添加">' + "配对" + '</span>'
             + '<span class="tag ' + cls + '">' + label + '</span></div>';
         }).join("");
       }
@@ -4227,11 +4222,65 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           } catch { /* https 云形态/relay 未起：静默，账号卡照常可手登 */ }
         })();
       }
-      function acctRelayRows() {
-        const relays = acctAcctRelays();
-        if (!acctCred() || !relays.length) return "";
-        return relays.map((r) => '<div class="settings-row acct-relay-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>' + esc(String(r.name || r.dev)) + '</strong><div class="v8-swd conn-dev-id">' + esc(String(r.dev)) + '</div></div>'
-          + (r.online === false ? '<span class="tag" title="对方电脑离线">离线</span>' : '<button class="row-share" data-acct-relay-connect="' + esc(String(r.dev)) + '" type="button" title="切换到这台电脑的视角">连接</button>') + '</div>').join("");
+      function acctRelayRows() { // CONNV4 批A：旧渲染退役——acct 行并入 sourceListRows 五段序（本函数保留为空壳防外泄调用——grep 全仓唯二消费已迁）
+        return "";
+      }
+      // ---------- CONNV4 批A：源列表 UI 重组（零池化纯渲染层——PRD v2 批A 规格+评审汇总§三） ----------
+      // 五段序写死：本机（恒置顶）→ 在线同账号（名字序）→ 离线同账号（灰显+上次在线）→
+      // LAN 待连（批D 邻居发现前恒空段——排序位预留）→ 配对码源（sdelServerRows 条目）。
+      // 去重：acct 类内 by-dev 唯一（bridge.acctRelaysCache 合并已收敛——fresh+prev union）；
+      // 配对码类 by-id 唯一（sdel 读写同库）。跨类同机去重（同机既是同账号又配过码）现数据
+      // 模型无绑定键（dev≠entry.id/wsUrl）——弱匹配错吞风险大于收益，批B/C 桥侧绑定关系落位
+      // 后收口（裁量记录入回执）。
+      // 来源标签三态 ≤3 字（账号/局域网/配对）——<span class="tag"> 无修饰类=中性灰档，
+      // 不占强调色（色预算立约合规；「局域网」段批D 前不渲染行）。
+      // 三态行：视角所在（「当前」tag）/已连（后台——按 online 出「连接」钮，切换链
+      // activateAcctRelay 原样不动）/离线（行灰显+「上次在线 N 前」——ts 由 bridge 合并
+      // 处刷新衔接）。本机行：名称=本机源显示名，点击=setSourceView("local")——胶囊切到
+      // 任何远程源后首行仍是本机（治「行消失」表象的 UI 双保险）。
+      function connLastSeenText(ts) {
+        const t0 = Number(ts || 0);
+        if (!(t0 > 0)) return "之前在线"; // CONNV4A 护栏：旧 cache 条目无 ts（升级窗口期）——不显两万天（纪元起算病），降级泛词
+        const m = Math.max(1, Math.round((Date.now() - t0) / 60_000));
+        if (m < 60) return m + " 分钟前在线";
+        if (m < 1440) return Math.round(m / 60) + " 小时前在线";
+        return Math.round(m / 1440) + " 天前在线";
+      }
+      function srcTagHtml(kind) { // 来源小标签（中性灰）
+        return '<span class="tag" title="来源：' + kind + '">' + kind + '</span>';
+      }
+      function localSourceRowHtml() { // 段1 本机（恒置顶）
+        const b4 = window.__ccDeck005B4; // 块级局部取桥（settings 域无全局 bridge 标识——裸引用 ReferenceError 实锤修）
+        const raw = String((b4 && b4.relayName) || "本机");
+        const name = esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(raw) : raw);
+        const cur = viewSource() !== "cloud";
+        return '<div class="v8-swrow src-local-row' + (cur ? "" : " src-backdrop") + '" data-src-goto-local role="button" tabindex="0" title="本机 · 点击切回本机视角"><span class="v8-swico dev-ico desktop"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span>'
+          + '<div class="v8-swtxt">' + name + '<div class="v8-swd">本机 · 会话与派单主源</div></div>'
+          + (cur ? '<span class="tag done">当前</span>' : srcTagHtml("本机")) + '</div>';
+      }
+      function acctSourceRowsHtml() { // 段2+3 同账号（在线名字序 → 离线灰显+上次在线）
+        const relays = acctAcctRelays().filter((r) => r && typeof r.dev === "string" && acctCred());
+        const on = relays.filter((r) => r.online !== false).sort((a, b) => String(a.name || a.dev).localeCompare(String(b.name || b.dev), "zh-Hans"));
+        const off = relays.filter((r) => r.online === false);
+        const row = (r, offline) => {
+          const sub = offline ? connLastSeenText(r.ts) : "同账号 · 点击连接切到这台电脑的视角";
+          return '<div class="v8-swrow acct-relay-row' + (offline ? " src-offline" : "") + '"><span class="v8-swico dev-ico ' + (offline ? "browser" : "desktop") + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span>'
+            + '<div class="v8-swtxt">' + esc(String(r.name || r.dev)) + '<div class="v8-swd">' + (offline ? sub + ' · <span class="conn-dev-id">' + esc(String(r.dev)) + "</span>" : "同账号设备") + "</div></div>"
+            + (offline ? '<span class="tag" title="' + esc(sub) + '">离线</span>' : '<button class="row-share" data-acct-relay-connect="' + esc(String(r.dev)) + '" type="button" title="切换到这台电脑的视角">连接</button>')
+            + srcTagHtml("账号") + "</div>";
+        };
+        return on.map((r) => row(r, false)).join("") + off.map((r) => row(r, true)).join("");
+      }
+      function sourceListRows() { // 源列表卡唯一渲染口（两形态同源：cloudMode 与 LAN 桌面）
+        const localHtml = localSourceRowHtml();
+        const acctHtml = acctSourceRowsHtml();
+        const serversHtml = sdelServerRows(false); // 段5 配对码源（isCur 视角标记沿用 cloudTagOf）
+        if (!acctHtml && !serversHtml) { // 空态（登录态分叉——W-ACCOUNT 口径保持）
+          return localHtml + (acctCred()
+            ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>同账号的电脑会自动出现在这里</p></div></div>'
+            : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p></p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>');
+        }
+        return localHtml + acctHtml + serversHtml;
       }
       function accountSettingsRows() {
         const c = acctCred();
@@ -4310,6 +4359,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           try { window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive(); } catch {}
           return;
         }
+        if (t.closest("[data-src-goto-local]")) { setSourceView("local"); return; } // CONNV4 批A：源列表本机行点击=切回本机视角（胶囊切到任何远程源后此行仍在——首行恒本机）
         const con = t.closest("[data-acct-relay-connect]");
         if (con) { activateAcctRelay(con.getAttribute("data-acct-relay-connect") || ""); }
       });
@@ -4351,40 +4401,10 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         }
         return html;
       }
-      function cloudSettingsRows(withName = true) { // #280-A：withName=false 供桌面源列表卡（源名编辑保持现形：桌面 ghost 钮/云槽本分支——CONNV3 撤 v1 常驻迁移案）
-        // CONNV3（1116 用户实锤三路审查 v2）：「添加服务器」动作行退役（卡头「＋ 添加」承载）；空态
-        // 单路径指路（账号句 test.24 上线再升回——brief §2 回收钩子）；「本页设备 · wb-xxx」→「本设备」
-        // +裸 ID 降级 conn-dev-id 副行；输码表单=「输入对方的配对码」+对端指路（与「出示配对码」两动词闭环）
-        const entries = cloudSharedCloudServers();
-        let html = "";
-        // W-ACCOUNT 视觉审查修（uxcopy P1-1/aesthetic P1-2）：空态按登录态分叉——已登录且无同账号
-        // 电脑=账号体系引导（不再指路配对码，双叙事割裂根除）；未登录=配对码单路径（现状）
-        const acctRelayHtml0 = acctRelayRows();
-        if (!entries.length && !acctRelayHtml0) {
-          html += acctCred()
-            ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>同账号的电脑会自动出现在这里</p></div></div>'
-            : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p></p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>'; /* conn-page-v2 ⑦语义svg；P2-5a：徽章退役；CONNV3：动作行退役后空态引导行=唯一列表内入口 */
-        } else {
-          if (entries.length) html += sdelServerRows(false);
-        }
-        // W-ACCOUNT 视觉审查修（aesthetic P1-2）：acct 行紧随清单区（原先在 LAN 形态被拼到
-        // 「本设备/输码」尾块之后——「还没有源列表」与同卡第 5 行躺着的同账号行自相矛盾）
-        html += acctRelayHtml0;
-        if (withName) html += relayNameRowHtml(false); // #272 源名编辑（云形态槽内恒显；桌面形态=relaystat ghost 钮——test-272 B8/test-280 I3b 双落点锚保）
-        if (withName && cloudUIOn()) { // CONNFIX（1117 用户实锤「源列表里有本设备=矛盾」）：身份域（本设备/诊断/输码）只走云身份槽（这台电脑卡区）——withName=false 的源列表卡路径砍尾块，本机信息不再混进远程列表
-          const peer = cloudPeerOf(cloudCtx.cfg);
-          html += '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div><strong>本设备</strong><div class="v8-swd conn-dev-id">' + (ckp ? "设备 " + escapeHtml(String(devId(ckp.publicKey, "wb")).slice(-6)) : "—") + '</div>' + (peer ? "" : '<p>' + (cloudCtx.pendingPair ? "配对进行中" : "尚未配对到对方电脑") + '</p>') + '</div><span class="tag ' + (peer ? "done" : "action") + '">' + (peer ? "已配对" : "待配对") + '</span></div>';
-          html += cloudDiagRowHtml(cloudDiag(), false); // #268 通道诊断面板（test-268 S5 锚：调用字面不动；CONNV3 bar 收折层在 renderCloudUI 包裹）
-          if (!peer) {
-            html += '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-link"></use></svg></span><div style="flex:1;min-width:0"><strong>输入对方的配对码</strong>'
-              + '' /* W-DENSD 批三⑤：输码行内指路句删（placeholder 自释） */
-              + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
-              + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="对方的 8 位配对码" aria-label="对方的 8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em">'
-              + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div></div></div>';
-          }
-        }
-        return html;
-      }
+      // CONNV4 批A：cloudSettingsRows 退役（两调用点已迁 sourceListRows 五段序单口；
+      // 云身份域=cloudSelfRows 独立在册——本函数 45 行含 withName/cloudUIOn 尾块随迁删，
+      // 输码表单/本设备/诊断的卡内残余源彻底清零——「＋添加」弹窗唯一路径负向锚前提）。
+
       // 移动端「连接与设备」详情的远程源 lane（W-SDEL 同步列表化；720px 视口下表单可输入可提交——
       // 输入框显式 14px 防 iOS 聚焦缩放）。与桌面 sdelServerRows 共用 data-* 锚（文档级委托同一套）
       function cloudMobileLaneInner() {
