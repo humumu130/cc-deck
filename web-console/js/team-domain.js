@@ -395,7 +395,14 @@
                   }
                   const selfCheck = taskSelfCheck(task);
                   const selfCheckLabel = selfCheck ? "AI 自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
-                  const selfCheckHtml = selfCheck ? '<span class="task-verify" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span>" : "";
+                  // DENSN（批三⑦）：AI 自验 14 枚点墙折叠——默认一行摘要「自验 P/T · 全过/N 项未过」
+                  //（数字诚实=P/T 真数），点开才展 dots；title 悬浮保原全量细节（无断链）。
+                  const selfCheckBrief = selfCheck ? "自验 " + selfCheck.passed + "/" + selfCheck.total + (selfCheck.failed ? " · " + selfCheck.failed + " 项未过" : selfCheck.passed === selfCheck.total ? " · 全过" : "") : "";
+                  const selfCheckHtml = selfCheck
+                    ? '<button class="task-verify" type="button" data-verify-toggle="1" title="' + escape(selfCheckLabel) + '" aria-label="' + escape(selfCheckLabel) + '" aria-expanded="false">'
+                      + '<span class="tv-label">' + escape(selfCheckBrief) + '</span>'
+                      + '<span class="tv-dots" aria-hidden="true">' + selfCheck.dots.map((status) => '<i class="task-verify-dot ' + status + '"></i>').join("") + "</span></button>"
+                    : "";
                   // 件十九：泳道迁移时间线（历史条目无 transitions=从当下起记，如实显示已有部分）
                   const laneName = (st) => (lanes.find((l) => l[0] === (legacyStatuses.get(st) || st)) || [])[1] || st;
                   const timeline = Array.isArray(task.transitions) && task.transitions.length
@@ -2419,6 +2426,14 @@
                     const segBtn = event.target && event.target.closest ? event.target.closest(".segment-bar button") : null;
                     if (segBtn && [...root.querySelectorAll(".segment-bar button")].indexOf(segBtn) === 1) refreshBoardFresh("tab-看板");
                   }, true);
+                  // DENSN（批三⑦）：自验点墙折叠行开合（stopPropagation 防误触卡行语义）
+                  root.addEventListener("click", (ev) => {
+                    const tv = ev.target && ev.target.closest ? ev.target.closest("[data-verify-toggle]") : null;
+                    if (!tv) return;
+                    ev.stopPropagation();
+                    const open = tv.classList.toggle("tv-open");
+                    tv.setAttribute("aria-expanded", open ? "true" : "false");
+                  });
                   // lanefold（1104）：泳道头=抽屉把手——点击/Enter/空格 开合；开=记忆+卡片轻上浮
                   // （just-opened 一次性类，260ms 后自摘——render 重建不重播）；合=记忆+焦点保留。
                   const laneFoldToggle = (head) => {
