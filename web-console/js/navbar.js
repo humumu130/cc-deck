@@ -144,7 +144,7 @@
       renderRows(items); // NAVR4-②：展开态=全量行+真滚动（收起态=采样 28 概览轨）
       syncActive(); // renderRows 重建行后 active 高亮补同步（NAVR4-R2 ③）
       updateFade();
-      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("open")));
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (open) root.classList.add("open"); })); // 审查 P1-C：rAF 饥饿（遮挡窗/长任务——Tauri WebView 两家均节流）时 setOpen(false) 先落地、迟到的 rAF 仍补挂 .open=假开且不自愈——if(open) 守卫封死
     } else {
       root.classList.remove("open");
       if (swapT) clearTimeout(swapT);
