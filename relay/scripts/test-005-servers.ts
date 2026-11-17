@@ -19,7 +19,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+const html = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8"); // CONNV4 批A 顺刀：sdel 函数族随 settings 外置批迁 settings-domain.js——本件读档路径跟（index-005 零函数的历史欠账）
 
 let pass = 0;
 let fail = 0;
@@ -148,17 +148,17 @@ console.log("-- C. UI 列表化与三锚委托 --");
 // C2 cloudSettingsRows：空列表引导 + 多条时添加行恒显 + 非云形态也列条目
 {
   const body = blockFrom("function cloudSettingsRows() {");
-  ok(body.includes("cloudSharedCloudServers()"), "C2 设置域读共享库全量条目");
-  ok(body.includes("sdelServerRows(false)"), "C2 桌面行走 sdelServerRows");
+  ok(html.includes("cloudSharedCloudServers()"), "C2 设置域读共享库全量条目（CONNV4 批A：调用随 sourceListRows 单口——html 级锚）");
+  ok(html.includes("sdelServerRows(false)"), "C2 桌面行走 sdelServerRows（CONNV4 批A：随 sourceListRows 单口——html 级锚）");
   ok(!body.includes("if (!cloudUIOn()) {\n          return"), "C2 非云形态不再提前 return（死条目清理不依赖云链激活态）");
-  ok(body.includes("data-settings-add"), "C2 添加入口恒显（多条时可继续加）");
-  ok(body.includes("data-cloud-pair-input") && body.includes("data-cloud-pair-submit"), "C2 配对表单锚保留（parity C8 兼容）");
+  ok(html.includes("data-settings-add"), "C2 添加入口恒显（多条时可继续加——卡头模板位）");
+  ok(html.includes("data-cloud-pair-input") && html.includes("data-cloud-pair-submit"), "C2 配对表单锚保留（parity C8 兼容——CONNFIX 后位 cloudSelfRows 云身份槽）");
 }
 // C3 移动端 lane 同步列表化
 {
   const body = blockFrom("function cloudMobileLaneInner() {");
   ok(body.includes("sdelServerRows(true)"), "C3 移动 lane 桌面同构列表");
-  ok(body.includes("其他电脑 · "), "C3 lane 头改「其他电脑 · N」（云桥从唯一固定项降级为条目之一）");
+  ok(html.includes("源列表 · "), "C3 lane 头「源列表 · N」（CONNV3 改名跟——云桥从唯一固定项降级为条目之一）");
   ok(body.includes("data-cloud-pair-input"), "C3 移动配对表单锚保留");
 }
 
@@ -197,8 +197,8 @@ console.log("-- C. UI 列表化与三锚委托 --");
 // C7 非 cloudMode（桌面壳/浏览器 LAN 形态）连接面板同列条目——用户主场景是桌面壳，
 // else 分支不列条目=改了白改；刷新借道防删后旧列表滞留
 {
-  const i = html.indexOf('cloudSettingsRows() +');
-  ok(i > 0, "C7 非 cloudMode 连接面板嵌入 cloudSettingsRows（桌面壳/LAN 形态同列条目）");
+  const i = html.indexOf('liveSetHtml(remoteLive, sourceListRows'); // CONNV4 批A 锚跟改：cloudSettingsRows 退役→sourceListRows 单口（注入点定位——非函数定义处）
+  ok(i > 0, "C7 非 cloudMode 连接面板嵌入 sourceListRows（桌面壳/LAN 形态同列条目——CONNV4 批A 单口）");
   const iElse = html.lastIndexOf("else {", i);
   ok(iElse > 0 && html.slice(iElse, i).includes("v8-relaystat"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后·W-V8R 批6 行形态改 v8-relaystat）");
   ok(html.includes("window.__ccDeck005RefreshSettingsLive = render;"), "C7 设置实时区刷新借道挂 window（bridge.subscribe 只随桥事件走）");
@@ -229,7 +229,7 @@ console.log("-- D. 结构闸 --");
     if (a < iSdel && iSdel < b) { iOpen = a; iClose = b; break; }
     p = b + 1;
   }
-  ok(iOpen > 0 && iClose > iSdel, "D1 sdel 段所在 script 块边界可寻（成对扫描）");
+  ok(iOpen > 0 && iClose > iSdel, "D1 sdel 段所在 script 块边界可寻（成对扫描——CONNV4 批A 外置后=settings-domain 函数段）");
   if (iOpen > 0 && iClose > iSdel) {
     const js = html.slice(iOpen + "<script>".length, iClose);
     const tmp = join(root, "relay", "data", "test-sdel-check.mjs");

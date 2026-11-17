@@ -76,7 +76,7 @@ ok(g3.second.includes("OfficeMac") && !g3.secondBtn && g3.secondGrey.includes("�
 const snapCloud = { type: "SNAPSHOT", payload: Object.assign({}, snap.payload, { relay_name: "OfficeWin", acct_relays: [ { dev: "rl-ccc333", name: "MacBook", rk: "rkM", online: true }, { dev: "rl-aaa111", name: "HomeWin", rk: "rkA", online: true } ] }) };
 await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "cloud", frame: ${JSON.stringify(snapCloud)} })`);
 await wait(700);
-const g3e = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector('[data-settings-panel="connections"]'); const rows = [...(p?.querySelectorAll(".acct-relay-row") || [])]; return { n: rows.length, names: rows.map(r => (r.querySelector("strong")||{}).textContent || "") }; })())`));
+const g3e = JSON.parse(await ev(`JSON.stringify((() => { const p = document.querySelector('[data-settings-panel="connections"]'); const rows = [...(p?.querySelectorAll(".acct-relay-row") || [])]; return { n: rows.length, names: rows.map(r => { const w = r.querySelector(".v8-swtxt"); const f = w ? [...w.childNodes].find(n => n.nodeType === 3 && n.textContent.trim()) : null; return f ? f.textContent.trim() : ((r.querySelector("strong")||{}).textContent || ""); }) }; })())`));
 ok(g3e.n === 2 && g3e.names.includes("OfficeMac"), `③e 云视角帧后 OfficeMac 行常驻（names=${JSON.stringify(g3e.names)}——云差集键不学习，本机缓存覆写）`);
 await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "lan", frame: ${JSON.stringify(snap2)} })`);
 await wait(600);

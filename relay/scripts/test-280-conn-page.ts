@@ -76,9 +76,9 @@ ok(sd.includes('data-settings-panel="connections"') && sd.includes("<h5>源列�
   "I1 四区 IA：源列表（W-COPYAUDIT 改名）/ 这台电脑（CONNV3 改名——原三卡混排拆分定稿）");
 ok(sd.includes('data-conn-remote-card') && sd.includes('data-settings-live="remote-sources"'),
   "I2 远程源独立容器+云形态整卡隐藏（云槽自渲染防双份）");
-ok(sd.includes("liveSetHtml(remoteLive, cloudSettingsRows(false));"), // W-ACCOUNT 视觉审查锚迁移Ⅱ：acct 行组内插 cloudSettingsRows 清单区（withName=false 语义不变）
-  "I3 桌面远程卡 withName=false（源名编辑归本机 relay 卡=同主体同卡）");
-ok(sd.includes("function cloudSettingsRows(withName = true)") && sd.includes("if (withName) html += relayNameRowHtml(false)"),
+ok(sd.includes("liveSetHtml(remoteLive, sourceListRows());"), // CONNV4 批A 锚跟改：cloudSettingsRows(false) 退役→sourceListRows 五段序单口（源名编辑仍归本机 relay 卡——withName 语义由单口内聚承载）
+  "I3 桌面远程卡单口渲染（源名编辑归本机 relay 卡=同主体同卡）");
+ok(sd.includes("function sourceListRows()") && sd.includes("function relayNameRowHtml(mobile)"),
   "I3 云形态槽内源名行保留（缺省 true，云源改名能力不变）");
 ok(sd.includes("出示配对码") && sd.includes("data-conn-section=\"this-machine\""),
   "I4 配对按钮归入这台电脑卡（原孤立页脚 → 操作与对象同卡——CONNV3 改「出示配对码」）");
