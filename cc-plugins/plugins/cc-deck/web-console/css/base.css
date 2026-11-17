@@ -1202,7 +1202,8 @@
     .kv-row-copy { position: relative; padding-right: 34px; }
     .kv-row-copy b { max-width: 46%; } /* W-UIB1：翻面后值右贴，让位绝对定位的复制钮 */
     .kv-row.kv-flow { display: block; } /* W-UIB1：经验注入行=内容行非键值行，免翻面免截断（b 流式 span 随行） */
-    .kv-row.kv-flow b { white-space: normal; overflow-wrap: anywhere; } /* 审查 P1 修：.kv-row b 的 nowrap 对 block 化后的 inline b 仍在效——长经验文本成不可折行长线撑出 .tabpage-scroll 横滚（overflow/ellipsis 对 inline 失效唯 nowrap 活=半截护体反成祸） */
+    .kv-row.kv-flow b { white-space: normal; overflow-wrap: anywhere; }
+    .kv-row.kv-flow span { display: block; margin-top: 3px; } /* 复审 P3 收口：经验行正文与作用域 meta 零分隔连读（「…无任何报错通用 · 全局」）——meta 独立成行缩 3px */ /* 审查 P1 修：.kv-row b 的 nowrap 对 block 化后的 inline b 仍在效——长经验文本成不可折行长线撑出 .tabpage-scroll 横滚（overflow/ellipsis 对 inline 失效唯 nowrap 活=半截护体反成祸） */
     .kv-copy-btn {position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .kv-copy-btn:hover { background: var(--hover); color: var(--text); border-color: var(--brand); }
     .more-section { margin-top: 18px; }
@@ -1948,7 +1949,6 @@
        仅真失联 bad 亮红字（红=错误） */
     #d-team .watchdog-signal { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font: var(--fs-C) var(--mono); }
     #d-team .watchdog-signal.bad { color: var(--error); }
-    /* 1014 词表统一：watchdog 双信号 good=绿/warn=橙/bad=红/off=灰（--st-*） */
 
     #d-team .workspace-pane .team-activity { width: 100%; max-width: none; padding: 0 4px 12px; }
     #d-team .activity-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-strong); font-size: var(--fs-B); font-weight: 700; }
