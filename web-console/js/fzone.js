@@ -2,7 +2,7 @@
 // W-FZONE-R4（1112 用户四轮打回·第四轮定谳「在外面，在右侧」）：工作区=app 内容区级右列——
 // fzone+4px sash 与 session-detail 并列为 .session-shell 子级（不在会话面板内、head 不压工作区）；
 // 窄窗禁浮层（<1200 覆盖媒体查询删除，任何宽度都是真实列）+冷启必收起（OPEN_KEY 全退役——P2 批五清账）+
-// 极窄 <1000 单向自动收起（NARROW_W）。宽度 440、clamp[340,800] 沿用；tab/内容链路不变。
+// 极窄 <1000 单向自动收起（NARROW_W）。宽度 440；W-UIB0 clamp[340,1200]；tab/内容链路不变。
 // 内容加载委托 session-domain 注册的 window.__ccDeck005FzoneLoad(el, sid, path)（复用
 // fetchArtifact/mdHtml/synHtml 闭包内管线——本文件零数据面）；图标委托 __ccDeck005ArtIconHtml。
 // 批一范围：md/代码/图片三格式 + 点击入口闭环；批二（W-FZONE-B2）：格式矩阵（pdf 原生 viewer/
@@ -37,7 +37,7 @@
   }
 
   // ---------- 宽度/收起（记忆：localStorage 持久——任务书「收起/展开记忆」） ----------
-  // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）、clamp[340,800]
+  // W-FZONE-R3：宽度策略照 WorkBuddy——默认 440（useState(440)）；W-UIB0 上限 1200
   // （Math.min(Math.max(w,340),800) 同构）；72vw 上位护栏为我方窄窗浮层配套（<1200 面板 absolute
   // 覆盖态防超窗——WorkBuddy 桌面窗最小宽足够无需此护栏，宽屏下 72vw≥864>800 零感知）。
   // W-FZONE-R4 P1-2 修（审 B）：浮层退役后 72vw 护栏在 <1111px 区间护不住（0.72*1111≈800>可用）——
@@ -178,7 +178,7 @@
     if (on && !wasOpen && shellWin()) { // R5 真第四列：壳内呼出=窗口外扩（R6：外扩优先+chat 压缩补足——见 shellOpenGrow 头注）。!wasOpen 门=已开时重复 setOpen(true)（open() 点文件聚焦路径）不二次外扩
       const w0 = readWShell();
       const chat0 = chatColW(); // 反方审 P0：chat0 必须在 fzone 仍 hidden 的同步段量（winOp 异步执行时面板已 hidden=false+预置宽占位——自量=账锚失真：富余让位永不生效+wtMax 双扣把面板压成 340 细条）
-      root.style.width = Math.max(340, Math.min(1200, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)))) + "px"; // R6：同步先落「chat 空白富余已让」的目标宽（winOp 内互钳后可能再收窄——一拍微调可接受，方向一致不闪跳；W-UIB0 上限 1200）
+      root.style.width = Math.max(340, Math.min(1200, Math.round(w0 + Math.max(0, chat0 - CHAT_COMFORT)), Math.round(window.innerWidth) - 4 - CHAT_FIT)) + "px"; // R6：同步先落「chat 空白富余已让」的目标宽（winOp 内互钳后可能再收窄——一拍微调可接受，方向一致不闪跳；W-UIB0 上限 1200）。审查 P3 修（预压钳）：CSS 上限放档后本拍瞬时目标宽不再被 800 意外兜住——加当前视口几何钳（chat≥CHAT_FIT；winOp 落地后终钳，防数十 ms 破底闪拍；Math.max 340 外兜=极窄视口不塌细条）
       shellOpenGrow(w0, chat0).then((grew) => { if (!grew) applyW(readW()); }); // P1-b：不可外扩回落挤压护栏接线（最大化/全屏/通道断——availMax/CHAT_FIT 护栏口径，头注合同兑现）
     } else if (on) applyW(readW()); // R4 P1-2 修（审 B）+ R4-R1 刀三合流单点：展开时按当前视口重钳记忆宽（护栏保对话列/composer 全按钮——窄域手动再开不再 215px 细条；记忆 800 极窄再开被 avail 收紧）——open/toggle/autoOpen 全走本口（R5/R6：无壳回落同口）
     else if (!on && wasOpen && shellWin()) shellShrink(openFromW != null ? Math.max(0, Math.round(window.innerWidth) - openFromW) : 0); // R6③：收合缩量=现宽−开前快照（手动改窄→0=保持用户态；无账→0 最保守不动窗——反方审 P1-a：旧「4+面板宽」回落在 R6 下面板宽≫窗增量必超缩）

@@ -168,6 +168,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
   const detail = readFileSync(join(root, "expo-app", "src", "screens", "DetailScreen.tsx"), "utf-8");
   const css = readFileSync(join(root, "web-console", "css", "base.css"), "utf-8");
   const fz = readFileSync(join(root, "web-console", "js", "fzone.js"), "utf-8"); // W-FZONE-B1
+  const fzCss = readFileSync(join(root, "web-console", "css", "base.css"), "utf-8"); // W-UIB1 审查 P0 教训：CSS max-width 独立于 JS clamp——内联 width 突不破类规则，探针只锚 JS 面=放档假绿（800 截死三套探针全漏）
   const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8"); // W-FZONE-B1
 
   // relay
@@ -224,7 +225,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(iShell >= 0 && iShell < iDetail && iDetail < iShellEnd && iFz < iShellEnd, "R4-2 sash 与 session-detail 同为 session-shell 子级（#d-session 网格第二列 occupant=session-shell——工作区整列独立于会话面板，如会话列表是左列）");
     ok(!html.includes('class="session-split"'), "R4-2b session-split 行容器退役负向锚（R3 形态不得回归）");
     ok(!html.includes("workspace-main"), "R4-3 旧 workspace-main 行容器退役（分栏藏在会话详情容器内的病灶结构不得回归）");
-    ok(fz.includes('Math.max(340, Math.min(1200, availMax(), Math.round(window.innerWidth * 0.85)') && fz.includes(": 440; // 缺省 440") && fz.includes('document.querySelector("#d-session .fz-sash[data-fz-resize]")') && fz.includes('document.body.style.userSelect = "none";') && fz.includes("sash.hidden = !on;"), "R4-4 拖拽/宽度同构保留（W-UIB0 批零规格：clamp[340,1200]+0.85vw+availMax 三钳+默认 440+sash 查询迁移后仍中+拖拽 body cursor/userSelect 锁+sash 随开合联动）");
+    ok(fz.includes('Math.max(340, Math.min(1200, availMax(), Math.round(window.innerWidth * 0.85)') && fzCss.includes(".fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 1200px;") && fz.includes(": 440; // 缺省 440") && fz.includes('document.querySelector("#d-session .fz-sash[data-fz-resize]")') && fz.includes('document.body.style.userSelect = "none";') && fz.includes("sash.hidden = !on;"), "R4-4 拖拽/宽度同构保留（W-UIB0 批零规格：clamp[340,1200]+0.85vw+availMax 三钳+CSS max-width 同值双面锚+默认 440+sash 查询迁移后仍中+拖拽 body cursor/userSelect 锁+sash 随开合联动）");
     ok(css.includes("width: 4px") && css.includes("cursor: col-resize") && css.includes(".fz-sash[hidden] { display: none; }") && css.includes("width: 440px") && css.includes(".session-shell > .session-detail"), "R4-5 CSS 锚（__detail-sash 4px col-resize+hidden 互斥+__detail-panel 定宽 440+session-shell>session-detail 会话列 flex 让位）");
     // R4-6：会话头只在会话列（用户口径④「head 压工作区」根治）——head 在 session-detail 内、会话体之上
     {

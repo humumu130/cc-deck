@@ -794,7 +794,7 @@
     .fz-sash { cursor: col-resize; z-index: 10; flex-shrink: 0; width: 4px; position: relative; } /* =WorkBuddy __detail-sash{cursor:col-resize;z-index:10;flex-shrink:0;width:4px;position:relative} */
     .fz-sash:hover, .fz-sash.dragging { background: color-mix(in srgb, var(--brand, #EC9A73) 60%, transparent); } /* =__detail-sash:hover 品牌色 60% */
     .fz-sash[hidden] { display: none; }
-    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 800px; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden; } /* 结构=WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，clamp[340,800]）；底色 W-FZONE-R5 融合（1115 用户「底色也不对」）：--surface1（=左列列表档，fzone 被读作列表列）退役→主面板同源面 workspace-top→bg1 梯度（与 .workspace 逐 token 同构）+左缘 1px line-soft 列界（与 .queue border-right 同节奏）——工作区=主面板延续，双主题自动随 token，不自创色 */
+    .fzone { position: relative; display: flex; flex-direction: column; flex-shrink: 0; height: 100%; width: 440px; min-width: 340px; max-width: 1200px; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); border-left: 1px solid var(--line-soft); overflow: hidden; } /* 结构=WorkBuddy __detail-panel{flex-shrink:0;height:100%}+width JS 注入（默认 440，W-UIB0 clamp[340,1200]——JS/CSS 双面同步，max-width 必须跟 JS 上限同值否则内联 width 突不破类规则=审查 P0 教训）；底色 W-FZONE-R5 融合（1115 用户「底色也不对」）：--surface1（=左列列表档，fzone 被读作列表列）退役→主面板同源面 workspace-top→bg1 梯度（与 .workspace 逐 token 同构）+左缘 1px line-soft 列界（与 .queue border-right 同节奏）——工作区=主面板延续，双主题自动随 token，不自创色 */
     .fzone[hidden] { display: none; }
     .fzone .ws-tools { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex: none; }
 
@@ -1198,10 +1198,11 @@
     .kv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 6px; border-radius: 6px; }
     .kv-row:hover { background: var(--hover); }
     .kv-row span { order: 1; flex: 0 0 auto; color: var(--dim); font-size: var(--fs-B); }
-    .kv-row b { order: 2; min-width: 0; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
+    .kv-row b { order: 2; min-width: 0; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; } /* 审查 P2 纠偏：右对齐+LTR 下超宽值溢出发生在行首（硬切、ellipsis 不渲染）——尾部恒可见，对路径/引擎名等「尾重要」值反而是正解（有意为之非缺陷；左截断指示器留批二 token 批再议） */
     .kv-row-copy { position: relative; padding-right: 34px; }
     .kv-row-copy b { max-width: 46%; } /* W-UIB1：翻面后值右贴，让位绝对定位的复制钮 */
     .kv-row.kv-flow { display: block; } /* W-UIB1：经验注入行=内容行非键值行，免翻面免截断（b 流式 span 随行） */
+    .kv-row.kv-flow b { white-space: normal; overflow-wrap: anywhere; } /* 审查 P1 修：.kv-row b 的 nowrap 对 block 化后的 inline b 仍在效——长经验文本成不可折行长线撑出 .tabpage-scroll 横滚（overflow/ellipsis 对 inline 失效唯 nowrap 活=半截护体反成祸） */
     .kv-copy-btn {position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface2); color: var(--dim); cursor: pointer; font-size: var(--fs-E);}
     .kv-copy-btn:hover { background: var(--hover); color: var(--text); border-color: var(--brand); }
     .more-section { margin-top: 18px; }
