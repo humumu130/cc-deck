@@ -177,15 +177,15 @@
                   }
                   return ids;
                 }
-                function memberCtxMeter(info) { // ⑥a-4 成员卡水位条：成员会话 context 用量（无数据不渲染）
+                // W-DENSD 批三②（1117 用户令「一次到底」）：成员卡水位条退役降 title 悬浮——数值不
+                // 占卡面（title 片段由 memberCardTitle 拼进卡 title；原 ctxrow 视觉条/ctxlabel 删）。
+                function memberCtxTitle(info) { // ⑥a-4 水位信息降 title：无数据返回空串
                   const used = Number(info.context_usage) || 0;
                   const limit = Number(info.context_limit) || 0;
                   if (!used || !limit || limit <= 0) return "";
                   const pct = Math.max(1, Math.min(100, Math.round((used / limit) * 100)));
-                  if (!Number.isFinite(pct)) return ""; // 件十六防护：脏数据（NaN 比例）宁缺毋滥——NaN% 内联失效会退化成全宽条（全员等长观感的候选根因）
-                  // V8R：原型 ctxrow/.ctx/.ctxlabel——5px 渐变填充条 + tabular-nums 标签
-                  //（原三色 tone 分段退役；title 带原值与档位信息补偿）
-                  return '<div class="ctxrow" data-context-waterline title="上下文 ' + used + ' / ' + limit + ' tokens（' + (pct >= 85 ? "危险" : pct >= 60 ? "偏高" : "安全") + '）"><span class="ctx"><i style="width:' + pct + '%"></i></span><span class="ctxlabel">上下文 ' + pct + "%</span></div>";
+                  if (!Number.isFinite(pct)) return ""; // 件十六防护：NaN 比例宁缺毋滥
+                  return " · 上下文 " + pct + "%（" + used + "/" + limit + (pct >= 85 ? " 危险" : pct >= 60 ? " 偏高" : " 安全") + "）";
                 }
                 // #264（1026 用户实锤）头像标准化：与会话列表同源体系（W-CRABINTEGRATE 手机端
                 // 角色蟹移植桌面）——底色=引擎品牌色淡彩（session-domain b2AvaColor 同口径色轮）；
@@ -231,7 +231,12 @@
                   const dispPend = pendingDispatchSids(project.id).has(member.session_id)
                     ? '<span class="tag dispatch-pending" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 未消费</span>'
                     : "";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head">' + memberAvatarHtml(info, roleClass) + '<div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '">心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '">日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
+                  // W-DENSD 批三②：engine-badge 重复枚举退役（矩阵整列同引擎=chip×N 噪音）——
+                  // 引擎信息两在：头像品牌图标/底色（memberAvatarHtml 同源）+卡 title 文字；
+                  // 水位数值同入 title（memberCtxTitle）。identity-cluster 只留 dispPend。
+                  const engName = info.engine && engines.has(info.engine) ? engines.get(info.engine)[0] : String(info.engine || "");
+                  const cardTitle = "打开成员会话" + (engName ? " · 引擎 " + engName : "") + memberCtxTitle(info);
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="' + escape(cardTitle) + '"><div class="member-head">' + memberAvatarHtml(info, roleClass) + '<div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '">心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '">日志</span></div>' + msgBtn + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染
@@ -1850,18 +1855,11 @@
                 // 文案与浏览钮真值联动（消灭「非当前浏览器电脑」的自相矛盾）；A4+C4 文案
                 // 全线砍短（≤32 字当量单行，word-break 兜底在 CSS）
                 function teamAnchorHint(which) {
-                  const plat = window.__ccDeck005PlatformFor ? window.__ccDeck005PlatformFor(which) : null;
-                  const posix = "形如 /Users/名字/项目";
-                  const win = "形如 C:\\Users\\名字\\项目";
-                  if (which !== "cloud" && teamAnchorBrowseable(which)) return "路径在本机 relay 上，可点浏览直接选择";
-                  if (which === "cloud") {
-                    if (plat === "win32") return "路径在那台电脑（Windows）上——" + win;
-                    if (plat) return "路径在那台电脑上——" + posix;
-                    return "路径在那台电脑上——按它的系统填绝对路径";
-                  }
-                  if (plat === "win32") return "路径在 relay 宿主机（Windows）上——" + win;
-                  if (plat) return "路径在 relay 宿主机上——" + posix;
-                  return "路径在 relay 宿主机上——按它的系统填绝对路径"; // W-AGGFIX A4：未知平台回落砍短（原双系统长文案 probe 实证 4 行）
+                  // W-DENSD 批三⑤：五段长文案形态（本机可浏览/云 win/云 posix/本机 win/本机 posix/未知六变体）退役——
+                  // 锚=一行极短句（同账号互通语义由「创建到」选择行自释；平台示例句删——
+                  // placeholder 已示意路径形态）。保留 hint 行机制（browseable 短句仍实用）。
+                  if (which !== "cloud" && teamAnchorBrowseable(which)) return "本机路径，可点浏览选择";
+                  return which === "cloud" ? "那台电脑上的绝对路径" : "relay 宿主机上的绝对路径";
                 }
                 function syncTeamCreateSource(pop) {
                   const sel = pop.querySelector("[data-team-field='source']");
@@ -2086,7 +2084,7 @@
                     html += '<div class="create-label">立项档</div><select class="create-field" data-team-field="tier" aria-label="立项档">'
                       + '<option value="轻立项"' + (pfTier === "轻立项" ? " selected" : "") + '>轻量项目（日常免确认）</option>'
                       + '<option value="正经立项"' + (pfTier === "正经立项" ? " selected" : "") + '>正式项目（需你确认）</option></select>';
-                    html += '<div class="create-label">锚点目录<button type="button" class="anchor-info" data-team-anchor-info aria-label="锚点说明">ⓘ</button></div><div class="create-inline"><input class="create-field" data-team-field="anchor" placeholder="项目绝对路径（在 relay 宿主机上）" aria-label="锚点目录" value="' + escape(pf && pf.anchor ? String(pf.anchor) : teamCwdDefault()) + '">'
+                    html += '<div class="create-label">锚点目录<button type="button" class="anchor-info" data-team-anchor-info aria-label="锚点说明">ⓘ</button></div><div class="create-inline"><input class="create-field" data-team-field="anchor" placeholder="绝对路径（如 /Users/名字/项目）" aria-label="锚点目录" value="' + escape(pf && pf.anchor ? String(pf.anchor) : teamCwdDefault()) + '">'
                       + '<button type="button" class="create-browse" data-team-anchor-browse title="从文件管理器选择目录" hidden>浏览</button></div>'
                       + '<div class="create-hint" data-team-anchor-hint hidden></div>';
                     if (pfDirs.length) html += '<div class="anchor-dirs-row" data-team-anchor-dirs title="' + escape("同 origin clone 目录 · 随创建提交多锚（主锚=锚点目录恒首）") + '"><span class="anchor-dirs-label">附锚</span>' + pfDirs.map((d) => {

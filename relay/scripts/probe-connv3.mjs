@@ -38,7 +38,7 @@ ok(g.head.includes("连到别的电脑"), "①b 副题改写：" + g.head);
 ok(g.thisM && g.pairBtn && g.pairLabel.includes("出示配对码"), "①c 这台电脑卡 + 「出示配对码」钮（" + g.pairLabel + "）");
 ok(g.devicesIn, "①d 连进来的设备台账归宿（data-settings-live=devices 入卡）");
 ok(g.diagbar && g.account === true && g.nearby === true && g.hiddenAcct === false, "①e 诊断 bar + account 卡升顶可见（非 hidden）+ nearby hidden 锚（W-ACCOUNT 件三翻面）");
-ok(g.emptyText.includes("还没有添加源") && g.emptyText.includes("出示配对码"), "①f 空态单路径指路（W-COPYAUDIT 文案锚随改钉）");
+ok(g.emptyText.includes("还没有添加源") && g.emptyText.includes("用配对码添加"), "①f 空态单路径指路（W-COPYAUDIT 改钉随 W-DENSD 批三⑤：指路句删——钮文即路径）");
 
 // ② 全页旧词扫描（连接面板范围内）
 const olds = await ev(`(() => { const p = document.querySelector('[data-settings-panel="connections"]'); if (!p) return "[]"; const hits = []; if (p.textContent.includes("本页设备")) hits.push("本页设备"); if (p.textContent.includes("添加服务器")) hits.push("添加服务器"); if (p.textContent.includes("客户端 · 连到本机的终端")) hits.push("客户端lane"); if (p.textContent.includes("远程源")) hits.push("远程源"); return JSON.stringify(hits); })()`);

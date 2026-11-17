@@ -1514,8 +1514,8 @@ function connectLan(ctx) {
                 liveSetHtml(remoteLive, (entries0.length ? sdelServerRows(false)
                   : (!entries0.length && !acctHtml0
                     ? (acctCred()
-                      ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>在对方电脑上登录同一账号，它会自动出现在这里（免配对码）</p></div></div>'
-                      : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>')
+                      ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>同账号的电脑会自动出现在这里</p></div></div>'
+                      : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p></p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>')
                     : "")) + acctHtml0);
               }
               liveSetHtml(connLive, '<div data-cloud-settings-slot></div>');
@@ -3922,7 +3922,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         pop.setAttribute("aria-modal", "true");
         pop.setAttribute("aria-label", "用配对码添加");
         pop.innerHTML = '<div class="create-head"><h3>用配对码添加</h3><button type="button" class="create-x" data-add-close aria-label="关闭" title="关闭">✕</button></div>'
-          + '<p class="create-sub">在对方电脑的「这台电脑」卡里点「出示配对码」，把得到的 8 位码填到这里；两台电脑都登录同一账号的话可免配对码自动互连</p>'
+          + '<p class="create-sub">填对方电脑出示的 8 位配对码（同账号免码自动互连）</p>'
           + '<div class="create-label">对方的配对码</div>'
           + '<div class="pair-link-row"><input class="create-field" data-cloud-pair-input type="text" inputmode="numeric" maxlength="8" placeholder="对方的 8 位配对码" aria-label="对方的 8 位配对码"><button class="primary-btn" type="button" data-add-submit>连接</button></div>'
           + '<details class="add-adv"><summary>高级 · 服务器地址与令牌</summary>'
@@ -4344,7 +4344,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         html += cloudDiagRowHtml(cloudDiag(), false); // #268 锚：调用字面不动
         if (!peer) {
           html += '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-link"></use></svg></span><div style="flex:1;min-width:0"><strong>输入对方的配对码</strong>'
-            + '<p>在对方电脑的「这台电脑」卡里点「出示配对码」，把 8 位码填到这里</p>'
+            + '' /* W-DENSD 批三⑤：输码行内指路句删（placeholder 自释） */
             + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
             + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="对方的 8 位配对码" aria-label="对方的 8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em">'
             + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div></div></div>';
@@ -4362,8 +4362,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         const acctRelayHtml0 = acctRelayRows();
         if (!entries.length && !acctRelayHtml0) {
           html += acctCred()
-            ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>在对方电脑上登录同一账号，它会自动出现在这里（免配对码）</p></div></div>'
-            : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p>在对方电脑的「这台电脑」卡点「出示配对码」，把码填进来</p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>'; /* conn-page-v2 ⑦语义svg；P2-5a：徽章退役；CONNV3：动作行退役后空态引导行=唯一列表内入口 */
+            ? '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有其他源上线</strong><p>同账号的电脑会自动出现在这里</p></div></div>'
+            : '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-cloud"></use></svg></span><div><strong>还没有添加源</strong><p></p></div><button class="row-share" data-settings-add type="button" title="输入对方电脑的 8 位配对码，把它加进来">用配对码添加</button></div>'; /* conn-page-v2 ⑦语义svg；P2-5a：徽章退役；CONNV3：动作行退役后空态引导行=唯一列表内入口 */
         } else {
           if (entries.length) html += sdelServerRows(false);
         }
@@ -4377,7 +4377,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           html += cloudDiagRowHtml(cloudDiag(), false); // #268 通道诊断面板（test-268 S5 锚：调用字面不动；CONNV3 bar 收折层在 renderCloudUI 包裹）
           if (!peer) {
             html += '<div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-link"></use></svg></span><div style="flex:1;min-width:0"><strong>输入对方的配对码</strong>'
-              + '<p>在对方电脑的「这台电脑」卡里点「出示配对码」，把 8 位码填到这里</p>'
+              + '' /* W-DENSD 批三⑤：输码行内指路句删（placeholder 自释） */
               + '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">'
               + '<input class="composer-input" data-cloud-pair-input type="text" inputmode="numeric" placeholder="对方的 8 位配对码" aria-label="对方的 8 位配对码" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:9em">'
               + '<button class="primary-btn" data-cloud-pair-submit type="button">配对</button></div></div></div>';
