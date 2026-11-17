@@ -440,7 +440,11 @@
     .create-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -5px -6px 0 0; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; line-height: 1; } /* W-TEAMPOPOLISH P3（C 路）：× 命中区 28px（macOS 弹窗惯例），负 margin 视觉盒不外扩 */
     /* W-UIB1（弹窗规范拉齐）：source-menu 家族头行也可容纳 create-x（出示配对码弹窗）——
        头行转 flex，X 负 margin 收进头行右缘 */
-    .source-menu-head.pair-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-right: 3px; } /* 审查 P1 修：仅 flex 排队 X 跟在标签后距缘 310px=六弹窗拉齐自违约——space-between 推右上 */
+    .source-menu-head.pair-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-right: 3px; }
+    .source-menu-head.src-head-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-right: 2px; } /* 1117 用户令：重连小图标收进下拉头行右上角（长文字菜单项退役） */
+    .src-refresh { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); cursor: pointer; }
+    .src-refresh:hover { color: var(--text); background: var(--hover); }
+    .src-refresh .icon-inline { width: 13px; height: 13px; } /* 审查 P1 修：仅 flex 排队 X 跟在标签后距缘 310px=六弹窗拉齐自违约——space-between 推右上 */
     .source-menu-head.pair-head-row .create-x { margin: -6px 0 0 0; flex: none; } /* 审查 P1 修：-6px 右距随 space-between 收回（否则 X 顶到 2px 圆角上），右距 10px≈create 族 11px 视觉对齐 */
     .create-x:hover { background: var(--hover); color: var(--text); }
     .create-inline { display: flex; gap: 6px; align-items: center; }
