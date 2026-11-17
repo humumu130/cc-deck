@@ -107,6 +107,9 @@
                   const status = session.status === "WORKING" && window.__ccDeck005IsRealWorking && !window.__ccDeck005IsRealWorking(session) ? "working-standby" : ({ WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" })[session.status] || ""; /* #291 审查 B-P2-4：成员灯过真判定（待命灰呼吸与列表卡同源；缺全局=老壳降级原样） */
                   const heartbeatAt = Number(member.last_heartbeat_at || session.activity?.updated_at || session.updated_at || 0);
                   const logAt = Number(member.last_business_log_at || session.activity?.activity?.observed_at || session.activity?.updated_at || session.updated_at || 0);
+                  // W-UIB1（红点误报墙）：watchdog 彩点退役——心跳/日志新鲜度是例行数据不是错误，
+                  // 28 枚绿/橙/红点铺满全屏如故障告警。改中性灰文字标签，新鲜度进 title 悬浮；
+                  // 真失联（bad）才亮红字（红=错误，色预算批二立约）。
                   const signalTone = (at) => {
                     if (!at) return "off";
                     const age = Math.max(0, Date.now() - at);
@@ -228,7 +231,7 @@
                   const dispPend = pendingDispatchSids(project.id).has(member.session_id)
                     ? '<span class="tag dispatch-pending" title="派单已注入，worker 尚未消费（换流/启动窗口）">已派单 · 未消费</span>'
                     : "";
-                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head">' + memberAvatarHtml(info, roleClass) + '<div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '"><i></i>心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '"><i></i>日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
+                  return '<div class="member-card" data-team-member-session="' + escape(member.session_id) + '" title="打开成员会话"><div class="member-head">' + memberAvatarHtml(info, roleClass) + '<div class="mh-id"><strong>' + escape(info.name) + '</strong><p class="member-role">' + escape(info.role) + (info.provider ? " · " + escape(info.provider) : "") + '</p></div>' + mdl + '<span class="member-state state-' + (info.status || "offline") + '"><i class="status-dot ' + (info.status || "") + '"></i>' + stateLabel + '</span></div><span class="member-summary" title="' + escape(info.summary) + '">' + escape(info.summary) + '</span><div class="identity-cluster">' + engBadgeHtml + dispPend + '</div><div class="watchdog-row"><span class="watchdog-signal ' + info.heartbeat + '" title="心跳 · ' + signalLabel(info.heartbeat) + '">心跳</span><span class="watchdog-signal ' + info.log + '" title="日志 · ' + signalLabel(info.log) + '">日志</span></div>' + memberCtxMeter(info) + msgBtn + "</div>";
                 }
                 // UIPOLISH3 件五/六/七/八 + 件四⑤ + 追加⑦⑧（2026-10-11 用户看板实测反馈）：
                 // 紧凑双行卡——泳道已表达状态，卡上状态标签删除（件五）；引擎词表外不渲染

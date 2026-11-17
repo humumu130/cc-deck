@@ -230,7 +230,7 @@
                 // ---------- #164 轻量 Markdown + 语法高亮 + 链接化（旧壳 :7548-7845 全量移植，escapeHtml→esc） ----------
                 // 任务号口径与 005 既有 taskRefHtml 一致（#NNN 1~4 位），渲染成 .task-ref 可点段
                 //（旧壳 .task-ref 形态；005 列表/任务 tab 的 .tag 胶囊不复用到正文行内）。
-                const FPATH_RE = /\b[A-Za-z]:[\\/][\w.\-\\/]+|\/(?:home|Users|root|mnt|opt|tmp|var)\/[\w.\-\\/]+/g;
+                const FPATH_RE = /(?:~\/|[A-Za-z]:[\\/]|\/(?:home|Users|root|mnt|opt|tmp|var)\/)[\w.\-\\/]+/g; // W-UIB0（1117 用户实锤「消息文件不能点开」主根）：补 ~ 前缀形态——交付物路径惯例 ~/.cc-deck/… 此前不匹配=零 .fpath 生成
                 function fpathHtml(t) {
                   const s = String(t ?? "");
                   let out = "", last = 0;
@@ -4330,13 +4330,13 @@
                         && (e.role_scope === "any" || e.role_scope === String(s.engine_role).toLowerCase())
                         && (e.project_scope === "global" || e.project_scope.replace(/\/+$/, "") === expAnchor));
                       if (!hits.length) {
-                        html += '<div class="kv-row"><b>0 条</b><span>当前角色×项目无可注入经验</span></div>';
+                        html += '<div class="kv-row kv-flow"><b>0 条</b><span>当前角色×项目无可注入经验</span></div>';
                       } else {
                         const expKind = { pitfall: "坑", practice: "法", preference: "好", fact: "实" };
                         for (const e of hits.slice(0, 12)) {
-                          html += '<div class="kv-row"><b><span class="tag ' + (e.kind === "pitfall" ? "danger" : e.kind === "practice" ? "done" : e.kind === "preference" ? "info" : "") + '" style="margin-right:5px">' + esc(expKind[e.kind] || e.kind) + "</span>" + esc(e.text) + "</b><span>" + esc((e.role_scope === "any" ? "通用" : e.role_scope) + " · " + (e.project_scope === "global" ? "全局" : "本项目") + " · 用 " + (Number(e.use_count) || 0) + " 次") + "</span></div>";
+                          html += '<div class="kv-row kv-flow"><b><span class="tag ' + (e.kind === "pitfall" ? "danger" : e.kind === "practice" ? "done" : e.kind === "preference" ? "info" : "") + '" style="margin-right:5px">' + esc(expKind[e.kind] || e.kind) + "</span>" + esc(e.text) + "</b><span>" + esc((e.role_scope === "any" ? "通用" : e.role_scope) + " · " + (e.project_scope === "global" ? "全局" : "本项目") + " · 用 " + (Number(e.use_count) || 0) + " 次") + "</span></div>";
                         }
-                        if (hits.length > 12) html += '<div class="kv-row"><b>…</b><span>其余 ' + (hits.length - 12) + " 条按权重择优注入</span></div>";
+                        if (hits.length > 12) html += '<div class="kv-row kv-flow"><b>…</b><span>其余 ' + (hits.length - 12) + " 条按权重择优注入</span></div>";
                       }
                     }
                     html += "</div>";
@@ -5360,6 +5360,9 @@
                       const raw = String(fp.dataset.p || "");
                       const abs = raw.startsWith("/") ? raw : (raw.startsWith("~/") && S.homedir ? S.homedir.replace(/[\\/]+$/, "") + raw.slice(1) : null);
                       if (abs) { openFzoneTab(abs); return; }
+                      // W-UIB0：~ 形态无 homedir（快照缺键）时按原样尝试（fetch 失败落 errCard 可见重试形态——
+                      // 与 abs 路径同语义非静默）；真外部（URL/裸文件名）保持复制兜底
+                      if (raw.startsWith("~/")) { openFzoneTab(raw); return; }
                       copyText(raw); b2Toast("外部路径已复制 · " + raw);
                       return;
                     }

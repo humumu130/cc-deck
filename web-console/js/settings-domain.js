@@ -1991,7 +1991,7 @@ function connectLan(ctx) {
         pop.setAttribute("aria-label", "出示配对码");
         const link = lanShareLink();
         let smartTimer = null;
-        pop.innerHTML = '<div class="source-menu-head">出示配对码</div>'
+        pop.innerHTML = '<div class="source-menu-head pair-head-row"><span>出示配对码</span><button type="button" class="create-x" data-pair-close aria-label="关闭" title="关闭">✕</button></div>'
           + '<div class="pair-grid">'
           + '<div class="pair-qr-col"><canvas data-pair-qr width="10" height="10"></canvas><small>手机扫码直接加入</small></div>'
           + '<div class="pair-info">'
@@ -3755,7 +3755,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         pop.setAttribute("role", "dialog");
         pop.setAttribute("aria-modal", "true");
         pop.setAttribute("aria-label", "重命名源");
-        pop.innerHTML = '<h3>重命名源</h3>'
+        pop.innerHTML = '<div class="create-head"><h3>重命名源</h3><button type="button" class="create-x" data-rename-close aria-label="关闭" title="关闭">✕</button></div>'
           + '<p class="create-sub">给这台远程起个好认的名字 · 顶栏/源列表/会话徽章同步更新</p>'
           + '<div class="create-label">显示名</div>'
           + '<input class="create-field" data-rename-input type="text" maxlength="40" placeholder="' + String(sourceDisplayName(rawName)).replace(/"/g, "&quot;") + '" aria-label="源显示名">'
@@ -3966,7 +3966,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         pop.setAttribute("role", "dialog");
         pop.setAttribute("aria-modal", "true");
         pop.setAttribute("aria-label", "用配对码添加");
-        pop.innerHTML = '<h3>用配对码添加</h3>'
+        pop.innerHTML = '<div class="create-head"><h3>用配对码添加</h3><button type="button" class="create-x" data-add-close aria-label="关闭" title="关闭">✕</button></div>'
           + '<p class="create-sub">在对方电脑的「这台电脑」卡里点「出示配对码」，把得到的 8 位码填到这里；两台电脑都登录同一账号的话可免配对码自动互连</p>'
           + '<div class="create-label">对方的配对码</div>'
           + '<div class="pair-link-row"><input class="create-field" data-cloud-pair-input type="text" inputmode="numeric" maxlength="8" placeholder="对方的 8 位配对码" aria-label="对方的 8 位配对码"><button class="primary-btn" type="button" data-add-submit>连接</button></div>'
@@ -4064,7 +4064,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         pop.setAttribute("role", "dialog");
         pop.setAttribute("aria-modal", "true");
         pop.setAttribute("aria-label", "编辑服务器");
-        pop.innerHTML = '<h3>编辑服务器</h3>'
+        pop.innerHTML = '<div class="create-head"><h3>编辑服务器</h3><button type="button" class="create-x" data-edit-close aria-label="关闭" title="关闭">✕</button></div>'
           + '<p class="create-sub">改动地址将重置配对（换桥需重新输码）· 改动连接字段即重连此源</p>'
           + '<div class="create-label">名称</div>'
           + '<input class="create-field" data-edit-name type="text" maxlength="40" placeholder="如：家里 Mac" aria-label="服务器名称" value="' + escapeHtml(String(entry.name || "")) + '">'
@@ -4293,20 +4293,20 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         const back = document.createElement("div"); back.className = "pair-pop-backdrop"; back.dataset.acctBack = "";
         const pop = document.createElement("div"); pop.className = "create-pop add-server-pop"; pop.dataset.acctPop = "";
         pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-label", register ? "创建账号" : "登录");
-        pop.innerHTML = '<h3>' + (register ? "创建账号" : "登录") + '</h3>'
+        pop.innerHTML = '<div class="create-head"><h3>' + (register ? "创建账号" : "登录") + '</h3><button type="button" class="create-x" data-acct-close aria-label="关闭" title="关闭">✕</button></div>'
           + '<p class="create-sub">' + (register ? "注册一次，所有设备用同一账号即可自动互联" : "同一账号的电脑自动互联") + '</p>'
           + '<div class="create-label">用户名</div>'
           + '<div class="pair-link-row"><input class="create-field" data-acct-user type="text" maxlength="24" placeholder="3-24 位，字母 / 数字 / . _ -" aria-label="用户名" autocomplete="username"></div>'
           + '<div class="create-label">密码</div>'
-          + '<div class="pair-link-row"><input class="create-field" data-acct-pass type="password" maxlength="64" placeholder="至少 8 位" aria-label="密码" autocomplete="new-password"><button class="row-share" type="button" data-acct-eye="pass" title="显示 / 隐藏密码" aria-label="显示或隐藏密码"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></button></div>'
-          + (register ? '<div class="create-label">确认密码</div>' + '<div class="pair-link-row"><input class="create-field" data-acct-pass2 type="password" maxlength="64" placeholder="再输一次密码" aria-label="确认密码" autocomplete="new-password"><button class="row-share" type="button" data-acct-eye="pass2" title="显示 / 隐藏密码" aria-label="显示或隐藏密码"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></button></div>' : '') // 视觉审查修（uxcopy P1-2）：注册无确认密码=敲错一位 409 占坑死账号（无找回路径），双字段前置拦截
+          + '<div class="pair-link-row field-eye-row"><input class="create-field" data-acct-pass type="password" maxlength="64" placeholder="至少 8 位" aria-label="密码" autocomplete="new-password"><button class="field-eye" type="button" title="显示 / 隐藏密码" aria-label="显示或隐藏密码"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></button></div>'
+          + (register ? '<div class="create-label">确认密码</div>' + '<div class="pair-link-row field-eye-row"><input class="create-field" data-acct-pass2 type="password" maxlength="64" placeholder="再输一次密码" aria-label="确认密码" autocomplete="new-password"><button class="field-eye" type="button" title="显示 / 隐藏密码" aria-label="显示或隐藏密码"><svg class="icon-inline" aria-hidden="true"><use href="#icon-eye"></use></svg></button></div>' : '') // 视觉审查修（uxcopy P1-2）：注册无确认密码=敲错一位 409 占坑死账号（无找回路径），双字段前置拦截
           + '<div class="pair-foot"><span class="create-err-note" data-acct-err></span><span style="display:flex;gap:8px"><button class="secondary-btn" type="button" data-acct-close>取消</button><button class="primary-btn" type="button" data-acct-submit>' + (register ? "创建账号" : "登录") + '</button></span></div>'; // 审美 P1-1：按钮簇包裹（家族先例）+err 红警示
         const close = () => { pop.remove(); back.remove(); };
         back.addEventListener("click", close);
         pop.addEventListener("keydown", (kev) => { if (kev.key === "Escape") { kev.stopPropagation(); close(); } }); // 视觉审查 P2：Esc 关闭（家族先例）
         pop.addEventListener("click", async (ev) => {
-          const eye = ev.target.closest("[data-acct-eye]");
-          if (eye) { const f = pop.querySelector("[data-acct-" + eye.getAttribute("data-acct-eye") + "]"); if (f) f.type = f.type === "password" ? "text" : "password"; return; } // 审美 P2：密码可见性切换
+          const eye = ev.target.closest(".field-eye"); // W-UIB1（用户点名）：白盒按钮退役——输入框内嵌幽灵图标钮（base.css .field-eye 绝对定位于 input 右内侧）
+          if (eye) { const f = eye.parentElement && eye.parentElement.querySelector("input[data-acct-pass], input[data-acct-pass2]"); if (f) { f.type = f.type === "password" ? "text" : "password"; eye.classList.toggle("revealed", f.type === "text"); } return; }
           if (ev.target.closest("[data-acct-close]")) { close(); return; }
           if (!ev.target.closest("[data-acct-submit]")) return;
           const user = (pop.querySelector("[data-acct-user]") || {}).value || "";
