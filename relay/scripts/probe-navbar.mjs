@@ -53,7 +53,7 @@ const s1 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.quer
 ok(!s1.none && s1.hidden === false && s1.rows === 5 && s1.ticks === 5, `① 门槛渲染：5 行单套 DOM+5 tick 线（rows=${s1.rows}）`);
 ok(s1.clip.includes("calc(100% - 44px)") && s1.bg === "rgba(0, 0, 0, 0)", `①b 折叠态=纯线轨（clip 只露右侧 44px 线区+卡面透明 bg=${s1.bg}——原版机制）`);
 ok(s1.transDur === "0.343s" && s1.transFn.includes("cubic-bezier(0.45, 0, 0.3, 1)", ) === false ? s1.transFn.includes("cubic-bezier(0.45") : true, `①c 收起方向动效参数=${s1.transDur} ${s1.transFn.slice(0, 30)}（原版 .343s cubic-bezier(.45,0,.3,1)）`);
-ok(s1.panelH >= 5 * 22 && s1.panelH <= 5 * 22 + 16, `③高度对照（W-UIP2 期三收紧）：面板折叠高=${s1.panelH}px=5×22+padding（期二 26px→22px——用户 #169「整体高度太高了」）`);
+ok(s1.panelH >= 5 * 16 && s1.panelH <= 5 * 16 + 16, `③高度对照（NAVR5 密度令跟钉）：面板折叠高=${s1.panelH}px=5×16+padding（#173 六轮密度收敛终值 16px 密轨——原 22px 钉是 NAVR5 落地后探针未跟的历史漂移，八修批 2026-11-17 补钉）`);
 
 // ② hover 展开（等 .543s 过渡完）+呼出方向动效参数
 await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false, clientX: document.querySelector(".msg-navbar").getBoundingClientRect().right - 20 }))`);
