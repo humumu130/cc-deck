@@ -72,8 +72,8 @@ console.log("#280-A 连接页重设计——失焦根修（行为级）+ IA/视�
 }
 
 // ---------- I 信息架构（硬要求 2） ----------
-ok(sd.includes('data-settings-panel="connections"') && sd.includes("<h5>其他电脑</h5>") && sd.includes("<h5>这台电脑</h5>") && sd.includes("data-conn-section=\"sources\"") && sd.includes("data-conn-section=\"this-machine\""),
-  "I1 四区 IA：其他电脑 / 这台电脑（CONNV3 改名——原三卡混排拆分定稿）");
+ok(sd.includes('data-settings-panel="connections"') && sd.includes("<h5>源列表</h5>") && sd.includes("<h5>这台电脑</h5>") && sd.includes("data-conn-section=\"sources\"") && sd.includes("data-conn-section=\"this-machine\""),
+  "I1 四区 IA：源列表 / 这台电脑（CONNFIX 1117 用户拍板改名——原三卡混排拆分定稿）");
 ok(sd.includes('data-conn-remote-card') && sd.includes('data-settings-live="remote-sources"'),
   "I2 远程源独立容器+云形态整卡隐藏（云槽自渲染防双份）");
 ok(sd.includes("liveSetHtml(remoteLive, cloudSettingsRows(false));"), // W-ACCOUNT 视觉审查锚迁移Ⅱ：acct 行组内插 cloudSettingsRows 清单区（withName=false 语义不变）

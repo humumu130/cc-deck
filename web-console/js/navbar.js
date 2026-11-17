@@ -27,9 +27,9 @@
   let fishY = 0, fishT = 0; // 期二 R1 fisheye：光标 Y+在飞 rAF 帧号（mouseleave 复位见 fishReset）
 
   // fisheye 鼠标跟随放大（W-UIP2 期三强化·1115 test.18 用户 #169「选中那条变长不明显」）：
-  // 刻度 --fz = 1 + 1.2·exp(−d²/2σ²)（σ=40px，NAVR8 峰值 2.2×——用户 1117 拍板：去果冻尾
-  // 保呼吸感；峰值亮度恒 64% 由 CSS 斜率分母 /1.2 配合）；亮度随 --fz 插值在 CSS tick 行
-  // （color-mix calc）。rAF 合帧不变。
+  // 刻度 --fz：命中行（光标所在行盒内）=2.2×，其余行=1×（用户 1117 二次实锤对齐 WorkBuddy
+  // 单行放大——原高斯邻域衰减上下各两行全动嫌乱）；峰值亮度恒 64% 由 CSS 斜率分母 /1.2 配合；
+  // 亮度随 --fz 插值在 CSS tick 行（color-mix calc）。rAF 合帧不变。
   function fishApply() {
     fishT = 0;
     if (!panelEl) return;
@@ -37,7 +37,7 @@
       const rc = r.getBoundingClientRect();
       if (!rc.height) continue;
       const d = fishY - (rc.top + rc.height / 2);
-      const s = 1 + 1.2 * Math.exp(-(d * d) / 3200); // NAVR8（用户 1117 拍板）：峰值 3.2→2.2×（动效路测算——去果冻尾抢戏保呼吸感）；2σ²=3200 σ=40 不变；CSS tick 斜率分母同步 /1.2（峰值亮度恒 64%）
+      const s = Math.abs(d) <= rc.height / 2 ? 2.2 : 1; // 用户 1117 二次实锤：WorkBuddy 只有鼠标所在行变宽——高斯 σ=40 邻域衰减令上下各两行全动「显得很乱」；改离散单行放大（光标在行盒内=2.2×，行外=1×；tick .12s transition 承接行间过渡）
       r.style.setProperty("--fz", s.toFixed(3));
     }
   }
