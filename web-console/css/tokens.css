@@ -54,6 +54,7 @@
       --rail: #050A11;
       --queue-deep: #0B1522;
       --workspace-top: #0A111C;
+      --surface-popover: #1B2A3D; /* NAVR8 八修（1117 用户令 WorkBuddy 对标）：浮层卡提亮档=现 --hover 值零新色——surface1 卡面双主题都比页底暗（1.08:1/1.12:1=「洞不是卡」三路实锤），浮层须比底亮；notifpanel 卡也病着（1.01:1）留批二收编本 token */
       --footer: #0B1522;
       --inspector-top: #0D1A2B;
       --phone-frame: #02060A;
@@ -212,6 +213,7 @@
       --rail: #DEDEDE;
       --queue-deep: #EDEDED; /* 列表中灰档（微信第二列） */
       --workspace-top: #FAFAFA; /* 1117 用户令：随 bg1 同改（面板梯度上下同值=平色，两 token 必须同步） */
+      --surface-popover: #FFFFFF; /* NAVR8：浅色浮层卡=纯白（surface2 同值零新色）——对气泡 #E5E7EB 1.24:1 解粘连，对页 #FAFAFA 明度归零=分离全押三层影（视觉路 P1 定案） */
       --footer: #EDEDED;
       --inspector-top: #F0F0F0;
       --phone-frame: #172636;

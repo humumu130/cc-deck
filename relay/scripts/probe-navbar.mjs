@@ -49,18 +49,24 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail++; console.log(`  ✗ ${m}`); } };
 
 // ① 门槛渲染+折叠态形态（clip 只露 44px 线区+卡面透明）
-const s1 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); if (!nb) return { none: true }; const p = nb.querySelector(".msg-navbar__panel"); const cs = getComputedStyle(p); return { hidden: nb.hidden, rows: p.querySelectorAll(".msg-navbar__item").length, ticks: p.querySelectorAll(".tick").length, aria: nb.getAttribute("aria-label"), clip: cs.clipPath, bg: cs.backgroundColor, transDur: cs.transitionDuration.split(", ")[0], transFn: cs.transitionTimingFunction.split(", ")[0], panelH: Math.round(p.getBoundingClientRect().height), right: Math.round(nb.getBoundingClientRect().right) }; })())`));
+const s1 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); if (!nb) return { none: true }; const p = nb.querySelector(".msg-navbar__panel"); const li = nb.querySelector(".msg-navbar__list"); const cs = getComputedStyle(p); const lcs = getComputedStyle(li); return { hidden: nb.hidden, rows: li.querySelectorAll(".msg-navbar__item").length, ticks: li.querySelectorAll(".tick").length, aria: nb.getAttribute("aria-label"), clip: lcs.clipPath, bg: cs.backgroundColor, shadow: cs.boxShadow, mask: lcs.maskImage, transDur: cs.transitionDuration.split(", ")[0], transFn: cs.transitionTimingFunction.split(", ")[0], panelH: Math.round(p.getBoundingClientRect().height), right: Math.round(nb.getBoundingClientRect().right) }; })())`));
 ok(!s1.none && s1.hidden === false && s1.rows === 5 && s1.ticks === 5, `① 门槛渲染：5 行单套 DOM+5 tick 线（rows=${s1.rows}）`);
-ok(s1.clip.includes("calc(100% - 44px)") && s1.bg === "rgba(0, 0, 0, 0)", `①b 折叠态=纯线轨（clip 只露右侧 44px 线区+卡面透明 bg=${s1.bg}——原版机制）`);
+ok(s1.clip.includes("calc(100% - 44px)") && s1.bg === "rgba(0, 0, 0, 0)", `①b 折叠态=纯线轨（NAVR8 分层：clip 在 list 层只露右侧 44px 线区+卡壳透明 bg=${s1.bg}）`);
 ok(s1.transDur === "0.343s" && s1.transFn.includes("cubic-bezier(0.45, 0, 0.3, 1)", ) === false ? s1.transFn.includes("cubic-bezier(0.45") : true, `①c 收起方向动效参数=${s1.transDur} ${s1.transFn.slice(0, 30)}（原版 .343s cubic-bezier(.45,0,.3,1)）`);
 ok(s1.panelH >= 5 * 16 && s1.panelH <= 5 * 16 + 16, `③高度对照（NAVR5 密度令跟钉）：面板折叠高=${s1.panelH}px=5×16+padding（#173 六轮密度收敛终值 16px 密轨——原 22px 钉是 NAVR5 落地后探针未跟的历史漂移，八修批 2026-11-17 补钉）`);
 
-// ② hover 展开（等 .543s 过渡完）+呼出方向动效参数
+// ② hover 展开：中途采样（N1/N2 mount-then-toggle 真播）+终态断言（等 .543s 过渡完）
 await ev(`document.querySelector(".msg-navbar").dispatchEvent(new MouseEvent("mouseenter", { bubbles: false, clientX: document.querySelector(".msg-navbar").getBoundingClientRect().right - 20 }))`);
-await wait(700);
-const s2 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); const p = nb.querySelector(".msg-navbar__panel"); const cs = getComputedStyle(p); return { open: nb.classList.contains("open"), ariaExp: nb.getAttribute("aria-expanded"), clip: cs.clipPath, bg: cs.backgroundColor, border: cs.borderColor, transDur: cs.transitionDuration.split(", ")[0], transFn: cs.transitionTimingFunction.split(", ")[0], firstTxt: (p.querySelector(".msg-navbar__item .txt")||{}).textContent?.slice(0, 12), role: p.getAttribute("role") }; })())`));
-ok(s2.open && s2.ariaExp === "true" && /inset\(0px( 0px)* round 12px\)/.test(s2.clip), `② hover 展开：clip 全开=${s2.clip}（Chromium 归一化省略零——裁剪框左缘右移擦显，原版机制）`);
-ok(s2.bg !== "rgba(0, 0, 0, 0)" && s2.border !== "rgba(0, 0, 0, 0)", `②b 卡面渐入=cc-deck token 实底（bg=${s2.bg.slice(0, 24)}…/--line 描边——融合）`);
+await wait(150); // .543s 过渡早段（60ms 防抖+双 rAF≈80ms 后≈70ms 入渡≈13%——弹性缓动前快后慢，340ms 已 97% 采不到中间值）
+const mid = JSON.parse(await ev(`JSON.stringify((() => { const it = document.querySelector(".msg-navbar .msg-navbar__item"); const txt = it && it.querySelector(".txt"); return { h: it ? Math.round(it.getBoundingClientRect().height) : null, o: txt ? Number(getComputedStyle(txt).opacity) : null }; })())`));
+ok(mid.h > 16.5 && mid.h < 27.5, `N1 行级过渡真播（mount-then-toggle）：过渡中段行高=${mid.h}px∈(16,28)——旧 renderRows 重建=终态首帧单帧跳变（动效路 P0 根修实证）`);
+ok(mid.o > 0.05 && mid.o < 0.95, `N2 文字滑显真播：中段 opacity=${mid.o}∈(0,1)`);
+await wait(690);
+const s2 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); const p = nb.querySelector(".msg-navbar__panel"); const li = nb.querySelector(".msg-navbar__list"); const cs = getComputedStyle(p); const lcs = getComputedStyle(li); return { open: nb.classList.contains("open"), ariaExp: nb.getAttribute("aria-expanded"), clip: lcs.clipPath, bg: cs.backgroundColor, border: cs.borderColor, shadow: cs.boxShadow, mask: lcs.maskImage, transDur: cs.transitionDuration.split(", ")[0], transFn: cs.transitionTimingFunction.split(", ")[0], firstTxt: (li.querySelector(".msg-navbar__item .txt")||{}).textContent?.slice(0, 12), role: p.getAttribute("role") }; })())`));
+ok(s2.open && s2.ariaExp === "true" && /inset\(0px( 0px)* round 14px\)/.test(s2.clip), `② hover 展开：list clip 全开=${s2.clip}（radius-lg 14px token 化——擦显机制原版同款）`);
+ok(s2.bg === "rgb(27, 42, 61)" && s2.border !== "rgba(0, 0, 0, 0)", `②b 卡面浮起=--surface-popover 提亮档（bg=${s2.bg} 比页底亮）+描边 color-mix（视觉路 token 表 #3/#4）`);
+ok(String(s2.shadow).includes("64px"), `N3 阴影复活（分层修）：box-shadow 三层影在场=${String(s2.shadow).slice(0, 46)}…——旧结构 clip/mask 双杀阴影=死代码（一致性路 1421px 差分实锤的修复面）`);
+ok(!String(s2.mask) || String(s2.mask) === "none", `N4 静置无渐隐税：5 行无溢出 mask=${String(s2.mask)}（条件渐隐 fade-top/bottom 仅滚动未到头挂——mask 静置恒挂为旧病）`);
 ok(s2.transDur === "0.543s" && s2.transFn.includes("cubic-bezier(0.16"), `⑦呼出动效=${s2.transDur} ${s2.transFn.slice(0, 34)}（原版 .543s cubic-bezier(.16,1,.3,1) 弹性缓动）`);
 ok(/^第1个提问/.test(String(s2.firstTxt)) && s2.role === "listbox", `②c 首行=${s2.firstTxt}…+listbox`);
 await shot("p2-open-dark");
@@ -79,8 +85,8 @@ ok(ma.txt && /^第\d个提问/.test(ma.txt) && parseFloat(ma.w) >= 19, `④ 滚�
 // ⑤ Escape 收起（等 .343s 过渡+visibility/卡面回隐）
 await ev(`(() => { document.querySelector(".msg-navbar").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); })()`);
 await wait(450);
-const s5 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); const p = nb.querySelector(".msg-navbar__panel"); return { open: nb.classList.contains("open"), clip: getComputedStyle(p).clipPath, bg: getComputedStyle(p).backgroundColor }; })())`));
-ok(!s5.open && s5.clip.includes("calc(100% - 44px)") && s5.bg === "rgba(0, 0, 0, 0)", `⑤ Escape 收起：clip 回折叠态+卡面回隐（.343s 曲线收回）`);
+const s5 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar"); const p = nb.querySelector(".msg-navbar__panel"); const li = nb.querySelector(".msg-navbar__list"); return { open: nb.classList.contains("open"), clip: getComputedStyle(li).clipPath, bg: getComputedStyle(p).backgroundColor, rows: li.querySelectorAll(".msg-navbar__item").length }; })())`));
+ok(!s5.open && s5.clip.includes("calc(100% - 44px)") && s5.bg === "rgba(0, 0, 0, 0)", `⑤ Escape 收起：list clip 回折叠态+卡壳回隐（.343s 反向过渡播完 360ms 后换血回采样轨 rows=${s5.rows}）`);
 
 // ⑨ 避让：navbar 与 inspector-expand 抽屉钮交集=0
 const s9 = JSON.parse(await ev(`JSON.stringify((() => { const nb = document.querySelector(".msg-navbar").getBoundingClientRect(); const btn = document.querySelector("#d-session .inspector-expand"); if (!btn) return { noBtn: true }; const ib = btn.getBoundingClientRect(); const ix = Math.max(0, Math.min(nb.right, ib.right) - Math.max(nb.left, ib.left)); const iy = Math.max(0, Math.min(nb.bottom, ib.bottom) - Math.max(nb.top, ib.top)); return { nbRight: Math.round(nb.right), btnX: Math.round(ib.x), inter: Math.round(ix * iy), gap: Math.round(ib.x - nb.right) }; })())`));
