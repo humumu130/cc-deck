@@ -1482,6 +1482,131 @@ function connectLan(ctx) {
           liveSkipped.delete(live);
           if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
         });
+        // ---------- CONNV4 批C-件二（connv4c2）：连入设备台账+双键（桥侧 POST /api/device-admin） ----------
+        // 桥侧 PR#145（fix/connv4c1）：list 混源台账（dev/kind/name/paired_at/last_seen/online/
+        // trust/cooldown_until/ignored_at/note）+kick/ignore/unignore 三写（kick 分型：手机类=作废
+        // 配对信任需重配对；账号类（网页/手表/其他）=断开+24h 冷却；ignore=拉黑常驻；unignore=恢复）。
+        // UI 四原则：①不假成功——写面 500/503/网络败统一人话失败 toast（C1R1 P1 同族纪律 UI 面）
+        // ②确认走页内双钮条（sdel-confirm-bar 同款——Nova 壳原生 confirm() 被桥默认拒，:4023 实锤）
+        // ③刷新只「卡开+动作后」（list 重拉，不轮询——桥侧 online 判据实时性足够）④旧 relay 404=
+        // 能力缺席回落旧台账链（relay_devices 渲染零改续用，能力位口径同 deliverables）。
+        // 军规：小标签 ≤3 字（手机/电脑/网页/手表/在线/离线/冷却中/已忽略）；红=错误系（踢钮）、
+        // 橙=交互系——踢钮红描边即交互按钮用红系的唯一例外（destructive 语义，评审 R2 双键口径）。
+        const DEV_ADMIN = { cache: null, unsupported: false, inFlight: false, pending: null, oldDevices: null };
+        const DEV_KIND_TXT = { phone: "手机", watch: "手表", web: "网页", other: "电脑" };
+        const DEV_KIND_ICON = { phone: "icon-phone", watch: "icon-phone", web: "icon-globe", other: "icon-desktop" }; // 无 icon-watch 字形：手表复用 phone 形，类型 tag 消歧
+        const devAdminUrl = () => {
+          // token 链尾挂 __ccDeck005Token 全局活镜像（:1874 canonical/:1921 壳探测更新——
+          // acctLanToken :4384 同款先例：ctx.cfg/闭包 relayToken 在浏览器 file:// 无 wsUrl
+          // 形态恒空，镜像恒在）
+          const t = String((ctx.cfg && ctx.cfg.token) || relayToken || window.__ccDeck005Token || "");
+          if (!t) return null;
+          const base = shellProbe && localRelayInfo ? "http://127.0.0.1:" + (localRelayInfo.port || 8787) : location.origin;
+          return base + "/api/device-admin?token=" + encodeURIComponent(t);
+        };
+        async function fetchDevAdminList() {
+          const url = devAdminUrl();
+          if (!url || DEV_ADMIN.inFlight) return;
+          DEV_ADMIN.inFlight = true;
+          try {
+            const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "list" }), signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined });
+            if (r.status === 404) { DEV_ADMIN.unsupported = true; return; } // 旧 relay 无此 API：回落旧链（本轮会话不再试）
+            const j = await r.json().catch(() => null);
+            if (!r.ok || !j || !j.ok || !Array.isArray(j.devices)) throw new Error("bad list");
+            DEV_ADMIN.cache = j.devices;
+            DEV_ADMIN.unsupported = false;
+          } catch (_) { /* 拉取失败零打扰：保旧渲染（动作后/重开会话再试） */ }
+          finally { DEV_ADMIN.inFlight = false; }
+        }
+        async function devAdminWrite(action, dev) {
+          const url = devAdminUrl();
+          if (!url) return false;
+          try {
+            const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, dev }), signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
+            const j = await r.json().catch(() => null);
+            return r.ok && j && j.ok === true; // 500/503/400/网络败统一 false——失败分支人话示警，不假成功
+          } catch (_) { return false; }
+        }
+        function devAdminToast(msg, isErr) {
+          try { if (window.__ccDeck005B4 && typeof window.__ccDeck005B4.toast === "function") { window.__ccDeck005B4.toast(msg, isErr ? "error" : undefined); return; } } catch (_) {}
+          showToast(msg); // bridge 未就绪兜底（域内 2.2s toast）
+        }
+        async function devAdminRun(action, dev) {
+          DEV_ADMIN.pending = null;
+          const okRun = await devAdminWrite(action, dev);
+          if (!okRun) { devAdminToast("操作未生效：管理数据写入失败", true); }
+          else if (action === "kick") devAdminToast("已踢出 · 对方需重新配对后才能再连");
+          else if (action === "ignore") devAdminToast("已忽略 · 该设备不再自动连入，可在列表底部恢复");
+          else devAdminToast("已恢复 · 对方需重新配对/确认后再连");
+          await fetchDevAdminList(); // 动作后即时刷新（list 重拉）
+          if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+        }
+        function renderDevAdminRows(devLive) {
+          const now = Date.now();
+          const relTime = (ts) => { const m = Math.max(1, Math.round((now - Number(ts || 0)) / 60_000)); return m < 60 ? m + " 分钟" : m < 1440 ? Math.round(m / 60) + " 小时" : Math.round(m / 1440) + " 天"; };
+          const list = (DEV_ADMIN.cache || []).filter((d) => d && typeof d.dev === "string");
+          const known = new Set(list.map((d) => d.dev));
+          // 旧台账并集去重：同 dev 键只留 admin 行（管理态/双键都在 admin 行）；admin 缺席的旧行尾插（无管理钮——旧形态只读）
+          const legacy = (DEV_ADMIN.oldDevices || []).filter((d) => d && typeof d.id === "string" && !known.has(d.id));
+          const act = list.filter((d) => !(Number(d.ignored_at || 0) > 0));
+          const ign = list.filter((d) => Number(d.ignored_at || 0) > 0); // 忽略行沉底
+          const rowHtml = (d) => {
+            const kind = DEV_KIND_TXT[d.kind] ? d.kind : "other";
+            const ignored = Number(d.ignored_at || 0) > 0;
+            const coolLeft = Number(d.cooldown_until || 0) - now;
+            const cooling = coolLeft > 0;
+            const on = d.online === true && !ignored;
+            const name = String(d.name || "").trim() || (DEV_KIND_TXT[kind] + "设备");
+            const sub = ignored ? "已忽略 · " + relTime(d.ignored_at) + "前标记"
+              : on ? "当前在线 · 已连 " + relTime(d.paired_at)
+              : "上次在线 " + relTime(d.last_seen) + " 前" + (cooling ? " · 冷却剩 " + Math.max(1, Math.round(coolLeft / 3_600_000)) + " 小时" : "");
+            const dev = esc(d.dev);
+            const adminTag = ignored ? '<span class="tag">已忽略</span>' : cooling ? '<span class="tag" title="冷却剩 ' + Math.max(1, Math.round(coolLeft / 3_600_000)) + ' 小时（期间不自动重连）">冷却中</span>' : "";
+            const keys = ignored
+              ? '<button class="row-share" data-devadmin-unignore="' + dev + '" type="button" title="解除忽略：对方需重新配对/确认后再连">恢复</button>'
+              : '<button class="row-share devadmin-kick" data-devadmin-kick="' + dev + '" type="button" title="' + (kind === "phone" ? "踢出：作废配对信任，对方需重新配对" : "断开：24 小时内不再自动重连") + '">踢</button>' +
+                '<button class="row-share" data-devadmin-ignore="' + dev + '" type="button" title="永久忽略该设备（不再自动连入），可在列表底部恢复">忽略</button>';
+            return '<div class="v8-swrow dev-row' + (ignored ? " dev-ignored" : "") + '" data-devadmin-row="' + dev + '"><span class="v8-swico dev-ico ' + esc(kind) + '"><svg class="icon-inline" aria-hidden="true"><use href="#' + DEV_KIND_ICON[kind] + '"></use></svg></span><div class="v8-swtxt">' + esc(name) + '<div class="v8-swd">' + sub + '</div></div><span class="tag">' + DEV_KIND_TXT[kind] + '</span><span class="tag ' + (on ? "done" : "") + '">' + (on ? "在线" : "离线") + "</span>" + adminTag + '<div class="devadmin-keys">' + keys + "</div></div>";
+          };
+          const p = DEV_ADMIN.pending;
+          const confirmHtml = p ? (() => {
+            const d = list.find((x) => x.dev === p.dev) || (DEV_ADMIN.oldDevices || []).find((x) => x && x.id === p.dev);
+            const kind = d && DEV_KIND_TXT[d.kind] ? d.kind : "other";
+            const msg = p.action === "ignore" ? "永久忽略，可在下方恢复" : kind === "phone" ? "踢出后需重新配对" : "断开并 24 小时内不再自动重连";
+            const verb = p.action === "ignore" ? "忽略" : "踢出";
+            return '<div class="devadmin-confirm" data-devadmin-confirm="' + esc(p.dev) + '"><span class="txt">' + esc(msg) + "</span>" +
+              '<button class="row-share" data-devadmin-cancel type="button">取消</button>' +
+              '<button class="row-share devadmin-kick" data-devadmin-go="' + esc(p.dev) + '" type="button">确认' + verb + "</button></div>";
+          })() : "";
+          const parts = [];
+          for (const d of act) { parts.push(rowHtml(d)); if (p && p.dev === d.dev && p.action !== "unignore") parts.push(confirmHtml); }
+          for (const d of ign) { parts.push(rowHtml(d)); if (p && p.dev === d.dev) parts.push(confirmHtml); }
+          if (p && !parts.includes(confirmHtml) && confirmHtml) parts.push(confirmHtml); // 目标行被刷新挤掉的兜底（确认条不丢）
+          for (const d of legacy) {
+            const on = d.online === true;
+            parts.push('<div class="v8-swrow dev-row"><span class="v8-swico dev-ico ' + esc(String(d.kind || "browser")) + '"><svg class="icon-inline" aria-hidden="true"><use href="#icon-' + (d.kind === "phone" ? "phone" : d.kind === "browser" ? "globe" : "desktop") + '"></use></svg></span><div class="v8-swtxt">' + esc(String(d.name || "未知设备")) + '<div class="v8-swd">旧台账记录（升级 relay 后可管理）</div></div><span class="tag ' + (on ? "done" : "") + '">' + (on ? "在线" : "离线") + "</span></div>");
+          }
+          liveSetHtml(devLive, parts.join("") || '<div class="v8-escape">暂无客户端连接记录 · 点上方「出示配对码」可添加手机或另一台电脑。</div>');
+        }
+        if (!window.__ccDeck005DevAdminWired) { // 点击委托一次挂载（render 多拍不叠监听）
+          window.__ccDeck005DevAdminWired = true;
+          window.__ccDeck005DevAdminRefresh = () => { void fetchDevAdminList().then(() => { if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive(); }); };
+          document.addEventListener("click", (ev) => {
+            const kick = ev.target.closest("[data-devadmin-kick]");
+            const ign = ev.target.closest("[data-devadmin-ignore]");
+            const unign = ev.target.closest("[data-devadmin-unignore]");
+            const go = ev.target.closest("[data-devadmin-go]");
+            const cancel = ev.target.closest("[data-devadmin-cancel]");
+            if (kick) { DEV_ADMIN.pending = { dev: kick.dataset.devadminKick, action: "kick" }; }
+            else if (ign) { DEV_ADMIN.pending = { dev: ign.dataset.devadminIgnore, action: "ignore" }; }
+            else if (unign) { void devAdminRun("unignore", unign.dataset.devadminUnignore); return; }
+            else if (go) { const pp = DEV_ADMIN.pending; if (pp && pp.dev === go.dataset.devadminGo) { void devAdminRun(pp.action, pp.dev); return; } }
+            else if (cancel) { DEV_ADMIN.pending = null; }
+            else return;
+            if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+          });
+        }
+
         const render = () => {
           const section = document.querySelector("#d-settings");
           const bodyEl = section?.querySelector(".workspace-body");
@@ -1554,6 +1679,21 @@ function connectLan(ctx) {
           const devLive = section.querySelector('[data-settings-live="devices"]');
           if (devLive) {
             const devices = Array.isArray(snap.relay_devices) ? snap.relay_devices.filter((d) => d && typeof d.id === "string") : null;
+            DEV_ADMIN.oldDevices = devices || []; // CONNV4C2：新旧台账合并的旧侧（admin 缺席行尾插去重）
+            if (DEV_ADMIN.cache) {
+              // CONNV4C2 新链：桥侧 /api/device-admin 台账（管理态+双键），快照重渲吃缓存（不轮询）
+              renderDevAdminRows(devLive);
+            } else if (!DEV_ADMIN.unsupported) {
+              // 首开（或上次拉取失败）：占位+异步首拉——成功换新链渲染，404 落回旧链（能力位）
+              liveSetHtml(devLive, '<div class="v8-escape">正在读取连入设备台账…</div>');
+              void fetchDevAdminList().then(() => {
+                const dl = document.querySelector('[data-settings-live="devices"]');
+                if (!dl) return;
+                if (DEV_ADMIN.cache) renderDevAdminRows(dl);
+                else if (DEV_ADMIN.unsupported && typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+              });
+            } else {
+            // 旧链（旧 relay 无 device-admin API）：relay_devices 渲染零改续用——conn-page-v2 ⑧ 原语义
             const relSeen = (ts) => {
               const m = Math.max(1, Math.round((Date.now() - Number(ts || 0)) / 60_000));
               if (m < 60) return m + " 分钟前在线";
@@ -1574,6 +1714,7 @@ function connectLan(ctx) {
                 : '<div class="v8-swrow"><span class="v8-swico dev-ico browser"><svg class="icon-inline" aria-hidden="true"><use href="#icon-desktop"></use></svg></span><div class="v8-swtxt">' + (desktopForm ? "桌面 App（本机）" : "浏览器 · 本设备") + '<div class="v8-swd">本页即已连客户端 · 配对 token ' + (connState === "unconfigured" ? "未配置" : "已就绪") + "</div></div>" + '<span class="tag ' + (connState === "unconfigured" ? "" : "done") + '">' + (connState === "unconfigured" ? "待配对" : "在线") + "</span></div>" +
                   '<div class="v8-escape">当前 relay 版本未下发客户端台账（升级 relay 后此处显示已连终端清单）。</div>';
             liveSetHtml(devLive, rows);
+            }
           }
           // W-ACCOUNT 件三：账号卡（登录/注册+已登录态+设备计数）——写口同 liveSetHtml（#280-A 失焦保护同享）
           acctMaybeRehydrate(snap); // 件三补：无凭据但 relay 已绑→拉取再水化（异步，回帧后下轮 render 生效）
