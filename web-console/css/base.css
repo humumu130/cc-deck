@@ -2406,6 +2406,15 @@
     /* ⑧ 客户端模块：设备行图标按 kind 语义着色（phone=品牌/desktop·browser=信息蓝） */
     .dev-ico.phone { color: var(--brand-strong, var(--brand)); }
     .dev-ico.desktop, .dev-ico.browser { color: var(--info); }
+    /* CONNV4 批C-件二（connv4c2）：设备管理双键——手表随 phone 形（无独立字形，tag 消歧）；
+       踢钮=destructive 红系（row-share 尺寸同档，色预算红=错误系的破坏性动作例外，评审 R2 双键口径）；
+       忽略行沉底灰显；确认条=页内双钮（sdel-confirm-bar 同款——Nova 壳原生 confirm 被桥默认拒） */
+    .dev-ico.watch { color: var(--brand-strong, var(--brand)); }
+    .devadmin-keys { display: flex; gap: 6px; flex: none; }
+    .row-share.devadmin-kick { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
+    .dev-row.dev-ignored { opacity: .55; }
+    .devadmin-confirm { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 7px 10px; border: 1px solid var(--danger-line); border-radius: 8px; background: var(--danger-bg); font-size: var(--fs-B); }
+    .devadmin-confirm .txt { flex: 1; color: var(--text); min-width: 0; }
     .conn-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
     .conn-card-foot .primary-btn { flex: none; }
     /* ④ ghost 钮规格归一（radius 统一 8px，与 v8-prbtn 同档；描边系全页一个模子） */
