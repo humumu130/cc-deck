@@ -2666,6 +2666,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       function destroyCtx(c) { // 池销毁链：断开（定时器全清）+移出池——内存护栏断言面（probe-connv4b ⑨）
         if (!c) return;
         cloudDisconnect(c);
+        if (c.cfg && c.cfg.id) { try { setPendingPair(c.cfg.id, null); } catch (_) {} } // CONNV4B-fix1（R2 P2-2）：源隔离键随销毁清——防 session 级孤儿键+陈旧 pair 覆盖新鲜 hit.rk
         c.sessions.clear(); c.hasSnapshot = false; c.lastSeq = 0; c.lastSnapshotPayload = null; c.logBuffer = null;
         if (c.cfg && c.cfg.id) ctxPool.delete(c.cfg.id);
       }
@@ -2675,7 +2676,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           warmId = prevId;
         }
       }
-      window.__ccDeck005ConnPool = () => ({ fg: cloudCtx.cfg && cloudCtx.cfg.id || "", pool: [...ctxPool.keys()], warm: warmId || "" }); // W-CONNV4B：池只读快照（probe-connv4b 断言面——fg 指针/池键/预热位）
+      window.__ccDeck005ConnPool = () => ({ fg: cloudCtx.cfg && cloudCtx.cfg.id || "", fgStatus: String(cloudCtx.status || ""), warm: warmId || "", warmStatus: warmId ? String((ctxPool.get(warmId) || {}).status || "") : "" , pool: [...ctxPool.keys()] }); // W-CONNV4B：池只读快照（probe-connv4b 断言面——fg 指针/池键/预热位）；fix1 扩 fgStatus/warmStatus——独立状态机观测面（串台形态两值恒等=同对象，fix1 前探针红）
       // ---------- #268 通道诊断账本：状态机每次迁移留痕（console 显形 + 设置页面板直读） ----------
       // 动机：1026 CF tail 实锤桌面壳 wss Canceled 后零流量零定时器——「连接中」黑洞正是
       // 状态机内部迁移不可见所致。ring 20 条防刷屏；连续相同迁移去重（轮询失败 4s 一拍不灌水）。
@@ -2745,22 +2746,23 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       // 每源状态落点（旧壳 setConn 云链版）：状态/归因 + B3 通道开关 + 总线 ws 事件 + 地基徽标 + 云 UI
       function cloudSetConn(status, text, kind, c) { // CONNV4B：可选第 4 参 ctx（缺省前台——存量调用零改；预热台路径传自身，诊断留痕仅前台）
         c = c || cloudCtx;
-        if (c === cloudCtx && (c.status !== status || c.statusText !== text)) cloudDiagNote("状态 " + status, text);
+        const fg = c === cloudCtx; // CONNV4B-fix1（R2 P0 刀二）：七处全局写套前台门——warm ctx 状态迁移只写自身（status/failKind/retryAt/_everOnline），不触全局面（诊断留痕/总线 emit/地基徽标/云 UI/团队绑定）
+        if (fg && (c.status !== status || c.statusText !== text)) cloudDiagNote("状态 " + status, text);
         c.status = status;
         c.statusText = text;
         // 失败归因（仅 offline 携带）：transport（自动+手动重试，绝不引导输码）/ unpaired（真未配对，
         // 引导输码）/ pair（配对受挫，换码）/ bridge（桥不可达，诊断文案保留为重试前缀）/ none
         c.failKind = status === "offline" ? (kind || classifyCloudFail(text)) : "";
-        if (status !== "connecting") { cloudCtx.retryAt = 0; cloudCtx.retryNote = ""; }
+        if (status !== "connecting") { c.retryAt = 0; c.retryNote = ""; } // fix1：参数化——warm 自身重试计也归零（原写死前台=串台位之一）
         if (status === "online") {
-          cloudCtx._everOnline = true;
-          syncTeamBind(); // 云在线：B3 命令通道按视角统一绑定（W-WINPAIR-R2：云视角才真正放行）
+          c._everOnline = true; // fix1：每源自证在线（原写死前台——warm status 永不更新=「已在线短路假在线」根位）
+          if (fg) syncTeamBind(); // 云在线：B3 命令通道按视角统一绑定（W-WINPAIR-R2：云视角才真正放行）——仅前台
         } else if (status === "offline") {
-          syncTeamBind(); // 离线三态完备（对齐 connectLan onclose 口径）；W-WINPAIR-R2 统一按视角源
+          if (fg) syncTeamBind(); // 离线三态完备（对齐 connectLan onclose 口径）；W-WINPAIR-R2 统一按视角源——仅前台
         }
-        window.__ccDeck005Frames.emit({ kind: "ws", state: status === "online" ? "open" : status === "connecting" ? "connecting" : "close", source: "cloud" }); // 缝合点 b；W-WINPAIR-R2 带源标记
-        setConn(cloudCtx, status, text, cloudCtx.failKind); // 地基三态徽标/chip/会话列表占位
-        renderCloudUI();
+        if (fg) window.__ccDeck005Frames.emit({ kind: "ws", state: status === "online" ? "open" : status === "connecting" ? "connecting" : "close", source: "cloud" }); // 缝合点 b；W-WINPAIR-R2 带源标记——仅前台（总线事件=前台视角语义）
+        if (fg) setConn(c, status, text, c.failKind); // 地基三态徽标/chip/会话列表占位——仅前台
+        if (fg) renderCloudUI();
       }
 
       // #259 通道启动层静默死根修：connectCloudFor 全包裹。ws 构造/devId/seal 等同步异常
@@ -2774,7 +2776,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           console.error("[cloud:" + ((ctx.cfg && ctx.cfg.name) || "云桥") + "] 通道启动异常（已转离线重试）:", e);
           if (ctx.transport === "ws") ctx.transport = "poll"; // WS 构造面挂了：下次重试走 HTTP 轮询通道
           cloudDiagNote("通道启动异常", (e && e.message) || String(e), true);
-          cloudSetConn("offline", "通道启动失败：" + ((e && e.message) || String(e)), "transport", undefined, ctx);
+          cloudSetConn("offline", "通道启动失败：" + ((e && e.message) || String(e)), "transport", ctx);
           scheduleCloudReconnect(ctx);
         }
       }
@@ -2799,7 +2801,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         ctx.pendingPair = pair;
         if (!peer && !pair) {
           // 明确无身份（新装/被清）：未配对态出配对 UI（手动触发时引导输码）
-          cloudSetConn("offline", "未配对", "unpaired", undefined, ctx);
+          cloudSetConn("offline", "未配对", "unpaired", ctx);
           if (manual) { showToast("请输入配对码配对（电脑端 CC Deck 设置 → relay 页领取）"); openCloudPairUI(); }
           return;
         }
@@ -2811,7 +2813,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
         stopChannelWatchdog(ctx);      // #259：新一轮连接重挂（hello 发出点重新武装）
         killWsTransport(ctx);          // #268：旧 ws 统一收尸（摘引用+摘处理器，晚到事件全哑火）
-        cloudSetConn("connecting", peer && !pair ? "连接中" : "配对中", undefined, ctx);
+        cloudSetConn("connecting", peer && !pair ? "连接中" : "配对中", ctx);
         if (ctx.transport === "poll") { startPollTransport(ctx, base, serverBridgeToken(cfg), dev, pair); return; }
         // 手填 https://…/cloud 也能连：统一归一到 ws/wss scheme（https 页面恒 wss——混合内容硬约束）
         const wsBase = base.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
@@ -2852,7 +2854,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             // 读 pair.pc 空引用炸断 onopen（判定链全灭）。改发现在帧交 RELAYS 判定
             //（B1 suspect-lead/裸态采信/换代守卫——同 index.html R2 同构修）
             if (!pair) {
-              if (!ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); cloudSetConn("connecting", "定位 relay…", undefined, ctx); }
+              if (!ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); cloudSetConn("connecting", "定位 relay…", ctx); }
               return;
             }
             // #258 自愈铁律：配对态每次连接建立必补发一查——pair_req 幂等（relay 对已配对
@@ -2864,7 +2866,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             startPairWatchdog(ctx);
             return;
           }
-          cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接", undefined, ctx);
+          cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接", ctx);
           // 刷新后内存无会话：last_seq=0 走全量 SNAPSHOT 重建（持久化旧 seq 只会造成空列表；
           // SNAPSHOT 单帧携带预算内日志，1MiB 帧限由 relay 侧有界化，页面不自建拉全量逻辑）
           sendCloudHello(ctx);
@@ -2879,7 +2881,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           if (!opened) { switchToPoll("握手被拒 code=" + ev.code); return; }
           ctx.wsFails++; // 连上又断且一帧未收 → 疑似代理放行握手后掐连接
           if (ctx.wsFails >= 2) { switchToPoll("ws 反复闪断 x" + ctx.wsFails); return; }
-          cloudSetConn("offline", "已断开", "transport", undefined, ctx); // 传输层失败，不引导配对码
+          cloudSetConn("offline", "已断开", "transport", ctx); // 传输层失败，不引导配对码
           scheduleCloudReconnect(ctx);
         };
         w.onerror = () => {};
@@ -2939,7 +2941,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             ctx.pairNextAt = Date.now() + ctx.pairBackoffMs;
             // 耗尽无新身份：offline + 退避重连，不能静默 return——否则状态永久卡「配对中」
             const bcMiss = ctx.pendingPair && !ctx.pendingPair.rd; // 广播态：码没找到持码者
-            cloudSetConn("offline", bcMiss ? "未找到持码服务器" : "配对无应答", "pair", undefined, ctx);
+            cloudSetConn("offline", bcMiss ? "未找到持码服务器" : "配对无应答", "pair", ctx);
             scheduleCloudReconnect(ctx, ctx.pairBackoffMs);
             showToast("配对请求没有回音：请确认双方网络畅通后重试 请求，截图备查");
             console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack，" + Math.round(ctx.pairBackoffMs / 1000) + "s 后自动重试");
@@ -2963,18 +2965,18 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         ctx.reconnectDelay = CLOUD_RETRY_BASE_MS; // 连上即归零退避
         const peer = cloudPeerOf(ctx.cfg);
         if (!peer || pair) {
-          cloudSetConn("connecting", "配对中（轮询）", undefined, ctx);
+          cloudSetConn("connecting", "配对中（轮询）", ctx);
           if (pair && !pair.rd && !ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); } // R2-B2：无锚广播态（含输码广播）预取发现帧补 cands
           // R2：!pair 空引用守卫（同 ws onopen——发现在帧交 RELAYS 判定，两传输同构）
           if (!pair) {
-            if (!ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); cloudSetConn("connecting", "定位 relay…", undefined, ctx); }
+            if (!ctx.discTried) { ctx.discTried = true; discoverRelay(ctx); cloudSetConn("connecting", "定位 relay…", ctx); }
             return;
           }
           // #258 同 onopen 口径：轮询传输建连即补发一查（幂等），退避窗不拦——防同型停摆
           sendPairReq(ctx, pair, dev);
           startPairWatchdog(ctx);
         } else {
-          cloudSetConn("online", "已连接（轮询）", undefined, ctx);
+          cloudSetConn("online", "已连接（轮询）", ctx);
           sendCloudHello(ctx); // #259：hello 发送收口 + 通道看门狗（poll POST 被吞时 13s 兜底）
           startCloudPing(ctx);
         }
@@ -2989,7 +2991,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           try { r = await fetch(ctx.pollBase + "&wait=20", { signal: AbortSignal.timeout?.(30000) }); }
           catch (e) {
             if (gen !== ctx.pollGen) return;
-            if (++netFails >= 3) { cloudSetConn("connecting", "网络不通，重试中", undefined, ctx); console.log("[cloud:" + ctx.cfg.name + "] 轮询 GET 失败 x" + netFails + ":", e && e.message); }
+            if (++netFails >= 3) { cloudSetConn("connecting", "网络不通，重试中", ctx); console.log("[cloud:" + ctx.cfg.name + "] 轮询 GET 失败 x" + netFails + ":", e && e.message); }
             await new Promise((res) => setTimeout(res, 4000));
             continue;
           }
@@ -3009,7 +3011,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
                 connectCloudFor(ctx, false);
                 return;
               }
-              cloudSetConn("offline", "云桥拒绝", "bridge", undefined, ctx); showToast("云桥凭证失效：云桥已换代，请从源电脑重新打开本页");
+              cloudSetConn("offline", "云桥拒绝", "bridge", ctx); showToast("云桥凭证失效：云桥已换代，请从源电脑重新打开本页");
             }
             break; // 其余 401/400：回到重连流程重建会话
           }
@@ -3023,7 +3025,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         }
         // 诊断态不覆写成通用断开文案：failKind=bridge 的重试带诊断前缀（病因+自愈节奏同屏）
         if (gen === ctx.pollGen) {
-          if (ctx.status !== "offline" || ctx.failKind !== "bridge") cloudSetConn("offline", "已断开", "transport", undefined, ctx);
+          if (ctx.status !== "offline" || ctx.failKind !== "bridge") cloudSetConn("offline", "已断开", "transport", ctx);
           scheduleCloudReconnect(ctx);
         }
       }
@@ -3060,7 +3062,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           // 烘焙值也失配（relay 换 keypair 后 rd 全部过期）：发发现帧向桥要在线 relay 列表自愈
           if (!ctx.discTried) {
             ctx.discTried = true;
-            cloudSetConn("connecting", "定位 relay…", undefined, ctx);
+            cloudSetConn("connecting", "定位 relay…", ctx);
             console.log("[cloud:" + cfg.name + "] ROUTE_MISS，发送发现帧定位在线 relay");
             discoverRelay(ctx);
             clearTimeout(ctx.discTimer);
@@ -3068,13 +3070,13 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
               ctx.discTimer = 0;
               if (ctx.status !== "connecting") return;
               clearInterval(ctx.pairTimer);
-              cloudSetConn("offline", "电脑端 relay 离线", "bridge", ctx, undefined, ctx); // 桥可达但 relay 不在：诊断态
+              cloudSetConn("offline", "电脑端 relay 离线", "bridge", ctx); // 桥可达但 relay 不在：诊断态
               scheduleCloudReconnect(ctx);
             }, 6000);
             return;
           }
           clearInterval(ctx.pairTimer);
-          cloudSetConn("offline", "电脑端 relay 离线", "bridge", ctx, undefined, ctx);
+          cloudSetConn("offline", "电脑端 relay 离线", "bridge", ctx);
           scheduleCloudReconnect(ctx);
           return;
         }
@@ -3115,7 +3117,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
               ctx.pendingPair = { rd: "", rk: "", pc: pair.pc, bc: true, cands: all.filter((x) => x.rk) };
               setPendingPair(cfg.id, ctx.pendingPair);
               console.log("[cloud:" + cfg.name + "] " + (all.length > 1 ? "多 relay 无锚点" : "锚定 relay 不在线") + "，转配对码广播定位（候选 " + all.length + " 台）");
-              cloudSetConn("connecting", "定位持码服务器…", undefined, ctx);
+              cloudSetConn("connecting", "定位持码服务器…", ctx);
               if (Date.now() >= (ctx.pairNextAt || 0)) {
                 sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
                 startPairWatchdog(ctx);
@@ -3139,13 +3141,13 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
                   // 续上；真换代经输码广播定位（B2）+pair_ack 落库（inner.relay_dev 覆写+paired:true）
                   // 自然换新 rd，旧 rd 无残留。sole 唯一采信随覆写退役。
                   ctx.genesisSeenAt = 0; // 降级即出观察态（P2-2：防陈钟跨态残留）
-                  cloudSetConn("offline", "relay 可能已换代·请输码重新配对", "unpaired", undefined, ctx);
+                  cloudSetConn("offline", "relay 可能已换代·请输码重新配对", "unpaired", ctx);
                   return;
                 }
-                cloudSetConn("offline", "relay 身份观察中·持续 " + Math.max(1, Math.round(graceMs / 60_000)) + " 分钟不变将提示重配" + (all.length > 1 ? "（忽略 " + all.length + " 个桥上陌生服务器）" : ""), "bridge", undefined, ctx);
+                cloudSetConn("offline", "relay 身份观察中·持续 " + Math.max(1, Math.round(graceMs / 60_000)) + " 分钟不变将提示重配" + (all.length > 1 ? "（忽略 " + all.length + " 个桥上陌生服务器）" : ""), "bridge", ctx);
               } else {
                 ctx.genesisSeenAt = 0; // P2-2（A 审）：观察中列表变空=新身份证据消失，钟清零（累计→持续语义）
-                cloudSetConn("offline", "已配对 relay 离线·重试中", "bridge", undefined, ctx);
+                cloudSetConn("offline", "已配对 relay 离线·重试中", "bridge", ctx);
               }
               ctx.awayFails = Math.min((ctx.awayFails || 0) + 1, 6); // R2-B3：桥活 relay 缺席退避梯（onopen 归零 reconnectDelay 不影响本梯；风暴 ~1200 轮/h → ≤30 轮/h）
               scheduleCloudReconnect(ctx, Math.min(6_000 * 2 ** (ctx.awayFails - 1), 120_000));
@@ -3154,12 +3156,12 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             if (suspect) {
               // R2-P1-B1：中毒残留已识别——不再采信列表里的陌生者，直接引导重配（输码即
               // 广播定位到家 relay，配对成功覆写合法身份=自愈闭环，无需手工删源）
-              cloudSetConn("offline", "检测到未完成配对·建议输码重连", "pair", undefined, ctx); // R3-P2①：中性措辞（同 index.html 同构）
+              cloudSetConn("offline", "检测到未完成配对·建议输码重连", "pair", ctx); // R3-P2①：中性措辞（同 index.html 同构）
               ctx.awayFails = Math.min((ctx.awayFails || 0) + 1, 6);
               scheduleCloudReconnect(ctx, Math.min(6_000 * 2 ** (ctx.awayFails - 1), 120_000));
               return;
             }
-            cloudSetConn("offline", all.length > 1 ? "发现多个 relay，请重新领码" : "电脑端 relay 离线", all.length > 1 ? "pair" : "bridge", undefined, ctx);
+            cloudSetConn("offline", all.length > 1 ? "发现多个 relay，请重新领码" : "电脑端 relay 离线", all.length > 1 ? "pair" : "bridge", ctx);
             scheduleCloudReconnect(ctx);
             return;
           }
@@ -3173,7 +3175,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             } else {
               console.log("[cloud:" + cfg.name + "] relay " + pick.dev + " 已回在线，重发配对请求");
             }
-            cloudSetConn("connecting", "配对中", undefined, ctx);
+            cloudSetConn("connecting", "配对中", ctx);
             ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // relay 确认回在线：清退避满速重试
             if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
             startPairWatchdog(ctx);
@@ -3182,7 +3184,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           if (peer && peer.relay_dev === pick.dev) {
             ctx.genesisSeenAt = 0; // W-PAIRFIX：记忆身份回列表——换代观察钟清零
             ctx.awayFails = 0; // R2-B3：缺席退避梯同刻复位（家回线即恢复敏捷重试）
-            cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接", undefined, ctx);
+            cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接", ctx);
             sendCloudHello(ctx); // #259 hello 收口（四号发出点）
             startCloudPing(ctx);
             return;
@@ -3192,7 +3194,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             ctx.genesisSeenAt = ctx.genesisSeenAt || Date.now();
             const graceMs = Number(window.__CCD_GENESIS_GRACE_MS) > 0 ? Number(window.__CCD_GENESIS_GRACE_MS) : 10 * 60_000;
             if (Date.now() - ctx.genesisSeenAt < graceMs) {
-              cloudSetConn("offline", "relay 身份观察中·持续 " + Math.max(1, Math.round(graceMs / 60_000)) + " 分钟不变将提示重配", "bridge", undefined, ctx);
+              cloudSetConn("offline", "relay 身份观察中·持续 " + Math.max(1, Math.round(graceMs / 60_000)) + " 分钟不变将提示重配", "bridge", ctx);
               ctx.awayFails = Math.min((ctx.awayFails || 0) + 1, 6); // R2-B3：观察态同吃退避梯
               scheduleCloudReconnect(ctx, Math.min(6_000 * 2 ** (ctx.awayFails - 1), 120_000));
               return;
@@ -3203,12 +3205,12 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           // （新客户端）pick 采信=记忆身份建立合法写点，保留。
           if (pairedAnchor) {
             clearInterval(ctx.pairTimer);
-            cloudSetConn("offline", "relay 可能已换代·请输码重新配对", "unpaired", undefined, ctx);
+            cloudSetConn("offline", "relay 可能已换代·请输码重新配对", "unpaired", ctx);
             return;
           }
           cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: pick.dev, rk: pick.rk || BAKED_RELAY.rk, paired: false };
           clearInterval(ctx.pairTimer);
-          cloudSetConn("offline", "未配对（relay 已换代）", "unpaired", undefined, ctx);
+          cloudSetConn("offline", "未配对（relay 已换代）", "unpaired", ctx);
           return;
         }
         if (f.type === "ERROR") return;
@@ -3220,7 +3222,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             setPendingPair(cfg.id, null);
             ctx.pendingPair = null;
             resetCloudPairing(cfg);
-            cloudSetConn("offline", "未配对", "unpaired", undefined, ctx); // relay 明确否认身份：引导输码
+            cloudSetConn("offline", "未配对", "unpaired", ctx); // relay 明确否认身份：引导输码
             showToast("请输入配对码重新配对（电脑端 CC Deck 设置 → relay 页领取）");
             console.log("[cloud:" + cfg.name + "] relay 判定未配对:", f.data.error);
             discoverRelay(ctx); // relay 在线才回得出 nack：顺手刷新真实身份，输码直达省一轮往返
@@ -3268,7 +3270,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             setPendingPair(cfg.id, null);
             ctx.pendingPair = null;
             resetCloudPairing(cfg);
-            cloudSetConn("offline", "已拦截：配对码属于本机——请在对端电脑领取", "pair", undefined, ctx);
+            cloudSetConn("offline", "已拦截：配对码属于本机——请在对端电脑领取", "pair", ctx);
             showToast("已拦截自配：这个码是本机领的（连回来还是本机）。请到另一台电脑的 CC Deck 设置页领取配对码，再在这里输入");
             console.log("[cloud:" + cfg.name + "] pair_ack 自环拦截（ack=" + inner.relay_dev + " == 本机 relay）——拒建源");
             return;
@@ -3280,7 +3282,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           ctx.pendingPair = null;
           ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #258 成功即清：配对退避归零，下次配对满速（看门狗 tick 路径之外补齐——ack 到达即清 timer，tick 不再跑）
           ctx.genesisSeenAt = 0; ctx.awayFails = 0; // R2-P2-2（A 审）：配对成功清观察钟+缺席梯——防陈钟在首个 RELAYS 秒降级打掉新配对
-          cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接", undefined, ctx);
+          cloudSetConn("online", ctx.transport === "poll" ? "已连接（轮询）" : "已连接", ctx);
           showToast("配对成功");
           sendCloudHello(ctx); // #259：配对完成即 hello + 看门狗——ack 到 hello 之间通道死/POST 被吞不再静默
           startCloudPing(ctx);
@@ -3294,7 +3296,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           setPendingPair(cfg.id, null);
           ctx.pendingPair = null;
           resetCloudPairing(cfg);
-          cloudSetConn("offline", "未配对", "unpaired", undefined, ctx);
+          cloudSetConn("offline", "未配对", "unpaired", ctx);
           showToast("配对失败：" + (inner.error || "码无效") + "，请重新领码输入");
           openCloudPairUI();
           return;
@@ -3333,11 +3335,11 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
                   connectCloudFor(ctx, false);
                   return;
                 }
-                cloudSetConn("offline", "云桥拒绝", "bridge", undefined, ctx); showToast("云桥凭证失效：云桥已换代，请从源电脑重新打开本页"); return;
+                cloudSetConn("offline", "云桥拒绝", "bridge", ctx); showToast("云桥凭证失效：云桥已换代，请从源电脑重新打开本页"); return;
               }
               if (ctx.postFails >= 3) { // #268：上行持续被拦=半死通道，直接重建（不再等 GET 侧兜底）
                 cloudDiagNote("上行持续被拦", "POST HTTP " + r.status + " ×" + ctx.postFails, true);
-                cloudSetConn("offline", "上行被拦 HTTP " + r.status, "transport", undefined, ctx);
+                cloudSetConn("offline", "上行被拦 HTTP " + r.status, "transport", ctx);
                 scheduleCloudReconnect(ctx);
               }
             })
@@ -3346,7 +3348,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
               console.log("[cloud:" + ctx.cfg.name + "] 轮询 POST 失败 x" + ctx.postFails + ":", e && e.message);
               if (ctx.postFails >= 3) { // #268：与 HTTP 拦截面同口径——持续失败直接重建
                 cloudDiagNote("上行持续失败", "POST 网络错误 ×" + ctx.postFails, true);
-                cloudSetConn("offline", "上行请求失败", "transport", undefined, ctx);
+                cloudSetConn("offline", "上行请求失败", "transport", ctx);
                 scheduleCloudReconnect(ctx);
               }
             });
@@ -3374,7 +3376,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         if (ok === false) {
           console.error("[cloud:" + ctx.cfg.name + "] hello 发送失败（ws 未就绪/已死），强制重连");
           cloudDiagNote("hello 未发出", "ws 未就绪（半开/已死），强制重连", true);
-          cloudSetConn("offline", "通道已死（hello 未发出），重连", "transport", undefined, ctx);
+          cloudSetConn("offline", "通道已死（hello 未发出），重连", "transport", ctx);
           killWsTransport(ctx); // #268：收尸不押 onclose（onclose 再排一次重连也幂等，但僵尸形态根本不来）
           scheduleCloudReconnect(ctx);
         }
@@ -3390,13 +3392,13 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           if (Date.now() - ctx.lastPong > 45000) {
             // #268：判死=判决而非告别——ws 路径旧版只 close() 押 onclose（僵尸形态永不触发，
             // 停摆）。现收尸+记账+直排重连；二次判定降级 poll（与通道看门狗同口径）。
-            if (ctx.transport === "poll") { ctx.pollGen++; cloudSetConn("offline", "已断开", "transport", undefined, ctx); scheduleCloudReconnect(ctx); }
+            if (ctx.transport === "poll") { ctx.pollGen++; cloudSetConn("offline", "已断开", "transport", ctx); scheduleCloudReconnect(ctx); }
             else {
               ctx.wsFails++;
               if (ctx.wsFails >= 2) ctx.transport = "poll";
               cloudDiagNote("心跳判死", "45s 无 pong，wsFails=" + ctx.wsFails + (ctx.transport === "poll" ? "，降级 HTTP 轮询" : "，重连 ws"), true);
               killWsTransport(ctx);
-              cloudSetConn("offline", "心跳超时（45s 无响应），重连", "transport", undefined, ctx);
+              cloudSetConn("offline", "心跳超时（45s 无响应），重连", "transport", ctx);
               scheduleCloudReconnect(ctx);
             }
             return;
@@ -3441,7 +3443,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
             cloudDiagNote("通道看门狗判死", "轮询通道 " + Math.round(CHANNEL_DEAD_MS / 1000) + "s 无回包，重建轮询会话", true);
             ctx.pollGen++;
           }
-          cloudSetConn("offline", "通道无响应（hello 未达），重连", "transport", undefined, ctx);
+          cloudSetConn("offline", "通道无响应（hello 未达），重连", "transport", ctx);
           showToast("云桥通道无响应，正在重连（F12 Console 有诊断日志）");
           scheduleCloudReconnect(ctx); // 直排重连：恢复不押在 onclose 身上
         }, CHANNEL_DEAD_MS);
@@ -3486,17 +3488,17 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         const cfg = ctx.cfg;
         if (!cfg.wsUrl) return;
         if (ctx.failKind === "unpaired") {
-          if (!ctx.reconnectTimer) ctx.reconnectTimer = setTimeout(() => connectCloudFor(cloudCtx, false), 300_000);
+          if (!ctx.reconnectTimer) ctx.reconnectTimer = setTimeout(() => connectCloudFor(ctx, false), 300_000); // CONNV4B-fix1（R1 P1）：重连回调绑自身 ctx——warm 掉线后重连落自身而非前台（防预热台静默死+前台状态机被改写）
           return;
         }
         const delay = Math.max(ctx.reconnectDelay || CLOUD_RETRY_BASE_MS, minDelayMs || 0);
         ctx.reconnectDelay = Math.min((ctx.reconnectDelay || CLOUD_RETRY_BASE_MS) * 2, CLOUD_RETRY_MAX_MS);
         const note = ctx.failKind === "bridge" && ctx.statusText ? ctx.statusText + " · " : "";
-        cloudSetConn("connecting", note + "重试中·下次 " + Math.round(delay / 1000) + "s", undefined, ctx);
+        cloudSetConn("connecting", note + "重试中·下次 " + Math.round(delay / 1000) + "s", ctx);
         ctx.retryNote = note;
         ctx.retryAt = Date.now() + delay;
         clearTimeout(ctx.reconnectTimer);
-        ctx.reconnectTimer = setTimeout(() => connectCloudFor(cloudCtx, false), delay);
+        ctx.reconnectTimer = setTimeout(() => connectCloudFor(ctx, false), delay); // CONNV4B-fix1（R1 P1）
       }
       // 手动重试：跳过退避等待立即重连（传输层/桥失败终态与重试等待期可用；真未配对不显示重试钮）
       function cloudManualRetry() {
@@ -4753,7 +4755,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         // 到达才收敛」)。Team 内部 per-type 处理(ORG_CONFIRM W-WINPAIR-R4 两源并集/
         // BOARD 锚定投影/经验规则覆盖透传)与 #236 B 合成 SNAPSHOT 兜底共存:增量按帧源
         // 粒度更新混合态,跨源重叠低域的覆盖由合成重喂自愈(teamvis 已备案取舍)
-        if ((viewSource() !== "aggregate" && context === (viewSource() === "cloud" ? cloudCtx : ctx)) || (viewSource() === "aggregate" && message.type !== "SNAPSHOT")) Team.onFrame(context, message);
+        if ((viewSource() !== "aggregate" && context === (viewSource() === "cloud" ? cloudCtx : ctx)) || (viewSource() === "aggregate" && message.type !== "SNAPSHOT" && (context === cloudCtx || context === ctx))) Team.onFrame(context, message); // CONNV4B-fix1（R2 P2-1）：aggregate Team 门补前台两源白名单——warm ctx 的 BOARD/ORG 增量不混入聚合视图（无源标污染）
         // #272 源名称改名广播（LAN+cloud 全扇出）：本源 chip/切换器/存量会话源标签
         // 即时跟随——SNAPSHOT.relay_name 虽也现算新名，但等快照要等重连，此处免等
         if (message.type === "RELAY_NAME_UPDATED" && message.payload && typeof message.payload.relay_name === "string") {

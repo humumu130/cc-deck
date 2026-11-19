@@ -335,6 +335,18 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(css.includes(".tabpage-head { flex: 0 0 auto;") && css.includes(".tabpage-head .tabpage-back") && !html.includes("tabpage"), "TAB5 页头行样式（轻量页名+回锚钮）+静态 HTML 零 tabpage 标记负向锚（页面结构纯 JS 装配——index-005 的 workspace 四件套 body/dock/agbox/footer 骨架不动）");
     ok(web.includes('section.querySelector(".segment-bar")?.addEventListener("click"') && web.includes("S.tabChatMemo = { sid: S.selected, top: el.scrollTop"), "TAB6 #124 往返滚动 memo 原样（捕获段记账+回对话恢复链零改——#session-body 让位后的 scrollTop clamp 正是该 memo 护的场景）");
     ok(readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8").includes('bar.closest(".workspace, .mobile-screen, .session-detail")'), "TAB7 R4 断链修复（setupStubTabs host 解析补 .session-detail——#128 R4 将会话 head 迁出 .workspace 后 closest 落空，包摄+wireSegmentTabs 整体跳过=四 tab 死钮+内容内联堆进消息流的既有断点；负向锚=裸 .workspace/.mobile-screen 双选旧串不得独存）");
+  // ============ CONNV4B-fix1（1119 三路审查返修）：P0 调用位归一+函数体前台门+P1+P2×2 静态精确锚 ============
+  {
+    const sd = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8");
+    ok(!sd.includes(", undefined, ctx)") && !sd.includes(", ctx, undefined, ctx)"), "CV4B-F1 P0 刀一：cloudSetConn 调用位全仓单一形（undefined 占位双形零残留——39 处归一 `, ctx)`，ctx 落第 4 参真位）");
+    ok(sd.includes("const fg = c === cloudCtx; // CONNV4B-fix1") && sd.includes("if (fg) window.__ccDeck005Frames.emit(") && sd.includes("if (fg) setConn(c, status, text, c.failKind);") && sd.includes("if (fg) renderCloudUI();") && sd.includes('{ c.retryAt = 0; c.retryNote = ""; } // fix1'), "CV4B-F2 P0 刀二：函数体七处全局写套前台门（fg 门——diagNote/emit/setConn/renderCloudUI/syncTeamBind 仅前台；retryAt/_everOnline 参数化写自身——warm status 自更新=「已在线短路假在线」根修）");
+    ok(sd.includes("setTimeout(() => connectCloudFor(ctx, false), 300_000); // CONNV4B-fix1") && sd.includes("setTimeout(() => connectCloudFor(ctx, false), delay); // CONNV4B-fix1") && sd.includes("function cloudManualRetry"), "CV4B-F3 P1：重连回调绑自身 ctx ×2（300s 长退避+delay 退避——warm 掉线重连落自身防静默死；cloudManualRetry 前台语义保持）");
+    ok(sd.includes('viewSource() === "aggregate" && message.type !== "SNAPSHOT" && (context === cloudCtx || context === ctx))'), "CV4B-F4 P2-1：aggregate Team 门前台两源白名单（warm ctx 的 BOARD/ORG 增量不混入聚合视图）");
+    ok(sd.includes("setPendingPair(c.cfg.id, null); } catch (_) {} } // CONNV4B-fix1"), "CV4B-F5 P2-2：destroyCtx 清 sessionStorage per-source pendingPair 键（防孤儿键+陈旧 pair 覆盖新鲜 rk）");
+    ok(sd.includes('fgStatus: String(cloudCtx.status || "")') && sd.includes("warmStatus: warmId ?"), "CV4B-F6 ConnPool 观测面扩（fgStatus/warmStatus——独立状态机探针断言面）");
+    const pb = readFileSync(join(root, "relay", "scripts", "probe-connv4b.mjs"), "utf-8");
+    ok(pb.includes("④b CONNV4B-fix1 锚A") && pb.includes("fgStatus !== st.warmStatus") && pb.includes("④c CONNV4B-fix1 锚B"), "CV4B-F7 探针三锚入库（warm 自身状态机活+fg/warm 独立值观察+armed-destroy 时序——串台形态同对象恒等必红）");
+  }
   }
 
 }
