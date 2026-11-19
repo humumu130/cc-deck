@@ -190,6 +190,65 @@ const post = async (body: unknown, token = cfg.token) => {
   assert(badTok.status === 401, "错 token 401");
 }
 
+// ---------- 4b. 写面返检（fix2：exec 级 fail-closed——C1R1 P1 盲区①②） ----------
+{
+  // 靶设备：WB_D（confirmed trust 行——kick/ignore 写失败靶）/ PH2（无 trust 行纯身份面 peer——容忍路径靶）
+  const wbDKp = generateKeyPair();
+  const WB_D = devId(wbDKp.publicKey, "wb");
+  upsertFirstSeen(port, WB_D, wbDKp.publicKey, null);
+  confirmDevice(port, WB_D, "写返检靶");
+  fakePeers.set(WB_D, { dev: WB_D, name: "写返检网页", paired_at: Date.now(), last_seen: Date.now(), online: true });
+  const PH2 = "ph-" + "e".repeat(8);
+  fakePeers.set(PH2, { dev: PH2, name: "无信任行手机", paired_at: Date.now(), last_seen: Date.now(), online: true });
+
+  // ① ph- 无 trust 行容忍路径（C1R1 盲区②，无 patch 正常态）：kick 200 正常断连——
+  //    fix2 的 hasTrust 预判不把「纯身份面配对无行」误报为写失败
+  const kick0 = await post({ action: "kick", dev: PH2 });
+  assert(kick0.status === 200 && getDeviceTrust(port!, PH2) === null, "kick ph- 无 trust 行：容忍路径 200（revoke {ok:false 无行}=预期形态非故障）");
+  assert(kickerCalls[kickerCalls.length - 1] === PH2, "kick ph- 无 trust 行：断连照走（主语义在 removePeer）");
+
+  // exec 注入器：按 SQL 表名选择性抛（模拟表锁/磁盘满——SELECT 可过而 exec 炸的真实形态）
+  const origExec = port!.exec.bind(port);
+  const patchExec = (shouldThrow: (sql: string) => boolean) => {
+    (port as { exec: unknown }).exec = (sql: string, ...rest: unknown[]) => {
+      if (shouldThrow(sql)) throw new Error("mock exec 炸（表锁 SQLITE_BUSY）");
+      return (origExec as unknown as (s: string, ...r: unknown[]) => unknown)(sql, ...rest);
+    };
+  };
+  const restoreExec = () => { (port as { exec: unknown }).exec = origExec; };
+
+  // ② kick wb- exec 全抛（盲区①）：500 非回显成功值、冷却未落库、不断连
+  let before = kickerCalls.length;
+  patchExec(() => true);
+  const kb = await post({ action: "kick", dev: WB_D });
+  assert(kb.status === 500 && kb.json.ok !== true && kb.json.cooldown_until === undefined, "kick wb- exec 抛：500+不回显成功值（假成功根除）");
+  assert(getAdminState(port!, WB_D) === null, "kick wb- exec 抛：冷却未落库（库面无行——回显值与库一致）");
+  assert(kickerCalls.length === before, "kick wb- exec 抛：不断连（拒入口没写上时断连=断连与静默拒脱节）");
+
+  // ③ ignore 半写态（exec 只炸 device_trust，admin 表放行）：500 带半写说明+
+  //    ignored 已落+revoked 未落（C1R1 推演的静默失效形态转为显性报错）
+  before = kickerCalls.length;
+  patchExec((sql) => /device_trust/.test(sql));
+  const ig = await post({ action: "ignore", dev: WB_D });
+  assert(ig.status === 500 && String(ig.json.error ?? "").includes("半写"), "ignore 半写：500+人话说明（忽略已落库但吊销未落库）");
+  assert(getAdminState(port!, WB_D)?.ignored_at != null, "ignore 半写：ignored 已生效（半写实况如实——非全回滚）");
+  assert(getDeviceTrust(port!, WB_D)?.revoked_at === null, "ignore 半写：吊销未落（配对码授权面还开着=报错不给过的理由）");
+  assert(kickerCalls.length === before, "ignore 半写：不断连（半写态报错可重试收敛）");
+
+  // ④ unignore exec 炸 admin 表（clearAdminMarks UPDATE 炸）：500（fix2 补的返检）
+  patchExec((sql) => /device_admin_state/.test(sql));
+  const ug = await post({ action: "unignore", dev: WB_D });
+  assert(ug.status === 500 && String(ug.json.error ?? "").includes("管理标记未清除"), "unignore exec 抛：500（clearAdminMarks 返检——标记没清不假成功）");
+
+  // ⑤ 恢复后重试幂等收敛：ignore 重试 200（upsert 同值+吊销补上）——半写态的收敛路径实证
+  restoreExec();
+  const ig2 = await post({ action: "ignore", dev: WB_D });
+  assert(ig2.status === 200, "恢复后 ignore 重试：200 幂等收敛（半写态闭环）");
+  assert(getAdminState(port!, WB_D)?.ignored_at != null && getDeviceTrust(port!, WB_D)?.revoked_at != null, "重试后忽略+吊销双写齐（半写收敛实况）");
+  // 收尾净地：unignore 恢复 WB_D（后续套件零污染）
+  await post({ action: "unignore", dev: WB_D });
+}
+
 // ---------- 5. 拒入口面：cloud-client pair_req 静默拒（onFrame 直驱） ----------
 {
   const identity = loadOrCreateIdentity(cfg.dataDir);
