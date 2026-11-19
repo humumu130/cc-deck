@@ -48,7 +48,7 @@ export const PERMISSION_AUDIT_TABLES = ["permission_audit"] as const;
 
 /** v7 设备互信表名清单（device_trust，X1 多机编排 PRD §4.4/§4.5——「relay 侧 SQLite 仅
  * device_trust 一表」；pubkey 钉扎/租户域/首联确认/吊销四态，与 org 实体表族隔离单独列）。 */
-export const DEVICE_TRUST_TABLES = ["device_trust"] as const;
+export const DEVICE_TRUST_TABLES = ["device_trust", "device_admin_state"] as const; // CONNV4C1：+管理态表（冷却/忽略——与互信表同库同域清单）
 
 // v1 基线 DDL——与冻结件 §2 逐字对齐（含引号写法 "group"）。
 const BASELINE_15_TABLES_DDL = `
@@ -345,5 +345,20 @@ CREATE TABLE task_v10 (
       p.exec("ALTER TABLE dispatch ADD COLUMN pr_url TEXT");
       p.exec("ALTER TABLE dispatch ADD COLUMN pr_state TEXT");
     },
+  },
+  {
+    // CONNV4C1 批C-件一（1117 用户令模块三）：设备管理态表——kick 冷却（wb-/wt- 账号类
+    // 24h 静默期）+ ignore 忽略清单（常驻拉黑）。与 device_trust 同库同域（互信=信任
+    // 生命周期，管理态=运维静默层——两张表解耦：冷却不动 trust（期满自动回正常），
+    // 忽略写 trust 吊销+本表留痕（unignore 双清）。幂等 upsert，无 DELETE（审计可查）。
+    version: 12,
+    name: "connv4c1-device-admin-state（踢冷却 24h/忽略常驻——与互信表同库）",
+    up: (p) =>
+      p.exec(`CREATE TABLE device_admin_state (
+  dev TEXT PRIMARY KEY,
+  cooldown_until INTEGER,
+  ignored_at INTEGER,
+  note TEXT
+)`),
   },
 ];

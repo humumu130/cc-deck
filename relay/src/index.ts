@@ -422,6 +422,18 @@ startServer(bus, mgr, cfg, {
   // `?.() ?? ""` 空值守卫既有，空值即不下发——语义与旧序等价）。
   cloudRelayDev: () => cloudIdentity?.relayDev ?? "",
   cloudWanDev: () => cloudIdentity?.wanDev ?? "",
+  // CONNV4C1：已配对设备快照（/api/device-admin list 混源台账数据源）——identity
+  // peers（设备名/配对时刻/最近活跃）⊕ 各桥 hasActiveDev（在线=持有活跃 hello 连接）
+  cloudPeers: () => {
+    if (!cloudIdentity) return [];
+    return [...cloudIdentity.peers.entries()].map(([dev, e]) => ({
+      dev,
+      name: e.name || dev,
+      paired_at: e.paired_at,
+      last_seen: e.last_seen ?? 0,
+      online: cloudClients.some((c) => c.hasActiveDev(dev)),
+    }));
+  },
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
   // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
   relayName: () => relayNameOf(cfg.dataDir),
