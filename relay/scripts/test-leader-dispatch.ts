@@ -91,7 +91,7 @@ function run(script: string, args: string[], opts: { input?: string; envPatch?: 
     let stderr = "";
     child.stdout.on("data", (c: Buffer) => { stdout += c; });
     child.stderr.on("data", (c: Buffer) => { stderr += c; });
-    child.stdin.on("error", () => {}); // EPIPE 竞态守卫：子进程秒退（如 bash -n 语法错即退）时 stdin 写侧未及收流，CI 慢机专属（2026-11-19 PR#146 实锤）
+    child.stdin.on("error", () => {}); // EPIPE 竞态守卫：子进程秒退（如 bash -n 语法错即退）时 stdin 写侧未及收流，CI 慢机专属（2026-11-19 PR#146 实锤）。声明（C2R1 P3-a）：全吞 stdin 写侧 error 非仅 EPIPE——写侧 error 实质均为子进程已死后的管道残错（EPIPE 主态），测试语义由 exit code+stdout/stderr 承载；收窄反而放非 EPIPE 残错炸 runner
     child.stdin.end(opts.input ?? "");
     child.on("error", (e) => done({ status: null, stdout, stderr: stderr + e.message }));
     child.on("close", (code) => done({ status: code, stdout, stderr }));

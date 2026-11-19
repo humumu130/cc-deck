@@ -121,7 +121,7 @@ ok(!g.confirm, "⑧b 取消钮收条（确认条消失）");
 await ev(`document.querySelector('[data-devadmin-kick="ph-aabb11"]').click()`); await wait(300);
 await ev(`document.querySelector('[data-devadmin-go="ph-aabb11"]').click()`); await wait(900);
 let toasts = await ev(`JSON.stringify(window.__toastLog || [])`);
-ok(toasts.includes("已踢出 · 对方需重新配对后才能再连"), `⑨确认踢→成功 toast 分型后句（${toasts.slice(0, 80)}）`);
+ok(toasts.includes("已踢出 · 对方需重新配对后才能再连"), `⑨手机类踢→成功 toast 分型句「已踢出 · 对方需重新配对后才能再连」（P1-A 两型锚·手机侧）`);
 let calls = await ev(`JSON.stringify(window.__devAdminCalls.slice(-2))`);
 ok(calls.includes('"action":"kick"') && calls.includes("ph-aabb11"), `⑨b 写口调用形态（POST body action=kick dev=ph-aabb11——${calls}）`);
 g = JSON.parse(await devLiveInfo());
@@ -147,6 +147,55 @@ g = JSON.parse(await devLiveInfo());
 ok(toasts.includes("操作未生效：管理数据写入失败"), `⑫503 fail-closed=人话失败 toast（${toasts.slice(-90)}）`);
 ok(g.byName["手表端"].tags.includes("在线") && g.byName["手表端"].kick, "⑫b 不假成功（行态不动、双键仍在——未把失败当成功渲染）");
 await png("3-confirm-and-fail");
+
+// ---------- 相四b（返修 fix1·P1-A）：账号类（手表）踢出成功 toast 分型——mock 写成功态 ----------
+await ev(`window.__mockDevAdmin.mode = "ok"`);
+await ev(`document.querySelector('[data-devadmin-kick="wt-ccdd33"]').click()`); await wait(300);
+g = JSON.parse(await devLiveInfo());
+ok(g.confirm.includes("断开并 24 小时内不再自动重连"), `⑨d 手表类踢=确认条分型「断开并 24 小时内不再自动重连」（${g.confirm.slice(0, 26)}）`);
+await ev(`document.querySelector('[data-devadmin-go="wt-ccdd33"]').click()`); await wait(900);
+const lastToast = await ev(`(window.__toastLog || []).slice(-1)[0] || ""`);
+ok(lastToast.startsWith("已断开 · 24 小时内不再自动重连"), `⑨e 手表类踢→成功 toast 分型句「已断开 · 24 小时内不再自动重连」（P1-A 两型锚·账号侧，末条=${lastToast}——旧恒定文案「已踢出·需重新配对」不得出现于手表链）`);
+g = JSON.parse(await devLiveInfo());
+ok(g.byName["手表端"].tags.includes("离线") && g.byName["手表端"].tags.includes("冷却中"), `⑨f 手表类踢后重拉回渲（翻离线+冷却中 tag——账号类 kick=断开+24h 冷却，toast 与行态语义一致）`);
+
+// ---------- 相五（返修 fix1·P2-a）：token 全空形态=诚实占位（非「正在读取」恒驻） ----------
+// 二次导航=全新上下文：file:// 形态 URL 无 ?token=，域脚本装载即 __ccDeck005Token=""（:1892）——
+// token 链三源（ctx.cfg/闭包 relayToken/尾镜像）全空=devAdminUrl null 连请求都不发的形态。
+await send("Page.navigate", { url: "file:///private/tmp/cc-deck-w-connv4c2/web-console/index-005.html" });
+let booted2 = false;
+for (let i = 0; i < 10; i++) { await wait(800); booted2 = await ev(`!!document.querySelector("#stage-desktop")`); if (booted2) break; }
+if (!booted2) { console.error("BOOT-FAIL-2：二次导航 #stage-desktop 未建"); try { globalThis.__p.kill(); } catch {} process.exit(1); }
+await wait(500);
+await ev(`(() => { // mock 重挂（新上下文）——特意不设 window.__ccDeck005Token；此 mock 兼作探流器：若代码仍发起 list，__devAdminCalls 会记账且 cache 落地换渲染
+  window.__devAdminCalls = []; window.__toastLog = [];
+  window.__mockDevAdmin = { mode: "ok", devices: [] };
+  window.__origFetch = window.fetch.bind(window);
+  window.fetch = (url, opts) => {
+    const u = String(url);
+    if (!u.includes("/api/device-admin")) return window.__origFetch(url, opts);
+    let body = {}; try { body = opts && opts.body ? JSON.parse(opts.body) : {}; } catch (_) {}
+    window.__devAdminCalls.push({ action: body.action || "?" });
+    const m = window.__mockDevAdmin;
+    if (body.action === "list") return Promise.resolve(new Response(JSON.stringify({ ok: true, devices: m.devices }), { status: 200, headers: { "content-type": "application/json" } }));
+    return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }));
+  };
+  try { const b = window.__ccDeck005B4; if (b && b.toast) { const o = b.toast.bind(b); b.toast = (msg, kind) => { window.__toastLog.push(String(msg) + "|" + String(kind || "")); return o(msg, kind); }; } } catch (_) {}
+  return true;
+})()`);
+await ev(`window.__ccDeck005RouteWs = null; window.__ccDeck005MainWs = { readyState: 1, send: () => {} };`);
+await ev(`window.__ccDeck005Frames.emit({ kind: "ws", state: "open" })`);
+await ev(`window.__ccDeck005Frames.emit({ kind: "frame", source: "lan", frame: ${JSON.stringify(snap)} })`);
+await wait(700);
+await ev(`(() => { const b = document.querySelector('.rail-btn[data-domain="settings"]'); if (b) b.click(); return !!b; })()`);
+await wait(900);
+await ev("window.__ccDeck005RefreshSettingsLive && window.__ccDeck005RefreshSettingsLive()");
+await wait(900);
+const calls5 = await ev(`JSON.stringify(window.__devAdminCalls)`);
+const esc5 = await ev(`(() => { const l = document.querySelector('[data-settings-live="devices"]'); return l ? l.textContent : "<none>"; })()`);
+ok(esc5.includes("当前 relay 版本未下发客户端台账") && !esc5.includes("正在读取"), `⑭ token 全空=诚实占位（「当前 relay 版本未下发客户端台账」族在场、「正在读取」恒驻退役——P2-a 修复锚；devLive=${esc5.slice(0, 42)}…）`);
+ok(calls5 === "[]", `⑭b 永不发起拉取（devAdminUrl null 连请求都不发——__devAdminCalls=${calls5}）`);
+await png("4-no-token-honest");
 
 ok(errs.length === 0, `⑬ console 零异常（${errs.length} 条${errs.length ? "：" + errs.slice(0, 2).join(" | ") : ""}）`);
 console.log(`\nconnv4c2 probe：${pass} ok / ${fail} FAIL`);

@@ -1535,10 +1535,17 @@ function connectLan(ctx) {
           DEV_ADMIN.pending = null;
           const okRun = await devAdminWrite(action, dev);
           if (!okRun) { devAdminToast("操作未生效：管理数据写入失败", true); }
-          else if (action === "kick") devAdminToast("已踢出 · 对方需重新配对后才能再连");
+          else if (action === "kick") {
+            // P1-A（C2R1 返修）：成功反馈兑现确认条的分型承诺——手机类=作废配对信任需重配对；
+            // 账号类（网页/手表/其他）=断开+24h 冷却（桥侧 PR#145 kick 语义）。kind 回查与确认条
+            // 同源（cache/oldDevices 双查），目标行被挤掉的边角回落 other=账号类文案。
+            const d = (DEV_ADMIN.cache || []).find((x) => x && x.dev === dev) || (DEV_ADMIN.oldDevices || []).find((x) => x && x.id === dev);
+            const kind = d && DEV_KIND_TXT[d.kind] ? d.kind : "other";
+            devAdminToast(kind === "phone" ? "已踢出 · 对方需重新配对后才能再连" : "已断开 · 24 小时内不再自动重连");
+          }
           else if (action === "ignore") devAdminToast("已忽略 · 该设备不再自动连入，可在列表底部恢复");
           else devAdminToast("已恢复 · 对方需重新配对/确认后再连");
-          await fetchDevAdminList(); // 动作后即时刷新（list 重拉）
+          await fetchDevAdminList(); // P2-b 口径（C2R1 返修）：动作后始终重拉读面（成败都刷，非「失败不重拉」）——503/网络败时 fetchDevAdminList catch 保旧台账，行态如实
           if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
         }
         function renderDevAdminRows(devLive) {
@@ -1684,14 +1691,22 @@ function connectLan(ctx) {
               // CONNV4C2 新链：桥侧 /api/device-admin 台账（管理态+双键），快照重渲吃缓存（不轮询）
               renderDevAdminRows(devLive);
             } else if (!DEV_ADMIN.unsupported) {
-              // 首开（或上次拉取失败）：占位+异步首拉——成功换新链渲染，404 落回旧链（能力位）
-              liveSetHtml(devLive, '<div class="v8-escape">正在读取连入设备台账…</div>');
-              void fetchDevAdminList().then(() => {
-                const dl = document.querySelector('[data-settings-live="devices"]');
-                if (!dl) return;
-                if (DEV_ADMIN.cache) renderDevAdminRows(dl);
-                else if (DEV_ADMIN.unsupported && typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
-              });
+              // P2-a（C2R1 返修）：token 全空（devAdminUrl null 连请求都不发）或壳形态探测落空
+              //（base=tauri.localhost fetch 恒败）=本轮永不发起拉取的形态——占位不再宣称
+              //「正在读取…」（假态恒驻），换诚实口径（与下方旧链无台账 escape 同句族）。
+              // token 后续到位/探测命中时 render 重评即自动恢复常链，无状态钉死。
+              if (!devAdminUrl() || (shellProbe && !localRelayInfo)) {
+                liveSetHtml(devLive, '<div class="v8-escape">当前 relay 版本未下发客户端台账（升级 relay 后此处显示已连终端清单）。</div>');
+              } else {
+                // 首开（或上次拉取失败）：占位+异步首拉——成功换新链渲染，404 落回旧链（能力位）
+                liveSetHtml(devLive, '<div class="v8-escape">正在读取连入设备台账…</div>');
+                void fetchDevAdminList().then(() => {
+                  const dl = document.querySelector('[data-settings-live="devices"]');
+                  if (!dl) return;
+                  if (DEV_ADMIN.cache) renderDevAdminRows(dl);
+                  else if (DEV_ADMIN.unsupported && typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+                });
+              }
             } else {
             // 旧链（旧 relay 无 device-admin API）：relay_devices 渲染零改续用——conn-page-v2 ⑧ 原语义
             const relSeen = (ts) => {
