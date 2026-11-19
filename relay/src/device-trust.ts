@@ -134,6 +134,22 @@ export function confirmDevice(port: StoragePort | null, dev: string, by: string)
   }
 }
 
+/** 清吊销标记（CONNV4C1 unignore 联动，运维动作）：revoked_at 清空，且 confirmed
+ *  一并清空回 pending——「不自动复活信任」（R2 定案）：unignore 只解除静默拒与
+ *  吊销锁死，设备要回 confirmed 必须重走配对/首联确认卡，不是清了吊销就自动回。
+ *  无行（纯身份面配对的手机/网页，trust 无记录）=幂等直过。 */
+export function unRevokeDevice(port: StoragePort | null, dev: string): { ok: boolean; error?: string } {
+  if (port === null) return { ok: false, error: "互信表不可用" };
+  const cur = getDeviceTrust(port, dev);
+  if (!cur) return { ok: true };
+  try {
+    port.exec("UPDATE device_trust SET revoked_at = NULL, confirmed_at = NULL, confirmed_by = NULL WHERE dev = ?", [dev]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** 吊销（首联卡 ✗ / 事后踢出）：终态，同 dev 同钥重连仍拒。幂等。 */
 export function revokeDevice(port: StoragePort | null, dev: string, note?: string): { ok: boolean; error?: string } {
   if (port === null) return { ok: false, error: "互信表不可用" };

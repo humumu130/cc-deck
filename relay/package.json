@@ -190,7 +190,8 @@
     "test:dutybackoffr2": "tsx scripts/test-dutybackoffr2.ts",
     "test:leader-dispatch": "tsx scripts/test-leader-dispatch.ts",
     "test:account": "tsx scripts/test-account.ts",
-    "test:boardtruth7": "tsx scripts/test-boardtruth7.ts"
+    "test:boardtruth7": "tsx scripts/test-boardtruth7.ts",
+    "test:connv4c1": "tsx scripts/test-connv4c1.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

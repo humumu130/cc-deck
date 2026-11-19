@@ -23,6 +23,11 @@ import {
 } from "./acceptance.js";
 import { listDesignDocs, resolveDesignFile } from "./design-docs.js";
 import { listDevices, touchDevice } from "./devices.js"; // conn-page-v2 件③：连接设备台账（relay_devices 数据源）
+// CONNV4C1（t-49e6102c 模块三）：桥侧设备管理命令面——trust 同库同 StoragePort
+// （device_admin_state=同域轻表，schema v12；trust=信任生命周期重语义，两者解耦见
+// device-admin.ts 文件头），list 混源台账 + kick/ignore/unignore 三写动作
+import { getDeviceTrust, listDeviceTrust, revokeDevice, trustStore, unRevokeDevice } from "./device-trust.js";
+import { clearAdminMarks, KICK_COOLDOWN_MS, listAdminState, setCooldown, setIgnored } from "./device-admin.js";
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
@@ -452,6 +457,10 @@ export interface StartServerOptions {
   lanHint?: () => string;
   lanAuthHello?: () => { relay_dev: string; nonce: string } | null;
   lanAuthHandle?: (dev: string, box: { n: string; c: string }) => { ok: true; box: { n: string; c: string } } | { ok: false; error: string };
+  // CONNV4C1：已配对设备快照（identity.peers ⊕ 各桥在线判定，index.ts 注入）——
+  // /api/device-admin list 混源台账的设备名/配对时刻/最近活跃数据源（bootfast2-r1
+  // P1-4 口径：恒展开+闭包内判空，云桥后台段构造完成前返回 []）
+  cloudPeers?: () => Array<{ dev: string; name: string; paired_at: number; last_seen: number; online: boolean }>;
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -813,6 +822,113 @@ export function startServer(
         res.writeHead(200, { ...acctHeaders, "cache-control": "no-store" }).end(JSON.stringify({ ok: true, bound: !!cfg.accountToken, token: cfg.accountToken || "", user }));
         return;
       }
+    }
+    // CONNV4C1（t-49e6102c 模块三）：桥侧设备管理命令面。LAN token 鉴权（relay-name
+    // 口径）。POST {action, dev, note}，action ∈ list/kick/ignore/unignore。语义分型
+    //（评审 R2 定案）：
+    //   kick ph-（手机）＝断连+吊销配对信任（重入需重新配对——配对码即授权门）；
+    //   kick wb-/wt-（账号类，sa=1 免码自动重连故静默期才有意义）＝断连+24h 冷却
+    //   （device_admin_state，不动 trust），期满自动回正常；
+    //   ignore＝吊销+断连+忽略清单常驻（adminVerdict 拒入口恒拒，直到 unignore）；
+    //   unignore＝清忽略+清冷却+清吊销回 pending（不自动复活——重走配对/首联确认）。
+    // 「断连」在桥模型下的等价实现＝peerKicker（identity.removePeer 写穿落盘+各桥
+    // CloudClient.kickPeer 发 pair_nack 停其重连+清 phones/wanWatches）——relay 出站
+    // 单 ws 连桥无法逐设备断物理连接；重入封锁由 cloud-client pair_req 入口的
+    // adminVerdict 静默拒承担（sa=1 免码分支与正码路径都在其后）。
+    if (req.method === "POST" && url.pathname === "/api/device-admin") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end(); return; }
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        try {
+          const { action, dev, note } = JSON.parse(body) as { action?: unknown; dev?: unknown; note?: unknown };
+          const adminPort = trustStore(cfg.dataDir); // device_trust 同库（ensureStore 缓存复用）；null=驱动缺失，读面空/写面 fail-closed
+          const peers = opts.cloudPeers?.() ?? [];
+          const kindOf = (d: string) => (d.startsWith("ph-") ? "phone" : d.startsWith("wt-") ? "watch" : d.startsWith("wb-") ? "web" : "other");
+          if (action === "list") {
+            // 混源台账：identity peers（设备名/配对时刻/在线）⊕ trust（信任态）⊕ admin_state（冷却/忽略）
+            const trustMap = new Map(listDeviceTrust(adminPort).map((r) => [r.dev, r] as const));
+            const adminMap = new Map(listAdminState(adminPort).map((r) => [r.dev, r] as const));
+            const peerMap = new Map(peers.map((p) => [p.dev, p] as const));
+            const all = new Set<string>([...peerMap.keys(), ...trustMap.keys(), ...adminMap.keys()]);
+            const devices = [...all]
+              .map((d) => {
+                const p = peerMap.get(d);
+                const t = trustMap.get(d);
+                const a = adminMap.get(d);
+                return {
+                  dev: d,
+                  kind: kindOf(d),
+                  name: p?.name ?? "",
+                  paired_at: p?.paired_at ?? t?.first_seen_at ?? 0,
+                  last_seen: p?.last_seen ?? 0,
+                  online: p?.online ?? false,
+                  trust: t ? (t.revoked_at !== null ? "revoked" : t.confirmed_at !== null ? "confirmed" : "pending") : "none",
+                  cooldown_until: a?.cooldown_until ?? null,
+                  ignored_at: a?.ignored_at ?? null,
+                  note: a?.note ?? t?.note ?? null,
+                };
+              })
+              .sort((x, y) => y.paired_at - x.paired_at);
+            res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, devices }));
+            return;
+          }
+          // 写动作公共校验：dev 设备号形态+前缀可识别（COMMAND_PEER_KICK 同款正则）
+          const d = String(dev ?? "");
+          if (!/^[a-z]{2}-[0-9a-f]{6,64}$/.test(d) || kindOf(d) === "other") {
+            res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "dev 需为 ph-/wb-/wt- 前缀设备号" }));
+            return;
+          }
+          const cleanNote = typeof note === "string" ? note.trim().slice(0, 120) : undefined;
+          if (action === "kick" || action === "ignore") {
+            if (adminPort === null) { res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "存储不可用，管理态写入失败（fail-closed）" })); return; }
+            const kind = kindOf(d);
+            // CONNV4C1 返修 fix2（C1R1 P1）：写面返检——fail-closed 补 exec 级半边。存储
+            // exec 抛（表锁/磁盘满/表损坏）被 device-admin/device-trust catch 吞成
+            // false/{ok:false}，此前返回值全丢弃=200 假成功+回显内存值而库没写（UI 说踢
+            // 了、verdict 读库无行放行=踢除静默失效——1117 用户令处置必须真生效）。
+            // 策略：存储写全成才断连+200；任一失败 500 带人话不回显成功值不踢（拒入口
+            // 没写上时断连=断连与静默拒脱节更糟）。容忍路径保留（C1R1 定谳语义）：ph- 无
+            // trust 行（纯身份面配对）的 revoke {ok:false}=预期形态——hasTrust 预判区分
+            // 「无行容忍」与「有行写失败」，不误伤合法 kick。
+            const hasTrust = getDeviceTrust(adminPort, d) !== null;
+            const writeFail = (msg: string) => res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: msg }));
+            let cooldownUntil: number | null = null;
+            if (action === "kick") {
+              if (kind === "phone") {
+                // 手机类：作废配对信任（trust 行缺席=纯身份面配对，容忍——主语义在 removePeer）
+                const rv = revokeDevice(adminPort, d, cleanNote ?? "设备管理 kick");
+                if (hasTrust && !rv.ok) { writeFail(`管理态写入失败：吊销未落库（${rv.error ?? "存储写失败"}）——kick 未生效，请重试`); return; }
+              } else {
+                cooldownUntil = Date.now() + KICK_COOLDOWN_MS; // 账号类：24h 冷却，不动 trust
+                if (!setCooldown(adminPort, d, cooldownUntil, cleanNote ?? "设备管理 kick")) { writeFail("管理态写入失败：冷却未落库——kick 未生效，请重试"); return; }
+              }
+            } else {
+              if (!setIgnored(adminPort, d, cleanNote)) { writeFail("管理态写入失败：忽略未落库——ignore 未生效，请重试"); return; } // 忽略清单常驻
+              const rv = revokeDevice(adminPort, d, cleanNote ?? "设备管理 ignore"); // + trust 吊销（无行同款容忍）
+              if (hasTrust && !rv.ok) { writeFail(`管理态写入失败：忽略已落库但吊销未落库（${rv.error ?? "存储写失败"}）——半写态，忽略常驻已生效；重试可幂等收敛`); return; }
+            }
+            // 断连等价实现（幂等：不在 peers/phones 的 dev 无副作用）；ignore 与两类 kick 同走
+            (mgr as unknown as { peerKicker?: (dev: string) => void }).peerKicker?.(d);
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, action, dev: d, kind, ...(cooldownUntil !== null ? { cooldown_until: cooldownUntil } : {}) }));
+            return;
+          }
+          if (action === "unignore") {
+            if (adminPort === null) { res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "存储不可用，管理态写入失败（fail-closed）" })); return; }
+            // fix2：clearAdminMarks 返检（clear exec 失败不得 200 假成功——标记没清=
+            // verdict 恒拒继续，unignore 静默失效同型；无行=幂等 true 既有语义不误报）
+            if (!clearAdminMarks(adminPort, d)) { res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "管理态写入失败：管理标记未清除——unignore 未生效，请重试" })); return; } // 清忽略+清冷却
+            const r = unRevokeDevice(adminPort, d); // 清吊销回 pending（不自动复活 confirmed；无行幂等 ok——ph- 纯身份面形态不误报）
+            if (!r.ok) { res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: `管理态写入失败：吊销未清除（${r.error ?? "存储写失败"}）——半写态，忽略/冷却已清；重试可幂等收敛` })); return; }
+            // 不自动 re-add peer：设备已被断连（removePeer），恢复连接需设备侧重走配对/首联
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, action, dev: d }));
+            return;
+          }
+          res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "action 需为 list/kick/ignore/unignore" }));
+        } catch { res.writeHead(400).end(); }
+      });
+      return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
       // tauritrust：/health 附版本拼盘指纹（壳/手机端可比对三件套是否同批——拼盘自检见

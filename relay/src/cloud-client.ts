@@ -23,6 +23,10 @@ import { reviewSeatSnapshotPayload } from "./review-seat.js";
 import { listModels } from "./models.js";
 import { permissionCapabilitiesSummary, permissionPolicyEnabled } from "./permission-policy.js";
 import { engineCatalogSummary } from "./engine-catalog.js";
+// CONNV4C1 模块三：设备管理静默拒数据面（device_admin_state 与 device_trust 同库
+// 同 StoragePort——trustStore 单口取端，ensureStore 缓存复用无重复开销）
+import { adminVerdict } from "./device-admin.js";
+import { trustStore } from "./device-trust.js";
 import { SNAPSHOT_SCHEMA_VERSION, type Command, type CommandAckPayload, type Envelope, type PeerMeta } from "./types.js";
 
 interface PhoneState {
@@ -147,6 +151,9 @@ export class CloudClient {
   private pairBudgetWindowMs = 600_000;
   // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
   private wanDropLoggedAt = 0;
+  // CONNV4C1：管理态静默拒日志限频（wanDropLoggedAt 同款样板）——冷却/忽略期内设备
+  // 持续重发 pair_req 也只 30s 一条，防被踢设备刷屏
+  private adminBarLoggedAt = 0;
   private delayMs = 1000;
   // [W-LINKQUALITY] 段②记账态：connect 计时/断点/存活起点/断因标注（boot-guard 等非 close 路径）
   private lqConnectAt = 0;
@@ -895,6 +902,20 @@ export class CloudClient {
       const dev = pubkey ? devId(pubkey, prefix) : "";
       if (!pubkey || dev !== f.from) {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
+        return;
+      }
+      // CONNV4C1 模块三：设备管理静默拒——冷却期内（kick wb-/wt- 后 24h）与忽略清单
+      //（ignore 常驻）的 dev 一切 pair_req 静默丢弃，含下方 sa=1 免码直入与正码路径
+      //（都必经此处）：桥模型下 relay 无法逐设备断物理连接，「踢」的封锁等价实现=
+      // 断连时的 removePeer+kickPeer（此刻设备已不在 peers）+此处拒重入。日志 30s
+      // 限频（wanDropLoggedAt 样板）。无管理态/冷却已过=adminVerdict 返回 null 直放过。
+      const barred = adminVerdict(trustStore(this.cfg.dataDir), dev);
+      if (barred) {
+        const bNow = Date.now();
+        if (bNow - this.adminBarLoggedAt > 30_000) {
+          this.adminBarLoggedAt = bNow;
+          console.log(`[cloud] pair_req admin-barred dev=${dev}（${barred.barred === "ignored" ? "已忽略" : "冷却中"}${barred.until ? `，约 ${Math.ceil((barred.until - bNow) / 60_000)} 分钟后到期` : ""}）`);
+        }
         return;
       }
       // 0.4.4 出码端 sighting：pair_req 到达（码对错不论）= 该 wb- 设备此刻连着本桥，
