@@ -4938,6 +4938,20 @@ CREATE TABLE task_v10 (
           p.exec("ALTER TABLE dispatch ADD COLUMN pr_url TEXT");
           p.exec("ALTER TABLE dispatch ADD COLUMN pr_state TEXT");
         }
+      },
+      {
+        // CONNV4C1 批C-件一（1117 用户令模块三）：设备管理态表——kick 冷却（wb-/wt- 账号类
+        // 24h 静默期）+ ignore 忽略清单（常驻拉黑）。与 device_trust 同库同域（互信=信任
+        // 生命周期，管理态=运维静默层——两张表解耦：冷却不动 trust（期满自动回正常），
+        // 忽略写 trust 吊销+本表留痕（unignore 双清）。幂等 upsert，无 DELETE（审计可查）。
+        version: 12,
+        name: "connv4c1-device-admin-state\uFF08\u8E22\u51B7\u5374 24h/\u5FFD\u7565\u5E38\u9A7B\u2014\u2014\u4E0E\u4E92\u4FE1\u8868\u540C\u5E93\uFF09",
+        up: (p) => p.exec(`CREATE TABLE device_admin_state (
+  dev TEXT PRIMARY KEY,
+  cooldown_until INTEGER,
+  ignored_at INTEGER,
+  note TEXT
+)`)
       }
     ];
   }
@@ -55203,6 +55217,17 @@ function confirmDevice(port, dev, by) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+function unRevokeDevice(port, dev) {
+  if (port === null) return { ok: false, error: "\u4E92\u4FE1\u8868\u4E0D\u53EF\u7528" };
+  const cur = getDeviceTrust(port, dev);
+  if (!cur) return { ok: true };
+  try {
+    port.exec("UPDATE device_trust SET revoked_at = NULL, confirmed_at = NULL, confirmed_by = NULL WHERE dev = ?", [dev]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
 function revokeDevice(port, dev, note) {
   if (port === null) return { ok: false, error: "\u4E92\u4FE1\u8868\u4E0D\u53EF\u7528" };
   const cur = getDeviceTrust(port, dev);
@@ -69772,6 +69797,78 @@ function listDevices(dataDir3, onlineIds) {
   return readDevices(dataDir3).map((d2) => ({ ...d2, online: onlineIds ? onlineIds.has(d2.id) : void 0 })).sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || b.last_seen - a.last_seen);
 }
 
+// src/device-admin.ts
+var KICK_COOLDOWN_MS = 24 * 36e5;
+function rowOf3(r) {
+  return {
+    dev: r.dev,
+    cooldown_until: r.cooldown_until ?? null,
+    ignored_at: r.ignored_at ?? null,
+    note: r.note ?? null
+  };
+}
+function getAdminState(port, dev) {
+  if (port === null) return null;
+  try {
+    const rows = port.query("SELECT * FROM device_admin_state WHERE dev = ?", [dev]);
+    return rows.length ? rowOf3(rows[0]) : null;
+  } catch {
+    return null;
+  }
+}
+function listAdminState(port) {
+  if (port === null) return [];
+  try {
+    return port.query("SELECT * FROM device_admin_state").map(rowOf3);
+  } catch {
+    return [];
+  }
+}
+function upsertField(port, dev, field, value, note) {
+  if (port === null) return false;
+  try {
+    const cur = getAdminState(port, dev);
+    const row = {
+      cooldown_until: field === "cooldown_until" ? value : cur?.cooldown_until ?? null,
+      ignored_at: field === "ignored_at" ? value : cur?.ignored_at ?? null,
+      note: note ?? cur?.note ?? null
+    };
+    if (cur) {
+      port.exec("UPDATE device_admin_state SET cooldown_until = ?, ignored_at = ?, note = ? WHERE dev = ?", [row.cooldown_until, row.ignored_at, row.note, dev]);
+    } else {
+      port.exec("INSERT INTO device_admin_state (dev, cooldown_until, ignored_at, note) VALUES (?,?,?,?)", [dev, row.cooldown_until, row.ignored_at, row.note]);
+    }
+    return true;
+  } catch (e) {
+    console.warn(`[device-admin] \u5199\u7BA1\u7406\u6001\u5931\u8D25 dev=${dev}: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function setCooldown(port, dev, until, note) {
+  return upsertField(port, dev, "cooldown_until", until, note ?? null);
+}
+function setIgnored(port, dev, note) {
+  return upsertField(port, dev, "ignored_at", Date.now(), note ?? "ignored");
+}
+function clearAdminMarks(port, dev) {
+  if (port === null) return false;
+  try {
+    if (!getAdminState(port, dev)) return true;
+    port.exec("UPDATE device_admin_state SET cooldown_until = NULL, ignored_at = NULL WHERE dev = ?", [dev]);
+    return true;
+  } catch (e) {
+    console.warn(`[device-admin] \u6E05\u7BA1\u7406\u6001\u5931\u8D25 dev=${dev}: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+function adminVerdict(port, dev, now = Date.now()) {
+  const row = getAdminState(port, dev);
+  if (!row) return null;
+  if (row.ignored_at !== null) return { barred: "ignored" };
+  if (row.cooldown_until !== null && now < row.cooldown_until) return { barred: "cooldown", until: row.cooldown_until };
+  return null;
+}
+
 // src/release.ts
 import { spawn as spawn6 } from "node:child_process";
 import { existsSync as existsSync42, mkdirSync as mkdirSync31, readFileSync as readFileSync54, writeFileSync as writeFileSync32, appendFileSync as appendFileSync10 } from "node:fs";
@@ -75458,6 +75555,115 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
     }
+    if (req.method === "POST" && url.pathname === "/api/device-admin") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end();
+        return;
+      }
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => {
+        body += c;
+      });
+      req.on("end", () => {
+        try {
+          const { action, dev, note } = JSON.parse(body);
+          const adminPort = trustStore(cfg2.dataDir);
+          const peers = opts.cloudPeers?.() ?? [];
+          const kindOf = (d4) => d4.startsWith("ph-") ? "phone" : d4.startsWith("wt-") ? "watch" : d4.startsWith("wb-") ? "web" : "other";
+          if (action === "list") {
+            const trustMap = new Map(listDeviceTrust(adminPort).map((r) => [r.dev, r]));
+            const adminMap = new Map(listAdminState(adminPort).map((r) => [r.dev, r]));
+            const peerMap = new Map(peers.map((p) => [p.dev, p]));
+            const all = /* @__PURE__ */ new Set([...peerMap.keys(), ...trustMap.keys(), ...adminMap.keys()]);
+            const devices = [...all].map((d4) => {
+              const p = peerMap.get(d4);
+              const t = trustMap.get(d4);
+              const a = adminMap.get(d4);
+              return {
+                dev: d4,
+                kind: kindOf(d4),
+                name: p?.name ?? "",
+                paired_at: p?.paired_at ?? t?.first_seen_at ?? 0,
+                last_seen: p?.last_seen ?? 0,
+                online: p?.online ?? false,
+                trust: t ? t.revoked_at !== null ? "revoked" : t.confirmed_at !== null ? "confirmed" : "pending" : "none",
+                cooldown_until: a?.cooldown_until ?? null,
+                ignored_at: a?.ignored_at ?? null,
+                note: a?.note ?? t?.note ?? null
+              };
+            }).sort((x, y) => y.paired_at - x.paired_at);
+            res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, devices }));
+            return;
+          }
+          const d2 = String(dev ?? "");
+          if (!/^[a-z]{2}-[0-9a-f]{6,64}$/.test(d2) || kindOf(d2) === "other") {
+            res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "dev \u9700\u4E3A ph-/wb-/wt- \u524D\u7F00\u8BBE\u5907\u53F7" }));
+            return;
+          }
+          const cleanNote = typeof note === "string" ? note.trim().slice(0, 120) : void 0;
+          if (action === "kick" || action === "ignore") {
+            if (adminPort === null) {
+              res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF08fail-closed\uFF09" }));
+              return;
+            }
+            const kind = kindOf(d2);
+            const hasTrust = getDeviceTrust(adminPort, d2) !== null;
+            const writeFail = (msg) => res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: msg }));
+            let cooldownUntil = null;
+            if (action === "kick") {
+              if (kind === "phone") {
+                const rv2 = revokeDevice(adminPort, d2, cleanNote ?? "\u8BBE\u5907\u7BA1\u7406 kick");
+                if (hasTrust && !rv2.ok) {
+                  writeFail(`\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF1A\u540A\u9500\u672A\u843D\u5E93\uFF08${rv2.error ?? "\u5B58\u50A8\u5199\u5931\u8D25"}\uFF09\u2014\u2014kick \u672A\u751F\u6548\uFF0C\u8BF7\u91CD\u8BD5`);
+                  return;
+                }
+              } else {
+                cooldownUntil = Date.now() + KICK_COOLDOWN_MS;
+                if (!setCooldown(adminPort, d2, cooldownUntil, cleanNote ?? "\u8BBE\u5907\u7BA1\u7406 kick")) {
+                  writeFail("\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF1A\u51B7\u5374\u672A\u843D\u5E93\u2014\u2014kick \u672A\u751F\u6548\uFF0C\u8BF7\u91CD\u8BD5");
+                  return;
+                }
+              }
+            } else {
+              if (!setIgnored(adminPort, d2, cleanNote)) {
+                writeFail("\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF1A\u5FFD\u7565\u672A\u843D\u5E93\u2014\u2014ignore \u672A\u751F\u6548\uFF0C\u8BF7\u91CD\u8BD5");
+                return;
+              }
+              const rv2 = revokeDevice(adminPort, d2, cleanNote ?? "\u8BBE\u5907\u7BA1\u7406 ignore");
+              if (hasTrust && !rv2.ok) {
+                writeFail(`\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF1A\u5FFD\u7565\u5DF2\u843D\u5E93\u4F46\u540A\u9500\u672A\u843D\u5E93\uFF08${rv2.error ?? "\u5B58\u50A8\u5199\u5931\u8D25"}\uFF09\u2014\u2014\u534A\u5199\u6001\uFF0C\u5FFD\u7565\u5E38\u9A7B\u5DF2\u751F\u6548\uFF1B\u91CD\u8BD5\u53EF\u5E42\u7B49\u6536\u655B`);
+                return;
+              }
+            }
+            mgr2.peerKicker?.(d2);
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, action, dev: d2, kind, ...cooldownUntil !== null ? { cooldown_until: cooldownUntil } : {} }));
+            return;
+          }
+          if (action === "unignore") {
+            if (adminPort === null) {
+              res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF08fail-closed\uFF09" }));
+              return;
+            }
+            if (!clearAdminMarks(adminPort, d2)) {
+              res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF1A\u7BA1\u7406\u6807\u8BB0\u672A\u6E05\u9664\u2014\u2014unignore \u672A\u751F\u6548\uFF0C\u8BF7\u91CD\u8BD5" }));
+              return;
+            }
+            const r = unRevokeDevice(adminPort, d2);
+            if (!r.ok) {
+              res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: `\u7BA1\u7406\u6001\u5199\u5165\u5931\u8D25\uFF1A\u540A\u9500\u672A\u6E05\u9664\uFF08${r.error ?? "\u5B58\u50A8\u5199\u5931\u8D25"}\uFF09\u2014\u2014\u534A\u5199\u6001\uFF0C\u5FFD\u7565/\u51B7\u5374\u5DF2\u6E05\uFF1B\u91CD\u8BD5\u53EF\u5E42\u7B49\u6536\u655B` }));
+              return;
+            }
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, action, dev: d2 }));
+            return;
+          }
+          res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "action \u9700\u4E3A list/kick/ignore/unignore" }));
+        } catch {
+          res.writeHead(400).end();
+        }
+      });
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end(
         JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005Live(), consoleLegacy: verLegacyLive() } })
@@ -77618,6 +77824,9 @@ var CloudClient = class {
   pairBudgetWindowMs = 6e5;
   // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
   wanDropLoggedAt = 0;
+  // CONNV4C1：管理态静默拒日志限频（wanDropLoggedAt 同款样板）——冷却/忽略期内设备
+  // 持续重发 pair_req 也只 30s 一条，防被踢设备刷屏
+  adminBarLoggedAt = 0;
   delayMs = 1e3;
   // [W-LINKQUALITY] 段②记账态：connect 计时/断点/存活起点/断因标注（boot-guard 等非 close 路径）
   lqConnectAt = 0;
@@ -78269,6 +78478,15 @@ var CloudClient = class {
       const dev = pubkey ? devId(pubkey, prefix) : "";
       if (!pubkey || dev !== f.from) {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
+        return;
+      }
+      const barred = adminVerdict(trustStore(this.cfg.dataDir), dev);
+      if (barred) {
+        const bNow = Date.now();
+        if (bNow - this.adminBarLoggedAt > 3e4) {
+          this.adminBarLoggedAt = bNow;
+          console.log(`[cloud] pair_req admin-barred dev=${dev}\uFF08${barred.barred === "ignored" ? "\u5DF2\u5FFD\u7565" : "\u51B7\u5374\u4E2D"}${barred.until ? `\uFF0C\u7EA6 ${Math.ceil((barred.until - bNow) / 6e4)} \u5206\u949F\u540E\u5230\u671F` : ""}\uFF09`);
+        }
         return;
       }
       this.wbSightings.set(dev, Date.now());
@@ -79022,6 +79240,18 @@ startServer(bus, mgr, cfg, {
   // `?.() ?? ""` 空值守卫既有，空值即不下发——语义与旧序等价）。
   cloudRelayDev: () => cloudIdentity?.relayDev ?? "",
   cloudWanDev: () => cloudIdentity?.wanDev ?? "",
+  // CONNV4C1：已配对设备快照（/api/device-admin list 混源台账数据源）——identity
+  // peers（设备名/配对时刻/最近活跃）⊕ 各桥 hasActiveDev（在线=持有活跃 hello 连接）
+  cloudPeers: () => {
+    if (!cloudIdentity) return [];
+    return [...cloudIdentity.peers.entries()].map(([dev, e]) => ({
+      dev,
+      name: e.name || dev,
+      paired_at: e.paired_at,
+      last_seen: e.last_seen ?? 0,
+      online: cloudClients.some((c) => c.hasActiveDev(dev))
+    }));
+  },
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
   // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
   relayName: () => relayNameOf(cfg.dataDir),
