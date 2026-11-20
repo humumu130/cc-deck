@@ -32,6 +32,9 @@ import { browseLanPeers, type BonjourCtor } from "./mdns.js";
 export const LAN_CONNECT_COOLDOWN_MS = 60_000;
 /** 请求帧 ts 窗口：±5 分钟（时钟漂移容忍+重放窗上限）。 */
 export const LAN_CONNECT_TS_WINDOW_MS = 5 * 60_000;
+/** 发现缓存帽（fix1 P2-5，R1 §五③）：mDNS 组播面伪造服务灌水的上限——超帽的新 dev
+ *  不入列（既有行仍可刷新）。真实局域网的 CC Deck 中继数量级 << 64。 */
+export const LAN_PEERS_MAX = 64;
 
 export interface LanPeer {
   dev: string;
@@ -188,13 +191,16 @@ export interface LanPeersHubOpts {
   now?: () => number;
 }
 
-/** 出卡（ws-server 受理端调）：标题带名字+指纹尾 4 位（名字不可信，指纹辅助核对）。 */
+/** 出卡（ws-server 受理端调）：标题带名字+指纹尾 8 位（名字不可信，指纹辅助核对。
+ *  fix1（P2-3，R1 §三）：尾 4 位=16bit，攻击者分钟级暴力 ~2^16 个 keypair 即可撞出
+ *  同名+同尾 4 的冒充卡与真卡不可区分；升尾 8 位（32bit）把人肉核对面从名存实亡
+ *  拉回可用——全量 dev/pubkey 恒在 payload 折叠区）。 */
 export function lanConnectConfirmCard(peer: { dev: string; name: string }, spk: string): void {
-  const fp = peer.dev.replace(/^rl-/, "").slice(-4);
+  const fp = peer.dev.replace(/^rl-/, "").slice(-8);
   addConfirm({
     kind: "lan-connect",
     title: `${peer.name || "一台电脑"} 请求连接`,
-    reason: `局域网设备请求连接（指纹尾 4 位 ${fp}）——同意仅开放传输层准入，数据信任仍走配对码/账号；核对名字可能被伪造，公钥指纹才是身份`,
+    reason: `局域网设备请求连接（指纹尾 8 位 ${fp}）——同意仅开放传输层准入，数据信任仍走配对码/账号；核对名字可能被伪造，公钥指纹才是身份`,
     payload: { dev: peer.dev, pubkey: spk, name: peer.name, fp },
   });
 }
@@ -222,6 +228,8 @@ export class LanPeersHub {
       (service) => {
         const peer = parseLanService(service, this.opts.selfDev(), this.opts.now?.() ?? Date.now());
         if (peer) {
+          // fix1（P2-5）：新 dev 超帽不入（组播灌水限流）——既有 dev 刷新不受限
+          if (!this.peers.has(peer.dev) && this.peers.size >= LAN_PEERS_MAX) return;
           this.peers.set(peer.dev, peer);
           if (service.name) byName.set(service.name, peer.dev);
         }

@@ -4,7 +4,11 @@
 //（applyLanConnectDecision：同意=confirmDevice；拒绝=忽略+吊销双写）+ Hub 端到端
 //（真 sqlite+真 confirms：首帧出卡/冷却不重弹/同意幂等/拒绝记忆静默/unignore 解除
 // 重新出卡/伪造帧拒）+ 路由面（ws-server 三端点 token/降级）+ 发起端（mock fetch
-// 出站+状态缓存）。跑法：
+// 出站+状态缓存）。
+// 返修 fix1 增锚：7b 拒绝记忆解除链走 /api/device-admin HTTP 面（P1-2——原测试直调
+// 库函数绕过 API gate 被 R2 实证打回）+ 8b 发现缓存灌水帽（P2-5）+ 卡面指纹尾 8 位
+//（P2-3）。真实启动序（P1-1）在 test-lan-boot.ts（真 index 进程+真组播）。
+// 跑法：
 //   env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx scripts/test-lan-peers.ts
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,7 +18,7 @@ import { EventEmitter } from "node:events";
 import { devId, generateKeyPair, seal } from "../src/e2e.js";
 import {
   admitLanConnect, applyLanConnectDecision, LanPeersHub, openLanConnect, parseLanService,
-  LAN_CONNECT_COOLDOWN_MS, type LanAdmitView,
+  LAN_CONNECT_COOLDOWN_MS, LAN_PEERS_MAX, type LanAdmitView,
 } from "../src/lan-peers.js";
 import { clearAdminMarks, adminVerdict, getAdminState } from "../src/device-admin.js";
 import { confirmDevice, getDeviceTrust, trustStore, trustVerdict, unRevokeDevice, upsertFirstSeen } from "../src/device-trust.js";
@@ -153,7 +157,7 @@ const lanCards = () => listPendingConfirms().filter((c) => c.kind === "lan-conne
   assert(lanCards().length === 1 && lanCards()[0]?.payload?.dev === DEV_A, "确认卡已出（kind=lan-connect，payload.dev 锚指纹）");
   const card = lanCards()[0];
   assert(String(card?.title ?? "").includes("Alice 的 Mac"), "卡面带发起方名字（不可信展示层）");
-  assert(String(card?.payload?.fp ?? "").length === 4, "卡面指纹尾 4 位（辅助核对锚）");
+  assert(String(card?.payload?.fp ?? "").length === 8, "卡面指纹尾 8 位（fix1 P2-3：尾 4 位 16bit 可暴力撞同尾冒充——辅助核对锚）");
   assert(getDeviceTrust(port, DEV_A)?.first_seen_at != null, "trust 行已建（upsertFirstSeen pending）");
   // 5b. 冷却内二帧：静默回 pending，不重弹卡
   const r2 = hub.handleIncoming(frameOf("request"));
@@ -279,6 +283,50 @@ const mgr = new SessionManager(bus, cfg);
   const rc = await fetch(`http://127.0.0.1:${cfg.port}/api/lan-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(frame) });
   const rcj = (await rc.json()) as { status?: string };
   assert(rc.status === 200 && rcj.status === "confirmed", "外来合法帧经 ws-server → hub 状态机（confirmed 幂等）");
+
+  // 7b. fix1（P1-2）：拒绝记忆解除链走 HTTP 面——/api/device-admin 真路由（批D 原测试
+  // 直调库函数绕过 API gate，被 R2 活体实证打回：unignore rl- 恒 400=单行道永久拉黑）
+  const kpU = generateKeyPair();
+  const DEV_U = devId(kpU.publicKey, "rl");
+  const frameU = (op: "request" | "status") => ({ op, from: DEV_U, spk: kpU.publicKey, box: seal({ op, ts: clock.now, name: "Dave" }, kpB.publicKey, kpU.secretKey) });
+  const adminPost = (body: Record<string, unknown>) =>
+    fetch(`http://127.0.0.1:${cfg.port}/api/device-admin?token=${cfg.token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  {
+    const u1 = await fetch(`http://127.0.0.1:${cfg.port}/api/lan-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(frameU("request")) });
+    const u1j = (await u1.json()) as { status?: string };
+    assert(u1.status === 200 && u1j.status === "pending", "P1-2 前置：新发起方 HTTP 首帧出卡（pending）");
+    const uCard = listPendingConfirms().find((c) => c.kind === "lan-connect" && c.payload?.dev === DEV_U);
+    assert(!!uCard, "P1-2 前置：确认卡在悬（payload.dev 锚）");
+    assert(decideConfirm(String(uCard?.id ?? ""), false, "user:bob").ok === true, "P1-2 前置：拒绝决议消卡（生产链两步复现——decideConfirm 消卡）");
+    assert(applyLanConnectDecision(dir, DEV_U, false, "user:bob").ok === true, "P1-2 前置：拒绝决议副作用（✗ 忽略+吊销双写）");
+    clock.now += LAN_CONNECT_COOLDOWN_MS + 1; // 冷却期满（silent 分支不刷冷却，但首帧设过）
+    const u2 = await fetch(`http://127.0.0.1:${cfg.port}/api/lan-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(frameU("request")) });
+    const u2j = (await u2.json()) as { status?: string };
+    assert(u2.status === 200 && u2j.status === "rejected", "拒绝后再请求：HTTP 面静默 rejected（拒绝记忆生效）");
+    // 修复锚本体：HTTP 面恢复（原 kindOf(rl-)=other → gate 400「恢复」钮必炸）
+    const un = await adminPost({ action: "unignore", dev: DEV_U });
+    const unj = (await un.json()) as { ok?: boolean };
+    assert(un.status === 200 && unj.ok === true, "P1-2 修复锚：unignore rl- 经 /api/device-admin 真路由 200（原恒 400 单行道）");
+    const u3 = await fetch(`http://127.0.0.1:${cfg.port}/api/lan-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(frameU("request")) });
+    const u3j = (await u3.json()) as { status?: string };
+    const reCard = listPendingConfirms().some((c) => c.kind === "lan-connect" && c.payload?.dev === DEV_U && c.status === "pending");
+    assert(u3.status === 200 && u3j.status === "pending" && reCard, "解除后重新出卡：unignore 200 → 发起端再请求 → 新确认卡（同意流重启——UI 承诺兑现）");
+    // gate 分型锚：kick rl- 拒（无持久连接语义）/ignore rl- 通（预拒同 ✗ 链）/未知前缀维持拒
+    const kk = await adminPost({ action: "kick", dev: DEV_U });
+    assert(kk.status === 400, "gate 分型：kick rl- 400（LAN 邻居无持久连接——UI 同步隐藏踢钮）");
+    const ig = await adminPost({ action: "ignore", dev: DEV_U });
+    assert(ig.status === 200, "gate 分型：ignore rl- 200（预拒=与 ✗ 决议同一条忽略+吊销链）");
+    assert(adminVerdict(port, DEV_U)?.barred === "ignored", "ignore rl- 后 verdict 恒拒（受理面静默拒生效）");
+    const un2 = await adminPost({ action: "unignore", dev: DEV_U });
+    assert(un2.status === 200, "ignore→unignore 幂等往返 200（恢复钮可重复使用）");
+    const zz = await adminPost({ action: "unignore", dev: "zz-abcdef12" });
+    assert(zz.status === 400, "未知前缀维持 400（gate 收紧面不变）");
+    // list 面：rl- 行在台账且 kind=lan（「连进来的设备」台账如实标注域）
+    const ls = await adminPost({ action: "list" });
+    const lsj = (await ls.json()) as { devices?: Array<{ dev: string; kind: string; ignored_at: number | null }> };
+    const rowU = lsj.devices?.find((x) => x.dev === DEV_U);
+    assert(ls.status === 200 && !!rowU && rowU.kind === "lan", "list 混源台账：rl- 行 kind=lan（设备管理面如实标注 LAN 邻居域）");
+  }
   server.close();
   await wait(120);
 }
@@ -320,6 +368,20 @@ const mgr = new SessionManager(bus, cfg);
   const snap = hub3.snapshot();
   assert(snap.peers.length === 1 && snap.peers[0]?.dev === DEV_A && snap.peers[0]?.conn === "confirmed", "发现缓存经 snapshot 输出（自见过滤+conn 状态并贴——DEV_A 已 confirmed）");
   assert(snap.self === DEV_B && snap.mdns === true, "snapshot 带 self 标识与 mdns 可用位");
+  // fix1（P2-5）：发现缓存帽——组播面伪造服务灌水限流（R1 §五③：peers Map 原无上限，
+  // 每行带「发起连接」钮=受理面放大器）。超帽新 dev 不入；既有 dev 刷新不受限。
+  {
+    const floodN = LAN_PEERS_MAX + 6;
+    for (let i = 0; i < floodN; i++) {
+      const kp = generateKeyPair();
+      const dev = devId(kp.publicKey, "rl");
+      feed({ name: `Flood Relay ${i}`, port: 8800 + i, addresses: [`192.168.31.${(i % 250) + 1}`], txt: { v: "2", dev, nm: `flood-${i}`, pk: kp.publicKey } });
+    }
+    const capped = hub3.snapshot();
+    assert(capped.peers.length === LAN_PEERS_MAX, `灌水帽：${floodN} 个伪造服务入列 ≤ ${LAN_PEERS_MAX}（peers Map 有界）`);
+    feed({ name: "CC Deck Relay (Alice)", port: 8788, addresses: ["192.168.1.50"], txt: { v: "2", dev: DEV_A, nm: "Alice 的 Mac", pk: kpA.publicKey } });
+    assert(hub3.snapshot().peers.some((p) => p.dev === DEV_A && p.port === 8788), "帽内既有 dev 刷新不受限（DEV_A 端口更新可见）");
+  }
   hub3.stop();
 }
 

@@ -414,8 +414,20 @@ const relayNameOf = (dataDir: string): string => effectiveRelayName(dataDir);
 
 // CONNV4 批D（connv4d）：LAN 邻居 hub——发现（browse _ccdeck._tcp）+发起（HTTP 出站
 // 密封请求帧）+受理（外来帧→确认卡→决议副作用）。selfDev/keypair 闭包读 cloudIdentity
-//（云桥块下方同步构造；onReady 与受理端点都在其后执行，闭包时序安全）；无云桥形态
-// txt()=null（#316 手表广播行为零变化——TXT 无 dev/pk 被发现侧忽略）、受理面 503。
+//（下方预构造——R1 P1-1 定谳：bootfast2 把云桥块后台化后 listen 回调先于原云桥块的
+// 唯一赋值点执行，onReady 里 advertiseRelay 求值 hub.txt() 时恒 null → TXT 恒发
+// v:"2" 空帧 → 同版本部署互不可见=LAN 发现腿死路；身份构造是几 ms 级小文件读
+//（cloud-keypair/wan-secret/peers/tenant 四文件），提前到 listen 前不伤「listen ≤2s」
+// 目标。失败留 null 由云桥块重试（重演既有后台段 catch 兜底——前台不因身份文件损坏
+// 崩进程）。无云桥形态（cloudUrls 空）不构造：txt()=null → 仍发 v2 空帧
+//（#316 手表广播行为零变化——TXT 无 dev/pk 被发现侧忽略）、受理面 503。
+if (cfg.cloudUrls.length) {
+  try {
+    cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
+  } catch (e) {
+    console.warn(`[boot] 云身份预构造失败（云桥段重试）: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 const lanPeersHub = new LanPeersHub({
   selfDev: () => cloudIdentity?.relayDev ?? "",
   selfName: () => relayNameOf(cfg.dataDir),
@@ -483,9 +495,9 @@ startServer(bus, mgr, cfg, {
     if (process.env.CCR_NO_MDNS !== "1") {
       // CCR_MDNS_NAME：广播名覆盖（#36 M2 并行测试版，2026-10-03）——同机双 relay
       // 并存（生产 8787 + M2 8788）时发现列表可分辨；缺省与生产逐字节一致
-      // CONNV4 批D：TXT 附 v2 帧（dev/nm/pk——identity 缺席时 hub.txt()=null 只发
-      // v:"2" 空帧，手表发现零影响）；同门启动 browse 发现（组播被拦静默降级→
-      // /api/lan-peers mdns:false→web 源列表 LAN 段隐藏）
+      // CONNV4 批D：TXT 附 v2 帧（dev/nm/pk——上方预构造就绪即首帧全量，LAN 邻居
+      // 可见；无云桥形态 hub.txt()=null 只发 v:"2" 空帧，手表发现零影响）；同门启动
+      // browse 发现（组播被拦静默降级→/api/lan-peers mdns:false→web 源列表 LAN 段隐藏）
       advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`, lanPeersHub.txt() ?? undefined);
       lanPeersHub.start();
     }
@@ -693,7 +705,9 @@ setTimeout(() => {
 }, 5_000).unref?.();
 
 if (cfg.cloudUrls.length) {
-  cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
+  // fix1（P1-1）：预构造失败（null）时重试——重演既有后台段行为（再抛由 IIFE 尾部
+  // catch 兜底）；成功则复用同一实例（二次构造会换掉 peers Map 等实例态=写穿态丢失）
+  if (!cloudIdentity) cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
   mgr.setPairIssuer((o) => pairCodes.issue(o));
   mgr.setLoginGranter((dev, pk, name) => {

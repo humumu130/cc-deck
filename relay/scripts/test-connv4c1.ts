@@ -183,7 +183,7 @@ const post = async (body: unknown, token = cfg.token) => {
   assert(kickerCalls.length === beforeU, "unignore：不触发断连（设备已被断，恢复靠设备侧重走配对）");
   // 校验面
   const bad1 = await post({ action: "kick", dev: "rl-1234abcd" });
-  assert(bad1.status === 400, "dev 前缀不可识别 400（rl- 非管理面设备）");
+  assert(bad1.status === 400, "kick rl- 400（connv4d-fix1 后 rl-=lan 可识别域——kick 分型拒：无持久连接；unignore/ignore 已放行，见 test-lan-peers 7b）");
   const bad2 = await post({ action: "explode", dev: PH });
   assert(bad2.status === 400, "未知 action 400");
   const badTok = await post({ action: "list" }, "wrong-token-x");

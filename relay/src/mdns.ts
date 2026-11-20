@@ -3,7 +3,7 @@
 // CONNV4 批D（connv4d）：双向化——publish TXT 扩 dev/nm/pk（v2 帧：LAN 邻居发现需要
 // 对端 relay 身份标识+公钥才能构造密封请求帧；v1 只有 v:"1" 被发现侧忽略）；新增
 // browseLanPeers（同网发现，lan-peers.ts 消费）。组播被拦容错与 publish 同款。
-import Bonjour from "bonjour-service";
+import Bonjour, { type ServiceConfig } from "bonjour-service";
 
 export interface MdnsTxtV2 {
   v: "2";
@@ -15,9 +15,22 @@ export interface MdnsTxtV2 {
 /** 可注入的 Bonjour 构造器（测试 mock；缺省真包）。 */
 export type BonjourCtor = typeof Bonjour;
 
+/** CONNV4D 返修 fix1（P1-1 测试基建）：CCR_MDNS_IP 覆盖组播组地址（缺省 224.0.0.251）。
+ *  用途=真实启动序测试的隔离面——真 index 进程+真组播栈跑在私有组（组织本地范围
+ *  239.192/14，RFC 2365），同网真实设备（224.0.0.251 组）不可见（#20「测试幽灵
+ *  实例」纪律不破）；测试端浏览器须同组才能收到（同主机组播回环）。publish/browse
+ *  同读此钮。生产不设=构造参数逐字节不变。 */
+/** bonjour-service 构造参数的 socket 透传面（ip=组播组地址——d.ts 未收录，
+ *  runtime 经 Server→multicast-dns(opts) 原样消费）。 */
+export type BonjourSocketOpts = Partial<ServiceConfig> & { ip?: string };
+const mdnsGroupOpts = (): BonjourSocketOpts | undefined => {
+  const ip = (process.env.CCR_MDNS_IP ?? "").trim();
+  return ip ? { ip } : undefined;
+};
+
 export function advertiseRelay(port: number, name: string, extraTxt?: Record<string, string>): { stop: () => void } {
   try {
-    const bonjour = new Bonjour();
+    const bonjour = new Bonjour(mdnsGroupOpts());
     // mDNS socket 的错误是异步 emit（组播被拦/地址被占），不监听会 unhandled——
     // 广播失败只影响手表自动发现（可手输），静默吞掉
     const service = bonjour.publish({ name, type: "ccdeck", port, txt: { v: "2", ...(extraTxt ?? {}) } });
@@ -47,7 +60,8 @@ export function browseLanPeers(
   Ctor: BonjourCtor = Bonjour,
 ): { stop: () => void; ok: boolean } {
   try {
-    const bonjour = new Ctor(undefined, () => {
+    // fix1：同读 CCR_MDNS_IP 隔离钮（与 publish 同组——测试形态下发现面也不出 224.0.0.251）
+    const bonjour = new Ctor(mdnsGroupOpts(), () => {
       // errorCallback：组播 socket 起不来（被拦/无网卡）——静默降级
       onDown();
     });

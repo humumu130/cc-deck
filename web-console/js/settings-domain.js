@@ -1493,8 +1493,8 @@ function connectLan(ctx) {
         // 军规：小标签 ≤3 字（手机/电脑/网页/手表/在线/离线/冷却中/已忽略）；红=错误系（踢钮）、
         // 橙=交互系——踢钮红描边即交互按钮用红系的唯一例外（destructive 语义，评审 R2 双键口径）。
         const DEV_ADMIN = { cache: null, unsupported: false, inFlight: false, pending: null, oldDevices: null };
-        const DEV_KIND_TXT = { phone: "手机", watch: "手表", web: "网页", other: "电脑" };
-        const DEV_KIND_ICON = { phone: "icon-phone", watch: "icon-phone", web: "icon-globe", other: "icon-desktop" }; // 无 icon-watch 字形：手表复用 phone 形，类型 tag 消歧
+        const DEV_KIND_TXT = { phone: "手机", watch: "手表", web: "网页", lan: "局域网", other: "电脑" };
+        const DEV_KIND_ICON = { phone: "icon-phone", watch: "icon-phone", web: "icon-globe", lan: "icon-desktop", other: "icon-desktop" }; // 无 icon-watch 字形：手表复用 phone 形，类型 tag 消歧；lan=LAN 邻居中继（connv4d fix1）复用 desktop 形
         const devAdminUrl = () => {
           // token 链尾挂 __ccDeck005Token 全局活镜像（:1874 canonical/:1921 壳探测更新——
           // acctLanToken :4384 同款先例：ctx.cfg/闭包 relayToken 在浏览器 file:// 无 wsUrl
@@ -1568,10 +1568,14 @@ function connectLan(ctx) {
               : on ? "当前在线 · 已连 " + relTime(d.paired_at)
               : "上次在线 " + relTime(d.last_seen) + " 前" + (cooling ? " · 冷却剩 " + Math.max(1, Math.round(coolLeft / 3_600_000)) + " 小时" : "");
             const dev = esc(d.dev);
+            // connv4d fix1（P1-2）：rl-（LAN 邻居）行不带「踢」——relay 侧 gate 已拒
+            //（无持久连接可断/冷却无消费方），UI 同步分型防点了恒 400 的死钮；
+            // 「忽略」（预拒）与「恢复」（解除拒绝记忆）保持——两写已放行。
+            const isLan = kind === "lan";
             const adminTag = ignored ? '<span class="tag">已忽略</span>' : cooling ? '<span class="tag" title="冷却剩 ' + Math.max(1, Math.round(coolLeft / 3_600_000)) + ' 小时（期间不自动重连）">冷却中</span>' : "";
             const keys = ignored
               ? '<button class="row-share" data-devadmin-unignore="' + dev + '" type="button" title="解除忽略：对方需重新配对/确认后再连">恢复</button>'
-              : '<button class="row-share devadmin-kick" data-devadmin-kick="' + dev + '" type="button" title="' + (kind === "phone" ? "踢出：作废配对信任，对方需重新配对" : "断开：24 小时内不再自动重连") + '">踢</button>' +
+              : (isLan ? "" : '<button class="row-share devadmin-kick" data-devadmin-kick="' + dev + '" type="button" title="' + (kind === "phone" ? "踢出：作废配对信任，对方需重新配对" : "断开：24 小时内不再自动重连") + '">踢</button>') +
                 '<button class="row-share" data-devadmin-ignore="' + dev + '" type="button" title="永久忽略该设备（不再自动连入），可在列表底部恢复">忽略</button>';
             return '<div class="v8-swrow dev-row' + (ignored ? " dev-ignored" : "") + '" data-devadmin-row="' + dev + '"><span class="v8-swico dev-ico ' + esc(kind) + '"><svg class="icon-inline" aria-hidden="true"><use href="#' + DEV_KIND_ICON[kind] + '"></use></svg></span><div class="v8-swtxt">' + esc(name) + '<div class="v8-swd">' + sub + '</div></div><span class="tag">' + DEV_KIND_TXT[kind] + '</span><span class="tag ' + (on ? "done" : "") + '">' + (on ? "在线" : "离线") + "</span>" + adminTag + '<div class="devadmin-keys">' + keys + "</div></div>";
           };
