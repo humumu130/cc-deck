@@ -183,6 +183,25 @@ export function clearWorktreeLock(worktree: string, dispatchId?: string): boolea
   }
 }
 
+/** W-DISPATCHFIX（1120 治本单·验收⑤）：slug 定位清锁——排队单被驱逐/终态弃单时，其
+ * bash 侧预建的哨兵锁（无 dispatch_id，slug 定位）随单撤。只清 slug 匹配且（无 id
+ * 哨兵锁 或 dispatch_id 归属本单）的锁——他人 id 活锁不动（clearWorktreeLock 同款
+ * 收窄）。返回 true=已清/本无锁。 */
+export function clearSlugWorktreeLock(worktree: string, slug: string, dispatchId?: string): boolean {
+  if (!worktree || !slug) return false;
+  const p = lockPath(worktree);
+  if (!existsSync(p)) return true;
+  const lock = readWorktreeLock(worktree);
+  if (lock && lock.slug !== slug) return false; // 异 slug 活锁：非本单不清
+  if (lock && lock.dispatch_id && dispatchId && lock.dispatch_id !== dispatchId) return false; // 他人 id 归属：不清
+  try {
+    rmSync(p, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** dispatch 收口清锁扫描：CCR_WT_ROOT（缺省 /private/tmp，对齐 leader-dispatch CCR_WT_ROOT
  * 同名覆盖）下所有 *cc-deck-w* 目录的锁文件，dispatch_id 匹配收口单即清。O(目录数)——
  * worktree 数量个位数级，收口边调用可接受。坏目录/权限错误静默跳过（尽力而为，不炸收口）。

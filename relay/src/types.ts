@@ -272,6 +272,14 @@ export interface SessionState {
   // undefined = 老 relay 未下发/回放未恢复——端上降级按干活中处理（不误伤），SNAPSHOT
   // 全量下发（cloneState），增量面不携带（端上收 SESSION_LOG 工具帧本地刷新）
   last_tool_use_at?: number;
+  // W-DISPATCHFIX（1120 治本单·验收③）活性真态：status∈{WORKING,WAITING} 时随
+  // SNAPSHOT/SESSION_HEARTBEAT 下发的显示级真活性——进程存在性（cli_pid kill-0）+
+  // 帧龄（events.ndjson 尾扫）复合判定（会话 jsonl 活动的代理面）。alive=进程活或
+  // 帧龄 ≤5min（CCR_WORKER_STALL_DISPLAY_MIN）或 SDK 流活；between-turns=回合间隙
+  // 守位（帧龄 ≤30min，SEATALIVE 刀1 语义）；dead=停摆（进程死/无流且帧龄超显示窗
+  // ——「WORKING 假态」的照妖镜：1119 夜 worker 01:32 死、板面示在审 80min 盲区
+  // 根治）。非 WORKING/WAITING 会话不带键（空闲是合法态无需活性）；旧端忽略零影响。
+  liveness?: "alive" | "between-turns" | "dead";
   usage?: TokenUsage;         // 会话累计 token 用量（统计页口径）
   context_usage?: number;     // 当前上下文水位 tokens（最后一条 assistant 的 usage：input+缓存读+缓存写；水位条数据源）
   context_limit?: number;     // 上下文窗口上限（contextLimitOf 按模型算出后随 state 持久下发，SNAPSHOT 也带上）
@@ -432,6 +440,10 @@ export interface SessionUpdatedPayload {
 export interface SessionHeartbeatPayload {
   elapsed_ms: number;
   action_summary: string;
+  // W-DISPATCHFIX（1120 治本单·验收③）：心跳帧捎带活性真态（心跳本身是 relay 侧
+  // 定时器、与子进程健康无关——「心跳在跳」从来不是活证据）。WORKING/WAITING 会话
+  // 每拍携带；dead=停摆（端上灯色/板面成员列消费——批E 接渲染，数据面本批到位）。
+  liveness?: "alive" | "between-turns" | "dead";
 }
 
 // 任务完成汇报（#204）：权威任务轮询 diff 出"本次完成"时下发，
@@ -1624,5 +1636,10 @@ export const CHAIN_AUDIT_ACTIONS = [
   "pm-override-pid-stale-candidate", // 刀2：pid 死但回合窗内候选保留（可观测不静默）
   "drainfix-dead-close", // W-DRAINFIX（1111 断档死锁治本）：周期 sweep 断档悬账收口（open 单 worker 判活=dead → failed 收口回 backlog，排队单随排水接续）
   "dispatch-sweep", // W-GATEPROBE（1111 断档死锁治本 delta）：断档 holder 席位回收（external/无 wrapper 形态 member 除名腾编制）/回收失败——僵尸看门狗不管的形态在这里出编制
+  // ---- W-DISPATCHFIX（1120 用户军令级·三现治本）：派单链状态一致性 ----
+  "dispatch-slug-dup", // 验收④：同 slug 在途拒收（板面零重复记账——同树双派时间窗防线）
+  "headless-spawn", // 验收②：池空窗自动拉起 headless 消费者（claude -p 形态——含让位全局帽/引擎面不适用分支）
+  "headless-spawn-failed", // 验收②：拉起失败升级（/api/notify 语义告警 PM——单留队列退避重试，绝不静默）
+  "dispatch-lock-gc", // 验收⑤：终态单锁 GC/弃单哨兵锁清（119min 死等形态退役——收口边清锁漏网兜底）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];

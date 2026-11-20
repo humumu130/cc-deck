@@ -1304,6 +1304,9 @@ export function startServer(
     // 「用户是指挥/验收者」的确认门槛（此前只是注释声明，未强制）
     // W-RATELIMIT429：轻量状态端点（token 鉴权）——bin 侧 leader-dispatch 派单前
     // 并发提示数据源（workers_running=在编活 worker 数；cap=全局帽）。只读无副作用。
+    // W-DISPATCHFIX（1120 治本单·验收①）：真活性分叉下发——workers_running 是 status
+    // 口径（含死透滞留 WORKING 的假位），workers_real_active 是进程/帧复合真值（0=池
+    // 空窗，排队即死等形态——leader-dispatch/PM 据此预判，不再被「都在忙」表象骗）。
     if (req.method === "GET" && url.pathname === "/api/state") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");
@@ -1312,6 +1315,7 @@ export function startServer(
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
         ok: true,
         workers_running: mgr.activeManagedCount(),
+        workers_real_active: mgr.realActiveManagedCount(),
         cap: workerConcurrencyCap(),
         queued: mgr.dispatchQueueSize(),
       }));

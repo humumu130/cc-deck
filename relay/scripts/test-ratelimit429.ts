@@ -7,7 +7,7 @@
 //   B 并发帽：8 单帽 6→2 排队（queued:true+队列长度+台账 queued 行）→空位放行（drain 后
 //     队列减一+新单真派出）。
 // 环境：CCR_ORG_DIR 沙盒+CCR_WORKER_CONCURRENCY_CAP=6+CCR_RATE_LIMIT_BASE_MS=50（短退避）。
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -126,6 +126,10 @@ const fix = spawned[0];
       state: { session_id: sid, status: "WORKING", cwd: DATA, title: `fx ${i}`, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, started_at: Date.now(), updated_at: Date.now() },
     });
     fixtureIds.push(sid);
+    // W-DISPATCHFIX：fixture 补真活性证据（events 帧）——6 席无帧会被真活性判死
+    //（池空窗）→ 排队单被 headless 消费者接管，帽排队断言面失真。帧在场=seats-busy
+    //（排队语义原样），headless 不触发。
+    appendFileSync(join(DATA, "events.ndjson"), JSON.stringify({ seq: 0, session_id: sid, ts: Date.now(), type: "SESSION_UPDATED", payload: { status: "WORKING" } }) + "\n");
   }
   ok(mgr.activeManagedCount() >= 6, `B1 前置：≥6 活 worker 占满帽（实测 ${mgr.activeManagedCount()}，含 A 组残留）`);
   // B2/B3：超帽单 → 排队不拒收

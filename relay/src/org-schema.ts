@@ -48,6 +48,7 @@ export const DISPATCH_EVENTS = [
   "dispatch-seat-scan",  // 派发侧：选席扫描（候选名单+逐跳过原因+落席决策）
   "dispatch-reused",     // 派发侧：复用在编熟手（值在 target=承接席）
   "dispatch-spawned",    // 派发侧：真启动新会话（spawn-pending→承接后）
+  "dispatch-headless",   // W-DISPATCHFIX（1120 治本单）：池空窗自动拉起 headless 消费者（claude -p 形态——target=headless:<pid>，日志路径在 receipt）
   "worker-ack",          // worker：接单（会话起来看到任务书——SDK SessionStart 钩子）
   "worker-start",        // worker：开工（首次工具活动——SDK PostToolUse 钩子首拍）
   "worker-milestone",    // worker：回合心跳（SDK Stop 钩子，relay 侧 90s 节流）
@@ -203,6 +204,8 @@ export const DISPATCH_ENTRY_SCHEMA: Record<string, { type: "string" | "number" |
   no_pr: { type: "boolean" }, // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
   event: { type: "enum", enumTable: DISPATCH_EVENTS }, // W-BOARDV2（1111 用户令）：黑板事件词表（词表 DISPATCH_EVENTS 本文件权威）——行仍带合法 status，event 承载细分生命周期（看板投影/PM 查询数据底座；旧行缺省 undefined=无事件面，宽容）
   abnormal_done: { type: "boolean" }, // W-BOARDV2「done 说真话」：relay 收口 done 时同 id 无 worker-done 申报（worker 半途跑路/静默收工——1111 实锤形态）即落此标。纯观测标：leader-board/看板投影消费（「异常完成」角标），不改状态语义。与 receipt_missing（回执内容观测）分立：本标=交付申报缺席
+  slug: { type: "string" }, // W-DISPATCHFIX（1120 治本单·验收④）：派单 slug（leader-dispatch --slug）——dispatched/queued 行落值（同 slug 在途查重锚；板面不重复记账）
+  headless: { type: "boolean" }, // W-DISPATCHFIX（验收②）：headless 消费者承接标记（池空窗自动拉起的 claude -p worker——running/终态行携带）
 };
 
 // ---------- reducer 门面 ----------
