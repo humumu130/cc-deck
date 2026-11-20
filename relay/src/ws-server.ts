@@ -28,6 +28,7 @@ import { listDevices, touchDevice } from "./devices.js"; // conn-page-v2 件③�
 // device-admin.ts 文件头），list 混源台账 + kick/ignore/unignore 三写动作
 import { getDeviceTrust, listDeviceTrust, revokeDevice, trustStore, unRevokeDevice } from "./device-trust.js";
 import { clearAdminMarks, KICK_COOLDOWN_MS, listAdminState, setCooldown, setIgnored } from "./device-admin.js";
+import { LanPeersHub } from "./lan-peers.js"; // CONNV4 批D：LAN 邻居发现+同意流（三端点数据面；opts.lanPeers 注入）
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
@@ -461,6 +462,9 @@ export interface StartServerOptions {
   // /api/device-admin list 混源台账的设备名/配对时刻/最近活跃数据源（bootfast2-r1
   // P1-4 口径：恒展开+闭包内判空，云桥后台段构造完成前返回 []）
   cloudPeers?: () => Array<{ dev: string; name: string; paired_at: number; last_seen: number; online: boolean }>;
+  // CONNV4 批D：LAN 邻居发现+同意流 hub（index.ts 装配；null=未启用——CCR_NO_MDNS/无
+  // identity 形态，三端点降级：lan-peers 回 mdns:false、两写端点 501）
+  lanPeers?: LanPeersHub | null;
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -926,6 +930,63 @@ export function startServer(
             return;
           }
           res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "action 需为 list/kick/ignore/unignore" }));
+        } catch { res.writeHead(400).end(); }
+      });
+      return;
+    }
+    // CONNV4 批D（connv4d）：LAN 邻居发现+一键发起+对端同意流三端点。安全口径全在
+    // lan-peers.ts 头注（评审 R5 红线：同意只授权传输层准入；名字=不可信展示层；
+    // 拒绝记忆/冷却键于公钥派生 dev；请求帧 sealed box 持钥证明+ts 防重放）。
+    //   GET  /api/lan-peers        （本机 web 面，token）：发现快照+发起端状态缓存
+    //   POST /api/lan-connect-send （本机 web 面，token）：{dev, op}→hub 密封出站
+    //   POST /api/lan-connect      （外来受理面，无 token）：对端 relay 的请求帧——
+    //        rateLimited 防洪+body 8KB 帽（lan-auth 同款），帧校验失败不回状态（防探测）
+    if (req.method === "GET" && url.pathname === "/api/lan-peers") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end(); return; }
+      if (!opts.lanPeers) { res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, mdns: false, peers: [], self: "" })); return; }
+      opts.lanPeers.refreshPendingAsync(); // pending 且 >10s 未刷的邻居异步补一拍（节流，响应不带新值）
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, ...opts.lanPeers.snapshot() }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/lan-connect-send") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end(); return; }
+      if (!opts.lanPeers) { res.writeHead(501, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "LAN 发现未启用" })); return; }
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        void (async () => {
+          try {
+            const { dev, op } = JSON.parse(body) as { dev?: unknown; op?: unknown };
+            const d = String(dev ?? "");
+            const o = op === "status" ? "status" : "request";
+            if (!/^rl-[0-9a-f]{4,64}$/.test(d)) { res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "dev 需为 rl- 前缀设备号" })); return; }
+            const r = await opts.lanPeers!.sendConnect(d, o);
+            res.writeHead(r.ok ? 200 : 502, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(r));
+          } catch { res.writeHead(400).end(); }
+        })();
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/lan-connect") {
+      // 外来受理面：无鉴权端点（对端发起端无本机 token）——防洪三件套（lan-auth 同款：
+      // rateLimited 按 remoteAddress+body 8KB 帽+全链 try）。帧本身须过 sealed box
+      // 持钥证明才有任何状态回显（lan-peers.handleIncoming）
+      if (!opts.lanPeers) { res.writeHead(501, { "content-type": "application/json" }).end('{"ok":false,"error":"LAN 发现未启用"}'); return; }
+      if (rateLimited(`lan-connect:${req.socket.remoteAddress ?? "?"}`)) {
+        res.writeHead(429, { "content-type": "application/json" }).end('{"ok":false,"error":"太频繁"}');
+        return;
+      }
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 8192) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const r = opts.lanPeers!.handleIncoming(JSON.parse(body));
+          res.writeHead(r.http, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify(r.body));
         } catch { res.writeHead(400).end(); }
       });
       return;

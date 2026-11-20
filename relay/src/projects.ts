@@ -238,6 +238,12 @@ export type ConfirmKind =
   // payload 携 dev/pubkey/tenant/first_msg_id，决议副作用在 applyConfirmEffects
   // case "device-trust"（xmsg 控制器 onTrustDecision）
   | "device-trust"
+  // CONNV4 批D（connv4d）：LAN 邻居连接请求确认卡——发起端密封请求帧到达弹卡一次
+  //（卡面名字+指纹尾 4 位：名字不可信展示层，指纹辅助核对）；✓ = confirmDevice
+  //（传输层准入记账——身份面不动，数据信任仍走配对码/账号链，评审 R5 红线），
+  // ✗ = 拒绝记忆（setIgnored+revoke：再请求静默拒，解除走批C2 unignore）；副作用
+  // 在 lan-peers.ts applyLanConnectDecision（applyConfirmEffects case "lan-connect"）
+  | "lan-connect"
   // [W-SEAT-SEMANTICS] 首次自动裁编确认（用户 1101 拍板 C 模式批次一）：每 gid 首次
   // 自动 trim 不直接裁——出卡告知名单+理由（idle 时长），✓ 后真裁（applyConfirmEffects
   // case "headcount-trim-first" 带 viaConfirm 重入）且此后该 gid 永直裁；✗=本轮不裁，

@@ -191,7 +191,9 @@
     "test:leader-dispatch": "tsx scripts/test-leader-dispatch.ts",
     "test:account": "tsx scripts/test-account.ts",
     "test:boardtruth7": "tsx scripts/test-boardtruth7.ts",
-    "test:connv4c1": "tsx scripts/test-connv4c1.ts"
+    "test:connv4c1": "tsx scripts/test-connv4c1.ts",
+    "test:lan-peers": "tsx scripts/test-lan-peers.ts",
+    "test:lanpeers-web": "tsx scripts/test-lanpeers-web.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

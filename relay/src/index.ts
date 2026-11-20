@@ -27,6 +27,7 @@ import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
 import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
+import { LanPeersHub } from "./lan-peers.js"; // CONNV4 批D：LAN 邻居发现+同意流 hub（index 装配：发现生命周期+ws-server opts 注入）
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 import { orgDir } from "./org.js";
 import { listConfirms } from "./projects.js";
@@ -410,6 +411,17 @@ const pairCodes = createPairingCodes();
 // #272：读写收编 settings.ts 单源模块（effectiveRelayName 现算——setRelayName 改名后
 // SNAPSHOT/reconcile 免重启带新名）；此处仅保留注入闭包形态
 const relayNameOf = (dataDir: string): string => effectiveRelayName(dataDir);
+
+// CONNV4 批D（connv4d）：LAN 邻居 hub——发现（browse _ccdeck._tcp）+发起（HTTP 出站
+// 密封请求帧）+受理（外来帧→确认卡→决议副作用）。selfDev/keypair 闭包读 cloudIdentity
+//（云桥块下方同步构造；onReady 与受理端点都在其后执行，闭包时序安全）；无云桥形态
+// txt()=null（#316 手表广播行为零变化——TXT 无 dev/pk 被发现侧忽略）、受理面 503。
+const lanPeersHub = new LanPeersHub({
+  selfDev: () => cloudIdentity?.relayDev ?? "",
+  selfName: () => relayNameOf(cfg.dataDir),
+  keypair: () => cloudIdentity?.keypair ?? null,
+  dataDir: cfg.dataDir,
+});
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   pairCodes, // bootfast2：恒传（云桥后台段起——pairCodes.issue 引用语义恒可用）
@@ -437,6 +449,8 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）；
   // W-SRCLABEL #134：缺省回落主机名（relayNameOf 单点，云通道同源）
   relayName: () => relayNameOf(cfg.dataDir),
+  // CONNV4 批D：LAN 邻居发现+同意流 hub（lan-peers.ts；三端点 trio 详见 ws-server）
+  lanPeers: lanPeersHub,
   // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
   lanHint: () => {
     const ip = detectLanIp(networkInterfaces());
@@ -469,7 +483,11 @@ startServer(bus, mgr, cfg, {
     if (process.env.CCR_NO_MDNS !== "1") {
       // CCR_MDNS_NAME：广播名覆盖（#36 M2 并行测试版，2026-10-03）——同机双 relay
       // 并存（生产 8787 + M2 8788）时发现列表可分辨；缺省与生产逐字节一致
-      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
+      // CONNV4 批D：TXT 附 v2 帧（dev/nm/pk——identity 缺席时 hub.txt()=null 只发
+      // v:"2" 空帧，手表发现零影响）；同门启动 browse 发现（组播被拦静默降级→
+      // /api/lan-peers mdns:false→web 源列表 LAN 段隐藏）
+      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`, lanPeersHub.txt() ?? undefined);
+      lanPeersHub.start();
     }
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
