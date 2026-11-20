@@ -1493,6 +1493,9 @@ function connectLan(ctx) {
         // 军规：小标签 ≤3 字（手机/电脑/网页/手表/在线/离线/冷却中/已忽略）；红=错误系（踢钮）、
         // 橙=交互系——踢钮红描边即交互按钮用红系的唯一例外（destructive 语义，评审 R2 双键口径）。
         const DEV_ADMIN = { cache: null, unsupported: false, inFlight: false, pending: null, oldDevices: null };
+        // CONNV4 批E：wb- 聚合行虚拟键（pending/确认条/data-devadmin-row 三处共用）——下划线
+        // 形态在后端 dev 正则（^[a-z]{2}-[0-9a-f]{6,64}$）外，与真设备号零碰撞
+        const WB_AGG_KEY = "__wb-agg__";
         const DEV_KIND_TXT = { phone: "手机", watch: "手表", web: "网页", other: "电脑" };
         const DEV_KIND_ICON = { phone: "icon-phone", watch: "icon-phone", web: "icon-globe", other: "icon-desktop" }; // 无 icon-watch 字形：手表复用 phone 形，类型 tag 消歧
         const devAdminUrl = () => {
@@ -1548,6 +1551,21 @@ function connectLan(ctx) {
           await fetchDevAdminList(); // P2-b 口径（C2R1 返修）：动作后始终重拉读面（成败都刷，非「失败不重拉」）——503/网络败时 fetchDevAdminList catch 保旧台账，行态如实
           if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
         }
+        // CONNV4 批E：聚合行「断开当前连接」——对全部在线无名 wb- 逐个 kick（主 token 共享：
+        // 断=当前 ws 全下线，各上 24h 冷却=账号类 kick 语义）。串行 for-await（写库不并发）；
+        // 部分失败人话计数不假成功（C2R1 同族纪律）；结束统一重拉+重渲。
+        async function wbAggKickAll() {
+          DEV_ADMIN.pending = null;
+          const targets = (DEV_ADMIN.cache || []).filter((d) => d && d.kind === "web" && !String(d.name || "").trim() && !(Number(d.ignored_at || 0) > 0) && d.online === true);
+          if (!targets.length) { devAdminToast("没有在线的网页连接", true); }
+          else {
+            let okN = 0;
+            for (const d of targets) { if (await devAdminWrite("kick", d.dev)) okN++; }
+            devAdminToast(okN === targets.length ? "已断开 · " + okN + " 个网页连接 · 24 小时内不再自动重连" : "部分未生效：" + okN + "/" + targets.length + " 已断开（可重试）", okN !== targets.length);
+          }
+          await fetchDevAdminList();
+          if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+        }
         function renderDevAdminRows(devLive) {
           const now = Date.now();
           const relTime = (ts) => { const m = Math.max(1, Math.round((now - Number(ts || 0)) / 60_000)); return m < 60 ? m + " 分钟" : m < 1440 ? Math.round(m / 60) + " 小时" : Math.round(m / 1440) + " 天"; };
@@ -1555,8 +1573,16 @@ function connectLan(ctx) {
           const known = new Set(list.map((d) => d.dev));
           // 旧台账并集去重：同 dev 键只留 admin 行（管理态/双键都在 admin 行）；admin 缺席的旧行尾插（无管理钮——旧形态只读）
           const legacy = (DEV_ADMIN.oldDevices || []).filter((d) => d && typeof d.id === "string" && !known.has(d.id));
-          const act = list.filter((d) => !(Number(d.ignored_at || 0) > 0));
+          // CONNV4 批E（评审 R6）：无名 wb- 纯网页行聚合「网页 ×N」一行——主 token 共享语义
+          //（真踢除=per-device token 独立立项不在本批），行内只给「断开当前连接」（对全部
+          // 在线 wb- peerKicker）。带名字的 wb- 行（配对过的网页源）不聚合照旧逐行；忽略行
+          // 沉底管理区不进聚合组。判定与 wbAggKickAll/mobile 只读台账（__ccDeck005DevAdminLedger
+          // 消费侧）三处同构：kind==="web" && 无名 && 非 ignored。
+          const isWbPure = (d) => d.kind === "web" && !String(d.name || "").trim() && !(Number(d.ignored_at || 0) > 0);
+          const act = list.filter((d) => !isWbPure(d) && !(Number(d.ignored_at || 0) > 0));
           const ign = list.filter((d) => Number(d.ignored_at || 0) > 0); // 忽略行沉底
+          const wbPure = list.filter(isWbPure); // 聚合组（活动区内独立一行，置 named 行之后——临时网页端次要信息位）
+          const wbOn = wbPure.filter((d) => d.online === true);
           const rowHtml = (d) => {
             const kind = DEV_KIND_TXT[d.kind] ? d.kind : "other";
             const ignored = Number(d.ignored_at || 0) > 0;
@@ -1577,6 +1603,11 @@ function connectLan(ctx) {
           };
           const p = DEV_ADMIN.pending;
           const confirmHtml = p ? (() => {
+            if (p.dev === WB_AGG_KEY) { // 批E：聚合行确认条（断开全部在线网页连接——账号类 kick 语义）
+              return '<div class="devadmin-confirm" data-devadmin-confirm="' + WB_AGG_KEY + '"><span class="txt">断开全部 ' + wbOn.length + ' 个网页连接 · 24 小时内不再自动重连</span>' +
+                '<button class="row-share" data-devadmin-cancel type="button">取消</button>' +
+                '<button class="row-share devadmin-kick" data-devadmin-go="' + WB_AGG_KEY + '" type="button">确认断开</button></div>';
+            }
             const d = list.find((x) => x.dev === p.dev) || (DEV_ADMIN.oldDevices || []).find((x) => x && x.id === p.dev);
             const kind = d && DEV_KIND_TXT[d.kind] ? d.kind : "other";
             const msg = p.action === "ignore" ? "永久忽略，可在下方恢复" : kind === "phone" ? "踢出后需重新配对" : "断开并 24 小时内不再自动重连";
@@ -1587,6 +1618,13 @@ function connectLan(ctx) {
           })() : "";
           const parts = [];
           for (const d of act) { parts.push(rowHtml(d)); if (p && p.dev === d.dev && p.action !== "unignore") parts.push(confirmHtml); }
+          if (wbPure.length) { // 批E 聚合行：「网页 ×N」（在线数/总数副行）+仅「断开当前连接」（R6 定案——单行钮语义，非逐行管理）
+            parts.push('<div class="v8-swrow dev-row" data-devadmin-row="' + WB_AGG_KEY + '"><span class="v8-swico dev-ico web"><svg class="icon-inline" aria-hidden="true"><use href="#icon-globe"></use></svg></span>'
+              + '<div class="v8-swtxt">网页 ×' + wbPure.length + '<div class="v8-swd">' + (wbOn.length ? "在线 " + wbOn.length + " / " + wbPure.length + " · 共用主 token · 断开=全部当前网页连接下线" : "全部离线 · 共 " + wbPure.length + " 个网页端") + '</div></div>'
+              + '<span class="tag">网页</span><span class="tag ' + (wbOn.length ? "done" : "") + '">' + (wbOn.length ? "在线" : "离线") + "</span>"
+              + '<div class="devadmin-keys">' + (wbOn.length ? '<button class="row-share devadmin-kick" data-devadmin-wbkick type="button" title="断开当前连接：对全部 ' + wbOn.length + ' 个在线网页端断连（24 小时内不再自动重连）">断开</button>' : "") + "</div></div>");
+            if (p && p.dev === WB_AGG_KEY) parts.push(confirmHtml);
+          }
           for (const d of ign) { parts.push(rowHtml(d)); if (p && p.dev === d.dev) parts.push(confirmHtml); }
           if (p && !parts.includes(confirmHtml) && confirmHtml) parts.push(confirmHtml); // 目标行被刷新挤掉的兜底（确认条不丢）
           for (const d of legacy) {
@@ -1598,16 +1636,27 @@ function connectLan(ctx) {
         if (!window.__ccDeck005DevAdminWired) { // 点击委托一次挂载（render 多拍不叠监听）
           window.__ccDeck005DevAdminWired = true;
           window.__ccDeck005DevAdminRefresh = () => { void fetchDevAdminList().then(() => { if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive(); }); };
+          // CONNV4 批E：台账只读口（mobile「这台电脑」反向视图最小面——005-mobile IIFE 消费；
+          // null=未拉到/旧 relay 404（unsupported 同 null——消费侧回落 relay_devices 旧链））
+          window.__ccDeck005DevAdminLedger = () => (DEV_ADMIN.unsupported ? null : DEV_ADMIN.cache);
           document.addEventListener("click", (ev) => {
             const kick = ev.target.closest("[data-devadmin-kick]");
             const ign = ev.target.closest("[data-devadmin-ignore]");
             const unign = ev.target.closest("[data-devadmin-unignore]");
             const go = ev.target.closest("[data-devadmin-go]");
             const cancel = ev.target.closest("[data-devadmin-cancel]");
-            if (kick) { DEV_ADMIN.pending = { dev: kick.dataset.devadminKick, action: "kick" }; }
+            const wbKick = ev.target.closest("[data-devadmin-wbkick]"); // 批E：聚合行断开钮（确认条走 pending 同链）
+            if (wbKick) { DEV_ADMIN.pending = { dev: WB_AGG_KEY, action: "kick" }; }
+            else if (kick) { DEV_ADMIN.pending = { dev: kick.dataset.devadminKick, action: "kick" }; }
             else if (ign) { DEV_ADMIN.pending = { dev: ign.dataset.devadminIgnore, action: "ignore" }; }
             else if (unign) { void devAdminRun("unignore", unign.dataset.devadminUnignore); return; }
-            else if (go) { const pp = DEV_ADMIN.pending; if (pp && pp.dev === go.dataset.devadminGo) { void devAdminRun(pp.action, pp.dev); return; } }
+            else if (go) {
+              const pp = DEV_ADMIN.pending;
+              if (pp && pp.dev === go.dataset.devadminGo) {
+                if (pp.dev === WB_AGG_KEY) { void wbAggKickAll(); return; } // 批E：聚合确认→批量断开全部在线 wb-
+                void devAdminRun(pp.action, pp.dev); return;
+              }
+            }
             else if (cancel) { DEV_ADMIN.pending = null; }
             else return;
             if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
@@ -4614,14 +4663,96 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       // 云身份域=cloudSelfRows 独立在册——本函数 45 行含 withName/cloudUIOn 尾块随迁删，
       // 输码表单/本设备/诊断的卡内残余源彻底清零——「＋添加」弹窗唯一路径负向锚前提）。
 
+      // ---------- CONNV4 批E（connv4e）：mobile 源列表 lane 五段序同步 ----------
+      // 桌面 sourceListRows 同构（1117 全栈一致性心智）：本机（恒置顶）→ 同账号（在线名字
+      // 序/离线灰显）→ LAN 待连（批D 同构条件渲染）→ 配对码源（sdelServerRows(true)）+「＋添加」。
+      // LAN 段数据源=/api/lan-peers：本单基于不含批D 的 dev——404=能力缺席段隐藏（批C2
+      // 能力位分流同款手法），批D 合入后 API 在场即通。命名/锚与批D 桌面侧（LAN_PEERS/
+      // lanPeersRows/data-lan-connect）全错开：批D 合入后双缓存并存互不干扰（无 redeclare
+      // 冲突），缓存归一属后续重构裁量（回执记录）。
+      const MOBILE_LAN = { data: null, at: 0, busy: false };
+      async function fetchMobileLanPeers(force) {
+        if (MOBILE_LAN.busy) return;
+        if (!force && Date.now() - MOBILE_LAN.at < 5000) return; // 节流 5s（批D 同款）
+        const token = acctLanToken();
+        if (!token) return; // 壳探测未命中/无 token：fetch 到不了本机 relay——段隐藏
+        MOBILE_LAN.busy = true;
+        try {
+          const r = await fetch(acctApiBase() + "/api/lan-peers?token=" + encodeURIComponent(token));
+          if (!r.ok) { MOBILE_LAN.at = Date.now(); return; } // 404=旧 relay（批D 未合入）——段隐藏非报错
+          const d = await r.json();
+          if (d && d.ok) { MOBILE_LAN.data = d; MOBILE_LAN.at = Date.now(); }
+        } catch (_) { MOBILE_LAN.at = Date.now(); } // https 云形态等网络不可达：静默——段隐藏
+        finally { MOBILE_LAN.busy = false; }
+      }
+      function lanPeersMobileRows() { // LAN 待连段 mobile 形态（四态语义/文案与批D 桌面 lanPeersRows 同构）
+        const d = MOBILE_LAN.data;
+        if (!d || d.mdns !== true || !Array.isArray(d.peers) || !d.peers.length) return "";
+        const relays = acctAcctRelays(); // 同账号设备不双列（rk 免码链已就绪，LAN 同意流对它冗余——批D 同款过滤）
+        return d.peers.filter((p) => p && typeof p.dev === "string" && !relays.some((r) => r && r.dev === p.dev)).map((p) => {
+          const name = esc(String(p.name || p.dev));
+          const conn = p.conn === "pending" || p.conn === "confirmed" || p.conn === "rejected" ? p.conn : "none";
+          let right = "";
+          let sub = "同局域网设备 · 点「发起连接」，对方确认后建立";
+          if (conn === "none") right = '<button class="primary-btn" data-lan-connect-m="' + esc(p.dev) + '" type="button" style="font-size:var(--fs-A)">发起连接</button>';
+          else if (conn === "pending") { right = '<span class="tag action">等待对方确认</span>'; sub = "已发起 · 等待对方确认"; }
+          else if (conn === "confirmed") { right = '<span class="tag done" title="对方已同意连接请求——传输层准入已开放；数据信任仍需配对码或同账号（同意≠身份信任）">已同意</span><span class="tag" title="身份信任未建立：会话数据读写与配对码/账号源同构，不因 LAN 加宽">未验证</span>'; sub = "对方已同意 · 数据信任待建立（配对码 / 同账号）"; }
+          else { right = '<span class="tag" title="对方已拒绝连接请求——对方在「连进来的设备」里解除忽略后可重新发起">对方已拒绝</span>'; sub = "对方已拒绝 · 对方解除忽略后可重新发起"; }
+          return '<div class="mobile-task"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong style="font-size:var(--fs-B)">' + name + '</strong><span class="tag" title="来源：局域网">局域网</span>' + right + '</div><p style="margin:4px 0 0;color:var(--dim)">' + sub + '</p></div>';
+        }).join("");
+      }
+      async function lanConnectSendMobile(dev) { // 发起连接（端点与批D 桌面同；独立函数避批D 合入撞名）
+        try {
+          const r = await fetch(acctApiBase() + "/api/lan-connect-send?token=" + encodeURIComponent(acctLanToken()), { method: "POST", body: JSON.stringify({ dev, op: "request" }) }); // 无 content-type=简单请求免预检（acctApiSet 同款）
+          const d = await r.json().catch(() => null);
+          if (r.ok && d && d.ok) showToast(d.status === "pending" ? "已发起 · 等待对方确认" : d.status === "confirmed" ? "对方已同意 · 数据信任待建立" : d.status === "rejected" ? "对方此前已拒绝——对方解除忽略后可重新发起" : "已发起");
+          else showToast("发起失败：" + ((d && d.error) || "网络异常"));
+        } catch (_) { showToast("发起失败：无法到达本机 relay"); }
+        MOBILE_LAN.at = 0;
+        void fetchMobileLanPeers(true);
+        if (typeof window.__ccDeck005RefreshSettingsLive === "function") window.__ccDeck005RefreshSettingsLive();
+      }
+      if (!window.__ccDeck005LanMobileWired) { // mobile 发起连接委托（一次挂载，渲染多拍不叠监听）
+        window.__ccDeck005LanMobileWired = true;
+        document.addEventListener("click", (ev) => {
+          const b = ev.target.closest("[data-lan-connect-m]");
+          if (b) void lanConnectSendMobile(b.getAttribute("data-lan-connect-m") || "");
+        });
+      }
+      function localSourceRowMobileHtml() { // 段1 本机（恒置顶）——mobile-task 形态（sdelServerRows(true) 同族）；data-src-goto-local 与桌面共用锚（文档级委托切回本机视角）
+        const b4 = window.__ccDeck005B4;
+        const raw = String((b4 && b4.relayName) || "本机");
+        const name = esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(raw) : raw);
+        const cur = viewSource() !== "cloud";
+        return '<div class="mobile-task" data-src-goto-local role="button" tabindex="0" title="本机 · 点击切回本机视角"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong style="font-size:var(--fs-B)">' + name + '</strong>' + (cur ? '<span class="tag done">当前</span>' : '<span class="tag">本机</span>') + '</div><p style="margin:4px 0 0;color:var(--dim)">本机 · 会话与派单主源 · 点击切回本机视角</p></div>';
+      }
+      function acctSourceRowsMobileHtml() { // 段2+3 同账号（在线名字序 → 离线灰显+上次在线；锚/文案与桌面 acctSourceRowsHtml 同构）
+        const relays = acctAcctRelays().filter((r) => r && typeof r.dev === "string" && acctCred());
+        const on = relays.filter((r) => r.online !== false).sort((a, b) => String(a.name || a.dev).localeCompare(String(b.name || b.dev), "zh-Hans"));
+        const off = relays.filter((r) => r.online === false);
+        const row = (r, offline) => '<div class="mobile-task' + (offline ? " src-offline" : "") + '"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><strong style="font-size:var(--fs-B)">' + esc(String(r.name || r.dev)) + '</strong>'
+          + (offline ? '<span class="tag" title="' + esc(connLastSeenText(r.ts)) + '">离线</span>' : '<button class="primary-btn" data-acct-relay-connect="' + esc(String(r.dev)) + '" type="button" style="font-size:var(--fs-A)">连接</button>') + '<span class="tag" title="来源：账号">账号</span></div>'
+          + '<p style="margin:4px 0 0;color:var(--dim)">' + (offline ? connLastSeenText(r.ts) + ' · ' + esc(String(r.dev)) : "同账号设备 · 点击连接切到这台电脑的视角") + '</p></div>';
+        return on.map((r) => row(r, false)).join("") + off.map((r) => row(r, true)).join("");
+      }
+      function mobileSourceLaneRows() { // mobile 源列表 lane 内容唯一渲染口（cloudMobileLane 与 mobile.js 非 cloud 分支同源消费）
+        void fetchMobileLanPeers(); // LAN 段条件渲染数据源（本拍吃缓存，到达后消费侧补拍重渲）
+        const localHtml = localSourceRowMobileHtml();
+        const acctHtml = acctSourceRowsMobileHtml();
+        const lanHtml = lanPeersMobileRows();
+        const serversHtml = sdelServerRows(true);
+        if (!acctHtml && !lanHtml && !serversHtml) { // 空态（登录态分叉——桌面 sourceListRows 同口径）
+          return localHtml + (acctCred()
+            ? '<div class="mobile-task"><p style="margin:0;color:var(--dim)">还没有其他源上线 · 同账号的电脑会自动出现在这里</p></div>'
+            : '<div class="mobile-task"><p style="margin:0;color:var(--dim)">还没有添加源 · 用对方配对码连接</p></div><div class="mobile-task"><button class="primary-btn" data-settings-add type="button" style="font-size:var(--fs-A)">用配对码添加</button></div>');
+        }
+        return localHtml + acctHtml + lanHtml + serversHtml + '<div class="mobile-task"><button class="primary-btn" data-settings-add type="button" style="font-size:var(--fs-A)">＋ 添加</button></div>';
+      }
       // 移动端「连接与设备」详情的远程源 lane（W-SDEL 同步列表化；720px 视口下表单可输入可提交——
       // 输入框显式 14px 防 iOS 聚焦缩放）。与桌面 sdelServerRows 共用 data-* 锚（文档级委托同一套）
       function cloudMobileLaneInner() {
-        const entries = cloudSharedCloudServers();
-        if (!entries.length) return '<div class="mobile-lane-head"><span>源列表</span><span class="tag info">未添加</span></div><div class="mobile-task">还没有添加源 · 点「＋ 添加」用对方配对码连接</div>';
-        let html = '<div class="mobile-lane-head"><span>源列表 · ' + entries.length + '</span></div>';
-        html += sdelServerRows(true);
-        html += '<div class="mobile-task"><button class="primary-btn" data-settings-add type="button" style="font-size:var(--fs-A)">＋ 添加</button></div>';
+        let html = '<div class="mobile-lane-head"><span>源列表</span></div>'; // 批E：五段序（本机+acct+LAN 待连+配对码源——头计数退役，LAN 待连非「源」防误导）
+        html += mobileSourceLaneRows();
         html += relayNameRowHtml(true); // #272 移动端同编辑行
         if (cloudUIOn()) {
           const peer = cloudPeerOf(cloudCtx.cfg);
@@ -4761,6 +4892,10 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           return null; // 云桥技术状态不进列横幅（快照等待走 B4 通用「等待 relay SNAPSHOT」文案）
         },
       };
+      // CONNV4 批E 挂口（mobile.js 005-mobile IIFE 消费——作用域不通走 window 惯例）：
+      // mobile 源列表 lane 完整壳（非 cloud 分支与 cloud 分支同源五段序——缺席=旧构建回落
+      // mobile.js 既有写死空态；台账只读口在 DevAdminWired 块同作用域另挂）
+      window.__ccDeck005MobileSourceLane = () => '<div class="mobile-lane">' + cloudMobileLaneInner() + '</div>';
 
       // ---------- #143 Leader 合流接线：团队域通道（B3-C1~C4，B3 报告遗留项 1/2 的接线侧）----------
       // B3 团队域只吃覆盖式全量帧 + bind({command, online})；delta 投影与锚定纪律（M13-2：
