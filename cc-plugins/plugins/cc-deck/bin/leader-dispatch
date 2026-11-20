@@ -449,7 +449,7 @@ body="$(printf '%s\n' "$resp" | sed '$d')"
 eval "$(python3 - "$body" "$code" <<'PY'
 import json, sys, shlex
 raw, code = sys.argv[1], sys.argv[2]
-ok = err = did = sid = q = dup = ""
+ok = err = did = sid = q = dup = qr = aw = ""
 try:
     d = json.loads(raw)
     ok = "1" if d.get("ok") is True else ""
@@ -458,9 +458,11 @@ try:
     sid = str(d.get("session_id") or "")
     q = "1" if d.get("queued") else ""
     dup = str(d.get("duplicate_of") or "")
+    qr = str(d.get("queue_reason") or "")   # W-DISPATCHFIX 验收①：排队真态分叉（pool-empty=池空窗/seats-busy=席位忙；旧 relay 无键=空串走旧文案）
+    aw = str(d.get("active_workers") if d.get("active_workers") is not None else "")
 except Exception as e:
     err = f"响应非 JSON：{e}"
-print(f"api_ok={shlex.quote(ok)}; api_err={shlex.quote(err)}; dispatch_id={shlex.quote(did)}; sid={shlex.quote(sid)}; queued={q}; dup={shlex.quote(dup)}")
+print(f"api_ok={shlex.quote(ok)}; api_err={shlex.quote(err)}; dispatch_id={shlex.quote(did)}; sid={shlex.quote(sid)}; queued={q}; dup={shlex.quote(dup)}; qr={shlex.quote(qr)}; aw={shlex.quote(aw)}")
 PY
 )"
 if [ "$code" != "200" ] || [ -z "$api_ok" ]; then
@@ -521,10 +523,16 @@ echo "会话 session_id=${sid:-（空）}"
 [ "$no_wt" = 0 ] && { echo "worktree=$wt"; echo "分支=${branch}（基线 ${base_ref} @${base_sha:0:8}）"; }
 echo "回执=$receipt"
 
-# ---------- queued：编制触顶排队（drain 自动接续），不做活性核验 ----------
+# ---------- queued：排队受理（W-DISPATCHFIX 验收①：真态分叉透传，不再假「全忙」） ----------
 if [ "$queued" = "1" ]; then
-  echo "排队：编制触顶全忙，单已受理待 drain 接续（无需动作，活性核验跳过）"
-  echo "RESULT ok=true queued=true dispatch_id=$dispatch_id slug=$slug branch=$branch receipt=$receipt"
+  if [ "$qr" = "pool-empty" ]; then
+    echo "排队：⚠️ 池空窗（真活 worker=${aw:-0}，无消费者——非席位忙）——relay 将自动拉起 headless 消费者（claude -p 形态；拉起失败会 /api/notify 升级），单已受理"
+  elif [ "$qr" = "seats-busy" ]; then
+    echo "排队：席位忙（真活 worker=${aw:-?} 在位）——单已受理待 drain 接续（无需动作，活性核验跳过）"
+  else
+    echo "排队：编制触顶排队（旧 relay 无 queue_reason 键——真态未知，可用 org status 核对 workers_real_active）"
+  fi
+  echo "RESULT ok=true queued=true queue_reason=${qr:-unknown} active_workers=${aw:-?} dispatch_id=$dispatch_id slug=$slug branch=$branch receipt=$receipt"
   exit 0
 fi
 [ -n "$sid" ] || die 2 "响应无 session_id（relay 响应协议异常？核对 dispatch-log 后人工处置）"
