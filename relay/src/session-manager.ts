@@ -212,6 +212,7 @@ import { CODEBUDDY_ACTIVITY_CAPABILITIES } from "./agent-codebuddy.js";
 import { ZCODE_ACTIVITY_CAPABILITIES } from "./agent-zcode.js";
 import { createRegisteredEngine, getEngineDefinition, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
 import { preflightEngine } from "./agent-jsonl.js";
+import { applyLanConnectDecision } from "./lan-peers.js"; // CONNV4 批D：lan-connect 确认卡决议副作用（applyConfirmEffects 双分支调）
 
 // isManagedMode/PERM_MODE_ZH/sanitizeImages/sanitizeFiles：W-SPLIT-S3b 随 case 体
 // 迁 commands/misc-commands.ts（单源防双源），本文件经顶部 import 反向引用
@@ -9575,6 +9576,17 @@ ${lines.join("\n")}
           }
           break;
         }
+        case "lan-connect": {
+          // CONNV4 批D：LAN 连接同意卡 ✓ = confirmDevice（传输层准入记账——身份面不动，
+          // 数据信任仍走配对码/账号链，评审 R5 红线）；✗ = 拒绝记忆（忽略清单+吊销，
+          // 再请求静默拒）。副作用体在 lan-peers.ts（写返检同批C1 fix2 口径）
+          const lanDev = typeof c.payload.dev === "string" ? c.payload.dev : "";
+          if (!lanDev) return fail("局域网连接决议", { error: "payload.dev 缺失（陈旧卡）" });
+          const r = applyLanConnectDecision(this.cfg.dataDir, lanDev, true, c.decided_by ?? "user");
+          if (!r.ok) return fail("局域网连接决议", { error: r.error });
+          console.log(`[lan-peers] 连接同意卡 ${c.id.slice(0, 8)} ✓ dev=${lanDev.slice(0, 11)}——传输层准入开放（身份信任不变，数据链照既有 rk/配对码链）`);
+          break;
+        }
         case "pm-appoint": {
           // [W-PMSEAT] 值守任命卡 ✓：陈旧卡复核（会话在册+pid 活，member-join 同款
           // 防线）→ setPmOverride 落值守位（喂活自此恢复——confirm-decided 边沿已挂
@@ -9680,6 +9692,15 @@ ${lines.join("\n")}
       } catch (e) {
         return fail("设备首联否决", { error: e instanceof Error ? e.message : String(e) });
       }
+    } else if (c.kind === "lan-connect") {
+      // CONNV4 批D：LAN 连接同意卡 ✗ = 拒绝记忆（忽略清单+吊销——该发起方再请求静默拒，
+      // 发起端显示「对方已拒绝」；解除走批C2 设备管理 unignore 双清链）——与 ✓ 同一副作用
+      // 单点（applyLanConnectDecision），不可只在 approved 分支挂
+      const lanDev = typeof c.payload.dev === "string" ? c.payload.dev : "";
+      if (!lanDev) return fail("局域网连接否决", { error: "payload.dev 缺失（陈旧卡）" });
+      const r = applyLanConnectDecision(this.cfg.dataDir, lanDev, false, c.decided_by ?? "user");
+      if (!r.ok) return fail("局域网连接否决", { error: r.error });
+      console.log(`[lan-peers] 连接同意卡 ${c.id.slice(0, 8)} ✗ dev=${lanDev.slice(0, 11)}——拒绝记忆生效（静默拒，unignore 可解除）`);
     }
     this.emitOrgState();
     if (gid) this.emitBoard(gid);

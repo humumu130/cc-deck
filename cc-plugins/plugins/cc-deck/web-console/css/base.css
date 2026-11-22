@@ -170,7 +170,10 @@
     .source-option[data-source-choice="local"] { border-left: 2px solid var(--source-company); }
     /* W-PILL4 ③（0.6 风格）：源图标右下角通道小标——☁=云通道 / ⌗=局域网直连（聚合行无标） */
     .source-option .source-dot { position: relative; }
-    .source-option[data-source-choice="cloud"] .source-dot::after {
+    /* CONNV4 批F：多源行（data-src-key=acct:dev / srv:id）承老 cloud 行通道族——☁ 通道标/
+       左缘云色/active 加粗左缘同款；离线行灰显仍可点；行内收缩策略仿 #b2-engine-menu
+       （名称/副行 nowrap+ellipsis，tag flex:none——窄菜单长名不折行塌陷） */
+    .source-option[data-src-key] .source-dot::after {
       content: "☁"; position: absolute; right: -4px; bottom: -4px;
       font: 8px/9px var(--mono); color: var(--dim); background: var(--panel);
       border-radius: 4px; padding: 0 1px;
@@ -180,9 +183,13 @@
       font: 8px/9px var(--mono); color: var(--dim); background: var(--panel);
       border-radius: 4px; padding: 0 1px;
     }
-    .source-option[data-source-choice="cloud"] { border-left: 2px solid var(--source-home); }
+    .source-option[data-src-key] { border-left: 2px solid var(--source-home); }
+    .source-option[data-src-key].src-off { opacity: .62; }
+    .source-option[data-src-key] .tag { flex: none; }
+    .source-option[data-src-key] strong { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .source-option[data-src-key] small { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .source-option[data-source-choice="aggregate"] { border-left: 2px solid var(--brand); }
-    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"], .source-option.active[data-source-choice="aggregate"] { border-left: 3px solid var(--brand); }
+    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="aggregate"], .source-option.active[data-src-key] { border-left: 3px solid var(--brand); }
     .source-option strong {flex: 1; color: var(--text-strong); font-size: var(--fs-A-item);}
     .source-option small {color: var(--dim); font: var(--fs-B) var(--mono);}
     /* W-ENGDROP（Windows WebView2 布局塌陷三症状根修，#b2-engine-menu 专用——
@@ -2406,6 +2413,15 @@
     /* ⑧ 客户端模块：设备行图标按 kind 语义着色（phone=品牌/desktop·browser=信息蓝） */
     .dev-ico.phone { color: var(--brand-strong, var(--brand)); }
     .dev-ico.desktop, .dev-ico.browser { color: var(--info); }
+    /* CONNV4 批C-件二（connv4c2）：设备管理双键——手表随 phone 形（无独立字形，tag 消歧）；
+       踢钮=destructive 红系（row-share 尺寸同档，色预算红=错误系的破坏性动作例外，评审 R2 双键口径）；
+       忽略行沉底灰显；确认条=页内双钮（sdel-confirm-bar 同款——Nova 壳原生 confirm 被桥默认拒） */
+    .dev-ico.watch { color: var(--brand-strong, var(--brand)); }
+    .devadmin-keys { display: flex; gap: 6px; flex: none; }
+    .row-share.devadmin-kick { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
+    .dev-row.dev-ignored { opacity: .55; }
+    .devadmin-confirm { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; padding: 7px 10px; border: 1px solid var(--danger-line); border-radius: 8px; background: var(--danger-bg); font-size: var(--fs-B); }
+    .devadmin-confirm .txt { flex: 1; color: var(--text); min-width: 0; }
     .conn-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
     .conn-card-foot .primary-btn { flex: none; }
     /* ④ ghost 钮规格归一（radius 统一 8px，与 v8-prbtn 同档；描边系全页一个模子） */
@@ -2695,7 +2711,7 @@
     #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: calc(18px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
     /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
-    #d-session .srow-time {flex: none; margin-left: auto; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
+    #d-session .srow-time {flex: none; margin-left: auto; margin-right: 50px; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
     #d-session .queue-card:hover .srow-time, #d-session .queue-card:focus-within .srow-time { opacity: 0; }
     /* 件五（2026-10-10 test.10 反馈）：右键菜单可发现性——卡 hover 行尾「⋯」微钮（时间戳
        hover 淡出让位是既有 ：1471 行为，此处即占其位），点击等效右键菜单（触控板/无右键
@@ -2703,10 +2719,15 @@
        关闭 ×」钮组（与项目卡 project-open-btn 同语言），32px 命中区（伪元素外扩 5px） */
     /* W-UIPOLISH ①：行钮浮层化（absolute 不占流）——right 三级 0/28/56px（22px 钮宽+6 间隙），
        top 50% 垂直居中；::before 扩点击域语义不变（absolute 父仍是其子 absolute 的包含块） */
-    #d-session .srow-more, #d-session .srow-pin, #d-session .srow-close { position: absolute; top: 50%; transform: translateY(-50%); flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--faint); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
+    #d-session .srow-more, #d-session .srow-close { position: absolute; top: 50%; transform: translateY(-50%); flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--faint); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
     #d-session .srow-close { right: 0; }
-    #d-session .srow-pin { right: 28px; }
-    #d-session .srow-more { right: 56px; }
+    #d-session .srow-more { right: 28px; } /* pin 迁走后 ⋯ 补位 right:56→28（1123 用户令：图钉移时间左侧 in-flow） */
+    /* 图钉 in-flow 化（1123 用户令）：恒在时间左侧占位——置顶与否时间位置恒定对齐；
+       未置顶 hover 显现（不常驻抢视）；置顶 .on 常显（--dim 灰） */
+    #d-session .srow-pin { position: static; flex: none; order: 0; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); font-size: 13px; line-height: 18px; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
+    #d-session .queue-card:hover .srow-pin, #d-session .queue-card:focus-within .srow-pin { opacity: .85; }
+    #d-session .srow-pin.on { opacity: 1; color: var(--dim); }
+    #d-session .srow-pin:hover { background: var(--hover); color: var(--text-strong); }
     #d-session .srow-more::before, #d-session .srow-pin::before, #d-session .srow-close::before { content: ""; position: absolute; inset: -5px; }
     #d-session .srow-more:hover, #d-session .srow-pin:hover, #d-session .srow-close:hover { background: var(--hover); color: var(--text-strong); }
     #d-session .srow-pin svg, #d-session .srow-close svg { width: 13px; height: 13px; }
