@@ -17,7 +17,7 @@
 (function () {
   "use strict";
   const MIN_ITEMS = 5, MIN_VW = 880, TEXT_MAX = 160, MAX_H = 400;
-  const ENTER_MS = 60, LEAVE_MS = 180, MAX_LINES = 28; // MAX_LINES=折叠轨显示上限（WorkBuddy V=min(len,28) 同款）
+  const ENTER_MS = 60, LEAVE_MS = 180, MAX_LINES = 10; // 折叠轨显示上限（1122 用户令：20+ 太多收 10 左右——WorkBuddy 28 同款退役）
   let root = null, panelEl = null, listEl = null; // NAVR8：panel=卡壳（底色/描边/影），list=列表层（clip/mask/滚动）——壳列表分层
   let swapT = 0; // NAVR8 mount-then-toggle：收起换血计时器（过渡播完 343ms 后再 renderRows——反向过渡真播不播在换血内容上）
   let items = [];            // 全量 [{ key, el, text }]
