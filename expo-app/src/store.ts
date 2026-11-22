@@ -2653,8 +2653,11 @@ class RelayStore {
         // 审批弹窗死锁根治（与网页端同款）：新 relay 恒随 UPDATE 帧携带 waiting_request
         // 权威值（null = 已清）直接采信；旧 relay 不带时保持原自愈——状态离开 WAITING
         // 就地清残留，防"列表按钮在、详情弹窗永不出现"的脱钩死锁
+        // #192 drainfix 返修 fix1：UPDATE 帧 PATCH 化后可整帧不含 status 键（diff 闸丢
+        // 同值键），自愈分支须加在场守卫——缺 status 键≠离开等待（等待期置顶/改名等
+        // PATCH 帧不得误清审批条；relay 不重发 WAITING，误清=手机审批断到下轮状态转移）
         if (msg.payload.waiting_request !== undefined) s.waiting_request = msg.payload.waiting_request;
-        else if (msg.payload.status !== "WAITING") s.waiting_request = null;
+        else if (msg.payload.status !== undefined && msg.payload.status !== "WAITING") s.waiting_request = null;
         if (msg.payload.stats) s.stats = msg.payload.stats;
         if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
         if (msg.payload.title) s.title = msg.payload.title;
