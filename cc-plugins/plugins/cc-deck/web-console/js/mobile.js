@@ -808,9 +808,30 @@
         const chip = screen.querySelector(".connection-chip");
         if (chip) { const last = chip.lastChild; if (last && last.nodeType === 3) last.textContent = (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active()) ? " 云桥 " + window.__ccDeck005CloudUI.stateLabel() : " relay " + stateText; }
       }
-      // conn-page-v2 ⑧ 移动端客户端 lane：连接与设备详情的第三模块（已连终端清单，
-      // SNAPSHOT.relay_devices 真实台账与桌面同源；旧 relay 无字段=本页设备单行兼容）
+      // conn-page-v2 ⑧ 移动端客户端 lane：连接与设备详情的第三模块（已连终端清单）。
+      // CONNV4 批E：device-admin 台账在场（__ccDeck005DevAdminLedger）→ 只读台账渲染
+      //（含 wb- 聚合行「网页 ×N」无钮——mobile 管理面独立立项，本批只看；判定与桌面
+      // renderDevAdminRows 同构）。未落定/旧 relay → 触发首拉（异步）+ relay_devices 旧链零改。
       function mobileDevicesLane() {
+        const ledger = window.__ccDeck005DevAdminLedger ? window.__ccDeck005DevAdminLedger() : null;
+        if (ledger) {
+          const relTime = (ts) => { const m = Math.max(1, Math.round((Date.now() - Number(ts || 0)) / 60_000)); return m < 60 ? m + " 分钟" : m < 1440 ? Math.round(m / 60) + " 小时" : Math.round(m / 1440) + " 天"; }; // 裸时长（「前」由调用点拼接——视觉核验实锤「前前」双拼 bug 修）
+          const list = ledger.filter((d) => d && typeof d.dev === "string");
+          const pure = [], rest = [];
+          for (const d of list) (d.kind === "web" && !String(d.name || "").trim() && !(Number(d.ignored_at || 0) > 0) ? pure : rest).push(d);
+          const rows = [];
+          if (pure.length) rows.push(`<div class="mobile-task">${svg("globe")} 网页 ×${pure.length} · 在线 ${pure.filter((d) => d.online === true).length} · 共用主 token</div>`);
+          const KIND = { phone: "phone", watch: "phone", web: "globe", other: "desktop" }; // 无 icon-watch 字形：手表复用 phone 形（桌面 DEV_KIND_ICON 同口径）
+          for (const d of rest) {
+            const ignored = Number(d.ignored_at || 0) > 0;
+            const on = d.online === true && !ignored;
+            const name = String(d.name || "").trim() || ({ phone: "手机", watch: "手表", web: "网页", other: "电脑" })[d.kind] + "设备";
+            const sub = ignored ? "已忽略 · " + relTime(d.ignored_at) + "前标记" : on ? "当前在线 · 已连 " + relTime(d.paired_at) : "上次在线 " + relTime(d.last_seen) + " 前";
+            rows.push(`<div class="mobile-task"${on || ignored ? "" : ' style="opacity:.55"'}>${svg(KIND[d.kind] || "desktop")} ${esc(name)} · ${esc(sub)}</div>`);
+          }
+          return `<div class="mobile-lane"><div class="mobile-lane-head"><span>连进来的设备</span><span class="tag">只读</span></div>${rows.join("") || '<div class="mobile-task"><span class="muted">暂无客户端连接记录 · 桌面端「出示配对码」可添加</span></div>'}</div>`;
+        }
+        if (window.__ccDeck005DevAdminRefresh) { try { window.__ccDeck005DevAdminRefresh(); } catch (_) {} } // 台账未落定：触发首拉（补拍重渲吃新值——下方旧链本拍先渲染）
         const snap = bridge.snapshot && typeof bridge.snapshot === "object" ? bridge.snapshot : {};
         const devices = Array.isArray(snap.relay_devices) ? snap.relay_devices.filter((d) => d && typeof d.id === "string") : null;
         const relSeen = (ts) => { const m = Math.max(1, Math.round((Date.now() - Number(ts || 0)) / 60000)); return m < 60 ? m + " 分钟前在线" : m < 1440 ? Math.round(m / 60) + " 小时前在线" : Math.round(m / 1440) + " 天前在线"; };
@@ -842,7 +863,11 @@
             : name === "连接与设备"
               ? (window.__ccDeck005CloudUI && window.__ccDeck005CloudUI.active())
                 ? window.__ccDeck005CloudUI.mobileLane() // 云形态：动态云桥 lane（状态行/输码表单/重试钮，720px 视口可输入可提交）
-                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>源列表</span></div><div class="mobile-task">还没有添加源 · 顶栏菜单「＋ 添加」用对方配对码连接</div></div>` + mobileDevicesLane()
+                : `<div class="mobile-lane"><div class="mobile-lane-head"><span>本机 relay</span><span class="tag ${connMaskedOk() ? "done" : "action"}">${stateText}</span></div><div class="mobile-task">端口 ${location.port || "8787"} · ${esc(window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(bridge.relayName || "") : (bridge.relayName || ""))}</div></div>`
+                  // CONNV4 批E：源列表 lane=桌面五段序同构单口（本机+acct 三态+LAN 待连+配对码源——
+                  // 与 cloud 分支同源渲染；挂口缺席=旧构建回落既有空态文案）
+                  + (window.__ccDeck005MobileSourceLane ? window.__ccDeck005MobileSourceLane() : `<div class="mobile-lane"><div class="mobile-lane-head"><span>源列表</span></div><div class="mobile-task">还没有添加源 · 顶栏菜单「＋ 添加」用对方配对码连接</div></div>`)
+                  + mobileDevicesLane()
             : name === "Agent 引擎" ? (cat ? cat.map((e) => `<div class="mobile-task"${e.state === "needs_auth" ? ` data-engine-login="${esc(e.id)}" role="button" style="cursor:pointer"` : ""}>${window.__ccDeck005EngineMarkHtml ? window.__ccDeck005EngineMarkHtml(e.id, e.label) + " " : ""}${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · ${e.state === "ready" ? "已接" : e.state === "needs_auth" ? "未登录 · 点此扫码登录" : e.state === "unsupported" ? "未接入" : "待装"}${Array.isArray(e.models) && e.models.length ? " · " + e.models.length + " 模型" : ""}</div>`).join("") : '<div class="mobile-task">引擎目录未随网页端下发</div>')
             : name === "通用与快捷键" ? `<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">${MOD_KEY("K")} 搜索 · ${MOD_KEY("N")} 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 即将支持</div>`
             : name === "团队身份模板" ? (roleSet.size ? [...roleSet.entries()].map(([role, e]) => `<div class="mobile-task">${esc(role)} · ${esc(e.label || ENGINE_SHORT[e.id] || e.id)} · 缺省</div>`).join("") : '<div class="mobile-task">无预置角色模板 · 建团时在组织侧配置</div>')
@@ -852,6 +877,13 @@
           content.querySelector(".primary-btn")?.setAttribute("hidden", "true");
           detail.hidden = false;
           detail.innerHTML = `<button class="mobile-back settings-detail-back" data-settings-detail-back type="button">‹ 设置</button><h3>${esc(name)}</h3>${html}`;
+          // CONNV4 批E 补拍：连接详情的 lane 数据多为异步（LAN 邻居/台账首拉）——1.6s 后
+          // 串有变则重渲一次（重渲再排同款计时，串稳定即止，不自旋）
+          if (name === "连接与设备") {
+            const laneSig = () => String((window.__ccDeck005MobileSourceLane ? window.__ccDeck005MobileSourceLane() : "") + "|" + (window.__ccDeck005DevAdminLedger ? JSON.stringify(window.__ccDeck005DevAdminLedger() || []) : ""));
+            const s0 = laneSig();
+            setTimeout(() => { try { if (!detail.hidden && laneSig() !== s0) content._renderSettingsDetail("连接与设备"); } catch (_) {} }, 1600);
+          }
           detail.querySelectorAll("[data-card-density-option]").forEach((btn) => btn.addEventListener("click", () => {
             const desktopBtn = document.querySelector(`#d-settings [data-settings-panel="general"] [data-card-density-option="${btn.dataset.cardDensityOption}"]`);
             if (desktopBtn) desktopBtn.click();
