@@ -10,6 +10,7 @@ const WebSocket = require("ws");
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9980 + Math.floor(Math.random() * 60);
 globalThis.__p = spawn(CHROME, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT}`, "--user-data-dir=/tmp/connv4c2-" + Date.now(), "--window-size=1440,940", "file://" + decodeURIComponent(new URL("../../web-console/index-005.html", import.meta.url).pathname)], { stdio: "ignore" });
+const SHELL_URL = "file://" + decodeURIComponent(new URL("../../web-console/index-005.html", import.meta.url).pathname); // 主仓相对解析（原硬编码 /tmp 工区路径——树收割清扫后死路 BOOT-FAIL 实锤 1123）
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 await wait(2200);
 for (let i = 0; i < 8; i++) { try { await fetch(`http://127.0.0.1:${PORT}/json/list`); break; } catch { await wait(1000); } }
@@ -34,7 +35,7 @@ const snap = { type: "SNAPSHOT", payload: { relay_name: "本机 relay", token_va
     { id: "wb-alpha111", kind: "browser", name: "公司浏览器", online: false, last_seen: now - 5 * 3600_000, first_seen: now - 2 * 24 * 3600_000 },
     { id: "wb-legacy99", kind: "browser", name: "纯旧行", online: true, last_seen: now, first_seen: now - 24 * 3600_000 },
   ] } };
-await send("Page.navigate", { url: "file:///private/tmp/cc-deck-w-connv4c2/web-console/index-005.html" }); // reload 在 file:// headless 有半死上下文竞态（BOOT-FAIL 实锤）——navigate 全新导航稳定
+await send("Page.navigate", { url: SHELL_URL }); // reload 在 file:// headless 有半死上下文竞态（BOOT-FAIL 实锤）——navigate 全新导航稳定
 let booted = false;
 for (let i = 0; i < 10; i++) { await wait(800); booted = await ev(`!!document.querySelector("#stage-desktop")`); if (booted) break; }
 if (!booted) { console.error("BOOT-FAIL：#stage-desktop 未建（壳装载竞态——localStorage 源态/时序）"); try { globalThis.__p.kill(); } catch {} process.exit(1); }
@@ -162,7 +163,7 @@ ok(g.byName["手表端"].tags.includes("离线") && g.byName["手表端"].tags.i
 // ---------- 相五（返修 fix1·P2-a）：token 全空形态=诚实占位（非「正在读取」恒驻） ----------
 // 二次导航=全新上下文：file:// 形态 URL 无 ?token=，域脚本装载即 __ccDeck005Token=""（:1892）——
 // token 链三源（ctx.cfg/闭包 relayToken/尾镜像）全空=devAdminUrl null 连请求都不发的形态。
-await send("Page.navigate", { url: "file:///private/tmp/cc-deck-w-connv4c2/web-console/index-005.html" });
+await send("Page.navigate", { url: SHELL_URL });
 let booted2 = false;
 for (let i = 0; i < 10; i++) { await wait(800); booted2 = await ev(`!!document.querySelector("#stage-desktop")`); if (booted2) break; }
 if (!booted2) { console.error("BOOT-FAIL-2：二次导航 #stage-desktop 未建"); try { globalThis.__p.kill(); } catch {} process.exit(1); }
