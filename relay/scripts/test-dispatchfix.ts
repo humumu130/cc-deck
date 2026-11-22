@@ -8,10 +8,13 @@
 //   S5 sweep 兜底拉起——已排队+池空（非 enqueue 时点）周期拍自动起消费者
 //   S6 活性真态穿透——displayLiveness/snapshot/心跳帧（WORKING 假态照妖镜）
 //   S7 org 面真态——status open 含 queued+worker_liveness；detail pool[].liveness
+//   S8 重启窗孤儿双跑面（返修 fix1·P1-1）——boot 清扫活守卫（pid 活不收口/pid 死照常
+//      +rc 还原 exit 语义）+sweep 重挂收口（pid 退按 rc done/failed+在途计数回填）
+//      +slug 闸孤儿查重（行态异常不放行）+worktree 锁认领/让位
 // agentFactory 测试缝（不拉真 CLI），范式同 test-drainfix.ts / test-headcount.ts。
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn as childSpawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -21,7 +24,7 @@ import { appendDispatch, readDispatchLog } from "../src/org.js";
 import type { DispatchTier } from "../src/org.js";
 import { createGroup, findGroup, setGroupStatus } from "../src/projects.js";
 import { loadDispatchQueue } from "../src/dispatch-queue.js";
-import { loadBoard } from "../src/projects.js";
+import { loadBoard, upsertBoardEntry } from "../src/projects.js";
 type QueuedDispatchLike = { dispatch_id: string; enqueued_at: number; input: Record<string, unknown> };
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -406,6 +409,129 @@ async function main() {
         const row2 = (detail2.data?.receipts ?? []).find((r) => r.id === rd1.dispatch_id);
         assert(row2?.worker_liveness === "dead", "detail receipts 失联行同源（claimed×dead）");
       } finally { Date.now = realNow; }
+    }
+
+    // ================= S8 重启窗孤儿双跑面（返修 fix1·P1-1）=================
+    console.log("S8 headless 重启窗——boot 清扫活守卫+重挂收口+slug 孤儿闸+锁认领");
+    {
+      // ── 夹具底座：组+板卡（收口翻态断言锚）+ 行注入器 + 牺牲子进程（真活/真死 pid）──
+      const anchor9 = join(ORG, "anchor-restart");
+      mkdirSync(anchor9, { recursive: true });
+      const cg9 = createGroup({ name: "重启窗组", anchor_dir: anchor9, tier: "轻立项" });
+      const gid9 = cg9.ok ? cg9.group.id : "";
+      setGroupStatus(gid9, "active");
+      const mkCard = (id: string, text: string): void => { upsertBoardEntry(gid9, { id, text, status: "claimed", owner_session: "", dispatch_id: id }); };
+      const cardOf = (id: string): { status?: string } | undefined => loadBoard(gid9).entries.find((x) => x.dispatch_id === id);
+      const mkHeadlessRow = (id: string, pid: number, slug: string): void => {
+        appendDispatch({ ts: Date.now(), id, tier: "轻立项" as DispatchTier, target: `headless:${pid}`, status: "running", event: "dispatch-headless", receipt: `池空窗 headless（pid=${pid}，重启窗测试注入）`, session_id: "", project_anchor: anchor9, actor: "leader", headless: true, slug });
+      };
+      const rcOf = (id: string): string => join(DATA, "headless-workers", `${id.slice(0, 8)}.rc`);
+      const closeHung = (): void => { (mgr as unknown as { closeHungDispatchRows: () => void }).closeHungDispatchRows(); };
+
+      // a) boot 清扫活守卫：pid 活（本测试进程）→ 行不收口（审查 P1-1 主形态）
+      const hidA = randomUUID();
+      mkCard(hidA, "重启窗单A");
+      mkHeadlessRow(hidA, process.pid, "restart-orphan-a");
+      closeHung();
+      assert(ledOf(hidA)?.status === "running", `**boot 清扫活守卫**：headless pid 活=行保持 running 不误收口（实际 ${ledOf(hidA)?.status}）`);
+      assert(cardOf(hidA)?.status === "claimed", "活孤儿板卡不动（在跑不说中断——面板所见即真实）");
+
+      // b) sweep 重挂收口拍：pid 活 → 行保持+在途计数回填；pid 退+rc=0 → done
+      const victim = childSpawn("/bin/sh", ["-c", "sleep 30"], { stdio: "ignore" });
+      const vpid = victim.pid ?? 0;
+      const exited = new Promise<void>((res) => victim.once("exit", () => res()));
+      const hidB = randomUUID();
+      mkCard(hidB, "重启窗单B");
+      mkHeadlessRow(hidB, vpid, "restart-orphan-b");
+      const sw1 = mgr.sweepHeadlessRows();
+      assert(sw1.live >= 1 && ledOf(hidB)?.status === "running", `**sweep poll 活 pid 不收口**（live=${sw1.live}，实际 ${ledOf(hidB)?.status}）`);
+      assert((mgr as unknown as { headlessSpawnInFlight: number }).headlessSpawnInFlight >= 1, "在途计数回填（重启后归零的孤儿并入并发帽口径）");
+      victim.kill("SIGKILL");
+      await exited; // 回收后 pid 真死（kill-0 ESRCH）
+      writeFileSync(rcOf(hidB), "0", "utf-8");
+      const sw2 = mgr.sweepHeadlessRows();
+      assert(sw2.closed >= 1 && ledOf(hidB)?.status === "done", `**pid 退+rc=0 → done**（exit 语义还原——实际 ${ledOf(hidB)?.status}）`);
+      assert((ledOf(hidB)?.receipt ?? "").includes("rc=0"), "收口行记 rc（对账锚）");
+      assert(cardOf(hidB)?.status === "done", "板卡随 rc=0 翻 done");
+
+      // c) rc≠0 → failed+板回待办+同款退避
+      const hidC = randomUUID();
+      mkCard(hidC, "重启窗单C");
+      mkHeadlessRow(hidC, vpid, "restart-orphan-c"); // vpid 已死（复用牺牲 pid）
+      writeFileSync(rcOf(hidC), "3", "utf-8");
+      mgr.sweepHeadlessRows();
+      assert(ledOf(hidC)?.status === "failed" && cardOf(hidC)?.status === "backlog", `**pid 退+rc=3 → failed+板回待办**（实际 ${ledOf(hidC)?.status}/${cardOf(hidC)?.status}）`);
+      assert((mgr as unknown as { headlessSpawnCooldownUntil: number }).headlessSpawnCooldownUntil > Date.now(), "异常 rc 同款 2min 退避（坏单连环拉起风暴防）");
+
+      // d) boot 清扫死 pid+rc 缺席（旧形态行）→ 照常中断收口（语义不可知不虚构 done）
+      const hidD = randomUUID();
+      mkCard(hidD, "重启窗单D");
+      mkHeadlessRow(hidD, vpid, "restart-orphan-d");
+      closeHung();
+      assert(ledOf(hidD)?.status === "done" && (ledOf(hidD)?.receipt ?? "").includes("中断"), `**boot 清扫死 pid+无 rc → 照常中断收口**（实际 ${ledOf(hidD)?.status}/${ledOf(hidD)?.receipt}）`);
+      assert(cardOf(hidD)?.status === "backlog", "中断收口板卡回待办");
+
+      // e) boot 清扫死 pid+rc 在场 → 按 rc 还原（重启窗内完成的真交付不记「中断」）
+      const hidE = randomUUID();
+      mkCard(hidE, "重启窗单E");
+      mkHeadlessRow(hidE, vpid, "restart-orphan-e");
+      writeFileSync(rcOf(hidE), "0", "utf-8");
+      closeHung();
+      assert(ledOf(hidE)?.status === "done" && (ledOf(hidE)?.receipt ?? "").includes("rc=0"), `**boot 清扫死 pid+rc=0 → done**（rc 语义优先——实际 ${ledOf(hidE)?.receipt}）`);
+
+      // f) slug 闸孤儿查重：行态异常（误收口）也不放行——同树还有真跑的 worker
+      appendDispatch({ ts: Date.now(), id: hidA, tier: "轻立项" as DispatchTier, target: "headless", status: "done", receipt: "误收口（测试注入——行态异常形态）", session_id: "", project_anchor: anchor9, actor: "leader", headless: true, slug: "restart-orphan-a" });
+      const rga = mgr.dispatchWorker({ anchor: anchor9, gid: gid9, prompt: "重派同 slug", title: "RG", slug: "restart-orphan-a" }) as { ok: boolean; error?: string; duplicate_of?: string };
+      assert(rga.ok === false && rga.duplicate_of === hidA && (rga.error ?? "").includes("孤儿"), `**slug 闸行态异常不放行**（误收口行+pid 活=拒新单——实际 ${JSON.stringify(rga).slice(0, 120)}）`);
+
+      // g) worktree 锁认领/让位（真 spawn 流——mock bin 同 S3/S5 范式）
+      (mgr as unknown as { headlessSpawnCooldownUntil: number }).headlessSpawnCooldownUntil = 0; // c) 段退避清位（隔离）
+      (mgr as unknown as { headlessSpawnInFlight: number }).headlessSpawnInFlight = 0; // b) 段孤儿计数清位（前段注入孤儿已全部收口）
+      const marker8 = join(DATA, "headless-marker-s8.log");
+      const mockBin8 = join(DATA, "mock-claude-s8.sh");
+      writeFileSync(mockBin8, `#!/bin/bash\ncat > /dev/null\necho "s8-pid=$$" >> ${JSON.stringify(marker8)}\nexit 0\n`, { encoding: "utf-8", mode: 0o755 });
+      chmodSync(mockBin8, 0o755);
+      process.env.CCR_HEADLESS_CLAUDE = mockBin8;
+      const anchorG = join(ORG, "anchor-s8g");
+      mkdirSync(anchorG, { recursive: true });
+      const cgG = createGroup({ name: "锁认领组", anchor_dir: anchorG, tier: "轻立项" });
+      const gidG = cgG.ok ? cgG.group.id : "";
+      setGroupStatus(gidG, "active");
+      mgr.orgAction("cap-set", { gid: gidG, cap: 1 });
+      const rg0 = mgr.dispatchWorker({ anchor: anchorG, gid: gidG, prompt: "占位者四", title: "S8O" }) as { ok: boolean; session_id?: string };
+      await wait(30);
+      killTruth(mgr, rg0.session_id ?? "");
+      // g1) 让位：worktree 被他人活锁占 → 不拉（防同树双跑），单留队列
+      const wtBusy = join(WT, "cc-deck-w-s8-busy");
+      mkdirSync(wtBusy, { recursive: true });
+      writeFileSync(join(wtBusy, ".cc-deck-lock"), JSON.stringify({ slug: "other-slug", dispatch_id: randomUUID(), created_at: Date.now(), expires_at: Date.now() + 2 * 3600_000 }), "utf-8");
+      let rg2: { ok: boolean; queued?: boolean; dispatch_id?: string } = { ok: false };
+      const realNowG = Date.now;
+      Date.now = () => realNowG() + 40 * 60_000;
+      try {
+        clearFrameCache(mgr);
+        rg2 = mgr.dispatchWorker({ anchor: anchorG, gid: gidG, prompt: "锁忙单", title: "S8B", slug: "s8-claim", worktree: wtBusy }) as typeof rg2;
+      } finally { Date.now = realNowG; }
+      assert(queueOf(mgr).some((x) => x.dispatch_id === rg2.dispatch_id) && ledOf(rg2.dispatch_id ?? "")?.status === "queued", `**worktree 被占让位**：单留队不拉（实际 ${ledOf(rg2.dispatch_id ?? "")?.status}）`);
+      assert(!existsSync(marker8), "未真拉起（无消费者标记——锁闸先于 spawn）");
+      (mgr as unknown as { evictQueuedDispatch: (id: string) => number }).evictQueuedDispatch(rg2.dispatch_id ?? "");
+      // g2) 认领：无主 worktree → 拉起+落锁+rc 落盘+收口随清锁
+      const wtFree = join(WT, "cc-deck-w-s8-claim");
+      mkdirSync(wtFree, { recursive: true });
+      let rg3: { ok: boolean; queued?: boolean; dispatch_id?: string } = { ok: false };
+      Date.now = () => realNowG() + 40 * 60_000;
+      try {
+        clearFrameCache(mgr);
+        rg3 = mgr.dispatchWorker({ anchor: anchorG, gid: gidG, prompt: "锁认领单", title: "S8C", slug: "s8-claim-2", worktree: wtFree }) as typeof rg3;
+      } finally { Date.now = realNowG; }
+      const dG3 = rg3.dispatch_id ?? "";
+      assert(await waitFor(() => ledOf(dG3)?.status === "running" && ledOf(dG3)?.headless === true, 5000), `**headless 拉起（无主 worktree）**（实际 ${ledOf(dG3)?.status}）`);
+      assert(/^headless:\d+$/.test(ledOf(dG3)?.target ?? ""), `running 行 target 锚 pid（重启判活锚——实际 ${ledOf(dG3)?.target}）`);
+      const lockBody = JSON.parse(readFileSync(join(wtFree, ".cc-deck-lock"), "utf-8")) as { dispatch_id?: string };
+      assert(lockBody.dispatch_id === dG3, `**headless 认领 worktree 锁**（重启窗异 slug 互斥面——实际 ${lockBody.dispatch_id?.slice(0, 8)}）`);
+      assert(await waitFor(() => ledOf(dG3)?.status === "done", 5000), `消费完成收口（实际 ${ledOf(dG3)?.status}）`);
+      assert(readFileSync(rcOf(dG3), "utf-8") === "0", "**rc 落盘=0**（sh 包装——重启后 exit 语义证据）");
+      assert(!existsSync(join(wtFree, ".cc-deck-lock")), "收口随清锁（notifyDispatchClosed 扫描清）");
     }
 
     console.log(`\n结果：${pass} 通过 / ${fail} 失败`);

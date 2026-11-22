@@ -274,6 +274,17 @@ function expandHome(p: string): string {
   return p;
 }
 
+/** 返修 fix1（P1-1）：headless 行 pid 提取——running 行 target 形态 `headless:<pid>`
+ *（spawn 边落值；sh 包装后 pid=包装进程，等待 claude 期间恒活=判活语义同源）。
+ * 终态行 target="headless"（无 pid）返回 undefined；"?"=spawn 未取到 pid 的罕见形态
+ * 同样 undefined（不可判活——清扫/重挂/查重均跳过，在途 exit handler 自管）。
+ * 纯函数模块级（boot 清扫/sweep 重挂/slug 孤儿查重三口共用）。 */
+function headlessPidOfRow(e: DispatchEntry): number | undefined {
+  if (!e.headless) return undefined;
+  const m = /^headless:(\d+)$/.exec(e.target || "");
+  return m ? Number(m[1]) : undefined;
+}
+
 export function resolveCreateCwd(
   rawCwd: string,
   defaultCwd: string,
@@ -5927,6 +5938,27 @@ export class SessionManager {
     const bySt = listGroupsByStatus();
     const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
     for (const e of hung) {
+      // 返修 fix1（P1-1①）：headless 行活守卫——session_id 恒空（spawn 边落 ""），下方
+      // session 守卫对 headless 全盲；detached 子进程活过 relay 死，target 里的 pid 是
+      // 唯一活证据（此前清扫不消费它→误收口「中断」而孤儿继续跑=台账假态+双跑面）。
+      // pid 活=跳过清扫（行保持 running——台账不说谎，重挂收口交 sweep 拍
+      // sweepHeadlessRows poll）；pid 死=rc 落盘在场按 exit 语义收口（重启窗内消费完成
+      // 的真交付不被记「中断」——「面板所见即真实」），rc 缺席（旧形态行/被杀未及落盘）
+      // =落下方通用中断收口（语义不可知，不虚构 done）。
+      const hpid = headlessPidOfRow(e);
+      if (hpid !== undefined) {
+        let halive = false;
+        try { process.kill(hpid, 0); halive = true; } catch { halive = false; }
+        if (halive) {
+          this.emitChainAudit("restart-skip-live-worker", `dispatch=${e.id.slice(0, 8)} headless pid=${hpid} 活——跳过重启清扫（detached 子进程在跑，行保持 running，sweep 拍重挂收口）`);
+          continue;
+        }
+        const hrc = this.readHeadlessRc(e.id);
+        if (hrc !== undefined) {
+          this.closeDeadHeadlessRow(e, hrc, "relay 重启窗内退出（boot 清扫按 rc 还原 exit 语义）");
+          continue;
+        }
+      }
       // [W-PMSEAT] 重启误伤守卫（1104 21:09 事故实录→PM 裁定入批）：外部 worker 的
       // cli_pid 仍活=断在 relay 不在 worker——回合还在跑，此处收口即误伤（实录：在途
       // pmseat 实现被「relay 重启，回合中断」收口→PM 复活接替→双写碰撞）。活 worker 的
@@ -5954,13 +5986,20 @@ export class SessionManager {
       // W-BOARDV2：event 显式置 undefined（JSON.stringify 落盘丢键）——e 是收敛末行，
       // 可能是 worker-milestone 等黑板事件行；展开继承会把事件词带进 done 行，投影面
       // 把「重启中断收口」永判成施工中（事件词同向精化规则的边界洞，回归自堵）
-      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断", event: undefined });
-      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
-      this.notifyDispatchClosed(
-        { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
-        "done", "relay 重启，回合中断", e.session_id, true, // P1-c：重启清扫=中断口径（非交付）
-      );
+      this.closeHungRowAsInterrupted(e, scanGids);
     }
+  }
+
+  /** 悬账行「relay 重启，回合中断」收口（boot 清扫与 sweep 重挂收口共用口——返修
+   * fix1 抽取，行为与原清扫内联段逐字段等价）：done+interrupted 口径、板卡回
+   * backlog、通知账入账。 */
+  private closeHungRowAsInterrupted(e: DispatchEntry, scanGids: string[]): void {
+    appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断", event: undefined });
+    if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
+    this.notifyDispatchClosed(
+      { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
+      "done", "relay 重启，回合中断", e.session_id, true, // P1-c：重启清扫=中断口径（非交付）
+    );
   }
 
   // #40 M4 派单完成回调（谁派活谁收通知）——#018-R1FIX1 P1-2 后为全系统唯一
@@ -9968,7 +10007,20 @@ ${lines.join("\n")}
     if (!slug) return null;
     const dupRow = findInFlightBySlug(slug);
     const dup = dupRow ?? this.dispatchQueueItems.find((x) => (x.input as { slug?: string }).slug === slug)?.dispatch_id ?? null;
-    if (!dup) return null;
+    if (!dup) {
+      // 返修 fix1（P1-1②）：行态异常不放行——同 slug 的 headless 孤儿（pid 活）即使
+      // 行已被误收口/异常态，新单也拒（同树还有真跑的 worker，新单进去=同树双跑，
+      // 1101 P0 家族；查重域=原始行里的 headless 行，收敛视图对终态行丢 pid 查不到）。
+      const orphan = this.headlessOrphanBySlug(slug);
+      if (orphan) {
+        const msg = `同 slug 拒收（headless 孤儿在跑）：slug=${slug} 的 headless 单 ${orphan.id.slice(0, 8)} 进程 pid=${orphan.pid} 仍活（行态 ${orphan.status}——行态异常也不放行，防同树双跑），确认孤儿状态（收口/收割）或换 --slug 重派`;
+        appendDispatch({ ts: Date.now(), id: randomUUID(), tier, target: "dispatch-gate", status: "failed", receipt: truncate(msg, 200), session_id: "", ...(anchor ? { project_anchor: anchor } : {}), actor, failure_reason: "logic_error", slug, trigger_key: triggerKey });
+        this.emitChainAudit("dispatch-slug-dup", `同 slug 拒收（headless 孤儿）：slug=${slug} 单 ${orphan.id.slice(0, 8)} pid=${orphan.pid} 活（行态 ${orphan.status}）——本单未派发`);
+        console.warn(`[dispatch] slug-dup-reject(headless-orphan) slug=${slug} pid=${orphan.pid} row=${orphan.id.slice(0, 8)} status=${orphan.status}`);
+        return { ok: false, error: msg, duplicate_of: orphan.id };
+      }
+      return null;
+    }
     const last = readDispatchLog().find((e) => e.id === dup);
     const msg = `同 slug 在途拒收：slug=${slug} 已有在途单 ${dup.slice(0, 8)}（${last?.status ?? "queued（队列中）"}）——同树双派=撞车事故源（1101 定性 P0），等该单终态或换 --slug 重派`;
     appendDispatch({ ts: Date.now(), id: randomUUID(), tier, target: "dispatch-gate", status: "failed", receipt: truncate(msg, 200), session_id: "", ...(anchor ? { project_anchor: anchor } : {}), actor, failure_reason: "logic_error", slug, trigger_key: triggerKey });
@@ -11423,9 +11475,27 @@ ${lines.join("\n")}
     const actor = input.actor?.trim() || "leader";
     let child: ChildProcess;
     const logFd = (() => { try { return openSync(logPath, "a"); } catch { return undefined; } })();
+    // 返修 fix1（P1-1①）：worktree 锁认领——锁层此前对 headless 全盲（claimWorktreeLock
+    // 只在 SDK 认领边），孤儿期（relay 重启窗）异 slug 新单进同 worktree 无闸（slug 闸
+    // 只管同 slug）。认领失败（他人 id 活锁/异 slug 哨兵锁）=树被占：不拉（同树双跑面），
+    // 单留队列下拍再试（占用是常态语义——不退避不升级）。
+    if (typeof input.worktree === "string" && input.worktree) {
+      const cl = claimWorktreeLock(input.worktree, { slug: input.slug || next.dispatch_id, dispatch_id: next.dispatch_id });
+      if (!cl.ok) {
+        this.emitChainAudit("headless-spawn", `池空窗拉起让位 worktree 锁：wt=${input.worktree} 被 ${cl.held?.dispatch_id?.slice(0, 8) ?? cl.held?.slug ?? "?"} 持有——单 ${next.dispatch_id.slice(0, 8)} 留队，trigger=${trigger}（防同树双跑）`);
+        return { spawned: false, reason: "worktree-busy" };
+      }
+    }
+    // 返修 fix1（P1-1①）：rc 落盘——detached 子进程活过 relay 死，重启后 exit handler
+    // 不在、rc 无处读（boot 清扫/重挂收口只能瞎猜「中断」）。sh 包装把 rc 写进 per-单
+    // 文件（8 字符 id 键，与日志同目录），重启后按 rc 还原 exit 语义（0=done/非 0=failed）
+    // ——审查修法①的「重挂收口按 exit 语义」依赖此落盘。stdio/cwd/env/stdin 全透传不变；
+    // 记入 target 的 pid=sh 的 pid（sh 等待 claude 期间恒活——判活语义同源）。
+    const rcPath = join(logDir, `${next.dispatch_id.slice(0, 8)}.rc`);
+    const shellCmd = `${JSON.stringify(bin)} -p --dangerously-skip-permissions; __cc_rc=$?; printf '%s' "$__cc_rc" > ${JSON.stringify(rcPath)} 2>/dev/null; exit "$__cc_rc"`;
     this.headlessSpawnInFlight++;
     try {
-      child = spawn(bin, ["-p", "--dangerously-skip-permissions"], {
+      child = spawn("/bin/sh", ["-c", shellCmd], {
         cwd: existsSync(cwd) ? cwd : (process.env.HOME || cwd),
         detached: true,
         stdio: ["pipe", logFd ?? "ignore", logFd ?? "ignore"],
@@ -11518,6 +11588,101 @@ ${lines.join("\n")}
     } catch (e) {
       console.error(`[dispatch] headless-close 失败 id=${next.dispatch_id.slice(0, 8)}: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+
+  /** 返修 fix1（P1-1①）：headless rc 落盘读取——spawn 边 sh 包装把退出码写进
+   * data/headless-workers/<id8>.rc（8 字符 id 键与日志同目录）。relay 活着时 exit
+   * handler 直读 code 用不上它；重启后（handler 不在）这是 exit 语义唯一证据。 */
+  private readHeadlessRc(dispatchId: string): number | undefined {
+    try {
+      const raw = readFileSync(join(this.cfg.dataDir, "headless-workers", `${dispatchId.slice(0, 8)}.rc`), "utf-8").trim();
+      if (raw === "" || !/^\d+$/.test(raw)) return undefined;
+      return Number(raw);
+    } catch { return undefined; }
+  }
+
+  /** 返修 fix1（P1-1①）：死 headless 行按 rc 收口（boot 清扫与 sweep 重挂共用）。
+   * rc=0 → done、非 0 → failed（exit 语义还原——重启窗内完成的真交付不被记「中断」，
+   * 「面板所见即真实」）；板卡翻态对齐 closeHeadlessDispatch（done→done /
+   * failed→backlog 回待办）。gid 不在行上（快照在内存、重启即失），按 dispatch_id
+   * 扫全组板卡（moveEntryByDispatch 同款发现手法）。 */
+  private closeDeadHeadlessRow(e: DispatchEntry, rc: number, why: string): void {
+    const status: "done" | "failed" = rc === 0 ? "done" : "failed";
+    const receiptText = `headless worker 退出（rc=${rc}，${why}）——交付证据见回执/树`;
+    try {
+      appendDispatch({ ts: Date.now(), id: e.id, tier: e.tier, target: "headless", status, receipt: truncate(receiptText, 200), session_id: "", ...(e.project_anchor ? { project_anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}), headless: true, ...(e.slug ? { slug: e.slug } : {}), failure_reason: status === "failed" ? "logic_error" : undefined });
+      if (e.project_anchor) {
+        const bySt = listGroupsByStatus();
+        for (const g of [...bySt.active, ...bySt.parked]) {
+          try {
+            const card = loadBoard(g.id).entries.find((x) => x.dispatch_id === e.id);
+            if (!card) continue;
+            upsertBoardEntry(g.id, status === "done"
+              ? { id: card.id, text: card.text, status: "done", owner_session: card.owner_session, dispatch_id: e.id }
+              : { id: card.id, text: card.text, status: "backlog", owner_session: "", dispatch_id: e.id, note: `${card.note ? card.note + " " : ""}[dispatchfix] headless 退出 rc=${rc} 回待办` });
+            this.emitBoard(g.id);
+          } catch { /* 板卡尽力而为（台账已真） */ }
+        }
+      }
+      if (status === "failed") this.headlessSpawnCooldownUntil = Date.now() + 2 * 60_000; // 异常退出同款退避（坏单连环拉起风暴防）
+      this.notifyDispatchClosed({ id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) }, status, receiptText, "");
+      this.emitOrgState();
+      this.emitChainAudit("headless-reattach", `重挂收口：单 ${e.id.slice(0, 8)} headless 退出 rc=${rc}（${why}）→ ${status}`);
+    } catch (err) {
+      console.error(`[dispatch] headless-dead-close 失败 id=${e.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** 返修 fix1（P1-1①）：headless 在途行重挂收口拍（sweep 宿主，public=测试可直调）。
+   * boot 清扫放行的活 pid 行在此 poll：
+   *   pid 仍活 → 行保持 running（真在跑），且并入在途计数——重启后
+   *     headlessSpawnInFlight 归零，孤儿不计数=并发帽（真活+在途 ≥ cap 不拉）失真；
+   *   pid 退 → rc 落盘在场按 exit 语义收口（done/failed），缺席=中断口径（语义
+   *     不可知，与 boot 清扫通用路径同款——旧形态行 rc 无处落）。
+   * 双收口防撞：行达终态后不再 running=本拍天然跳过；在途 exit handler 与本拍同
+   * 线程（事件先于定时器拍），无并发窗。 */
+  sweepHeadlessRows(now = Date.now()): { live: number; closed: number } {
+    let live = 0;
+    let closed = 0;
+    for (const e of readDispatchLog()) {
+      if (!e.headless || e.status !== "running") continue;
+      const pid = headlessPidOfRow(e);
+      if (pid === undefined) continue;
+      let alive = false;
+      try { process.kill(pid, 0); alive = true; } catch { alive = false; }
+      if (alive) { live++; continue; }
+      const rc = this.readHeadlessRc(e.id);
+      if (rc !== undefined) {
+        this.closeDeadHeadlessRow(e, rc, "sweep 重挂收口（relay 重启窗内退出）");
+        closed++;
+      } else {
+        const bySt = listGroupsByStatus();
+        this.closeHungRowAsInterrupted(e, [...bySt.active, ...bySt.parked].map((g) => g.id));
+        closed++;
+      }
+    }
+    if (live > this.headlessSpawnInFlight) {
+      this.emitChainAudit("headless-reattach", `重挂收口：${live} 个 headless 孤儿仍活（重启后在途计数已回填——并发帽口径恢复），等待真实退出收口`);
+      this.headlessSpawnInFlight = live;
+    }
+    return { live, closed };
+  }
+
+  /** 返修 fix1（P1-1②）：headless 孤儿查重（slug 闸补盲）——同 slug 的 headless 单
+   * 只要 target 里的 pid 还活着，**行态异常也不放行**（行被误收口/被别的路径关掉/
+   * 状态字段损坏——同树还有个真跑的 worker，新单进去=双跑，1101 P0 家族）。查重走
+   * 原始行（readDispatchLogRaw）：终态行 target="headless" 无 pid，收敛视图会把带
+   * pid 的 running 行收敛掉——孤儿证据只在原始行里。 */
+  private headlessOrphanBySlug(slug: string): { id: string; pid: number; status: string } | null {
+    if (!slug) return null;
+    for (const e of readDispatchLogRaw()) {
+      if (!e.headless || e.slug !== slug) continue;
+      const pid = headlessPidOfRow(e);
+      if (pid === undefined) continue;
+      try { process.kill(pid, 0); } catch { continue; }
+      return { id: e.id, pid, status: e.status };
+    }
+    return null;
   }
 
   /** headless 拉起失败升级（验收②：/api/notify 告警 PM 语义——relay 内等价单口：
@@ -11784,6 +11949,10 @@ ${lines.join("\n")}
    * triggered=本拍有动作（排水或收口），deadClosed=断档悬账收口行数。 */
   sweepDispatchQueueOnce(now = Date.now()): { triggered: boolean; deadClosed: number } {
     let deadClosed = 0;
+    // 返修 fix1（P1-1①）：headless 在途行重挂收口先行——boot 清扫放行的活 pid 行在
+    // 此 poll（pid 退→按 rc 收口/在途计数回填）。先于排水拍：收口释放的 slug/锁/帽
+    // 位对同拍后续动作可见。尽力而为不炸拍。
+    try { this.sweepHeadlessRows(now); } catch { /* 尽力而为 */ }
     // B 先扫断档悬账（快照遍历——closeOpenDispatches 会就地改 openDispatches）。
     // **两轮确认**（W-DRAINFIX-R1 审查 P1 返修）：首拍 dead 只记账，确认窗后仍 dead
     // 才收口——单拍帧龄判死会把「回合内长命令静默 >TTL」的活 worker 误收口（误关+

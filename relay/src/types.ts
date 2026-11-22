@@ -1640,6 +1640,7 @@ export const CHAIN_AUDIT_ACTIONS = [
   "dispatch-slug-dup", // 验收④：同 slug 在途拒收（板面零重复记账——同树双派时间窗防线）
   "headless-spawn", // 验收②：池空窗自动拉起 headless 消费者（claude -p 形态——含让位全局帽/引擎面不适用分支）
   "headless-spawn-failed", // 验收②：拉起失败升级（/api/notify 语义告警 PM——单留队列退避重试，绝不静默）
+  "headless-reattach", // 返修 fix1（P1-1）：重启窗 headless 孤儿重挂——pid 活跳过清扫/在途计数回填/pid 退按 rc 落盘还原 exit 语义收口
   "dispatch-lock-gc", // 验收⑤：终态单锁 GC/弃单哨兵锁清（119min 死等形态退役——收口边清锁漏网兜底）
 ] as const;
 export type ChainAuditAction = (typeof CHAIN_AUDIT_ACTIONS)[number];
