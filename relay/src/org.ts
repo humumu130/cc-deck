@@ -667,6 +667,15 @@ export interface DispatchEntry {
    *  看板投影「异常完成」角标消费，不改状态语义。与 receipt_missing 分立
    *  （missing=回执内容观测，本标=交付申报缺席）。 */
   abnormal_done?: boolean;
+  /** W-DISPATCHFIX（1120 用户军令级）：派单 slug（leader-dispatch --slug / org 透传）——
+   *  dispatched/queued 行落值（同 trigger_key 层的查重锚）。同 slug 在途（queued/
+   *  dispatched/running）→ 入口拒新单（板面不重复记账——1120 晨「同 slug 死锁 119min
+   *  挡续派」三现之一）。旧行缺省 undefined=不参与查重（宽容惯例）。 */
+  slug?: string;
+  /** W-DISPATCHFIX：headless 消费者标记——池空窗（活 worker=0）自动拉起的 claude -p
+   *  worker 承接的行落 true（running/终态行携带；消费面按此区分 SDK 席位承接与
+   *  headless 进程承接）。 */
+  headless?: boolean;
 }
 
 // S3-P4 组锚豁免谓词（relfix-s 续作）：org 底座 import projects 会环（projects →
@@ -832,6 +841,20 @@ export function readDispatchLogFile(dir?: string, max = 500): DispatchEntry[] {
   }
   const all = [...byId.values()];
   return all.length <= max ? all : all.slice(all.length - max);
+}
+
+/** W-DISPATCHFIX（1120 治本单·验收④）：同 slug 在途查重——收敛视图里 slug 匹配且
+ *  status ∈ {queued, dispatched, running} 的单即「该 slug 已有活单」。返回在途单 id
+ * （幂等命中回执对账键），无则 null。口径对齐 findInFlightByTriggerKey（trigger-key.ts）：
+ *  查重域=活单白名单三态；slug 是 leader-dispatch 层的任务身份键（worktree/分支/回执
+ *  三同源），同 slug 双活=同树双派撞车面（1101 定性 P0 的派单侧防线——锁层只防同刻
+ *  并发，本闸防的是「上一单还没死透又派同 slug」的时间窗面）。 */
+export function findInFlightBySlug(slug: string, dir?: string): string | null {
+  if (!slug) return null;
+  for (const e of readDispatchLog(dir)) {
+    if (e.slug === slug && (e.status === "queued" || e.status === "dispatched" || e.status === "running")) return e.id;
+  }
+  return null;
 }
 
 // W-BOARDV2（1111 用户令「黑板」）：**原始行读口**——同 id 全部行按文件序返回（不收敛）。
