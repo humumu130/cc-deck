@@ -686,6 +686,46 @@ function connectLan(ctx) {
       // halfconn R1（A审 P1-① 补）：45s 到期反向翻转（重连中→未连接）无帧事件可依——
       // 秒针拍（下方 1s interval）检测 alive 态位变化驱动一刷（转发到该 interval 内执行）
       let _halfconnAliveSeen;
+      // ---------- CONNV4 批F：源胶囊下拉多源化（1122 用户实锤——三台在线只显示 2 圆+聚合，第 3 台无处显示） ----------
+      // 下拉是单云源时代结构（cloudRow 单行承载 cloudCtx 前台指针），批A 只改了设置页源列表卡、
+      // 漏改胶囊；批B 池化后此缺口暴露。本批纯 UI 接线：每个已知源一行（acct 同账号+共享库已
+      // 配对源），点击走 activateAcctRelay/activateCloudServer 既有切换链（池化=秒切不断后台）。
+      // 数据链与设置页 sourceListRows 同源（acctAcctRelays 缓存含离线 online:false + 已配对
+      // cloudSharedCloudServers）；排序口径一致：本机→在线同账号（名字序）→离线同账号（灰显）→配对码源。
+      // 调用时序注记：本段先于 const acctAcctRelays/ctxPool 定义，但 refreshSourceSwitchers 全部
+      // 调用点都在函数体内（IIFE 求值完成后才跑）——TDZ 窗口无调用，直引安全。
+      function connv4fAcctRelayList() {
+        return acctAcctRelays().filter((r) => r && typeof r.dev === "string");
+      }
+      // 下拉行数据装配（纯读）：[{key,choice,dev,id,name,tag,sub,dot,offline}]
+      // key=行对账锚（acct:dev / srv:id）；dot 三态入 sourceDotClass；sub=副行（上次在线/会话数/地址）
+      function connv4fMenuSources() {
+        const rows = [];
+        if (acctCred()) {
+          const relays = connv4fAcctRelayList();
+          const on = relays.filter((r) => r.online !== false).sort((a, b) => String(a.name || a.dev).localeCompare(String(b.name || b.dev), "zh-Hans"));
+          const off = relays.filter((r) => r.online === false);
+          for (const r of on.concat(off)) {
+            const offline = r.online === false;
+            const pc = ctxPool.get("acct:" + r.dev); // 批B 池内 ctx：已连源显会话数、冷连期显连接中
+            const sub = offline ? connLastSeenText(r.ts)
+              : pc && pc.status === "online" && pc.hasSnapshot ? String(pc.sessions.size) + " 会话"
+              : pc && pc.status === "connecting" ? "连接中…"
+              : "同账号 · 点击连接";
+            rows.push({ key: "acct:" + r.dev, choice: "acct", dev: String(r.dev), name: String(r.name || r.dev), tag: "账号",
+              sub, dot: offline ? "offline" : (pc && pc.status === "connecting" ? "connecting" : "online"), offline });
+          }
+        }
+        const servers = cloudSharedCloudServers().filter((s) => s && s.cloud && s.cloud.paired); // 共享库已配对源（未配对条目走设置页输码流，不进下拉）
+        for (const s of servers) {
+          const isFg = cloudCtx === homeCtx && !!(cloudCtx.cfg && cloudCtx.cfg.id === s.id);
+          const disp = sdelDisplayName(s, isFg); // 在线 fg 显对端 relay 名（改名映射同源），否则条目名/地址
+          const sub = isFg ? (cloudCtx.status === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : (s.wsUrl ? hostOf(s.wsUrl) : "云桥")) : (s.wsUrl ? hostOf(s.wsUrl) : "未配置");
+          rows.push({ key: "srv:" + s.id, choice: "server", id: String(s.id), name: disp, tag: "配对",
+            sub, dot: isFg ? (cloudCtx.status === "online" ? "online" : cloudCtx.status === "connecting" ? "connecting" : "offline") : "offline", offline: false });
+        }
+        return rows;
+      }
       function refreshSourceSwitchers() {
         const bridge = window.__ccDeck005B4;
         const state = bridge ? bridge.connection : "connecting";
@@ -694,6 +734,11 @@ function connectLan(ctx) {
         const cloudLinked = cloudUIOn(); // 云链已激活（决定云桥行是否注入）
         const cloudActive = v === "cloud"; // 视角（决定哪行 active；aggregate 时两行皆非）
         const pairedCloud = (typeof cloudSharedCloudServers === "function" ? cloudSharedCloudServers() : []).filter((s) => s && s.cloud && s.cloud.paired);
+        // CONNV4 批F：多源行清单+在场性（acct 在线数——胶囊箭头/聚合行的「有第二源」判据扩容）
+        const srcDesired = connv4fMenuSources();
+        const acctOnlineCount = srcDesired.filter((d) => d.choice === "acct" && !d.offline).length;
+        // fg 源键（行 active 态随视角）：acct 源=cfg.id（"acct:dev"）；服务器源=本位 cfg.id 加 srv: 前缀对齐行键
+        const fgSrcKey = v === "cloud" && cloudCtx.cfg ? (cloudCtx.cfg.acct ? String(cloudCtx.cfg.id || "") : (cloudCtx === homeCtx ? "srv:" + String(cloudCtx.cfg.id || "") : "")) : "";
         // W-WINPAIR-R5 件六①：trigger 文本=视角源名（不等快照——云快照滞后时不再恒显「本机」）：
         // cloud→云源名（快照 relay_name 优先，未达显桥地址）；aggregate→「聚合 · 全部源」；local→本机
         let name;
@@ -709,7 +754,7 @@ function connectLan(ctx) {
           // W-STATUSBAR-OVERHAUL：桌面 windowbar 壳=状态胶囊（未连接后缀「· 未连接」+
           // 多源下拉箭头）；移动 sourcebar 壳保持旧形态（纯源名）
           const isBar = !!switcher.closest(".windowbar, .queue-source"); /* W-WBARSLIM：胶囊宿主自 windowbar 迁会话侧栏头 .queue-source——未连接后缀/多源箭头逻辑随宿主走 */
-          const multiSource = !!(cloudLinked || pairedCloud.length);
+          const multiSource = !!(cloudLinked || pairedCloud.length || acctOnlineCount); /* CONNV4 批F：同账号在线源也是第二源（纯 acct 场景箭头不再缺失） */
           switcher.querySelectorAll("[data-source-dot]").forEach((el) => { el.className = "source-dot " + sourceDotClass(state); });
           switcher.querySelectorAll("[data-source-conn]").forEach((el) => { el.className = "source-conn " + sourceConnClass(state); });
           switcher.querySelectorAll("[data-current-source]").forEach((el) => {
@@ -734,32 +779,54 @@ function connectLan(ctx) {
               tr.append(chev);
             } else if (!multiSource && chev) { chev.remove(); }
           });
-          // W-WINPAIR：云桥源行——云链激活或共享库有已配对云源时注入（与静态本机行并列，点击真切换）
+          // W-WINPAIR 云桥源行 → CONNV4 批F 多源化：单云源时代 cloudRow（cloudCtx 前台指针单行）
+          // 退役——每个已知源一行（acct 同账号：在线名字序在前、离线灰显殿后；共享库已配对源
+          // 随其后），聚合行殿后。数据全进多源行（老行承载的 fg 指针视角由行 active 态承接）。
           const menu = switcher.querySelector("[data-source-menu]");
           if (menu) {
             const localRow = menu.querySelector('.source-option[data-source-choice="local"]');
-            let cloudRow = menu.querySelector('.source-option[data-source-choice="cloud"]');
-            if (cloudLinked || pairedCloud.length) {
-              if (!cloudRow && localRow) {
-                cloudRow = document.createElement("button");
-                cloudRow.className = "source-option";
-                cloudRow.type = "button";
-                cloudRow.dataset.sourceChoice = "cloud";
-                cloudRow.innerHTML = '<span class="source-dot status-disconnected"></span><strong>云桥</strong><small>—</small>';
-                localRow.after(cloudRow);
+            // 多源行对账（data-src-key=acct:dev / srv:id 锚）：源消失即撤行，增改就地更新；
+            // 依序插到聚合行/添加钮前（已就位节点 insertBefore=no-op 移动——序漂移自愈）
+            let lastSrcRow = null;
+            const anchor = menu.querySelector('.source-option[data-source-choice="aggregate"]') || menu.querySelector("[data-source-add]");
+            if (localRow && anchor) {
+              const byKey = new Map([...menu.querySelectorAll(".source-option[data-src-key]")].map((el) => [el.dataset.srcKey, el]));
+              for (const el of byKey.values()) if (!srcDesired.some((d) => d.key === el.dataset.srcKey)) el.remove(); // 登出/删条目→行即撤
+              for (const d of srcDesired) {
+                let el = byKey.get(d.key);
+                if (!el) {
+                  el = document.createElement("button");
+                  el.className = "source-option";
+                  el.type = "button";
+                  el.dataset.sourceChoice = d.choice;
+                  el.dataset.srcKey = d.key;
+                  if (d.dev) el.dataset.srcDev = d.dev;
+                  if (d.id) el.dataset.srcId = d.id;
+                }
+                menu.insertBefore(el, anchor);
+                el.innerHTML = '<span class="source-dot ' + sourceDotClass(d.dot) + '"></span><strong>' + esc(d.name) + '</strong>'
+                  + (d.offline ? '<span class="tag" title="' + esc(d.sub) + '">离线</span>' : "")
+                  + '<span class="tag" title="来源：' + esc(d.tag) + '">' + esc(d.tag) + '</span>'
+                  + "<small>" + esc(d.sub) + "</small>";
+                el.classList.toggle("src-off", !!d.offline); // 离线灰显仍可点（点击走冷连 ≤3s 现行语义）
+                el.classList.toggle("active", v === "cloud" && d.key === fgSrcKey); // 行 active 态随视角（fg 源行亮）
+                el.title = d.offline ? d.name + " · 离线 · 点击尝试连接" : d.name + " · 点击切换视角";
+                lastSrcRow = el;
               }
-            } else if (cloudRow) { cloudRow.remove(); cloudRow = null; }
+            } else {
+              menu.querySelectorAll(".source-option[data-src-key]").forEach((el) => el.remove()); // 无本机行锚的异常宿主不留孤儿行
+            }
             // W-WINPAIR-R3：聚合=源列表特殊行（与其他源平级平权；test.20 ②——两钮并排退役）。
-            // 有第二源（云链激活或共享库有已配对云源）才注入——单源聚合无意义
+            // 有第二源（云链激活/共享库已配对源/同账号源在线——批F 扩）才注入——单源聚合无意义
             let aggRow = menu.querySelector('.source-option[data-source-choice="aggregate"]');
-            if (cloudLinked || pairedCloud.length) {
+            if (cloudLinked || pairedCloud.length || acctOnlineCount) {
               if (!aggRow && localRow) {
                 aggRow = document.createElement("button");
                 aggRow.className = "source-option";
                 aggRow.type = "button";
                 aggRow.dataset.sourceChoice = "aggregate";
                 aggRow.innerHTML = '<span class="source-dot status-disconnected"></span><strong>聚合</strong>'; /* W-PILL4 ②③：文案简化+small 副行退役 */
-                (cloudRow || localRow).after(aggRow);
+                (lastSrcRow || localRow).after(aggRow);
               }
             } else if (aggRow) { aggRow.remove(); aggRow = null; }
             if (aggRow) {
@@ -767,30 +834,6 @@ function connectLan(ctx) {
               /* W-PILL4 ③：small 三态副行退役（计数/「全部源合并展示」/等待提示全去）——只留状态灯 */
               aggRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(bothOn ? "online" : "connecting"));
               aggRow.classList.toggle("active", v === "aggregate");
-            }
-            if (cloudRow) {
-              const cs = cloudCtx.status;
-              // 在线显 relay 名（与顶栏 trigger 同源一致，走改名映射）；未连接显地址（激活前 cloudCtx.cfg 还没填则回落共享库）
-              const cloudAddr = (cloudCtx.cfg && cloudCtx.cfg.wsUrl) || (pairedCloud[0] && pairedCloud[0].wsUrl) || "";
-              const cloudLabel = (cs === "online" && cloudCtx.relayName && !/^(tauri\.localhost|localhost|127\.0\.0\.1)(:|$)/.test(String(cloudCtx.relayName))) ? sourceDisplayName(String(cloudCtx.relayName)) : (cloudAddr ? hostOf(cloudAddr) : "云桥");
-              cloudRow.querySelector("strong").textContent = cloudLabel;
-              // W-WINPAIR-R7②：在线云源行尾 ✎ 改名钮（hover 显现）
-              let renameBtn = cloudRow.querySelector("[data-source-rename]");
-              if (cs === "online" && cloudCtx.relayName && !renameBtn) {
-                renameBtn = document.createElement("button");
-                renameBtn.className = "source-rename";
-                renameBtn.type = "button";
-                renameBtn.title = "重命名此源";
-                renameBtn.setAttribute("aria-label", "重命名此源");
-                renameBtn.dataset.sourceRename = "";
-                renameBtn.dataset.relayName = String(cloudCtx.relayName);
-                renameBtn.textContent = "✎";
-                cloudRow.appendChild(renameBtn);
-              } else if (renameBtn && cs !== "online") { renameBtn.remove(); }
-              else if (renameBtn) { renameBtn.dataset.relayName = String(cloudCtx.relayName); }
-              cloudRow.querySelector("small").textContent = cs === "connecting" ? "连接中…" : cloudCtx.failKind === "unpaired" ? "未配对 · 输码" : (cloudAddr ? hostOf(cloudAddr) : "云桥"); /* W-PILL4 ③：去在线/离线文字（状态由连接灯承载） */
-              cloudRow.querySelector(".source-dot")?.setAttribute("class", "source-dot " + sourceDotClass(cs === "online" ? "online" : cs === "connecting" ? "connecting" : "offline"));
-              cloudRow.classList.toggle("active", cloudActive);
             }
             if (localRow) {
               // W-WINPAIR-R2：并行保活——本机行连接点显本机链自身状态（不再因视角切走显离线）
@@ -802,7 +845,7 @@ function connectLan(ctx) {
           }
           switcher.querySelectorAll(".source-option[data-source-choice]").forEach((option) => {
             const choice = option.dataset.sourceChoice;
-            if (choice === "cloud" || choice === "local" || choice === "aggregate") return; // 本机/云桥/聚合三行已分别渲染（W-WINPAIR-R3：聚合行不再被兜底循环覆盖文案）
+            if (choice === "local" || choice === "aggregate" || option.dataset.srcKey) return; // 本机/聚合/多源行已分别渲染（批F：多源行随 srcKey 锚跳过——不被兜底覆盖文案）
             const strong = option.querySelector("strong");
             const small = option.querySelector("small");
             if (strong) strong.textContent = name;
@@ -5291,12 +5334,18 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           const option = target.closest(".source-option[data-source-choice]");
           if (option) {
             const choice = String(option.dataset.sourceChoice || "");
-            // W-WINPAIR-R2：真切换且幂等——cloud=云桥视角（未激活则先并行起云链），local=本机视角。
-            // 连接保活不断链；active 态由 refreshSourceSwitchers 按 viewSource 驱动
-            if (choice === "cloud") {
+            // W-WINPAIR-R2：真切换且幂等——local=本机视角。连接保活不断链；active 态由
+            // refreshSourceSwitchers 按 viewSource 驱动。
+            // CONNV4 批F：单数 cloud 分支随老 cloudRow 退役——acct/server 多源行走各自
+            // 切换链（activateAcctRelay 池化秒切+activateCloudServer 本位链，toast 均自带）
+            if (choice === "acct") {
               closeSourceMenu(switcher);
-              switchToCloudSource(false);
-              showToast("视角：云桥 · 连接保持");
+              activateAcctRelay(String(option.dataset.srcDev || ""));
+              return;
+            }
+            if (choice === "server") {
+              closeSourceMenu(switcher);
+              activateCloudServer(String(option.dataset.srcId || ""));
               return;
             }
             if (choice === "local") {
