@@ -14150,7 +14150,7 @@ import { networkInterfaces as networkInterfaces3, homedir as homedir28, hostname
 import { join as join72, sep as sep9 } from "node:path";
 import { writeFileSync as writeFileSync40, openSync as openSync9, readFileSync as readFileSync62, rmSync as rmSync13, existsSync as existsSync49, readdirSync as readdirSync24, statSync as statSync25 } from "node:fs";
 import { execSync as execSync2 } from "node:child_process";
-import { spawn as spawn8, execFileSync as execFileSync8 } from "node:child_process";
+import { spawn as spawn9, execFileSync as execFileSync8 } from "node:child_process";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
 
 // src/agent-activator.ts
@@ -15072,7 +15072,7 @@ var EventBus = class {
 
 // src/session-manager.ts
 import { randomUUID as randomUUID13 } from "node:crypto";
-import { execSync, execFile as execFile5 } from "node:child_process";
+import { execSync, execFile as execFile5, spawn as spawn6 } from "node:child_process";
 import { promisify } from "node:util";
 
 // src/decision-ledger-projection.ts
@@ -16022,6 +16022,8 @@ var DISPATCH_EVENTS = [
   // 派发侧：复用在编熟手（值在 target=承接席）
   "dispatch-spawned",
   // 派发侧：真启动新会话（spawn-pending→承接后）
+  "dispatch-headless",
+  // W-DISPATCHFIX（1120 治本单）：池空窗自动拉起 headless 消费者（claude -p 形态——target=headless:<pid>，日志路径在 receipt）
   "worker-ack",
   // worker：接单（会话起来看到任务书——SDK SessionStart 钩子）
   "worker-start",
@@ -16183,8 +16185,12 @@ var DISPATCH_ENTRY_SCHEMA = {
   // W-CARDLIFE-R4-R1（双审 P0-1 修法 a·派单面打标）：--no-pr 派单受理时落 dispatched 行（源头真值——不依赖事后上报）；converge submitted 兜底仅翻显式 no_pr:true（缺省/false=有 PR 面或未标=安全侧不翻）。与 pr_url（交付上报面，写入链未建）正交：no_pr=派单时已知，pr_url=交付后事实
   event: { type: "enum", enumTable: DISPATCH_EVENTS },
   // W-BOARDV2（1111 用户令）：黑板事件词表（词表 DISPATCH_EVENTS 本文件权威）——行仍带合法 status，event 承载细分生命周期（看板投影/PM 查询数据底座；旧行缺省 undefined=无事件面，宽容）
-  abnormal_done: { type: "boolean" }
+  abnormal_done: { type: "boolean" },
   // W-BOARDV2「done 说真话」：relay 收口 done 时同 id 无 worker-done 申报（worker 半途跑路/静默收工——1111 实锤形态）即落此标。纯观测标：leader-board/看板投影消费（「异常完成」角标），不改状态语义。与 receipt_missing（回执内容观测）分立：本标=交付申报缺席
+  slug: { type: "string" },
+  // W-DISPATCHFIX（1120 治本单·验收④）：派单 slug（leader-dispatch --slug）——dispatched/queued 行落值（同 slug 在途查重锚；板面不重复记账）
+  headless: { type: "boolean" }
+  // W-DISPATCHFIX（验收②）：headless 消费者承接标记（池空窗自动拉起的 claude -p worker——running/终态行携带）
 };
 function applyOrgChange(kind, payload) {
   if (!isObj(payload)) return { ok: false, error: "\u8F7D\u8377\u5FC5\u987B\u662F\u5BF9\u8C61" };
@@ -16690,6 +16696,13 @@ function readDispatchLogFile(dir, max = 500) {
   }
   const all = [...byId.values()];
   return all.length <= max ? all : all.slice(all.length - max);
+}
+function findInFlightBySlug(slug, dir) {
+  if (!slug) return null;
+  for (const e of readDispatchLog(dir)) {
+    if (e.slug === slug && (e.status === "queued" || e.status === "dispatched" || e.status === "running")) return e.id;
+  }
+  return null;
 }
 var rawLogCacheByWindow = /* @__PURE__ */ new Map();
 function readDispatchLogRaw(dir, window2 = 2e3) {
@@ -56264,6 +56277,20 @@ function clearWorktreeLock(worktree, dispatchId) {
     return false;
   }
 }
+function clearSlugWorktreeLock(worktree, slug, dispatchId) {
+  if (!worktree || !slug) return false;
+  const p = lockPath(worktree);
+  if (!existsSync31(p)) return true;
+  const lock = readWorktreeLock(worktree);
+  if (lock && lock.slug !== slug) return false;
+  if (lock && lock.dispatch_id && dispatchId && lock.dispatch_id !== dispatchId) return false;
+  try {
+    rmSync6(p, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
 function scanClearWorktreeLocks(dispatchId, root, guard, guardedOut) {
   if (!dispatchId) return [];
   const wtRoot = root ?? process.env.CCR_WT_ROOT ?? "/private/tmp";
@@ -59165,6 +59192,11 @@ function expandHome(p) {
   if (p.startsWith("~/")) return join60(homedir19(), p.slice(2));
   return p;
 }
+function headlessPidOfRow(e) {
+  if (!e.headless) return void 0;
+  const m = /^headless:(\d+)$/.exec(e.target || "");
+  return m && Number(m[1]) > 0 ? Number(m[1]) : void 0;
+}
 function resolveCreateCwd(rawCwd, defaultCwd, autoMkdir = false) {
   const isUsableDir = (p) => {
     if (!p) return false;
@@ -59527,7 +59559,7 @@ var SessionManager = class _SessionManager {
   /** W-SEATALIVE 刀4：no_pm_target 连击计数（feedPM 成功投喂即清零；≥2 出 streak 告警卡） */
   noTargetStreak = 0;
   openDispatches = /* @__PURE__ */ new Map();
-  /* #G5：retry_of 随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板基线比对源 */
+  /* #G5：retry_of 随在途记录（收口行透传源）；S3 generation/task_snapshot=收口 CAS+板基线比对源；W-DISPATCHFIX：slug 随在途记录（workerBoardEvent 黑板行透传源） */
   // M12-6 值守喂活 chain 状态（019 §3.4 K=3 连续计数+回合计数）：内存态跨重启重置
   // ——duty-rounds.ndjson 是独立审计日志（D18 不参加业务状态机），chain 断了从新
   // chain 起算无对账风险；跨重启持久化属 #71 产品面
@@ -59698,6 +59730,8 @@ provider=${opts.provider ?? "default"}` : void 0,
     return [...this.sessions.values()].filter((s) => !(hideLeader && s.state.session_id === this.leaderId)).map((s) => {
       const c = this.cloneState(s);
       c.pm_standby = !!(dutyId && c.session_id === dutyId && c.status === "DONE");
+      const live = this.displayLivenessOf(s);
+      if (live) c.liveness = live;
       if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
       if (!c.engine) c.engine = "claude";
       return c;
@@ -63285,6 +63319,8 @@ provider=${opts.provider ?? "default"}` : void 0,
       session_id: sid,
       ...e.anchor ? { project_anchor: e.anchor } : {},
       ...e.actor ? { actor: e.actor } : {},
+      ...e.slug ? { slug: e.slug } : {},
+      // W-DISPATCHFIX：黑板行透传 slug（ack/start/milestone 是收敛末行常态——查重锚不丢）
       ...e.generation !== void 0 ? { generation: e.generation } : {}
     });
     if (ok2) console.log(`[boardv2] worker-event ${event} dispatch=${e.id.slice(0, 8)} sid=${sid.slice(0, 12)}`);
@@ -63793,6 +63829,25 @@ provider=${opts.provider ?? "default"}` : void 0,
     const bySt = listGroupsByStatus();
     const scanGids = [...bySt.active, ...bySt.parked].map((g2) => g2.id);
     for (const e of hung) {
+      const hpid = headlessPidOfRow(e);
+      if (hpid !== void 0) {
+        let halive = false;
+        try {
+          process.kill(hpid, 0);
+          halive = true;
+        } catch {
+          halive = false;
+        }
+        if (halive) {
+          this.emitChainAudit("restart-skip-live-worker", `dispatch=${e.id.slice(0, 8)} headless pid=${hpid} \u6D3B\u2014\u2014\u8DF3\u8FC7\u91CD\u542F\u6E05\u626B\uFF08detached \u5B50\u8FDB\u7A0B\u5728\u8DD1\uFF0C\u884C\u4FDD\u6301 running\uFF0Csweep \u62CD\u91CD\u6302\u6536\u53E3\uFF09`);
+          continue;
+        }
+        const hrc = this.readHeadlessRc(e.id);
+        if (hrc !== void 0) {
+          this.closeDeadHeadlessRow(e, hrc, "relay \u91CD\u542F\u7A97\u5185\u9000\u51FA\uFF08boot \u6E05\u626B\u6309 rc \u8FD8\u539F exit \u8BED\u4E49\uFF09");
+          continue;
+        }
+      }
       if (e.session_id) {
         const s = this.sessions.get(e.session_id);
         const wpid = s?.state.external ? s.state.cli_pid && s.state.cli_pid > 0 ? s.state.cli_pid : this.cliPidFromEventsTail(e.session_id) : void 0;
@@ -63810,17 +63865,23 @@ provider=${opts.provider ?? "default"}` : void 0,
           }
         }
       }
-      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD", event: void 0 });
-      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
-      this.notifyDispatchClosed(
-        { id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} },
-        "done",
-        "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD",
-        e.session_id,
-        true
-        // P1-c：重启清扫=中断口径（非交付）
-      );
+      this.closeHungRowAsInterrupted(e, scanGids);
     }
+  }
+  /** 悬账行「relay 重启，回合中断」收口（boot 清扫与 sweep 重挂收口共用口——返修
+   * fix1 抽取，行为与原清扫内联段逐字段等价）：done+interrupted 口径、板卡回
+   * backlog、通知账入账。 */
+  closeHungRowAsInterrupted(e, scanGids) {
+    appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD", event: void 0 });
+    if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "backlog");
+    this.notifyDispatchClosed(
+      { id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} },
+      "done",
+      "relay \u91CD\u542F\uFF0C\u56DE\u5408\u4E2D\u65AD",
+      e.session_id,
+      true
+      // P1-c：重启清扫=中断口径（非交付）
+    );
   }
   // #40 M4 派单完成回调（谁派活谁收通知）——#018-R1FIX1 P1-2 后为全系统唯一
   // dispatch 终态通知策略口：各出口先写事实源（appendDispatch），再统一走此入口。
@@ -65283,10 +65344,10 @@ ${lines.join("\n")}
           g2?.anchor_dir ?? anchorDir,
           tier,
           r2.ok,
-          r2.ok ? `\u7F16\u6392\u6D3E\u5355\u5DF2\u53D7\u7406\uFF08entry=${cardId} dispatch=${dr3?.dispatch_id?.slice(0, 8) ?? ""}${dr3?.queued ? " \xB7 \u7F16\u5236\u89E6\u9876\u6392\u961F" : ""}${payload.redispatch_of ? " \u91CD\u6295" : ""}\uFF09` : `${r2.error}\uFF08task_ref=${cardId} \u5DF2\u5165\u8D26\uFF0C\u53EF\u5E26 entry_id \u91CD\u6D3E\uFF09`
+          r2.ok ? `\u7F16\u6392\u6D3E\u5355\u5DF2\u53D7\u7406\uFF08entry=${cardId} dispatch=${dr3?.dispatch_id?.slice(0, 8) ?? ""}${dr3?.queued ? ` \xB7 \u6392\u961F\uFF08${dr3?.queue_reason === "pool-empty" ? "\u6C60\u7A7A\u7A97" : "\u5E2D\u4F4D\u5FD9"}\uFF09` : ""}${payload.redispatch_of ? " \u91CD\u6295" : ""}\uFF09` : `${r2.error}\uFF08task_ref=${cardId} \u5DF2\u5165\u8D26\uFF0C\u53EF\u5E26 entry_id \u91CD\u6D3E\uFF09`
         );
         if (!r2.ok) return { ok: false, error: `${r2.error}\uFF08task_ref=${cardId} \u5DF2\u5165\u8D26\uFF0C\u53EF\u5E26 entry_id \u91CD\u6D3E\uFF09` };
-        return { ok: true, data: { entity_id: cardId, gid, task_ref: cardId, blocked: false, dispatch_id: dr3?.dispatch_id ?? "", session_id: dr3?.session_id ?? "", ...dr3?.queued ? { queued: true } : {} } };
+        return { ok: true, data: { entity_id: cardId, gid, task_ref: cardId, blocked: false, dispatch_id: dr3?.dispatch_id ?? "", session_id: dr3?.session_id ?? "", ...dr3?.queued ? { queued: true } : {}, ...dr3?.queue_reason ? { queue_reason: dr3.queue_reason } : {}, ...typeof dr3?.active_workers === "number" ? { active_workers: dr3.active_workers } : {} } };
       }
       const prompt = typeof payload.prompt === "string" ? payload.prompt : "";
       if (!prompt.trim()) {
@@ -65317,10 +65378,10 @@ ${lines.join("\n")}
         g2?.anchor_dir ?? anchorDir,
         tier,
         r.ok,
-        r.ok ? `\u6D3E\u5355\u5DF2\u53D7\u7406\uFF08dispatch=${dr2?.dispatch_id?.slice(0, 8) ?? ""}${dr2?.queued ? " \xB7 \u7F16\u5236\u89E6\u9876\u6392\u961F" : ""}\uFF09` : r.error
+        r.ok ? `\u6D3E\u5355\u5DF2\u53D7\u7406\uFF08dispatch=${dr2?.dispatch_id?.slice(0, 8) ?? ""}${dr2?.queued ? ` \xB7 \u6392\u961F\uFF08${dr2?.queue_reason === "pool-empty" ? "\u6C60\u7A7A\u7A97" : "\u5E2D\u4F4D\u5FD9"}\uFF09` : ""}\uFF09` : r.error
       );
       if (!r.ok) return { ok: false, error: r.error };
-      return { ok: true, data: { entity_id: dr2?.session_id ?? "", gid: gid || null, dispatch_id: dr2?.dispatch_id ?? "", session_id: dr2?.session_id ?? "", ...dr2?.queued ? { queued: true } : {} } };
+      return { ok: true, data: { entity_id: dr2?.session_id ?? "", gid: gid || null, dispatch_id: dr2?.dispatch_id ?? "", session_id: dr2?.session_id ?? "", ...dr2?.queued ? { queued: true } : {}, ...dr2?.queue_reason ? { queue_reason: dr2.queue_reason } : {}, ...typeof dr2?.active_workers === "number" ? { active_workers: dr2.active_workers } : {} } };
     }
     if (action === "lesson-append") {
       const gid = typeof payload.gid === "string" ? payload.gid.trim() : "";
@@ -65448,16 +65509,23 @@ ${lines.join("\n")}
     try {
       switch (action) {
         case "status": {
+          const openRows = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched" || e.status === "queued").slice(-20);
           return {
             ok: true,
             data: {
               groups: listGroups(),
               pending: listPendingConfirms(),
-              open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20),
+              open: openRows.map((e) => ({
+                ...e,
+                ...e.session_id && e.status !== "queued" ? { worker_liveness: this.realLivenessOfSid(e.session_id) } : {}
+              })),
               // #279 值守 PM 视图（dutyTargetId 口径；无在岗 PM 带提示——Leader 会话/
               // 野生编排会话据此决定分诊暂缓或走接管）。leader_session_id 为遗留字段
               // 不在此依赖（修正④）。
-              pm: this.pmDutyStatus()
+              pm: this.pmDutyStatus(),
+              // W-DISPATCHFIX：池真态一览（PM 一眼判「排队=真忙还是死等」）
+              workers_real_active: this.realActiveManagedCount(),
+              workers_status_active: this.activeManagedCount()
             }
           };
         }
@@ -66534,7 +66602,14 @@ ${lines.join("\n")}
             if (a && a === g2.anchor_dir.replace(/\/+$/, "")) return true;
             return memberSids.has(e.session_id);
           }).slice(-30).reverse();
-          const receipts = receiptsRows.map((e) => ({ ...e, consumed: e.status === "done" || e.status === "failed" }));
+          const receipts = receiptsRows.map((e) => ({
+            ...e,
+            consumed: e.status === "done" || e.status === "failed",
+            // W-DISPATCHFIX 验收③：派单单态同源真活性——claimed（dispatched/running）
+            // 行带承接 worker 真态；dead=「失联」（非「在跑」——1119 夜在审假态根治）。
+            // queued/终态行不带（无承接者/已收口）。
+            ...e.session_id && (e.status === "dispatched" || e.status === "running") ? { worker_liveness: this.realLivenessOfSid(e.session_id) } : {}
+          }));
           const pool = routingFor(g2.id).map((e) => {
             const s = this.sessions.get(e.session_id);
             return {
@@ -66550,7 +66625,10 @@ ${lines.join("\n")}
               /** 可拉起：在册且有 SDK resume 句柄；false = 退休（只剩路由表档案） */
               resumable: !!s && !!s.state.relay_session_id,
               /** 随本组挂起休眠（org_parked 指回本组） */
-              parked: s?.state.org_parked === g2.id
+              parked: s?.state.org_parked === g2.id,
+              /** W-DISPATCHFIX 验收③：成员真活性（进程/帧复合，显示级）——板面成员
+               *  活性列数据源（busy 是 status 声明，本字段是活证据；两者分立消费） */
+              liveness: this.realLivenessOfSid(e.session_id)
             };
           });
           const projection = (() => {
@@ -67317,6 +67395,35 @@ ${lines.join("\n")}
       void this.dispatchWorker({ ...input, queue_replay: dispatchId, retry_of: dispatchId });
     });
   }
+  /** W-DISPATCHFIX 验收④：同 slug 去重闸（dispatchWorker 两调用点共用——全局帽
+   * 排队分支[入队前]与主流程[trigger_key 闸后]）。查重域=台账收敛视图（queued 行也
+   * 带 slug——入队即锚）∪ 内存队列项兜底。命中→响亮拒收（failed 行记因+
+   * duplicate_of 回执对账键+链审计），板面零重复记账。内部段链（queue_replay/
+   * retry_of/redispatch_of=同 id 续行）豁免；无 slug（随手办/内部单）零影响。 */
+  slugDupGate(input, tier, anchor, actor, triggerKey) {
+    if (input.queue_replay || input.retry_of || input.redispatch_of) return null;
+    const slug = input.slug?.trim();
+    if (!slug) return null;
+    const dupRow = findInFlightBySlug(slug);
+    const dup = dupRow ?? this.dispatchQueueItems.find((x) => x.input.slug === slug)?.dispatch_id ?? null;
+    if (!dup) {
+      const orphan = this.headlessOrphanBySlug(slug);
+      if (orphan) {
+        const msg2 = `\u540C slug \u62D2\u6536\uFF08headless \u5B64\u513F\u5728\u8DD1\uFF09\uFF1Aslug=${slug} \u7684 headless \u5355 ${orphan.id.slice(0, 8)} \u8FDB\u7A0B pid=${orphan.pid} \u4ECD\u6D3B\uFF08\u884C\u6001 ${orphan.status}\u2014\u2014\u884C\u6001\u5F02\u5E38\u4E5F\u4E0D\u653E\u884C\uFF0C\u9632\u540C\u6811\u53CC\u8DD1\uFF09\uFF0C\u786E\u8BA4\u5B64\u513F\u72B6\u6001\uFF08\u6536\u53E3/\u6536\u5272\uFF09\u6216\u6362 --slug \u91CD\u6D3E`;
+        appendDispatch({ ts: Date.now(), id: randomUUID13(), tier, target: "dispatch-gate", status: "failed", receipt: truncate2(msg2, 200), session_id: "", ...anchor ? { project_anchor: anchor } : {}, actor, failure_reason: "logic_error", slug, trigger_key: triggerKey });
+        this.emitChainAudit("dispatch-slug-dup", `\u540C slug \u62D2\u6536\uFF08headless \u5B64\u513F\uFF09\uFF1Aslug=${slug} \u5355 ${orphan.id.slice(0, 8)} pid=${orphan.pid} \u6D3B\uFF08\u884C\u6001 ${orphan.status}\uFF09\u2014\u2014\u672C\u5355\u672A\u6D3E\u53D1`);
+        console.warn(`[dispatch] slug-dup-reject(headless-orphan) slug=${slug} pid=${orphan.pid} row=${orphan.id.slice(0, 8)} status=${orphan.status}`);
+        return { ok: false, error: msg2, duplicate_of: orphan.id };
+      }
+      return null;
+    }
+    const last = readDispatchLog().find((e) => e.id === dup);
+    const msg = `\u540C slug \u5728\u9014\u62D2\u6536\uFF1Aslug=${slug} \u5DF2\u6709\u5728\u9014\u5355 ${dup.slice(0, 8)}\uFF08${last?.status ?? "queued\uFF08\u961F\u5217\u4E2D\uFF09"}\uFF09\u2014\u2014\u540C\u6811\u53CC\u6D3E=\u649E\u8F66\u4E8B\u6545\u6E90\uFF081101 \u5B9A\u6027 P0\uFF09\uFF0C\u7B49\u8BE5\u5355\u7EC8\u6001\u6216\u6362 --slug \u91CD\u6D3E`;
+    appendDispatch({ ts: Date.now(), id: randomUUID13(), tier, target: "dispatch-gate", status: "failed", receipt: truncate2(msg, 200), session_id: "", ...anchor ? { project_anchor: anchor } : {}, actor, failure_reason: "logic_error", slug, trigger_key: triggerKey });
+    this.emitChainAudit("dispatch-slug-dup", `\u540C slug \u62D2\u6536\uFF1Aslug=${slug} \u5728\u9014\u5355 ${dup.slice(0, 8)}\u2014\u2014\u672C\u5355\u672A\u6D3E\u53D1\uFF08\u677F\u9762\u96F6\u91CD\u590D\u8BB0\u8D26\uFF09`);
+    console.warn(`[dispatch] slug-dup-reject slug=${slug} in_flight=${dup.slice(0, 8)} title=${truncate2(input.title?.trim() || input.prompt.split("\n")[0] || "", 40)}`);
+    return { ok: false, error: msg, duplicate_of: dup };
+  }
   dispatchWorker(input) {
     if (!input.prompt.trim()) return { ok: false, error: "prompt \u5FC5\u586B" };
     if (this.dispatchQueueItems.length >= 200) {
@@ -67324,15 +67431,20 @@ ${lines.join("\n")}
     }
     if (this.activeManagedCount() >= workerConcurrencyCap()) {
       const cap = workerConcurrencyCap();
+      const sg2 = this.slugDupGate(input, "\u6B63\u7ECF\u7ACB\u9879", input.anchor, input.actor?.trim() || "leader", dispatchTriggerKey(input));
+      if (sg2) return sg2;
+      const realActive = this.realActiveManagedCount();
+      const poolEmpty = realActive === 0;
       const dispatchId2 = randomUUID13();
       const item = { dispatch_id: dispatchId2, enqueued_at: Date.now(), input: { ...input } };
       this.dispatchQueueItems = [...this.dispatchQueueItems, item];
       if (!saveDispatchQueue(this.dispatchQueueItems)) console.warn("[dispatch-queue] \u5168\u5C40\u5E3D\u6392\u961F\u843D\u76D8\u5931\u8D25\uFF08\u5185\u5B58\u961F\u5217\u6709\u6548\uFF0C\u91CD\u542F\u8BE5\u5355\u4E22\u5931\uFF09");
       const titleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
-      appendDispatch({ ts: Date.now(), id: dispatchId2, tier: "\u6B63\u7ECF\u7ACB\u9879", target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate2(`${titleSeg}\u5168\u5C40\u5E76\u53D1\u89E6\u9876\uFF08${this.activeManagedCount()}/${cap}\uFF09\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u4F4D\uFF08429 \u9650\u6D41\u6CBB\u7406\uFF09`, 200), session_id: "", project_anchor: input.anchor, ...input.actor ? { actor: input.actor } : {}, trigger_key: dispatchTriggerKey(input) });
-      this.emitChainAudit("worker-cap", `\u5168\u5C40\u5E76\u53D1\u95F8\uFF1A${this.activeManagedCount()}/${cap} \u89E6\u9876\uFF0C\u5355 ${dispatchId2.slice(0, 8)} \u6392\u961F\uFF08\u961F\u5217 ${this.dispatchQueueItems.length}\uFF09`);
-      console.log(`[dispatch] worker-cap queued id=${dispatchId2.slice(0, 8)} pos=${this.dispatchQueueItems.length}\uFF08${this.activeManagedCount()}/${cap}\uFF09`);
-      return { ok: true, dispatch_id: dispatchId2, session_id: "", queued: true };
+      appendDispatch({ ts: Date.now(), id: dispatchId2, tier: "\u6B63\u7ECF\u7ACB\u9879", target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate2(poolEmpty ? `${titleSeg}\u5168\u5C40\u5E3D\u663E\u793A\u89E6\u9876\uFF08${this.activeManagedCount()}/${cap}\uFF09\u4F46\u771F\u6D3B\u6027 worker=0\uFF08\u6C60\u7A7A\u7A97\u2014\u2014\u6B7B\u4F1A\u8BDD\u5360\u4F4D\uFF09\u2014\u2014\u81EA\u52A8\u62C9\u8D77 headless \u6D88\u8D39\u8005` : `${titleSeg}\u5168\u5C40\u5E76\u53D1\u89E6\u9876\uFF08\u771F\u6D3B ${realActive}/${cap}\uFF09\u2014\u2014\u5E2D\u4F4D\u5FD9\u6392\u961F\u7B49\u5F85\u7A7A\u4F4D\uFF08429 \u9650\u6D41\u6CBB\u7406\uFF09`, 200), session_id: "", project_anchor: input.anchor, ...input.actor ? { actor: input.actor } : {}, ...input.slug ? { slug: input.slug } : {}, trigger_key: dispatchTriggerKey(input) });
+      this.emitChainAudit("worker-cap", `\u5168\u5C40\u5E76\u53D1\u95F8\uFF1A${this.activeManagedCount()}/${cap} \u89E6\u9876\uFF0C\u5355 ${dispatchId2.slice(0, 8)} \u6392\u961F\uFF08\u961F\u5217 ${this.dispatchQueueItems.length}\uFF09\u2014\u2014\u771F\u6D3B ${realActive}${poolEmpty ? "\uFF08\u6C60\u7A7A\u7A97\uFF09" : ""}`);
+      console.log(`[dispatch] worker-cap queued id=${dispatchId2.slice(0, 8)} pos=${this.dispatchQueueItems.length}\uFF08${this.activeManagedCount()}/${cap}\uFF0C\u771F\u6D3B ${realActive}${poolEmpty ? " \u6C60\u7A7A\u7A97" : ""}\uFF09`);
+      if (poolEmpty) this.maybeSpawnHeadlessConsumer("global-cap");
+      return { ok: true, dispatch_id: dispatchId2, session_id: "", queued: true, queue_reason: poolEmpty ? "pool-empty" : "seats-busy", active_workers: realActive };
     }
     if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84" };
     let tier = "\u968F\u624B\u529E";
@@ -67416,6 +67528,8 @@ ${lines.join("\n")}
         return { ok: false, error: msg, duplicate_of: dup };
       }
     }
+    const slugGate = this.slugDupGate(input, tier, anchor, actor, triggerKey);
+    if (slugGate) return slugGate;
     console.log(`[dispatch] start id=${dispatchId.slice(0, 8)} tier=${tier} gid=${input.gid ?? "-"} actor=${actor} engine=${planned.engine ?? "-"} title=${truncate2(input.title?.trim() || input.prompt.split("\n")[0] || "", 60)}`);
     if (typeof input.target_sid === "string" && input.target_sid && this.isReviewerSeat(input.target_sid) && input.review_only !== true) {
       this.emitChainAudit("dispatch-reroute", `review-seat \u5B88\u536B\u62D2\u6D3E\uFF1A\u8BC4\u5BA1\u5E2D ${input.target_sid.slice(0, 12)} \u4E0D\u63A5\u5B9E\u65BD\u7C7B\u5355\uFF08review_only \u7F3A\uFF09\u2014\u2014\u6539\u6D3E worker \u6216\u8865 review_only`);
@@ -67669,7 +67783,7 @@ ${lines.join("\n")}
       const clash = withStorageTx(void 0, () => {
         const c = readDispatchLogFile().find((e) => e.session_id === veteran && e.id !== dispatchId && (e.status === "dispatched" || e.status === "running"));
         if (!c) {
-          const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", event: "dispatch-reused", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+          const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: veteran, status: "dispatched", event: "dispatch-reused", session_id: veteran, project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...input.slug ? { slug: input.slug } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
           if (!okd) {
             appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran, status: "failed", receipt: truncate2("dispatched \u884C\u843D\u8D26\u88AB\u62D2\uFF08\u951A\u5E42\u7B49/\u5199\u4E25\u683C\uFF09\u2014\u2014\u672C\u5355\u672A\u6D3E\u53D1\uFF08\u626B\u63CF\u884C\u8865\u507F\u6536\u53E3\uFF0CW-BOARDV2\uFF09", 200), session_id: veteran, project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields, generation: dispatchGeneration });
           }
@@ -67685,7 +67799,7 @@ ${lines.join("\n")}
     } else {
       seatScan.push("\u843D\u5E2D:\u65B0\u5EFA\u4F1A\u8BDD\uFF08spawn\uFF09");
       emitSeatScanRow();
-      const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", event: "dispatch-spawned", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
+      const okd = appendDispatch({ ts: dispatchGeneration, id: dispatchId, tier, target: "spawn-pending", status: "dispatched", event: "dispatch-spawned", session_id: "", project_anchor: anchor, actor, ...input.title ? { title: input.title } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...input.slug ? { slug: input.slug } : {}, ...engineFields, ...input.no_pr === true ? { no_pr: true } : {}, ...input.exclude_sessions?.length ? { exclude_sessions: input.exclude_sessions } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {}, trigger_key: triggerKey });
       if (!okd) {
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate2("dispatched \u884C\u843D\u8D26\u88AB\u62D2\uFF08\u951A\u5E42\u7B49/\u5199\u4E25\u683C\uFF09\u2014\u2014\u672C\u5355\u672A\u6D3E\u53D1\uFF08\u626B\u63CF\u884C\u8865\u507F\u6536\u53E3\uFF0CW-BOARDV2\uFF09", 200), session_id: "", project_anchor: anchor, actor, failure_reason: "logic_error", ...engineFields, generation: dispatchGeneration });
       }
@@ -67801,11 +67915,11 @@ ${msg2}`);
         return { ok: false, error: am2.error ?? "\u5165\u7F16\u5931\u8D25" };
       }
     }
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...engineFields, generation: dispatchGeneration, trigger_key: triggerKey });
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor, ...input.slug ? { slug: input.slug } : {}, ...engineFields, generation: dispatchGeneration, trigger_key: triggerKey });
     console.log(`[dispatch] running id=${dispatchId.slice(0, 8)} sid=${sessionId.slice(0, 14)} role=${role}`);
     const receiptRel = /~\/\.cc-deck\/artifacts\/(w-[a-z0-9-]+\.md)/i.exec(input.prompt)?.[1];
     const receiptPath = receiptRel ? join60(artifactsDir(), receiptRel.split("/").pop() ?? "") : void 0;
-    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...receiptPath ? { receiptPath } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {} });
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor, ...engineFields, ...receiptPath ? { receiptPath } : {}, ...input.retry_of ? { retry_of: input.retry_of } : {}, ...input.slug ? { slug: input.slug } : {}, generation: dispatchGeneration, ...taskSnapshot ? { task_snapshot: taskSnapshot } : {} });
     if (input.gid) {
       let claimEntryId = input.entry_id;
       if (!claimEntryId) {
@@ -68265,6 +68379,460 @@ ${out}`;
     }
     return n;
   }
+  // ── W-DISPATCHFIX（1120 用户军令级·治本单）：真活性单源 + 池空窗 headless 拉起 ──
+  // 三现根因同族：编排层把 status 声明当活证据（WORKING 假态/queued 假忙/在审假挂）。
+  // 本段立真活性单源（进程存在性+帧龄复合），消费面三处：queued 语义分叉（验收①）、
+  // 池空窗自动拉起（验收②）、板面/单态真态穿透（验收③）。判定窗与保守收口链
+  //（W-DRAINFIX 两轮确认 30min）刻意分层：显示/派发面 5min 快窗（用户看得见的真），
+  // 收口/回收面维持既有保守窗（误杀代价不对称——显示错=误导，收口错=丢工）。
+  /** 真活性三态（sid 口径）。alive=进程活（kill-0 且未换代）或帧龄 ≤5min 或 SDK 流活；
+   * between-turns=回合间隙守位（SEATALIVE 刀1 语义，帧龄 ≤CCR_SEAT_TURN_GAP_MIN
+   * 缺省 30min——外部 CLI 回合结束进程退出是合法生命周期）；dead=进程死/无流且帧龄
+   * 超窗。pmOverrideLiveness 的会话现值变体（无 override 换代差面）。 */
+  realLivenessOfSid(sid) {
+    const s = this.sessions.get(sid);
+    if (!s) return "dead";
+    const pid = s.state.cli_pid ?? 0;
+    const stallMs = (Number(process.env.CCR_WORKER_STALL_DISPLAY_MIN) || 5) * 6e4;
+    const frameAt = this.cachedFrameAge(sid);
+    if (pid > 0) {
+      try {
+        process.kill(pid, 0);
+        return "alive";
+      } catch {
+      }
+    } else if (!s.state.external && s.agent && s.wd && this.agentStreamAlive(s)) {
+      return "alive";
+    }
+    if (frameAt !== null && Date.now() - frameAt <= stallMs) return "alive";
+    const gapMin = Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30;
+    if (frameAt !== null && Date.now() - frameAt <= gapMin * 6e4) return "between-turns";
+    return "dead";
+  }
+  /** 显示级活性（验收③板面真态）：status∈{WORKING,WAITING} 的会话才有意义——声明
+   * 在干活但进程死+帧超显示窗=停摆（dead）。与 realLivenessOfSid 的差异：pid 已死时
+   * 不给 between-turns 缓冲到 30min（声明在忙的会话，进程死+5min 无帧=假态实锤——
+   * 1119 夜 worker 01:32 死板面示在审 80min 盲区的照妖镜）；realLivenessOfSid 的
+   * between-turns 归 DONE/空闲席位（守位不误清）。 */
+  displayLivenessOf(s) {
+    if (s.state.status !== "WORKING" && s.state.status !== "WAITING") return void 0;
+    const pid = s.state.cli_pid ?? 0;
+    const stallMs = (Number(process.env.CCR_WORKER_STALL_DISPLAY_MIN) || 5) * 6e4;
+    const frameAt = this.cachedFrameAge(s.state.session_id);
+    if (pid > 0) {
+      try {
+        process.kill(pid, 0);
+        return "alive";
+      } catch {
+      }
+    } else if (!s.state.external && s.agent && s.wd && this.agentStreamAlive(s)) {
+      return "alive";
+    }
+    if (frameAt !== null && Date.now() - frameAt <= stallMs) return "alive";
+    if (pid <= 0 && !(!s.state.external && s.agent)) {
+      const gapMin = Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30;
+      if (frameAt !== null && Date.now() - frameAt <= gapMin * 6e4) return "between-turns";
+    }
+    return "dead";
+  }
+  /** 帧龄尾扫缓存（5s TTL）：lastFrameAtFromEvents 每次全尾扫 events.ndjson，快照/
+   * 心跳高频面直扫会把 IO 放大 N 倍——短窗缓存吸收（活性变化以 10s 级可见即满足
+   * 「5min 内显停摆」验收，缓存不损语义）。 */
+  frameAgeCache = /* @__PURE__ */ new Map();
+  cachedFrameAge(sid) {
+    const hit = this.frameAgeCache.get(sid);
+    if (hit && Date.now() - hit.ts < 5e3) return hit.at;
+    let at = null;
+    try {
+      at = lastFrameAtFromEvents(this.cfg.dataDir, sid);
+    } catch {
+      at = null;
+    }
+    if (this.frameAgeCache.size > 500) this.frameAgeCache.clear();
+    this.frameAgeCache.set(sid, { at, ts: Date.now() });
+    return at;
+  }
+  /** 真活性在位 worker 计数（全局帽口径的真相面）：activeManagedCount 的同域过滤
+   * （managed+agent+WORKING/WAITING+wd-stall 剔除）再叠加真活性（alive/between-turns
+   * 都算占位——between-turns 的席位 drain 可 resume 接单，是潜在消费者）。 */
+  realActiveManagedCount() {
+    let n = 0;
+    for (const s of this.sessions.values()) {
+      if (s.state.action_summary === "wd-stall") continue;
+      if (!s.state.external && s.agent && (s.state.status === "WORKING" || s.state.status === "WAITING")) {
+        const l = this.realLivenessOfSid(s.state.session_id);
+        if (l === "alive" || l === "between-turns") n++;
+      }
+    }
+    return n;
+  }
+  /** 组内真活性 worker 计数（编制闸口径的真相面）：groupHasLiveWorker 的「忙=活」
+   * status 判据叠真活性——死透滞留 WORKING 的席位不再算「活席」（1120 晨现三：
+   * 表象活席都在忙、实际池空窗死等）。 */
+  realGroupLiveWorkers(g2) {
+    let n = 0;
+    for (const h of g2.headcount) {
+      const s = this.sessions.get(h.session_id);
+      if (!s || s.state.external) continue;
+      const l = this.realLivenessOfSid(h.session_id);
+      if (l === "alive" || l === "between-turns") n++;
+    }
+    return n;
+  }
+  /** W-DISPATCHFIX 验收②：池空窗自动拉起 headless 消费者（1120 晨手动止血的制度化
+   * ——「headless claude -p 直接起 worker」三次成功的批D 交付/双审/返修全此法）。
+   * 触发：dispatch 排队且真活 worker=0（无消费者死等）；或 sweep 周期拍发现队列
+   * 非空+池空。动作：claude -p 消费队首单（日志落盘+台账全程留痕+退出收口）。
+   * 并发闸遵守：全局帽（W-RATELIMIT429 CCR_WORKER_CONCURRENCY_CAP——真活+在途
+   * headless 合计不得过帽）+#89 活性闸语义（活会话在场即非池空窗，本口天然不触发
+   * ——池空判定即活性闸）。拉起失败：/api/notify 语义升级 PM（upsertNotification
+   * attention 档+notifyLeaderSystem），单留队列等下一拍，绝不静默。 */
+  /** headless 在途账（返修 fix2·r2 P1：重构为**派生非累积**）。fix1 的整数计数器把重挂
+   * 孤儿回填进去且只上调不下调——孤儿收口无人减，单飞闸永久 single-flight、池空窗
+   * headless 拉起哑火到下次 relay 重启（S8 手工清零位即绕过缺陷的实证）。两口：
+   *  - 本进程在途 = headlessChildren 键数：spawn 成功入表、exit|error 出表（Map.delete
+   *    幂等——旧计数器 error/exit 双发各减一次=多减，靠 max(0) 钳位遮丑）；
+   *  - 重挂孤儿在途 = headlessOrphansInFlight：sweepHeadlessRows 每拍按「pid 活的
+   *    running headless 行且不属本进程」重算——上拍计入的孤儿本拍已收口即自然回落，
+   *    不依赖任何收口路径记得减（「收口漏减」这一类缺陷从此无处发生）。
+   *  合计进单飞闸与并发帽（同口径）。 */
+  headlessChildren = /* @__PURE__ */ new Map();
+  headlessOrphansInFlight = 0;
+  headlessSpawnCooldownUntil = 0;
+  /** headless 在途合计（本进程子进程+重挂孤儿）——单飞闸/并发帽唯一取数口；
+   *  public=测试/观测只读缝（dispatchQueueSize 同款）。 */
+  headlessInFlight() {
+    return this.headlessChildren.size + this.headlessOrphansInFlight;
+  }
+  maybeSpawnHeadlessConsumer(trigger) {
+    if (process.env.CCR_NO_HEADLESS_SPAWN === "1") return { spawned: false, reason: "disabled" };
+    if (this.dispatchQueueItems.length === 0) return { spawned: false, reason: "queue-empty" };
+    if (this.headlessOrphansInFlight > 0) {
+      try {
+        this.sweepHeadlessRows();
+      } catch {
+      }
+    }
+    const inFlight2 = this.headlessInFlight();
+    if (inFlight2 > 0) return { spawned: false, reason: "single-flight" };
+    const now = Date.now();
+    if (now < this.headlessSpawnCooldownUntil) return { spawned: false, reason: "cooldown" };
+    if (this.realActiveManagedCount() + inFlight2 >= workerConcurrencyCap()) {
+      this.emitChainAudit("headless-spawn", `\u6C60\u7A7A\u7A97\u62C9\u8D77\u8BA9\u4F4D\u5168\u5C40\u5E3D\uFF08\u771F\u6D3B ${this.realActiveManagedCount()}+\u5728\u9014 ${inFlight2} \u2265 ${workerConcurrencyCap()}\uFF09\u2014\u2014trigger=${trigger}`);
+      return { spawned: false, reason: "cap" };
+    }
+    const next = this.dispatchQueueItems[0];
+    const input = next.input;
+    if (input.engine && input.engine !== "claude") {
+      this.headlessSpawnCooldownUntil = now + 2 * 6e4;
+      const msg = `\u6C60\u7A7A\u7A97\uFF08\u6D3B worker=0\uFF09\u4E14\u961F\u9996\u5355\u4E3A\u975E claude \u5F15\u64CE\uFF08${input.engine}\uFF09\u2014\u2014headless \u62C9\u8D77\u4E0D\u9002\u7528\uFF0C\u5355 ${next.dispatch_id.slice(0, 8)} \u7559\u961F\uFF0C\u4EBA\u5DE5\u5206\u8BCA`;
+      this.emitChainAudit("headless-spawn", msg + ` trigger=${trigger}`);
+      try {
+        this.upsertNotification("system", `headless-engine-${next.dispatch_id.slice(0, 8)}`, this.leaderId ?? "leaderless", {
+          title: "\u6C60\u7A7A\u7A97\u62C9\u8D77\u4E0D\u9002\u7528\uFF08\u5F15\u64CE\u9762\uFF09",
+          body: msg,
+          severity: "waiting",
+          group: "attention",
+          actionable: true,
+          domain: "session",
+          returnPath: "/"
+        });
+        this.notifyLeaderSystem(msg);
+      } catch {
+      }
+      return { spawned: false, reason: "engine" };
+    }
+    if (process.env.CCR_HEADLESS_CLAUDE) {
+      if (!existsSync40(process.env.CCR_HEADLESS_CLAUDE)) {
+        this.escalateHeadlessFailure(next, trigger, `CCR_HEADLESS_CLAUDE \u8986\u76D6\u4F4D\u4E0D\u5B58\u5728: ${process.env.CCR_HEADLESS_CLAUDE}`);
+        return { spawned: false, reason: "bad-override" };
+      }
+    } else {
+      const cli = resolveClaudeCliPath();
+      if (!cli) {
+        this.escalateHeadlessFailure(next, trigger, "claude CLI \u4E0D\u53EF\u5BFB\uFF08resolveClaudeCliPath \u7A7A\u2014\u2014\u5B89\u88C5/PATH \u6838\u5BF9\uFF09");
+        return { spawned: false, reason: "no-cli" };
+      }
+    }
+    const bin = process.env.CCR_HEADLESS_CLAUDE || resolveClaudeCliPath() || "claude";
+    const logDir = join60(this.cfg.dataDir, "headless-workers");
+    const logPath = join60(logDir, `${next.dispatch_id.slice(0, 8)}-${Date.now()}.log`);
+    try {
+      mkdirSync29(logDir, { recursive: true });
+    } catch {
+    }
+    const cwd = input.worktree || input.anchor;
+    const gid = input.gid;
+    const tier = (gid ? findGroup(gid)?.tier : void 0) ?? "\u968F\u624B\u529E";
+    const actor = input.actor?.trim() || "leader";
+    let child;
+    const logFd = (() => {
+      try {
+        return openSync5(logPath, "a");
+      } catch {
+        return void 0;
+      }
+    })();
+    if (typeof input.worktree === "string" && input.worktree) {
+      const cl2 = claimWorktreeLock(input.worktree, { slug: input.slug || next.dispatch_id, dispatch_id: next.dispatch_id });
+      if (!cl2.ok) {
+        this.emitChainAudit("headless-spawn", `\u6C60\u7A7A\u7A97\u62C9\u8D77\u8BA9\u4F4D worktree \u9501\uFF1Awt=${input.worktree} \u88AB ${cl2.held?.dispatch_id?.slice(0, 8) ?? cl2.held?.slug ?? "?"} \u6301\u6709\u2014\u2014\u5355 ${next.dispatch_id.slice(0, 8)} \u7559\u961F\uFF0Ctrigger=${trigger}\uFF08\u9632\u540C\u6811\u53CC\u8DD1\uFF09`);
+        return { spawned: false, reason: "worktree-busy" };
+      }
+    }
+    const rcPath = join60(logDir, `${next.dispatch_id.slice(0, 8)}.rc`);
+    const shellCmd = `${JSON.stringify(bin)} -p --dangerously-skip-permissions; __cc_rc=$?; printf '%s' "$__cc_rc" > ${JSON.stringify(rcPath)} 2>/dev/null; exit "$__cc_rc"`;
+    try {
+      child = spawn6("/bin/sh", ["-c", shellCmd], {
+        cwd: existsSync40(cwd) ? cwd : process.env.HOME || cwd,
+        detached: true,
+        stdio: ["pipe", logFd ?? "ignore", logFd ?? "ignore"],
+        env: { ...process.env }
+      });
+    } catch (e) {
+      if (logFd !== void 0) {
+        try {
+          closeSync5(logFd);
+        } catch {
+        }
+      }
+      this.escalateHeadlessFailure(next, trigger, `spawn \u5F02\u5E38: ${e instanceof Error ? e.message : String(e)}`);
+      return { spawned: false, reason: "spawn-error" };
+    }
+    this.headlessChildren.set(next.dispatch_id, child);
+    this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== next.dispatch_id);
+    saveDispatchQueue(this.dispatchQueueItems);
+    const pid = typeof child.pid === "number" ? child.pid : 0;
+    const titleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
+    appendDispatch({ ts: Date.now(), id: next.dispatch_id, tier, target: `headless:${pid || "?"}`, status: "running", event: "dispatch-headless", receipt: truncate2(`${titleSeg}\u6C60\u7A7A\u7A97\u81EA\u52A8\u62C9\u8D77 headless worker\uFF08claude -p\uFF0Cpid=${pid || "?"}\uFF0C\u65E5\u5FD7 ${logPath}\uFF09\u2014\u2014trigger=${trigger}`, 200), session_id: "", ...input.anchor ? { project_anchor: input.anchor } : {}, actor, headless: true, ...input.slug ? { slug: input.slug } : {}, trigger_key: dispatchTriggerKey(input) });
+    this.emitChainAudit("headless-spawn", `\u6C60\u7A7A\u7A97\u62C9\u8D77 headless \u6D88\u8D39\u8005\uFF1A\u5355 ${next.dispatch_id.slice(0, 8)} pid=${pid || "?"} \u65E5\u5FD7=${logPath} trigger=${trigger}\uFF08\u961F\u5217\u4F59 ${this.dispatchQueueItems.length}\uFF09`);
+    console.log(`[dispatch] headless-spawn id=${next.dispatch_id.slice(0, 8)} pid=${pid || "?"} log=${logPath} trigger=${trigger}`);
+    if (gid) {
+      try {
+        const board = loadBoard(gid);
+        const taskRefId = input.entry_id ?? findContCard(board.entries || [], String(input.title || "")) ?? `t-${randomUUID13().slice(0, 8)}`;
+        const prev = board.entries.find((x) => x.id === taskRefId);
+        upsertBoardEntry(gid, prev ? { id: prev.id, text: prev.text, status: "claimed", owner_session: "", dispatch_id: next.dispatch_id, note: `${prev.note ? prev.note + " " : ""}[dispatchfix] \u6C60\u7A7A\u7A97 headless \u6D88\u8D39\uFF08dispatch=${next.dispatch_id.slice(0, 8)}\uFF09` } : { id: taskRefId, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "claimed", owner_session: "", dispatch_id: next.dispatch_id });
+        this.emitBoard(gid);
+      } catch {
+      }
+    }
+    try {
+      const head = gid ? `[task_ref:${input.entry_id ?? ""}] [gid:${gid}] ${input.title ?? ""}
+` : "";
+      child.stdin?.end(head + "\n" + input.prompt);
+    } catch {
+    }
+    child.unref();
+    let closed = false;
+    child.on("error", (e) => {
+      this.headlessChildren.delete(next.dispatch_id);
+      if (closed) return;
+      closed = true;
+      this.closeHeadlessDispatch(next, gid, tier, actor, input, "failed", `headless worker \u62C9\u8D77\u540E\u5373\u9519\uFF08${e.message}\uFF09\u2014\u2014\u65E5\u5FD7 ${logPath}`, logPath);
+    });
+    child.on("exit", (code, signal) => {
+      this.headlessChildren.delete(next.dispatch_id);
+      if (closed) return;
+      closed = true;
+      const rc2 = code ?? -1;
+      if (rc2 === 0) {
+        this.closeHeadlessDispatch(next, gid, tier, actor, input, "done", `headless worker \u6D88\u8D39\u5B8C\u6210\uFF08rc=0\uFF09\u2014\u2014\u4EA4\u4ED8\u8BC1\u636E\u89C1\u56DE\u6267/\u6811\uFF0C\u65E5\u5FD7 ${logPath}`, logPath);
+      } else {
+        this.headlessSpawnCooldownUntil = Date.now() + 2 * 6e4;
+        this.closeHeadlessDispatch(next, gid, tier, actor, input, "failed", `headless worker \u5F02\u5E38\u9000\u51FA\uFF08rc=${rc2}${signal ? ` signal=${signal}` : ""}\uFF09\u2014\u2014\u65E5\u5FD7 ${logPath}\uFF0C\u4EBA\u5DE5\u6838\u5BF9`, logPath);
+      }
+    });
+    return { spawned: true, reason: `pid=${pid || "?"}` };
+  }
+  /** headless 单收口（exit/error 边）：台账终态行+板卡翻态+锁随收口清——notifyDispatchClosed
+   * 复用（duty feed/锁清/审计/通知全链同款语义，workerSessionId 空=无席位归属）。 */
+  closeHeadlessDispatch(next, gid, tier, actor, input, status, receiptText, _logPath) {
+    try {
+      appendDispatch({ ts: Date.now(), id: next.dispatch_id, tier, target: "headless", status, receipt: truncate2(receiptText, 200), session_id: "", ...input.anchor ? { project_anchor: input.anchor } : {}, actor, headless: true, failure_reason: status === "failed" ? "logic_error" : void 0 });
+      if (gid) {
+        try {
+          const board = loadBoard(gid);
+          const taskRefId = next.input.entry_id ?? findContCard(board.entries || [], String(input.title || "")) ?? "";
+          const card = taskRefId ? board.entries.find((x) => x.dispatch_id === next.dispatch_id) ?? board.entries.find((x) => x.id === taskRefId) : board.entries.find((x) => x.dispatch_id === next.dispatch_id);
+          if (card) {
+            upsertBoardEntry(gid, status === "done" ? { id: card.id, text: card.text, status: "done", owner_session: card.owner_session, dispatch_id: next.dispatch_id } : { id: card.id, text: card.text, status: "backlog", owner_session: "", dispatch_id: next.dispatch_id, note: `${card.note ? card.note + " " : ""}[dispatchfix] headless \u6D88\u8D39\u5931\u8D25\u56DE\u5F85\u529E` });
+            this.emitBoard(gid);
+          }
+        } catch {
+        }
+      }
+      this.notifyDispatchClosed({ id: next.dispatch_id, tier, ...gid ? { gid } : {}, ...input.anchor ? { anchor: input.anchor } : {}, actor }, status, receiptText, "");
+      this.emitOrgState();
+    } catch (e) {
+      console.error(`[dispatch] headless-close \u5931\u8D25 id=${next.dispatch_id.slice(0, 8)}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  /** 返修 fix1（P1-1①）：headless rc 落盘读取——spawn 边 sh 包装把退出码写进
+   * data/headless-workers/<id8>.rc（8 字符 id 键与日志同目录）。relay 活着时 exit
+   * handler 直读 code 用不上它；重启后（handler 不在）这是 exit 语义唯一证据。 */
+  readHeadlessRc(dispatchId) {
+    try {
+      const raw = readFileSync50(join60(this.cfg.dataDir, "headless-workers", `${dispatchId.slice(0, 8)}.rc`), "utf-8").trim();
+      if (raw === "" || !/^\d+$/.test(raw)) return void 0;
+      return Number(raw);
+    } catch {
+      return void 0;
+    }
+  }
+  /** 返修 fix1（P1-1①）：死 headless 行按 rc 收口（boot 清扫与 sweep 重挂共用）。
+   * rc=0 → done、非 0 → failed（exit 语义还原——重启窗内完成的真交付不被记「中断」，
+   * 「面板所见即真实」）；板卡翻态对齐 closeHeadlessDispatch（done→done /
+   * failed→backlog 回待办）。gid 不在行上（快照在内存、重启即失），按 dispatch_id
+   * 扫全组板卡（moveEntryByDispatch 同款发现手法）。 */
+  closeDeadHeadlessRow(e, rc2, why) {
+    const status = rc2 === 0 ? "done" : "failed";
+    const receiptText = `headless worker \u9000\u51FA\uFF08rc=${rc2}\uFF0C${why}\uFF09\u2014\u2014\u4EA4\u4ED8\u8BC1\u636E\u89C1\u56DE\u6267/\u6811`;
+    try {
+      appendDispatch({ ts: Date.now(), id: e.id, tier: e.tier, target: "headless", status, receipt: truncate2(receiptText, 200), session_id: "", ...e.project_anchor ? { project_anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {}, headless: true, ...e.slug ? { slug: e.slug } : {}, failure_reason: status === "failed" ? "logic_error" : void 0 });
+      if (e.project_anchor) {
+        const bySt = listGroupsByStatus();
+        for (const g2 of [...bySt.active, ...bySt.parked]) {
+          try {
+            const card = loadBoard(g2.id).entries.find((x) => x.dispatch_id === e.id);
+            if (!card) continue;
+            upsertBoardEntry(g2.id, status === "done" ? { id: card.id, text: card.text, status: "done", owner_session: card.owner_session, dispatch_id: e.id } : { id: card.id, text: card.text, status: "backlog", owner_session: "", dispatch_id: e.id, note: `${card.note ? card.note + " " : ""}[dispatchfix] headless \u9000\u51FA rc=${rc2} \u56DE\u5F85\u529E` });
+            this.emitBoard(g2.id);
+          } catch {
+          }
+        }
+      }
+      if (status === "failed") this.headlessSpawnCooldownUntil = Date.now() + 2 * 6e4;
+      this.notifyDispatchClosed({ id: e.id, tier: e.tier, ...e.project_anchor ? { anchor: e.project_anchor } : {}, ...e.actor ? { actor: e.actor } : {} }, status, receiptText, "");
+      this.emitOrgState();
+      this.emitChainAudit("headless-reattach", `\u91CD\u6302\u6536\u53E3\uFF1A\u5355 ${e.id.slice(0, 8)} headless \u9000\u51FA rc=${rc2}\uFF08${why}\uFF09\u2192 ${status}`);
+    } catch (err) {
+      console.error(`[dispatch] headless-dead-close \u5931\u8D25 id=${e.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  /** 返修 fix1（P1-1①）：headless 在途行重挂收口拍（sweep 宿主，public=测试可直调）。
+   * boot 清扫放行的活 pid 行在此 poll：
+   *   pid 仍活 → 行保持 running（真在跑）；不属本进程的（上个 relay 生命周期拉起的
+   *     孤儿）计入 headlessOrphansInFlight——重启后本进程登记表为空，孤儿不计数=
+   *     并发帽/单飞闸失真；
+   *   pid 退 → rc 落盘在场按 exit 语义收口（done/failed），缺席=中断口径（语义
+   *     不可知，与 boot 清扫通用路径同款——旧形态行 rc 无处落）。
+   * 双收口防撞：行达终态后不再 running=本拍天然跳过；在途 exit handler 与本拍同
+   * 线程（事件先于定时器拍），无并发窗。
+   * 返修 fix2（r2 P1）：孤儿在途数每拍**重算**（非只上调的回填）——上拍计入的孤儿
+   * 本拍已收口即回落；收口路径（rc 两形态/中断/boot 清扫/任何旁路关行）零减计数
+   * 负担。另被 maybeSpawnHeadlessConsumer 闸前直调（孤儿快照刷新，不等本拍）。 */
+  sweepHeadlessRows(now = Date.now()) {
+    let own = 0;
+    let orphans = 0;
+    let closed = 0;
+    for (const e of readDispatchLog()) {
+      if (!e.headless || e.status !== "running") continue;
+      const pid = headlessPidOfRow(e);
+      if (pid === void 0) continue;
+      let alive2 = false;
+      try {
+        process.kill(pid, 0);
+        alive2 = true;
+      } catch {
+        alive2 = false;
+      }
+      if (alive2) {
+        if (this.headlessChildren.has(e.id)) own++;
+        else orphans++;
+        continue;
+      }
+      const rc2 = this.readHeadlessRc(e.id);
+      if (rc2 !== void 0) {
+        this.closeDeadHeadlessRow(e, rc2, "sweep \u91CD\u6302\u6536\u53E3\uFF08relay \u91CD\u542F\u7A97\u5185\u9000\u51FA\uFF09");
+        closed++;
+      } else {
+        const bySt = listGroupsByStatus();
+        this.closeHungRowAsInterrupted(e, [...bySt.active, ...bySt.parked].map((g2) => g2.id));
+        closed++;
+      }
+    }
+    if (orphans > this.headlessOrphansInFlight) {
+      this.emitChainAudit("headless-reattach", `\u91CD\u6302\u6536\u53E3\uFF1A${orphans} \u4E2A headless \u5B64\u513F\u4ECD\u6D3B\uFF08\u91CD\u542F\u540E\u5728\u9014\u8BA1\u6570\u5DF2\u56DE\u586B\u2014\u2014\u5E76\u53D1\u5E3D/\u5355\u98DE\u53E3\u5F84\u6062\u590D\uFF09\uFF0C\u7B49\u5F85\u771F\u5B9E\u9000\u51FA\u6536\u53E3`);
+    } else if (orphans < this.headlessOrphansInFlight) {
+      this.emitChainAudit("headless-reattach", `\u91CD\u6302\u6536\u53E3\uFF1Aheadless \u5B64\u513F\u5728\u9014 ${this.headlessOrphansInFlight}\u2192${orphans}\uFF08\u6536\u53E3\u540E\u56DE\u843D\u2014\u2014\u6C60\u7A7A\u7A97\u62C9\u8D77\u53EF\u91CD\u590D\uFF09`);
+    }
+    this.headlessOrphansInFlight = orphans;
+    return { live: own + orphans, closed };
+  }
+  /** 返修 fix1（P1-1②）：headless 孤儿查重（slug 闸补盲）——同 slug 的 headless 单
+   * 只要 target 里的 pid 还活着，**行态异常也不放行**（行被误收口/被别的路径关掉/
+   * 状态字段损坏——同树还有个真跑的 worker，新单进去=双跑，1101 P0 家族）。查重走
+   * 原始行（readDispatchLogRaw）：终态行 target="headless" 无 pid，收敛视图会把带
+   * pid 的 running 行收敛掉——孤儿证据只在原始行里。 */
+  headlessOrphanBySlug(slug) {
+    if (!slug) return null;
+    for (const e of readDispatchLogRaw()) {
+      if (!e.headless || e.slug !== slug) continue;
+      const pid = headlessPidOfRow(e);
+      if (pid === void 0) continue;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        continue;
+      }
+      return { id: e.id, pid, status: e.status };
+    }
+    return null;
+  }
+  /** headless 拉起失败升级（验收②：/api/notify 告警 PM 语义——relay 内等价单口：
+   * upsertNotification attention 档+notifyLeaderSystem 排队通知）。单**留队列**（下拍
+   * sweep 重试受 2min 退避），绝不丢单不静默。 */
+  escalateHeadlessFailure(item, trigger, why) {
+    this.headlessSpawnCooldownUntil = Date.now() + 2 * 6e4;
+    const msg = `\u6C60\u7A7A\u7A97 headless \u62C9\u8D77\u5931\u8D25\uFF1A\u5355 ${item.dispatch_id.slice(0, 8)}\uFF08${truncate2(String(item.input.title || item.input.prompt || ""), 40)}\uFF09\u2014\u2014${why}\uFF1B\u5355\u5DF2\u7559\u961F\u5217\uFF08\u9000\u907F 2min \u540E\u91CD\u8BD5\uFF09\uFF0C\u4EBA\u5DE5\u6838\u5BF9 dispatch \u94FE trigger=${trigger}`;
+    this.emitChainAudit("headless-spawn-failed", msg);
+    console.error(`[dispatch] headless-spawn-failed id=${item.dispatch_id.slice(0, 8)}: ${why}`);
+    try {
+      this.upsertNotification("system", `headless-fail-${item.dispatch_id.slice(0, 8)}-${this.stableKeyHint(why)}`, this.leaderId ?? "leaderless", {
+        title: "\u6C60\u7A7A\u7A97 headless \u62C9\u8D77\u5931\u8D25",
+        body: msg,
+        severity: "waiting",
+        group: "attention",
+        actionable: true,
+        domain: "session",
+        returnPath: "/"
+      });
+      this.notifyLeaderSystem(msg);
+    } catch {
+    }
+  }
+  /** W-DISPATCHFIX 验收⑤：终态单锁 GC——CCR_WT_ROOT 扫描 .cc-deck-lock，持锁
+   * dispatch_id 在台账已终态（failed/done）且树不脏 → 清锁。补的洞：收口边
+   * scanClearWorktreeLocks 只在 notifyDispatchClosed 路径跑，绕过该口的收口（台账
+   * 导入/回填/evict/relay 重启窗收的单）锁悬置到 2h 过期——「119min 死等」形态。
+   * 周期宿主=sweep（5min 一拍），O(worktree 数+一次台账收敛读)。脏树不清
+   * （W-TREEGC 守卫同款——锁=占位牌防裸奔）。 */
+  gcTerminalWorktreeLocks() {
+    let cleared = 0;
+    try {
+      const wtRoot = process.env.CCR_WT_ROOT ?? "/private/tmp";
+      const terminalIds = new Set(readDispatchLog(void 0, 500).filter((r) => r.status === "failed" || r.status === "done").map((r) => r.id));
+      if (!terminalIds.size) return 0;
+      for (const name of readdirSync16(wtRoot)) {
+        if (!name.includes("cc-deck-w")) continue;
+        const dir = join60(wtRoot, name);
+        const p = join60(dir, ".cc-deck-lock");
+        if (!existsSync40(p)) continue;
+        try {
+          const lock = JSON.parse(readFileSync50(p, "utf-8"));
+          if (!lock.dispatch_id || !terminalIds.has(lock.dispatch_id)) continue;
+          if (worktreeDirty(dir)) continue;
+          rmSync9(p, { force: true });
+          cleared++;
+          this.emitChainAudit("dispatch-lock-gc", `\u7EC8\u6001\u5355\u9501 GC\uFF1A${dir}\uFF08\u5355 ${lock.dispatch_id.slice(0, 8)} \u5DF2\u7EC8\u6001\uFF0C\u6811\u51C0\uFF09\u2014\u2014119min \u6B7B\u7B49\u5F62\u6001\u9000\u5F79`);
+        } catch {
+        }
+      }
+    } catch {
+    }
+    return cleared;
+  }
   // ---------- R1（B1-b）：429 退避态持久化（rate-limit-backoff.json 侧账） ----------
   // 纯内存态重启即失=风暴复活窗（B1）——boot 回灌进内存 map；revive/keepalive/选席
   // 判据统一走 backoffUntilOf 合并读（内存 ∨ 持久侧账）。
@@ -68328,11 +68896,14 @@ ${out}`;
     if (!saveDispatchQueue(this.dispatchQueueItems)) {
       console.warn("[dispatch-queue] \u6392\u961F\u843D\u76D8\u5931\u8D25\uFF08\u5185\u5B58\u961F\u5217\u6709\u6548\uFF0C\u91CD\u542F\u8BE5\u5355\u4E22\u5931\uFF09");
     }
+    const realLive = this.realGroupLiveWorkers(g2);
+    const poolEmpty = realLive === 0;
     const queuedTitleSeg = `\u3010${(input.title?.trim() || input.prompt.split("\n")[0] || "\u65E0\u9898").slice(0, 40)}\u3011`;
-    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate2(`${queuedTitleSeg}\u7F16\u5236\u5DF2\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, trigger_key: dispatchTriggerKey(input) });
-    console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g2.id} actor=${actor} title=${queuedTitleSeg}`);
-    this.pushExternalLog(this.leaderId ?? "", "system", `\u6D3E\u5355\u6392\u961F\uFF1A${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}\uFF08\u7F16\u5236 ${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)} \u89E6\u9876\u4E14\u5168\u5FD9\uFF0C\u961F\u5217\u4F4D\u7F6E ${this.dispatchQueueItems.length}\uFF09`);
-    return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true };
+    appendDispatch({ ts: enqueuedAt, id: dispatchId, tier, target: "cap-queue", status: "queued", event: "dispatch-queued", receipt: truncate2(poolEmpty ? `${queuedTitleSeg}\u7F16\u5236\u5360\u6EE1\uFF08${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)}\uFF09\u4F46\u771F\u6D3B\u6027 worker=0\uFF08\u6C60\u7A7A\u7A97\u2014\u2014\u5E2D\u4F4D\u6B7B\u6863\u975E\u5728\u5FD9\uFF09\u2014\u2014\u81EA\u52A8\u62C9\u8D77 headless \u6D88\u8D39\u8005` : `${queuedTitleSeg}\u7F16\u5236\u5DF2\u6EE1\uFF08\u771F\u6D3B ${realLive}/${headcountCapOf(g2)}\uFF09\u4E14\u65E0\u7A7A\u95F2 worker\u2014\u2014\u5E2D\u4F4D\u5FD9\u6392\u961F\u7B49\u5F85\u7A7A\u95F2\u540D\u989D\uFF08\u4E0D\u81EA\u52A8\u6269\u7F16\uFF09`, 200), session_id: "", project_anchor: anchor, actor, ...engineFields, ...input.slug ? { slug: input.slug } : {}, trigger_key: dispatchTriggerKey(input) });
+    console.log(`[dispatch] queued id=${dispatchId.slice(0, 8)} pos=${this.dispatchQueueItems.length} gid=${g2.id} actor=${actor} title=${queuedTitleSeg} \u771F\u6D3B=${realLive}${poolEmpty ? "\uFF08\u6C60\u7A7A\u7A97\uFF09" : ""}`);
+    this.pushExternalLog(this.leaderId ?? "", "system", `\u6D3E\u5355\u6392\u961F\uFF1A${(input.title?.trim() || input.prompt.split("\n")[0] || "").slice(0, 40)}\uFF08\u7F16\u5236 ${genericWorkerCount(g2.headcount)}/${headcountCapOf(g2)} \u89E6\u9876${poolEmpty ? "\u4F46\u6C60\u7A7A\u7A97\uFF08\u771F\u6D3B 0\uFF09\u2014\u2014\u81EA\u52A8\u62C9\u8D77 headless \u6D88\u8D39\u8005" : `\uFF0C\u771F\u6D3B ${realLive} \u5728\u5FD9`}\uFF0C\u961F\u5217\u4F4D\u7F6E ${this.dispatchQueueItems.length}\uFF09`);
+    if (poolEmpty) this.maybeSpawnHeadlessConsumer("group-cap");
+    return { ok: true, dispatch_id: dispatchId, session_id: "", queued: true, queue_reason: poolEmpty ? "pool-empty" : "seats-busy", active_workers: realLive };
   }
   /** W-BOARDTRUTH-R1（P1 撤单驱逐）：按 dispatch_id 从 cap-queue 重放队列移除排队单
    *（内存+落盘）——撤单（patrol 刀2 TTL/未来任何收口口）只写台账 failed 不清队列的
@@ -68340,14 +68911,32 @@ ${out}`;
    * 返回驱逐数（0=队列本无此单——幂等）。 */
   evictQueuedDispatch(dispatchId) {
     if (!dispatchId) return 0;
+    const evicted = this.dispatchQueueItems.filter((x) => x.dispatch_id === dispatchId);
     const before = this.dispatchQueueItems.length;
     this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== dispatchId);
     const n = before - this.dispatchQueueItems.length;
     if (n > 0) {
       saveDispatchQueue(this.dispatchQueueItems);
       this.emitChainAudit("boardtruth-queue-evict", `\u6392\u961F\u5355 ${dispatchId.slice(0, 8)} \u5DF2\u968F\u64A4\u5355\u9A71\u9010\u51FA\u91CD\u653E\u961F\u5217\uFF08\xD7${n}\u2014\u2014\u53F0\u8D26/\u961F\u5217\u4E0D\u518D\u77DB\u76FE\uFF09`);
+      this.clearEvictedSlugLocks(evicted);
     }
     return n;
+  }
+  /** W-DISPATCHFIX 验收⑤：被逐/被弃排队单的 slug 哨兵锁清理（evict 与 drain 终态弃单
+   * 两口共用）。只清 slug 匹配且归属本单（或无 id 哨兵）的锁——他人活锁不动
+   * （clearSlugWorktreeLock 收窄语义）。尽力而为不抛。 */
+  clearEvictedSlugLocks(items) {
+    for (const it2 of items) {
+      const wt2 = it2.input.worktree;
+      const slug = it2.input.slug;
+      if (!wt2 || !slug) continue;
+      try {
+        if (clearSlugWorktreeLock(wt2, slug, it2.dispatch_id)) {
+          this.emitChainAudit("dispatch-lock-gc", `\u6392\u961F\u5355 ${it2.dispatch_id.slice(0, 8)} \u5F03\u5355\u6E05\u54E8\u5175\u9501\uFF1A${wt2}\uFF08slug=${slug}\uFF09`);
+        }
+      } catch {
+      }
+    }
   }
   // 排队排水：组内出现空闲（回合收口/成员除名释放）时按 FIFO 接续。重入 dispatchWorker
   // （queue_replay 带原单 id，台账同 id 收敛 queued→dispatched/failed）。重入又 queued =
@@ -68364,6 +68953,7 @@ ${out}`;
             const kept2 = this.dispatchQueueItems.filter((x) => !terminalIds.has(x.dispatch_id));
             if (kept2.length !== this.dispatchQueueItems.length) {
               this.emitChainAudit("boardtruth-queue-evict", `drain \u524D\u67E5\u7EC8\u6001\u5F03 ${this.dispatchQueueItems.length - kept2.length} \u4E2A\u5DF2\u7EC8\u6001\u6392\u961F\u5355\uFF08\u53F0\u8D26/\u961F\u5217\u77DB\u76FE\u94FE\u515C\u5E95\u95F8\uFF09`);
+              this.clearEvictedSlugLocks(this.dispatchQueueItems.filter((x) => terminalIds.has(x.dispatch_id)));
               this.dispatchQueueItems = kept2;
             }
           }
@@ -68418,6 +69008,10 @@ ${out}`;
    * triggered=本拍有动作（排水或收口），deadClosed=断档悬账收口行数。 */
   sweepDispatchQueueOnce(now = Date.now()) {
     let deadClosed = 0;
+    try {
+      this.sweepHeadlessRows(now);
+    } catch {
+    }
     const confirmMs = (Number(process.env.CCR_SEAT_TURN_GAP_MIN) || 30) * 6e4;
     for (const [sid, rows] of [...this.openDispatches]) {
       if (!rows.length) {
@@ -68496,6 +69090,16 @@ ${out}`;
         }
         if (g2 && depth(g2) >= before && before > 0) this.dispatchSweepBackoff.set(g2, now + 15 * 6e4);
       }
+    }
+    if (this.dispatchQueueItems.length > 0 && this.realActiveManagedCount() === 0) {
+      try {
+        this.maybeSpawnHeadlessConsumer("sweep");
+      } catch {
+      }
+    }
+    try {
+      this.gcTerminalWorktreeLocks();
+    } catch {
     }
     return { triggered, deadClosed };
   }
@@ -69477,7 +70081,8 @@ ${out}`;
       if (s.state.status === "WORKING" || s.state.status === "WAITING") {
         this.bus.emit(s.state.session_id, "SESSION_HEARTBEAT", {
           elapsed_ms: now - s.state.started_at,
-          action_summary: s.state.action_summary
+          action_summary: s.state.action_summary,
+          liveness: this.displayLivenessOf(s)
         });
       }
     }
@@ -70229,7 +70834,7 @@ function listDevices(dataDir3, onlineIds) {
 }
 
 // src/release.ts
-import { spawn as spawn6 } from "node:child_process";
+import { spawn as spawn7 } from "node:child_process";
 import { existsSync as existsSync42, mkdirSync as mkdirSync31, readFileSync as readFileSync54, writeFileSync as writeFileSync32, appendFileSync as appendFileSync10 } from "node:fs";
 import { homedir as homedir20 } from "node:os";
 import { execFileSync as execFileSync4 } from "node:child_process";
@@ -70350,7 +70955,7 @@ var ReleaseModule = class {
     mkdirSync31(histDir, { recursive: true });
     const logFile = join64(histDir, `${runId}.log`);
     const record = { run_id: runId, channel, ...note ? { note } : {}, started_at: Date.now(), status: "running", log_file: logFile };
-    const child = spawn6("bash", [join64(mainRepoRoot(), script), note], {
+    const child = spawn7("bash", [join64(mainRepoRoot(), script), note], {
       cwd: mainRepoRoot(),
       env: { ...process.env }
     });
@@ -70473,7 +71078,7 @@ import { homedir as homedir23 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
-import { spawn as spawn7, execFileSync as execFileSync5 } from "node:child_process";
+import { spawn as spawn8, execFileSync as execFileSync5 } from "node:child_process";
 import { existsSync as existsSync43, mkdirSync as mkdirSync32, appendFileSync as appendFileSync11, readFileSync as readFileSync55, writeFileSync as writeFileSync33, rmSync as rmSync10 } from "node:fs";
 import path4, { join as join65 } from "node:path";
 import { homedir as homedir21, tmpdir as tmpdir5 } from "node:os";
@@ -70559,7 +71164,7 @@ var ERR_BY_CODE = {
 function run2(args) {
   return new Promise((resolve11) => {
     const fake = process.env.CCR_INJECT_CMD;
-    const child = fake ? spawn7(process.execPath, [fake, ...args], { windowsHide: true }) : spawn7(exe2, args, { windowsHide: true });
+    const child = fake ? spawn8(process.execPath, [fake, ...args], { windowsHide: true }) : spawn8(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -70610,7 +71215,7 @@ function mapAppleError(stderr) {
 }
 function runTmux2(args, timeoutMs = 5e3) {
   return new Promise((resolve11) => {
-    const child = spawn7("tmux", args);
+    const child = spawn8("tmux", args);
     let out = "";
     let err = "";
     child.stdout?.on("data", (c) => out += c);
@@ -70684,7 +71289,7 @@ async function tmuxVerifySubmitted(target, tail2) {
 function runAppleScript(script) {
   return new Promise((resolve11) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn7(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn7("osascript", ["-e", script]);
+    const child = fake ? spawn8(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn8("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -70747,7 +71352,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
     const tmp = join65(tmpdir5(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync33(tmp, body, "utf8");
     return new Promise((resolve11) => {
-      const child = spawn7("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
+      const child = spawn8("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
         stdio: "ignore"
@@ -70947,7 +71552,7 @@ function buildCaptureScript(pid) {
 function runAppleScriptOut(script) {
   return new Promise((resolve11) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn7(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn7("osascript", ["-e", script]);
+    const child = fake ? spawn8(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn8("osascript", ["-e", script]);
     let out = "";
     let err = "";
     child.stdout?.on("data", (c) => out += c);
@@ -76393,6 +76998,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
         ok: true,
         workers_running: mgr2.activeManagedCount(),
+        workers_real_active: mgr2.realActiveManagedCount(),
         cap: workerConcurrencyCap(),
         queued: mgr2.dispatchQueueSize()
       }));
@@ -79498,7 +80104,7 @@ if (cliArgs.has("--daemon")) {
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
   const logFd = openSync9(join72(cfg.dataDir, "relay.log"), "a");
-  const child = spawn8(process.execPath, [fileURLToPath5(import.meta.url), ...rest], {
+  const child = spawn9(process.execPath, [fileURLToPath5(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
