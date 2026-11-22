@@ -99,10 +99,14 @@ async function main() {
     }
     const logDir = join(DATA, "headless-workers");
     try {
-      const logs = readdirSync(logDir);
+      // 返修 fix2：只取 .log——目录里另有 sh 包装落的 <id8>.rc（fix1），字典序排在 .log
+      // 之后，原「取尾份」把 rc 文件当日志读（报「尾份 1 字节、无模型输出」的假象）
+      const logs = readdirSync(logDir).filter((f) => f.endsWith(".log")).sort();
       const body = logs.length ? readFileSync(join(logDir, logs[logs.length - 1]), "utf-8") : "";
-      console.log(`✓ 日志落盘：${logs.length} 份（尾份 ${body.length} 字节，含模型输出=${body.includes("冒烟") || body.length > 50}）`);
-    } catch { console.error("✗ 日志目录缺失"); ok = false; }
+      const rc = readFileSync(join(logDir, `${id.slice(0, 8)}.rc`), "utf-8");
+      console.log(`✓ 日志落盘：${logs.length} 份（尾份 ${body.length} 字节，含模型输出=${body.includes("冒烟") || body.length > 50}）；rc 落盘=${rc}`);
+      if (rc !== "0") { console.error("✗ sh 包装 rc 落盘非 0（重启后 exit 语义证据源坏）"); ok = false; }
+    } catch { console.error("✗ 日志目录/rc 落盘缺失"); ok = false; }
     console.log(ok ? "\n== 冒烟结果：PASS ==" : "\n== 冒烟结果：FAIL ==");
     process.exitCode = ok ? 0 : 1;
   } finally {

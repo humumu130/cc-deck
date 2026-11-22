@@ -11,10 +11,13 @@
 //   S8 重启窗孤儿双跑面（返修 fix1·P1-1）——boot 清扫活守卫（pid 活不收口/pid 死照常
 //      +rc 还原 exit 语义）+sweep 重挂收口（pid 退按 rc done/failed+在途计数回填）
 //      +slug 闸孤儿查重（行态异常不放行）+worktree 锁认领/让位
+//      h) 收口后可再拉起（返修 fix2·r2 P1）——在途账派生非累积：真拉起→模拟重启→pid 退
+//      （done/failed/中断三形态）→收口→在途归零→再派单新拉起成功；闸前刷新不等拍；
+//      手工清零位退役（fix1 在 S8 g 段首的手工清零=把「收口后计数应自行回落」洗出断言面）
 // agentFactory 测试缝（不拉真 CLI），范式同 test-drainfix.ts / test-headcount.ts。
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { execFileSync, spawn as childSpawn } from "node:child_process";
+import { execFileSync, spawn as childSpawn, type ChildProcess } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -314,7 +317,7 @@ async function main() {
     console.log("S5 周期拍池空窗兜底（已排队+池死透→自动起消费者）");
     {
       (mgr as unknown as { headlessSpawnCooldownUntil: number }).headlessSpawnCooldownUntil = 0; // S3 失败升级的退避清位（隔离）
-      (mgr as unknown as { headlessSpawnInFlight: number }).headlessSpawnInFlight = 0;
+      assert(mgr.headlessInFlight() === 0, `**自家消费者退出后在途归零**（S3 收口后零残留，无手工清零——实际 ${mgr.headlessInFlight()}）`);
       const marker5 = join(DATA, "headless-marker-s5.log");
       const mockBin5 = join(DATA, "mock-claude-s5.sh");
       writeFileSync(mockBin5, `#!/bin/bash\ncat > /dev/null\necho "s5-pid=$$" >> ${JSON.stringify(marker5)}\nexit 0\n`, { encoding: "utf-8", mode: 0o755 });
@@ -412,7 +415,7 @@ async function main() {
     }
 
     // ================= S8 重启窗孤儿双跑面（返修 fix1·P1-1）=================
-    console.log("S8 headless 重启窗——boot 清扫活守卫+重挂收口+slug 孤儿闸+锁认领");
+    console.log("S8 headless 重启窗——boot 清扫活守卫+重挂收口+slug 孤儿闸+锁认领+收口后可再拉起");
     {
       // ── 夹具底座：组+板卡（收口翻态断言锚）+ 行注入器 + 牺牲子进程（真活/真死 pid）──
       const anchor9 = join(ORG, "anchor-restart");
@@ -445,12 +448,14 @@ async function main() {
       mkHeadlessRow(hidB, vpid, "restart-orphan-b");
       const sw1 = mgr.sweepHeadlessRows();
       assert(sw1.live >= 1 && ledOf(hidB)?.status === "running", `**sweep poll 活 pid 不收口**（live=${sw1.live}，实际 ${ledOf(hidB)?.status}）`);
-      assert((mgr as unknown as { headlessSpawnInFlight: number }).headlessSpawnInFlight >= 1, "在途计数回填（重启后归零的孤儿并入并发帽口径）");
+      assert(mgr.headlessInFlight() >= 1, "在途计数回填（重启后归零的孤儿并入并发帽口径）");
+      const inFlightAtBackfill = mgr.headlessInFlight();
       victim.kill("SIGKILL");
       await exited; // 回收后 pid 真死（kill-0 ESRCH）
       writeFileSync(rcOf(hidB), "0", "utf-8");
       const sw2 = mgr.sweepHeadlessRows();
       assert(sw2.closed >= 1 && ledOf(hidB)?.status === "done", `**pid 退+rc=0 → done**（exit 语义还原——实际 ${ledOf(hidB)?.status}）`);
+      assert(mgr.headlessInFlight() === inFlightAtBackfill - 1, `**孤儿收口后在途随之回落**（${inFlightAtBackfill}→${mgr.headlessInFlight()}，余活孤儿 hidA——派生非累积，返修 fix2）`);
       assert((ledOf(hidB)?.receipt ?? "").includes("rc=0"), "收口行记 rc（对账锚）");
       assert(cardOf(hidB)?.status === "done", "板卡随 rc=0 翻 done");
 
@@ -486,7 +491,6 @@ async function main() {
 
       // g) worktree 锁认领/让位（真 spawn 流——mock bin 同 S3/S5 范式）
       (mgr as unknown as { headlessSpawnCooldownUntil: number }).headlessSpawnCooldownUntil = 0; // c) 段退避清位（隔离）
-      (mgr as unknown as { headlessSpawnInFlight: number }).headlessSpawnInFlight = 0; // b) 段孤儿计数清位（前段注入孤儿已全部收口）
       const marker8 = join(DATA, "headless-marker-s8.log");
       const mockBin8 = join(DATA, "mock-claude-s8.sh");
       writeFileSync(mockBin8, `#!/bin/bash\ncat > /dev/null\necho "s8-pid=$$" >> ${JSON.stringify(marker8)}\nexit 0\n`, { encoding: "utf-8", mode: 0o755 });
@@ -532,6 +536,232 @@ async function main() {
       assert(await waitFor(() => ledOf(dG3)?.status === "done", 5000), `消费完成收口（实际 ${ledOf(dG3)?.status}）`);
       assert(readFileSync(rcOf(dG3), "utf-8") === "0", "**rc 落盘=0**（sh 包装——重启后 exit 语义证据）");
       assert(!existsSync(join(wtFree, ".cc-deck-lock")), "收口随清锁（notifyDispatchClosed 扫描清）");
+    }
+
+    // ================= S8 h) 收口后可再拉起（返修 fix2·r2 P1）=================
+    console.log("S8h 重挂孤儿收口后在途归位——真拉起→模拟重启→pid 退→收口→再派单→新拉起成功");
+    {
+      // ── 夹具：门控 mock（吃 stdin 后等放行文件 $CCR_TEST_HEADLESS_GATE 出现，按其内容退出=rc
+      //    可控；120s 兜底自退防遗留）+池空窗组（死席占位，g 段同款）──
+      const markerH = join(DATA, "headless-marker-s8h.log");
+      const mockBinH = join(DATA, "mock-claude-s8h.sh");
+      writeFileSync(mockBinH, [
+        "#!/bin/bash",
+        "# 返修 fix2 门控 mock：吃 stdin、记 pid、等放行文件出现后按其内容退出（120s 兜底自退）",
+        "cat > /dev/null",
+        `echo "pid=$$" >> ${JSON.stringify(markerH)}`,
+        `n=0; while [ ! -f "$CCR_TEST_HEADLESS_GATE" ] && [ "$n" -lt 2400 ]; do sleep 0.05; n=$((n+1)); done`,
+        `exit "$(cat "$CCR_TEST_HEADLESS_GATE" 2>/dev/null || echo 9)"`,
+        "",
+      ].join("\n"), { encoding: "utf-8", mode: 0o755 });
+      chmodSync(mockBinH, 0o755);
+      process.env.CCR_HEADLESS_CLAUDE = mockBinH;
+      const gates: string[] = []; // 全部门控文件（段尾统一放行——SIGKILL 形态下 mock 孙进程仍在等）
+      const newGate = (name: string): string => { const g = join(DATA, `gate-${name}`); gates.push(g); return g; };
+      const markerLines = (): number => { try { return readFileSync(markerH, "utf-8").split("\n").filter(Boolean).length; } catch { return 0; } };
+      const rcOfH = (id: string): string => join(DATA, "headless-workers", `${id.slice(0, 8)}.rc`);
+      const closeHung = (): void => { (mgr as unknown as { closeHungDispatchRows: () => void }).closeHungDispatchRows(); };
+      const mkHeadlessRow = (id: string, pid: number, slug: string): void => {
+        appendDispatch({ ts: Date.now(), id, tier: "轻立项" as DispatchTier, target: `headless:${pid}`, status: "running", event: "dispatch-headless", receipt: `池空窗 headless（pid=${pid}，重启窗测试注入）`, session_id: "", project_anchor: anchorH, actor: "leader", headless: true, slug });
+      };
+      const auditHas = (...needles: string[]): boolean => {
+        try { return readFileSync(join(DATA, "chain-audit.jsonl"), "utf-8").split("\n").some((l) => needles.every((n) => l.includes(n))); } catch { return false; }
+      };
+      // 时间机器（S1/S8g 同款 +40min：帧龄超 5min 显示窗+30min 间隙窗=死席真判死）；调用前后清帧龄缓存
+      const realNowH = Date.now;
+      const tm = <T>(fn: () => T): T => { Date.now = () => realNowH() + 40 * 60_000; try { clearFrameCache(mgr); return fn(); } finally { Date.now = realNowH; clearFrameCache(mgr); } };
+      type Seam = { headlessChildren: Map<string, ChildProcess>; headlessOrphansInFlight: number; headlessSpawnCooldownUntil: number };
+      const seam = mgr as unknown as Seam;
+      /** 模拟 relay 重启（进程内等价）：新 relay 对旧子进程零记忆——登记表清空（孤儿=不属
+       *  本进程的 running headless 行）+摘掉本进程挂在子进程上的 exit/error handler（旧
+       *  relay 的收口闭包随进程消亡——没人替孤儿收口，只剩台账 running 行+pid+sh 包装的
+       *  rc 落盘文件）。子进程本体不动（detached，照跑）。 */
+      const simulateRestart = (): ChildProcess[] => {
+        const children = [...seam.headlessChildren.values()];
+        for (const c of children) {
+          c.removeAllListeners("exit");
+          c.removeAllListeners("error");
+          c.on("error", () => {}); // 护栏：摘掉 handler 后 error 事件无监听=炸测试进程（真孤儿无此对象，纯 harness 防护）
+        }
+        seam.headlessChildren.clear();
+        return children;
+      };
+      /** 放行子进程退出并等其真死（exit 事件=已回收非僵尸）；窗内未退返回 false（断言报） */
+      const release = async (child: ChildProcess, gate: string, rc: string): Promise<boolean> => {
+        let exited = false;
+        child.once("exit", () => { exited = true; });
+        writeFileSync(gate, rc, "utf-8");
+        return waitFor(() => exited, 15_000);
+      };
+      const anchorH = join(ORG, "anchor-s8h");
+      mkdirSync(anchorH, { recursive: true });
+      const cgH = createGroup({ name: "重启再拉起组", anchor_dir: anchorH, tier: "轻立项" });
+      const gidH = cgH.ok ? cgH.group.id : "";
+      setGroupStatus(gidH, "active");
+      assert(mgr.orgAction("cap-set", { gid: gidH, cap: 1 }).ok, "夹具：cap=1（池空窗组）");
+      const rh0 = mgr.dispatchWorker({ anchor: anchorH, gid: gidH, prompt: "占位者五", title: "S8HO" }) as { ok: boolean; session_id?: string };
+      await wait(30);
+      killTruth(mgr, rh0.session_id ?? "");
+      const cardOfH = (id: string): { status?: string } | undefined => loadBoard(gidH).entries.find((x) => x.dispatch_id === id);
+      type Disp = { ok: boolean; queued?: boolean; queue_reason?: string; dispatch_id?: string };
+      /** 池空窗派单（group-cap 触发路径）：门控文件经 env 透传给本次拉起的消费者（spawn 时点快照） */
+      const dispatch = (slug: string, gate: string): Disp => {
+        process.env.CCR_TEST_HEADLESS_GATE = gate;
+        return tm(() => mgr.dispatchWorker({ anchor: anchorH, gid: gidH, prompt: `返修 fix2 重启再拉起 ${slug}`, title: slug, slug })) as Disp; // title=全 slug（截断会撞 trigger_key 幂等闸）
+      };
+      /** 真拉起（生产 spawn 流：sh 包装+rc 落盘+running 行）→模拟重启→boot 清扫+首拍重挂：
+       *  断言孤儿在途=1。返回孤儿句柄（行 id/子进程句柄/包装 pid/门控文件）。 */
+      const raiseOrphan = async (slug: string): Promise<{ id: string; child: ChildProcess; pid: number; gate: string }> => {
+        const gate = newGate(slug);
+        const linesBefore = markerLines(); // 本次拉起前的消费者进程数（marker 行=已起进程各 1 行）
+        const r = dispatch(slug, gate);
+        const id = r.dispatch_id ?? "";
+        assert(r.ok && r.queued === true && r.queue_reason === "pool-empty", `[${slug}] 夹具：池空窗排队→拉起（实际 ${JSON.stringify(r).slice(0, 160)}）`);
+        const row = ledOf(id);
+        const pid = Number((/^headless:(\d+)$/.exec(row?.target ?? "") ?? [])[1] ?? 0);
+        const child = seam.headlessChildren.get(id);
+        assert(row?.status === "running" && row.headless === true && pid > 0 && !!child && mgr.headlessInFlight() === 1, `[${slug}] **真拉起**：running headless 行+本进程在途登记=1（实际 ${row?.status}/${row?.target}/在途 ${mgr.headlessInFlight()}）`);
+        assert(await waitFor(() => markerLines() >= linesBefore + 1, 5000), `[${slug}] 消费者进程真起（吃到 stdin——marker 第 ${linesBefore + 1} 行）`);
+        assert(simulateRestart().length === 1, `[${slug}] 模拟重启：旧 relay 内存态清空（登记表 1→0，exit handler 摘除）`);
+        assert(mgr.headlessInFlight() === 0, `[${slug}] 重启后新 relay 在途归零（孤儿首拍回填前不可见）`);
+        closeHung(); // boot 清扫：活 pid 行跳过
+        assert(ledOf(id)?.status === "running", `[${slug}] boot 清扫不误收口活孤儿（真子进程 pid=${pid}）`);
+        const sw = tm(() => mgr.sweepHeadlessRows());
+        assert(sw.live === 1 && seam.headlessChildren.size === 0 && seam.headlessOrphansInFlight === 1 && mgr.headlessInFlight() === 1, `[${slug}] **首拍重挂：孤儿在途=1**（本进程 0+孤儿 1；live=${sw.live}）`);
+        return { id, child: child as ChildProcess, pid, gate };
+      };
+      /** 放行本进程消费者（rc=0）→等 done 收口→在途归零 */
+      const finishOwn = async (id: string, gate: string): Promise<void> => {
+        const child = seam.headlessChildren.get(id);
+        assert(!!child && mgr.headlessInFlight() === 1, `[${id.slice(0, 8)}] 新消费者本进程在途=1（实际 ${mgr.headlessInFlight()}）`);
+        writeFileSync(gate, "0", "utf-8");
+        assert(await waitFor(() => ledOf(id)?.status === "done", 8000), `[${id.slice(0, 8)}] **新消费者消费完成 done**（实际 ${ledOf(id)?.status}）`);
+        assert(mgr.headlessInFlight() === 0, `[${id.slice(0, 8)}] 退出后在途归零（exit 边出表——实际 ${mgr.headlessInFlight()}）`);
+      };
+      try {
+        // ── 前置：g) 段自家消费者经 exit handler 收口后在途零残留（本进程账精确——全程无手工清零）──
+        assert(mgr.headlessInFlight() === 0, `**g 段消费者收口后在途归零**（实际 ${mgr.headlessInFlight()}——手工清零位已退役）`);
+
+        // ── A) done 形态·拍收口：孤儿在跑期间新单让位→pid 退 rc=0→拍收口 done→在途归零
+        //      →让位单被拍排水消费（新 pid）→新派单再拉起 ──
+        const oa = await raiseOrphan("fix2-done");
+        const markerAfterOrphan = markerLines(); // 此后未拉起期间应恒等（raiseOrphan 返回=本孤儿 marker 行已落）
+        const gateBlockedA = newGate("fix2-done-blocked");
+        const blockedA = dispatch("fix2-done-blocked", gateBlockedA);
+        const bidA = blockedA.dispatch_id ?? "";
+        assert(blockedA.ok && blockedA.queued === true && ledOf(bidA)?.status === "queued", `**孤儿在跑期间新单让位**：留队不拉第二个消费者（实际 ${ledOf(bidA)?.status}）`);
+        assert(mgr.headlessInFlight() === 1 && markerLines() === markerAfterOrphan, "在途=1（孤儿）且消费者进程数未增（单飞语义对孤儿同权——闸前刷新不误放）");
+        assert(await release(oa.child, oa.gate, "0"), "孤儿 rc=0 放行后窗内真退（exit 事件=已回收）");
+        assert(ledOf(oa.id)?.status === "running" && readFileSync(rcOfH(oa.id), "utf-8") === "0", "孤儿真退后行仍 running（重启后无 exit handler 收口）+rc 落盘=0 由 sh 包装真写（非测试注入）");
+        const swA = tm(() => mgr.sweepHeadlessRows());
+        assert(swA.closed === 1 && ledOf(oa.id)?.status === "done" && (ledOf(oa.id)?.receipt ?? "").includes("rc=0"), `**拍收口 done**（rc 语义——实际 ${ledOf(oa.id)?.status}/${ledOf(oa.id)?.receipt}）`);
+        assert(cardOfH(oa.id)?.status === "done", `板卡随收口翻 done（实际 ${cardOfH(oa.id)?.status}）`);
+        assert(mgr.headlessInFlight() === 0, `**收口后在途归零**（done 形态——实际 ${mgr.headlessInFlight()}，r2 P1 泄漏形态=仍 1）`);
+        // 让位单被周期拍消费（sweep 触发路径——「已排队后池才空」形态同款）
+        process.env.CCR_TEST_HEADLESS_GATE = gateBlockedA;
+        tm(() => mgr.sweepDispatchQueueOnce());
+        const newPid = Number((/^headless:(\d+)$/.exec(ledOf(bidA)?.target ?? "") ?? [])[1] ?? 0);
+        assert(ledOf(bidA)?.status === "running" && ledOf(bidA)?.headless === true && newPid > 0 && newPid !== oa.pid, `**让位单被新消费者接管**（拍排水→拉起新进程 pid=${newPid}≠孤儿 ${oa.pid}——实际 ${ledOf(bidA)?.status}/${ledOf(bidA)?.target}）`);
+        await finishOwn(bidA, gateBlockedA);
+        // 新派单再拉起（group-cap 触发路径——同 gid 池空窗）
+        const gateAgainA = newGate("fix2-again");
+        const againA = dispatch("fix2-again", gateAgainA);
+        const aidA = againA.dispatch_id ?? "";
+        assert(ledOf(aidA)?.status === "running" && ledOf(aidA)?.headless === true, `**再派单→新拉起成功**（同 gid 池空窗——实际 ${ledOf(aidA)?.status}/${ledOf(aidA)?.target}）`);
+        await finishOwn(aidA, gateAgainA);
+
+        // ── B) failed 形态·拍收口：rc=3→failed+板回待办+2min 退避；在途归零——闸因=cooldown
+        //      （按设计的坏单防风暴退避）而非 single-flight（泄漏形态）；退避过后再拉起成功 ──
+        const ob = await raiseOrphan("fix2-failed");
+        const gateBlockedB = newGate("fix2-failed-blocked");
+        const blockedB = dispatch("fix2-failed-blocked", gateBlockedB);
+        const bidB = blockedB.dispatch_id ?? "";
+        assert(blockedB.ok && blockedB.queued === true && ledOf(bidB)?.status === "queued" && mgr.headlessInFlight() === 1, `孤儿在跑期间让位（failed 形态同款——实际 ${ledOf(bidB)?.status}/在途 ${mgr.headlessInFlight()}）`);
+        assert(await release(ob.child, ob.gate, "3"), "孤儿 rc=3 放行后窗内真退");
+        const swB = tm(() => mgr.sweepHeadlessRows());
+        assert(swB.closed === 1 && ledOf(ob.id)?.status === "failed" && cardOfH(ob.id)?.status === "backlog", `**拍收口 failed+板回待办**（rc=3——实际 ${ledOf(ob.id)?.status}/${cardOfH(ob.id)?.status}）`);
+        assert(mgr.headlessInFlight() === 0, `**收口后在途归零**（failed 形态——实际 ${mgr.headlessInFlight()}，r2 P1 泄漏形态=仍 1）`);
+        const verdictB = tm(() => mgr.maybeSpawnHeadlessConsumer("test"));
+        assert(verdictB.spawned === false && verdictB.reason === "cooldown", `**闸因=cooldown 非 single-flight**（泄漏形态=single-flight 永久哑火；退避是按设计的坏单防风暴——实际 ${verdictB.reason}）`);
+        seam.headlessSpawnCooldownUntil = 0; // 退避清位=时间控制（退避是设计行为，非缺陷遮掩）
+        process.env.CCR_TEST_HEADLESS_GATE = gateBlockedB;
+        const spawnB = tm(() => mgr.maybeSpawnHeadlessConsumer("test"));
+        assert(spawnB.spawned === true && ledOf(bidB)?.status === "running" && ledOf(bidB)?.headless === true, `**退避过后让位单被拉起**（实际 ${ledOf(bidB)?.status}）`);
+        await finishOwn(bidB, gateBlockedB);
+
+        // ── C) 中断形态·拍收口：SIGKILL 包装进程（rc 未及落盘）→「回合中断」收口→在途归零→再拉起 ──
+        const oc = await raiseOrphan("fix2-killed");
+        let killed = false;
+        oc.child.once("exit", () => { killed = true; });
+        oc.child.kill("SIGKILL");
+        assert(await waitFor(() => killed, 15_000), "包装进程被杀且窗内回收（pid 真死）");
+        assert(!existsSync(rcOfH(oc.id)) && ledOf(oc.id)?.status === "running", "未及落 rc+行仍 running（中断形态前提——待拍收口）");
+        const swC = tm(() => mgr.sweepHeadlessRows());
+        assert(swC.closed === 1 && ledOf(oc.id)?.status === "done" && (ledOf(oc.id)?.receipt ?? "").includes("中断"), `**拍收口中断口径**（实际 ${ledOf(oc.id)?.status}/${ledOf(oc.id)?.receipt}）`);
+        assert(mgr.headlessInFlight() === 0, `**收口后在途归零**（中断形态——实际 ${mgr.headlessInFlight()}）`);
+        const gateAgainC = newGate("fix2-killed-again");
+        const againC = dispatch("fix2-killed-again", gateAgainC);
+        const aidC = againC.dispatch_id ?? "";
+        assert(ledOf(aidC)?.status === "running" && ledOf(aidC)?.headless === true, `**再派单→新拉起成功**（实际 ${ledOf(aidC)?.status}/${ledOf(aidC)?.target}）`);
+        await finishOwn(aidC, gateAgainC);
+
+        // ── D) 闸前刷新（不等拍）：孤儿在两拍之间退出→再派单时闸口当场收口+回落→同一次派单即拉起 ──
+        const od = await raiseOrphan("fix2-refresh");
+        assert(await release(od.child, od.gate, "0"), "孤儿 rc=0 放行后窗内真退");
+        assert(ledOf(od.id)?.status === "running" && mgr.headlessInFlight() === 1, "拍未到：行仍 running+在途快照仍=1（孤儿已退的陈旧快照——r2 P1 在此后的闸口必现）");
+        const gateAgainD = newGate("fix2-refresh-again");
+        const againD = dispatch("fix2-refresh-again", gateAgainD);
+        const aidD = againD.dispatch_id ?? "";
+        assert(ledOf(od.id)?.status === "done" && cardOfH(od.id)?.status === "done", `**闸前刷新当场收口孤儿**（走 sweep 同一收口口——实际 ${ledOf(od.id)?.status}/${cardOfH(od.id)?.status}）`);
+        assert(ledOf(aidD)?.status === "running" && ledOf(aidD)?.headless === true, `**同一次派单即拉起新消费者**（不等下一拍 ≤5min——实际 ${ledOf(aidD)?.status}）`);
+        await finishOwn(aidD, gateAgainD);
+
+        // ── E) 闸前刷新·failed 形态：当场收口 failed→在途归零→按设计退避（cooldown）→退避后拍排水拉起 ──
+        const oe = await raiseOrphan("fix2-refresh-failed");
+        const markerAfterOrphanE = markerLines();
+        assert(await release(oe.child, oe.gate, "3"), "孤儿 rc=3 放行后窗内真退");
+        const gateBlockedE = newGate("fix2-refresh-failed-blocked");
+        const blockedE = dispatch("fix2-refresh-failed-blocked", gateBlockedE);
+        const bidE = blockedE.dispatch_id ?? "";
+        assert(blockedE.ok && blockedE.queued === true && ledOf(oe.id)?.status === "failed" && mgr.headlessInFlight() === 0, `**闸前刷新当场收口 failed+在途归零**（实际 ${ledOf(oe.id)?.status}/在途 ${mgr.headlessInFlight()}）`);
+        assert(ledOf(bidE)?.status === "queued" && markerLines() === markerAfterOrphanE, `坏单退避生效：新单留队不拉（闸因 cooldown——实际 ${ledOf(bidE)?.status}）`);
+        seam.headlessSpawnCooldownUntil = 0;
+        process.env.CCR_TEST_HEADLESS_GATE = gateBlockedE;
+        tm(() => mgr.sweepDispatchQueueOnce());
+        assert(ledOf(bidE)?.status === "running" && ledOf(bidE)?.headless === true, `退避过后让位单被拍排水拉起（实际 ${ledOf(bidE)?.status}）`);
+        await finishOwn(bidE, gateBlockedE);
+
+        // ── F) 全局帽分支（trigger=global-cap）同享闸口：帽=在编 status 口径数+死席池空窗→排队即拉起 ──
+        const orf = await raiseOrphan("fix2-global");
+        assert(await release(orf.child, orf.gate, "0"), "孤儿 rc=0 放行后窗内真退");
+        const activeStatus = mgr.activeManagedCount();
+        assert(activeStatus >= 2, `夹具：在编 status 口径 ≥2（实际 ${activeStatus}——workerConcurrencyCap 下限 2）`);
+        const prevCap = process.env.CCR_WORKER_CONCURRENCY_CAP;
+        const gateF = newGate("fix2-global-again");
+        let gf: Disp = { ok: false };
+        let fid = "";
+        process.env.CCR_WORKER_CONCURRENCY_CAP = String(activeStatus);
+        try {
+          gf = dispatch("fix2-global-again", gateF);
+          fid = gf.dispatch_id ?? "";
+        } finally { process.env.CCR_WORKER_CONCURRENCY_CAP = prevCap; }
+        assert(gf.ok && gf.queued === true && gf.queue_reason === "pool-empty" && ledOf(orf.id)?.status === "done", `**全局帽池空窗排队→闸前刷新收口孤儿**（实际 queue_reason=${gf.queue_reason}/孤儿行 ${ledOf(orf.id)?.status}）`);
+        assert(ledOf(fid)?.status === "running" && ledOf(fid)?.headless === true && auditHas("headless-spawn", `单 ${fid.slice(0, 8)} pid=`, "trigger=global-cap"), `**全局帽路径再拉起成功**（trigger=global-cap 审计在——实际 ${ledOf(fid)?.status}/${ledOf(fid)?.target}）`);
+        await finishOwn(fid, gateF);
+
+        // ── G) 加固：`headless:0` 形态行（kill(0,0) 打本进程组恒成功）不认 pid——不计孤儿在途、boot 清扫照常收口 ──
+        const hid0 = randomUUID();
+        mkHeadlessRow(hid0, 0, "fix2-zero-pid");
+        assert(process.kill(0, 0) === true, "背景事实：kill(0,0) 恒成功（pid 0 行若被认=永久判活+在途常驻）");
+        const sw0 = tm(() => mgr.sweepHeadlessRows());
+        assert(sw0.live === 0 && mgr.headlessInFlight() === 0, `**\`headless:0\` 行不计活孤儿**（在途仍 0——live=${sw0.live}）`);
+        closeHung();
+        assert(ledOf(hid0)?.status === "done" && (ledOf(hid0)?.receipt ?? "").includes("中断"), `**\`headless:0\` 行落通用清扫口收口**（不永久挂起——实际 ${ledOf(hid0)?.status}）`);
+      } finally {
+        for (const g of gates) { try { writeFileSync(g, "0", "utf-8"); } catch { /* 尽力而为 */ } }
+        delete process.env.CCR_TEST_HEADLESS_GATE;
+        await wait(300); // 被杀包装进程遗留的 mock 孙进程见放行文件自退（DATA 目录此后才清）
+      }
     }
 
     console.log(`\n结果：${pass} 通过 / ${fail} 失败`);

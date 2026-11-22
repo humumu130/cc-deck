@@ -282,7 +282,9 @@ function expandHome(p: string): string {
 function headlessPidOfRow(e: DispatchEntry): number | undefined {
   if (!e.headless) return undefined;
   const m = /^headless:(\d+)$/.exec(e.target || "");
-  return m ? Number(m[1]) : undefined;
+  // 返修 fix2：pid 0 不认——kill(0, 0) 打的是本进程组（恒成功），`headless:0` 形态行会被
+  // 永久判活=永不收口+孤儿在途常驻（单飞闸永久哑火的另一扇门）；落通用清扫口收口。
+  return m && Number(m[1]) > 0 ? Number(m[1]) : undefined;
 }
 
 export function resolveCreateCwd(
@@ -11420,17 +11422,39 @@ ${lines.join("\n")}
    * headless 合计不得过帽）+#89 活性闸语义（活会话在场即非池空窗，本口天然不触发
    * ——池空判定即活性闸）。拉起失败：/api/notify 语义升级 PM（upsertNotification
    * attention 档+notifyLeaderSystem），单留队列等下一拍，绝不静默。 */
-  private headlessSpawnInFlight = 0;
+  /** headless 在途账（返修 fix2·r2 P1：重构为**派生非累积**）。fix1 的整数计数器把重挂
+   * 孤儿回填进去且只上调不下调——孤儿收口无人减，单飞闸永久 single-flight、池空窗
+   * headless 拉起哑火到下次 relay 重启（S8 手工清零位即绕过缺陷的实证）。两口：
+   *  - 本进程在途 = headlessChildren 键数：spawn 成功入表、exit|error 出表（Map.delete
+   *    幂等——旧计数器 error/exit 双发各减一次=多减，靠 max(0) 钳位遮丑）；
+   *  - 重挂孤儿在途 = headlessOrphansInFlight：sweepHeadlessRows 每拍按「pid 活的
+   *    running headless 行且不属本进程」重算——上拍计入的孤儿本拍已收口即自然回落，
+   *    不依赖任何收口路径记得减（「收口漏减」这一类缺陷从此无处发生）。
+   *  合计进单飞闸与并发帽（同口径）。 */
+  private headlessChildren = new Map<string, ChildProcess>();
+  private headlessOrphansInFlight = 0;
   private headlessSpawnCooldownUntil = 0;
+  /** headless 在途合计（本进程子进程+重挂孤儿）——单飞闸/并发帽唯一取数口；
+   *  public=测试/观测只读缝（dispatchQueueSize 同款）。 */
+  headlessInFlight(): number {
+    return this.headlessChildren.size + this.headlessOrphansInFlight;
+  }
   maybeSpawnHeadlessConsumer(trigger: string): { spawned: boolean; reason: string } {
     if (process.env.CCR_NO_HEADLESS_SPAWN === "1") return { spawned: false, reason: "disabled" }; // 隔离缝（测试/沙盒）
     if (this.dispatchQueueItems.length === 0) return { spawned: false, reason: "queue-empty" };
-    if (this.headlessSpawnInFlight > 0) return { spawned: false, reason: "single-flight" }; // 单飞：一次只拉一个消费者
+    // 返修 fix2：孤儿在途是上一 sweep 拍的快照——闸前刷新：孤儿已退则当场走 sweep 同一
+    // 收口口（rc 语义/板卡/锁清全链）+派生值回落，拉起不等下一拍（≤5min）。刷新失败
+    // 维持上拍口径（下拍 sweep 兜底）——观测面异常不放行双消费者。
+    if (this.headlessOrphansInFlight > 0) {
+      try { this.sweepHeadlessRows(); } catch { /* 尽力而为 */ }
+    }
+    const inFlight = this.headlessInFlight();
+    if (inFlight > 0) return { spawned: false, reason: "single-flight" }; // 单飞：一次只拉一个消费者
     const now = Date.now();
     if (now < this.headlessSpawnCooldownUntil) return { spawned: false, reason: "cooldown" }; // 退避（拉起失败/异常退出后 2min 内不连环重试）
     // 并发闸（#89/W-RATELIMIT429）：真活在位+在途 headless 合计 ≥帽即不拉（帽满=排队语义回归）
-    if (this.realActiveManagedCount() + this.headlessSpawnInFlight >= workerConcurrencyCap()) {
-      this.emitChainAudit("headless-spawn", `池空窗拉起让位全局帽（真活 ${this.realActiveManagedCount()}+在途 ${this.headlessSpawnInFlight} ≥ ${workerConcurrencyCap()}）——trigger=${trigger}`);
+    if (this.realActiveManagedCount() + inFlight >= workerConcurrencyCap()) {
+      this.emitChainAudit("headless-spawn", `池空窗拉起让位全局帽（真活 ${this.realActiveManagedCount()}+在途 ${inFlight} ≥ ${workerConcurrencyCap()}）——trigger=${trigger}`);
       return { spawned: false, reason: "cap" };
     }
     const next = this.dispatchQueueItems[0];
@@ -11493,7 +11517,6 @@ ${lines.join("\n")}
     // 记入 target 的 pid=sh 的 pid（sh 等待 claude 期间恒活——判活语义同源）。
     const rcPath = join(logDir, `${next.dispatch_id.slice(0, 8)}.rc`);
     const shellCmd = `${JSON.stringify(bin)} -p --dangerously-skip-permissions; __cc_rc=$?; printf '%s' "$__cc_rc" > ${JSON.stringify(rcPath)} 2>/dev/null; exit "$__cc_rc"`;
-    this.headlessSpawnInFlight++;
     try {
       child = spawn("/bin/sh", ["-c", shellCmd], {
         cwd: existsSync(cwd) ? cwd : (process.env.HOME || cwd),
@@ -11502,11 +11525,13 @@ ${lines.join("\n")}
         env: { ...process.env },
       });
     } catch (e) {
-      this.headlessSpawnInFlight--;
       if (logFd !== undefined) { try { closeSync(logFd); } catch { /* 尽力而为 */ } }
       this.escalateHeadlessFailure(next, trigger, `spawn 异常: ${e instanceof Error ? e.message : String(e)}`);
       return { spawned: false, reason: "spawn-error" };
     }
+    // 在途入账=登记表入表（返修 fix2；spawn 同步返回后、台账落行前——同段同步无并发窗；
+    // 出表在 exit|error 边）。同步抛错路径（上方 catch）未入表=零在途零需回滚。
+    this.headlessChildren.set(next.dispatch_id, child);
     // ── spawn 成功：出队+台账 running 行（headless 标记）+板卡认领 ──
     this.dispatchQueueItems = this.dispatchQueueItems.filter((x) => x.dispatch_id !== next.dispatch_id);
     saveDispatchQueue(this.dispatchQueueItems);
@@ -11536,13 +11561,13 @@ ${lines.join("\n")}
     let closed = false; // error/exit 双发防双收口（Node 语义：error 后 exit 可能照发——末行收敛虽兜底，终态行只写一次为真）
     child.on("error", (e) => {
       // 异步失败面（spawn 后 ENOENT 等）：按 failed 收口+升级（单已出队）
-      this.headlessSpawnInFlight = Math.max(0, this.headlessSpawnInFlight - 1);
+      this.headlessChildren.delete(next.dispatch_id); // 出表幂等（error 后 exit 可能照发——在途只出一次账）
       if (closed) return;
       closed = true;
       this.closeHeadlessDispatch(next, gid, tier, actor, input, "failed", `headless worker 拉起后即错（${e.message}）——日志 ${logPath}`, logPath);
     });
     child.on("exit", (code, signal) => {
-      this.headlessSpawnInFlight = Math.max(0, this.headlessSpawnInFlight - 1);
+      this.headlessChildren.delete(next.dispatch_id);
       if (closed) return;
       closed = true;
       const rc = code ?? -1;
@@ -11635,14 +11660,19 @@ ${lines.join("\n")}
 
   /** 返修 fix1（P1-1①）：headless 在途行重挂收口拍（sweep 宿主，public=测试可直调）。
    * boot 清扫放行的活 pid 行在此 poll：
-   *   pid 仍活 → 行保持 running（真在跑），且并入在途计数——重启后
-   *     headlessSpawnInFlight 归零，孤儿不计数=并发帽（真活+在途 ≥ cap 不拉）失真；
+   *   pid 仍活 → 行保持 running（真在跑）；不属本进程的（上个 relay 生命周期拉起的
+   *     孤儿）计入 headlessOrphansInFlight——重启后本进程登记表为空，孤儿不计数=
+   *     并发帽/单飞闸失真；
    *   pid 退 → rc 落盘在场按 exit 语义收口（done/failed），缺席=中断口径（语义
    *     不可知，与 boot 清扫通用路径同款——旧形态行 rc 无处落）。
    * 双收口防撞：行达终态后不再 running=本拍天然跳过；在途 exit handler 与本拍同
-   * 线程（事件先于定时器拍），无并发窗。 */
+   * 线程（事件先于定时器拍），无并发窗。
+   * 返修 fix2（r2 P1）：孤儿在途数每拍**重算**（非只上调的回填）——上拍计入的孤儿
+   * 本拍已收口即回落；收口路径（rc 两形态/中断/boot 清扫/任何旁路关行）零减计数
+   * 负担。另被 maybeSpawnHeadlessConsumer 闸前直调（孤儿快照刷新，不等本拍）。 */
   sweepHeadlessRows(now = Date.now()): { live: number; closed: number } {
-    let live = 0;
+    let own = 0;
+    let orphans = 0;
     let closed = 0;
     for (const e of readDispatchLog()) {
       if (!e.headless || e.status !== "running") continue;
@@ -11650,7 +11680,10 @@ ${lines.join("\n")}
       if (pid === undefined) continue;
       let alive = false;
       try { process.kill(pid, 0); alive = true; } catch { alive = false; }
-      if (alive) { live++; continue; }
+      if (alive) {
+        if (this.headlessChildren.has(e.id)) own++; else orphans++;
+        continue;
+      }
       const rc = this.readHeadlessRc(e.id);
       if (rc !== undefined) {
         this.closeDeadHeadlessRow(e, rc, "sweep 重挂收口（relay 重启窗内退出）");
@@ -11661,11 +11694,13 @@ ${lines.join("\n")}
         closed++;
       }
     }
-    if (live > this.headlessSpawnInFlight) {
-      this.emitChainAudit("headless-reattach", `重挂收口：${live} 个 headless 孤儿仍活（重启后在途计数已回填——并发帽口径恢复），等待真实退出收口`);
-      this.headlessSpawnInFlight = live;
+    if (orphans > this.headlessOrphansInFlight) {
+      this.emitChainAudit("headless-reattach", `重挂收口：${orphans} 个 headless 孤儿仍活（重启后在途计数已回填——并发帽/单飞口径恢复），等待真实退出收口`);
+    } else if (orphans < this.headlessOrphansInFlight) {
+      this.emitChainAudit("headless-reattach", `重挂收口：headless 孤儿在途 ${this.headlessOrphansInFlight}→${orphans}（收口后回落——池空窗拉起可重复）`);
     }
-    return { live, closed };
+    this.headlessOrphansInFlight = orphans;
+    return { live: own + orphans, closed };
   }
 
   /** 返修 fix1（P1-1②）：headless 孤儿查重（slug 闸补盲）——同 slug 的 headless 单
