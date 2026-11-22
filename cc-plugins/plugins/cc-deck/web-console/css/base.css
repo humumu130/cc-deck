@@ -170,7 +170,10 @@
     .source-option[data-source-choice="local"] { border-left: 2px solid var(--source-company); }
     /* W-PILL4 ③（0.6 风格）：源图标右下角通道小标——☁=云通道 / ⌗=局域网直连（聚合行无标） */
     .source-option .source-dot { position: relative; }
-    .source-option[data-source-choice="cloud"] .source-dot::after {
+    /* CONNV4 批F：多源行（data-src-key=acct:dev / srv:id）承老 cloud 行通道族——☁ 通道标/
+       左缘云色/active 加粗左缘同款；离线行灰显仍可点；行内收缩策略仿 #b2-engine-menu
+       （名称/副行 nowrap+ellipsis，tag flex:none——窄菜单长名不折行塌陷） */
+    .source-option[data-src-key] .source-dot::after {
       content: "☁"; position: absolute; right: -4px; bottom: -4px;
       font: 8px/9px var(--mono); color: var(--dim); background: var(--panel);
       border-radius: 4px; padding: 0 1px;
@@ -180,9 +183,13 @@
       font: 8px/9px var(--mono); color: var(--dim); background: var(--panel);
       border-radius: 4px; padding: 0 1px;
     }
-    .source-option[data-source-choice="cloud"] { border-left: 2px solid var(--source-home); }
+    .source-option[data-src-key] { border-left: 2px solid var(--source-home); }
+    .source-option[data-src-key].src-off { opacity: .62; }
+    .source-option[data-src-key] .tag { flex: none; }
+    .source-option[data-src-key] strong { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .source-option[data-src-key] small { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .source-option[data-source-choice="aggregate"] { border-left: 2px solid var(--brand); }
-    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="cloud"], .source-option.active[data-source-choice="aggregate"] { border-left: 3px solid var(--brand); }
+    .source-option.active[data-source-choice="local"], .source-option.active[data-source-choice="aggregate"], .source-option.active[data-src-key] { border-left: 3px solid var(--brand); }
     .source-option strong {flex: 1; color: var(--text-strong); font-size: var(--fs-A-item);}
     .source-option small {color: var(--dim); font: var(--fs-B) var(--mono);}
     /* W-ENGDROP（Windows WebView2 布局塌陷三症状根修，#b2-engine-menu 专用——
