@@ -405,6 +405,7 @@ function kindLabel(kind: OrgConfirm["kind"]): string {
     case "rule-append": return "规则提案"; // W-RULES1：团队规则确认卡通知标签
     case "member-join": return "入队申请"; // X0 件2：org join 自荐入编确认卡通知标签
     case "device-trust": return "跨机首联"; // X1 多机编排：设备级 first-contact 确认卡通知标签
+    case "lan-connect": return "局域网连接请求"; // CONNV4 批D：LAN 邻居连接同意卡通知标签
     case "headcount-trim-first": return "首次编制清理"; // [W-SEAT-SEMANTICS] 首裁确认卡通知标签
     case "role-upsert": return "建岗提案"; // W-ROLE-BUILDER：AI Builder 对话建岗确认卡通知标签
     case "patrol-suggest": return "巡查阈值建议"; // W-WATCHAGENT：巡查员阈值调整确认卡通知标签
