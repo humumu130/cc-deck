@@ -61097,6 +61097,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const merged = id2 === this.leaderId ? mergeBoardMirror(disk) : disk;
     const hidden = hiddenTodoKeys(id2);
     const list = hidden.size ? merged.filter((t) => !hidden.has(normKey(t.content))) : merged;
+    if (JSON.stringify(s.state.todos ?? []) === JSON.stringify(list)) return;
     s.state.todos = list;
     s.state.updated_at = at ?? Date.now();
     this.emitUpdated(s, true, at);
@@ -61143,6 +61144,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   setExternalPending(id2, list) {
     const s = this.sessions.get(id2);
     if (!s) return;
+    if (JSON.stringify(s.state.pending_inputs ?? null) === JSON.stringify(list.length ? list : null)) return;
     s.state.pending_inputs = list.length ? list : void 0;
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
@@ -61156,6 +61158,8 @@ provider=${opts.provider ?? "default"}` : void 0,
   setExternalStats(id2, stats) {
     const s = this.sessions.get(id2);
     if (!s) return;
+    const p02 = s.state.stats;
+    if (p02 && p02.files_changed === stats.files_changed && p02.lines_added === stats.lines_added && p02.lines_deleted === stats.lines_deleted) return;
     s.state.stats = stats;
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
