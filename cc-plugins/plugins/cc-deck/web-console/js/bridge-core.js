@@ -196,9 +196,14 @@
                   // 不再盲投视角通道（地基 onEvent 只吃 SNAPSHOT、实时帧建的会话两源表恒 miss，
                   // 云视角下错投云 relay → 「会话不存在: <完整id>」——1015 用户实测实锤链）
                   const chan = evSource === "cloud" ? "cloud" : "lan";
+                  // 1123 用户实锤（test.28 项目页/聚合缺源标）：桥层会话打 per-session 源名——relay
+                  // 不发 relay_source，地基 S.sessions 有 t25fix#5 打标而桥缓存恒缺 → 项目页
+                  // deriveEntries 吃 bridge.sessions=分组卡无源可显。快照整体替换语义下按本快照
+                  // relay_name 打标即真值归属（聚合并集时各源各名）； displayName/配色在渲染端统一。
+                  const snapSrcName = typeof p.relay_name === "string" && p.relay_name ? p.relay_name : "";
                   bridge.sessions = new Map();
                   for (const session of Array.isArray(p.sessions) ? p.sessions : []) {
-                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, { ...session, relay_channel: chan }); // #150 R3：桥持会话浅拷贝，与 B2/地基切断共享别名（R3b P2——桥 merge 以信封 ts 覆写 updated_at 不得越权污染他域）
+                    if (session && typeof session.session_id === "string") bridge.sessions.set(session.session_id, { ...session, relay_channel: chan, ...(snapSrcName ? { relay_source: snapSrcName } : {}) }); // #150 R3：桥持会话浅拷贝，与 B2/地基切断共享别名（R3b P2——桥 merge 以信封 ts 覆写 updated_at 不得越权污染他域）
                   }
                   bridge.notifications = Array.isArray(p.notifications) ? p.notifications.map(normalizeNotification).filter(Boolean) : [];
                   bridge.notificationsSupported = Object.prototype.hasOwnProperty.call(p, "notifications");
@@ -717,6 +722,15 @@
                 // 整树重建收口（队列折叠态/长页滚动位逐帧存活）；等待分支清签防陈旧跳帧（P1-2 同型防线）
                 const bSigOf = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return "b" + (h >>> 0).toString(36); };
                 function renderQueue(entries) {
+                  // 1123 用户实锤（test.28 项目页缺源标）：页级源集合>1 时卡内显源胶囊（单源不显噪——
+                  // 与会话卡 W-SRCPILL「仅异源显示」同口径；多源时每卡标自己会话所属源）
+                  const pageSrcNames = new Set();
+                  for (const e of entries) for (const s of e.sessions) { const r = String((s && s.relay_source) || ""); if (r) pageSrcNames.add(r); }
+                  const srcCapOf = (n) => {
+                    const disp = window.__ccDeck005SourceDisplayName ? window.__ccDeck005SourceDisplayName(n) : n;
+                    const col = (window.__ccDeck005SourceColor && window.__ccDeck005SourceColor(disp)) || "#6b7280";
+                    return '<span class="src-cap" title="来自 ' + escapeHtml(disp) + '" style="background:' + col + 'E6;border-radius:4.5px;padding:1px 5.5px;color:#fff;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:1px"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-1px;margin-right:2px"><rect x="2" y="3.5" width="20" height="13.5" rx="2" fill="rgba(255,255,255,0.92)"/><path d="M8 21h8" stroke="rgba(255,255,255,0.92)" stroke-width="2.4" stroke-linecap="round"/></svg>' + escapeHtml(disp) + "</span>";
+                  };
                   // W-PROJP1 P1-2：未立项（group:null）从活跃项目拆出置底折叠组（设计 §3 方案 a），
                   // 组序：活跃项目 → 待确认立项 → 挂起/归档 → 未立项。降噪靠折叠不靠过滤，所有卡始终可回。
                   const activeList = entries.filter((e) => e.group && e.group.status === "active");
@@ -783,7 +797,7 @@
                     return '<div class="queue-card pc2 pc3' + (entry.key === selectedKey ? " selected" : "") + '" data-project-key="' + escapeHtml(entry.key) + '" title="' + escapeHtml(displayPath(entry.group ? String(entry.anchor || "") : String(entry.nativeCwd || entry.anchor || ""))) + '">'
                       + '<div class="pc2-r1"><i class="pc3-dot ' + dot + '"></i><strong class="pc2-name">' + escapeHtml(entry.name) + "</strong>" + (actions > 0 ? '<span class="cc-badge is-alert">需行动 ' + (actions > 9 ? "9+" : actions) + "</span>" : "") + "</div>"
                       + '<div class="pc2-r2"><span class="pc3-path">' + escapeHtml(pathMeta(entry.group ? entry.anchor : (entry.nativeCwd || entry.anchor))) + "</span>" + openBtn + "</div>"
-                      + '<div class="pc3-meta">' + escapeHtml(metaBits.join(" · ")) + "</div>"
+                      + '<div class="pc3-meta">' + escapeHtml(metaBits.join(" · ")) + (pageSrcNames.size > 1 ? (() => { const names = []; for (const s of entry.sessions) { const r = String((s && s.relay_source) || ""); if (r && !names.includes(r)) names.push(r); } return names.slice(0, 3).map(srcCapOf).join("") + (names.length > 3 ? '<span class="pc3-src-more" title="' + escapeHtml(names.slice(3).join(" · ")) + '">+' + (names.length - 3) + " 源</span>" : ""); })() : "") + "</div>"
                       + teamRow
                       + aggHtml
                       + "</div>";
