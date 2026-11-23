@@ -2723,7 +2723,7 @@
     #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: calc(18px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
     /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
-    #d-session .srow-time {flex: none; margin-right: 50px; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;} /* 1123 二轮实锤：右对齐锚改挂图钉（.srow-pin margin-left:auto）——本行去 auto，时间恒贴图钉右侧；标题 strong flex:1 兜底填充（无图钉变体同右贴） */
+    #d-session .srow-time {flex: none; margin-right: 6px; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;} /* 1123 三轮（截图实锤）：时间贴右——原 50px 预留死区（给悬停 ⋯/× 让位）平时空着=「位置不对」观感；⋯/× 悬停叠加时间原位（时间 hover 已淡出），零预留 */
     #d-session .queue-card:hover .srow-time, #d-session .queue-card:focus-within .srow-time { opacity: 0; }
     /* 件五（2026-10-10 test.10 反馈）：右键菜单可发现性——卡 hover 行尾「⋯」微钮（时间戳
        hover 淡出让位是既有 ：1471 行为，此处即占其位），点击等效右键菜单（触控板/无右键
