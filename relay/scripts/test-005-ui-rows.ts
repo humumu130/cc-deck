@@ -87,7 +87,7 @@ ok(cardJs.indexOf('srow-r3">${item.pinned ? `<span class="tag pin-flag">置顶</
 ok(cardJs.includes('${item.tag || item.engine || item.source || item.pinned ? `<span class="srow-r3">') , "r3 renders only when any badge exists (pinned counts, no hollow line)");
 ok(html.includes("#d-session .srow-r3 > * { flex: none; margin-top: 0; }"), "r3 badges never shrink");
 const timeRule = cssBlock("#d-session .srow-time");
-ok(cssBlock("#d-session .srow-pin").includes("margin-left: auto") && timeRule.includes("flex: none") && !timeRule.includes("margin-left: auto") && r1Strong.includes("flex: 1 1 auto"), "srow-time right-cluster via pin margin-left:auto (1123: pin anchors right cluster at time's left; time no auto of its own; strong flex:1 fills)");
+ok(timeRule.includes("margin-left: auto") && timeRule.includes("flex: none") && r1Strong.includes("flex: 1 1 auto"), "srow-time right-aligned via margin-left:auto (strong flex:1 shrinks first)"); // 追审 P2 复盘：本套件=specs/005-prototype-a.html 规格锁（非生产件），1123 生产改版不触此——生产断言在 test:ui-followup J1/件U
 ok(cardJs.includes('<span class="srow-sec" data-work-sec="${item.workSecs || 0}">'), "working row emits .srow-sec with data-work-sec base");
 
 // ---- ② 密度三档：行变量循环（卡变量改行变量，档位键不变） ----
