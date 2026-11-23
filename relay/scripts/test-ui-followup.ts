@@ -111,6 +111,7 @@ console.log("件U 1123 test.28 五刀（图钉右簇/聚合源标/桥层打标/�
   ok(bc.includes('relay_source: snapSrcName') && bc.includes('const snapSrcName'), "U3 桥层会话打 per-session 源名（applySnapshot 按本快照 relay_name——项目页/team 域消费桥缓存有源可显）");
   ok(bc.includes('pageSrcNames.size > 1') && bc.includes('srcCapOf'), "U4 项目卡源胶囊（页级源>1 开门，卡内显自己会话所属源≤3+溢出计数）");
   ok(!idx005.includes('data-head-menu') && idx005.includes('<button type="button" class="conv-mini" data-conv-toggle="proc"') && idx005.includes('<button type="button" class="conv-mini" data-conv-toggle="think"') && idx005.includes('<button type="button" class="conv-mini" data-fzone-toggle'), "U5 会话面板三功能平铺（⚙过程/✦思考/▤工作区 conv-mini 直出，⋯ 溢出菜单退役——1123 用户令不收纳）");
+  ok(ssd.includes('s.last_heartbeat_at = Date.now();') && ssd.includes('const u = s.last_heartbeat_at ?? s.updated_at;') && !ssd.includes('s.updated_at = Date.now();\n                  if (p && typeof p.action_summary'), "U6 心跳不洗 updated_at（1123 三现真凶：PM 常驻保活空闲态心跳每拍拉顶空闲区——onHeartbeat 改记专用键，isRealWorking 第二判据换源消费+老快照回落兼容）");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
