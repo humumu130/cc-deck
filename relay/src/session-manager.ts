@@ -2452,7 +2452,11 @@ export class SessionManager {
     this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点（awaituser R1 P2①）：外部 CLI 状态切换帧驱动——WAITING 增项/出清减项实时入出聚合清单，不再等 60s 兜底轮
     if (status !== "WAITING") s.state.waiting_started_at = undefined;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
-    s.state.updated_at = at ?? Date.now();
+    // 1123 用户实锤（test.28「空闲会话跳来跳去」）：同值 status/summary 重报（外部引擎周期
+    // 回放帧）原先也无条件洗 updated_at → 面板空闲区按 recency 重排=卡乱跳。改为与下方 emit
+    // 同门（changed || summaryChanged || WORKING——WORKING 恒洗保活跃顶置语义）才洗；同值
+    // 帧不再扰动排序与落盘采样。
+    if (changed || summaryChanged || status === "WORKING") s.state.updated_at = at ?? Date.now();
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,

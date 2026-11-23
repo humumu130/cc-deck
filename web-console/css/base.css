@@ -2723,7 +2723,7 @@
     #d-session .srow-r1 strong { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); font-weight: 650; line-height: calc(18px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
     /* 行尾时间右缘对齐（用户直馈：所有卡时间统一贴右——标题 flex:1 先收缩，时间不被挤）；
        hover 淡出 .06s 与行淡底同步（CTA 浮层化后零布局位移，时间右缘任何状态恒定） */
-    #d-session .srow-time {flex: none; margin-left: auto; margin-right: 50px; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;}
+    #d-session .srow-time {flex: none; margin-right: 50px; color: var(--faint); font: var(--srow-sub-size) var(--mono); font-variant-numeric: tabular-nums; transition: opacity .06s linear;} /* 1123 二轮实锤：右对齐锚改挂图钉（.srow-pin margin-left:auto）——本行去 auto，时间恒贴图钉右侧；标题 strong flex:1 兜底填充（无图钉变体同右贴） */
     #d-session .queue-card:hover .srow-time, #d-session .queue-card:focus-within .srow-time { opacity: 0; }
     /* 件五（2026-10-10 test.10 反馈）：右键菜单可发现性——卡 hover 行尾「⋯」微钮（时间戳
        hover 淡出让位是既有 ：1471 行为，此处即占其位），点击等效右键菜单（触控板/无右键
@@ -2736,7 +2736,7 @@
     #d-session .srow-more { right: 28px; } /* pin 迁走后 ⋯ 补位 right:56→28（1123 用户令：图钉移时间左侧 in-flow） */
     /* 图钉 in-flow 化（1123 用户令）：恒在时间左侧占位——置顶与否时间位置恒定对齐；
        未置顶 hover 显现（不常驻抢视）；置顶 .on 常显（--dim 灰） */
-    #d-session .srow-pin { position: static; flex: none; order: 0; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); font-size: 13px; line-height: 18px; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; }
+    #d-session .srow-pin { position: static; flex: none; order: 0; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); font-size: 13px; line-height: 18px; cursor: pointer; opacity: 0; transition: opacity .06s linear, color .15s ease, background .15s ease; } /* 1123 二轮实锤：margin-left:auto 挂图钉=右簇首锚——图钉紧贴时间左侧；恒占 18px（opacity:0 不撤位）置顶/未置顶时间位置逐像素恒定 */
     #d-session .queue-card:hover .srow-pin, #d-session .queue-card:focus-within .srow-pin { opacity: .85; }
     #d-session .srow-pin.on { opacity: 1; color: var(--dim); }
     #d-session .srow-pin:hover { background: var(--hover); color: var(--text-strong); }
@@ -2744,10 +2744,9 @@
     #d-session .srow-more:hover, #d-session .srow-pin:hover, #d-session .srow-close:hover { background: var(--hover); color: var(--text-strong); }
     #d-session .srow-pin svg, #d-session .srow-close svg { width: 13px; height: 13px; }
     #d-session .srow-pin.on { opacity: 1; color: var(--dim); } /* 件J②：常驻显但统一灰（旧品牌色退役）。W-FB66C ⑪：已置顶常驻显（hover 不再冒第二枚图钉——常驻/悬浮合一，点按=取消置顶，位置恒 right:28） */
-    /* 件J①③（1029 用户 21:5x 图）：时间戳与图钉零间距根修——r1 右侧预留按钮区（close 0-22/pin 28-50
-       含 6px 间隙到 56px 处），时间不再钻到钮下；置顶/未置顶图钉同位（恒 right:28）视觉对齐随间距
-       保留一并收敛。:has 不支持的壳降级为旧行为（时间照旧右贴，无布局破坏） */
-    #d-session .queue-card:has(.srow-pin.on) .srow-r1 { padding-right: 56px; }
+    /* 件J①③（1029 用户 21:5x 图）：原「置顶态 r1 padding-right:56px 预留」手法 1123 二轮实锤
+       退役——置顶行时间整体左移 56px=对齐更歪；改由 .srow-pin margin-left:auto 右簇锚定 +
+       恒占位 18px 达成「置顶/未置顶时间逐像素恒定」（上图两条规则），此预留删除 */
     #d-session .srow-close:hover { color: var(--error); background: var(--danger-bg); }
     #d-session .queue-card:hover .srow-more, #d-session .queue-card:hover .srow-pin, #d-session .queue-card:hover .srow-close,
     #d-session .queue-card:focus-within .srow-more, #d-session .queue-card:focus-within .srow-pin, #d-session .queue-card:focus-within .srow-close { opacity: 1; }

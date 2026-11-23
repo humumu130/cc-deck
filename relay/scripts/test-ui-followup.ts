@@ -80,7 +80,7 @@ ok(ssd.includes("while (at > 0 && Number(list[at - 1].ts) > Number(e.ts)) at--;"
 ok(ssd.includes('out === "resort") renderConversation()'), "I3 乱序路径整 pane 重排");
 
 console.log("件J 图钉三处：");
-ok(css.includes(".queue-card:has(.srow-pin.on) .srow-r1 { padding-right: 56px; }"), "J1 置顶态时间与图钉拉开间距（r1 预留按钮区）");
+ok(css.includes("#d-session .srow-pin { position: static; flex: none; order: 0; margin-left: auto;") && !css.includes(".queue-card:has(.srow-pin.on) .srow-r1 { padding-right: 56px; }") && !css.includes("#d-session .srow-time {flex: none; margin-left: auto;"), "J1 置顶/未置顶时间恒定对齐（1123 二轮实锤：图钉 margin-left:auto 右簇锚定+恒占 18px；:has padding-right:56px 预留与 time margin-left:auto 双退役——旧法置顶行时间左移 56px）");
 ok(css.includes("#d-session .queue-card.selected .srow-pin.on svg { color: var(--dim); }") && css.includes("#d-session .srow-pin.on { opacity: 1; color: var(--dim); }"), "J2 钉住/未钉住统一灰（品牌色+选中白描边退役）");
 
 console.log("件K 团队 chip 三件：");
@@ -100,6 +100,17 @@ ok(!/dockSemanticAction\(act\) \|\| s\.title/.test(ssd) && ssd.includes('dockSem
   const ds = rf("expo-app", "src", "components", "detail-styles.ts");
   ok(dp.includes("export function dutySummaryOf") && dp.includes('dutySrc.startsWith("DUTY_RECEIPT ")') && dp.includes("🛡 巡检"), "L5 expo 同款拦截卡（detail-parts）+摘要助手导出");
   ok(ds.includes("dutyRow") && ds.includes("dutyRaw"), "L6 expo 巡检卡样式键（对齐 trAuto 视觉）");
+}
+
+console.log("件U 1123 test.28 五刀（图钉右簇/聚合源标/桥层打标/项目卡源胶囊/空闲不跳+三功能平铺）：");
+{
+  const smSrc = rf("relay", "src", "session-manager.ts");
+  const idx005 = rf("web-console", "index-005.html");
+  ok(smSrc.includes('if (changed || summaryChanged || status === "WORKING") s.state.updated_at = at ?? Date.now();'), "U1 空闲不跳根修（同值 status/summary 重报不洗 updated_at——与 emit 同门；WORKING 恒洗保活跃顶置）");
+  ok(ssd.includes('b2AggViewActive') && ssd.includes('(b2AggViewActive() || item.source !== b2SelfSourceName())'), "U2 聚合视角会话卡全显源标（self 抑制仅单源/主源视角——S.relayName 随末到快照翻转反噬根因）");
+  ok(bc.includes('relay_source: snapSrcName') && bc.includes('const snapSrcName'), "U3 桥层会话打 per-session 源名（applySnapshot 按本快照 relay_name——项目页/team 域消费桥缓存有源可显）");
+  ok(bc.includes('pageSrcNames.size > 1') && bc.includes('srcCapOf'), "U4 项目卡源胶囊（页级源>1 开门，卡内显自己会话所属源≤3+溢出计数）");
+  ok(!idx005.includes('data-head-menu') && idx005.includes('<button type="button" class="conv-mini" data-conv-toggle="proc"') && idx005.includes('<button type="button" class="conv-mini" data-conv-toggle="think"') && idx005.includes('<button type="button" class="conv-mini" data-fzone-toggle'), "U5 会话面板三功能平铺（⚙过程/✦思考/▤工作区 conv-mini 直出，⋯ 溢出菜单退役——1123 用户令不收纳）");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
