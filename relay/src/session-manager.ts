@@ -2647,6 +2647,8 @@ export class SessionManager {
     const merged = id === this.leaderId ? mergeBoardMirror(disk) : disk;
     const hidden = hiddenTodoKeys(id);
     const list = hidden.size ? merged.filter((t) => !hidden.has(normKey(t.content))) : merged;
+    // 1123 二现（空闲仍跳）：同值写手全链守卫——todos 无变化不洗 updated_at 不发帧（与 setExternalSubagents 同法）
+    if (JSON.stringify(s.state.todos ?? []) === JSON.stringify(list)) return;
     s.state.todos = list;
     s.state.updated_at = at ?? Date.now();
     this.emitUpdated(s, true, at);
@@ -2697,6 +2699,8 @@ export class SessionManager {
   setExternalPending(id: string, list: PendingInput[]): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    // 1123 二现守卫：pending 清单无变化不洗 updated_at 不发帧
+    if (JSON.stringify(s.state.pending_inputs ?? null) === JSON.stringify(list.length ? list : null)) return;
     s.state.pending_inputs = list.length ? list : undefined;
     s.state.updated_at = Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
@@ -2711,6 +2715,9 @@ export class SessionManager {
   setExternalStats(id: string, stats: FileChangeStats): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    // 1123 二现守卫：stats 三键无变化（周期 usage 帧重放同值）不洗 updated_at 不发帧
+    const p0 = s.state.stats;
+    if (p0 && p0.files_changed === stats.files_changed && p0.lines_added === stats.lines_added && p0.lines_deleted === stats.lines_deleted) return;
     s.state.stats = stats;
     s.state.updated_at = Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
