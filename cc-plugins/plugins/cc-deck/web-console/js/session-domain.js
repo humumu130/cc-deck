@@ -909,7 +909,7 @@
                   // t>0 前置三态全正：起手窗（t=0 接单未开工）回灰=291 原语义；挂起
                   //（t>0 心跳停）灭；长工具（t>0 超 15min 窗但心跳新鲜）亮。
                   const HB_MS = 5 * 60 * 1000;
-                  const u = s.updated_at;
+                  const u = s.last_heartbeat_at ?? s.updated_at; // 1123 三现：心跳新鲜度换源专用键（onHeartbeat 不再洗 updated_at——保活空闲卡跳序真凶；老快照无该键回落 updated_at 兼容）
                   if (typeof u === "number" && u > 0 && t > 0 && at - u <= HB_MS) return true; // 心跳新鲜且有过工具活动：长工具执行中
                   return false; // 0=从未有工具活动（接单未开工/起手窗）；超窗=挂起——同待命
                 }
@@ -953,7 +953,10 @@
                 function onHeartbeat(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s) return;
-                  s.updated_at = Date.now();
+                  // 1123 三现（t31 实锤「空闲还是跳」）：心跳不再洗 updated_at——PM 常驻保活（#287 空闲态心跳不断）
+                  // 每拍把空闲卡拉顶=空闲区反复跳序真凶。心跳新鲜度改记专用键（isRealWorking 第二判据
+                  // 同步换源消费）；updated_at 只随真实状态/摘要/日志推进（relay 侧同值守卫已全）。
+                  s.last_heartbeat_at = Date.now();
                   if (p && typeof p.action_summary === "string" && p.action_summary) s.action_summary = p.action_summary;
                   if (sid === S.selected) { renderDock(); renderHeader(); }
                 }
