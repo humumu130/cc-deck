@@ -48,6 +48,7 @@
     "test:005-engauth-web": "node --import tsx/esm scripts/test-005-engauth-web.ts",
     "test:005-route-fix": "node --import tsx/esm scripts/test-005-route-fix.ts",
     "test:engine-auth": "tsx scripts/test-engine-auth.ts",
+    "test:enginefix": "tsx scripts/test-enginefix.ts",
     "test:watchdog": "tsx scripts/test-watchdog.ts",
     "test:acceptance": "tsx scripts/test-acceptance.ts",
     "test:version-sentinel": "node scripts/test-version-sentinel.mjs",

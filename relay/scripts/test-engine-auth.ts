@@ -12,9 +12,9 @@
 //       fail-open
 //   P2  codebuddy 三场景：Authentication required → needs_auth+hint / 正常输出 → ready /
 //       探针故障 fail-open（1014 根因案例探针面锁死）
-//   P3  qwen-code/trae 凭据文件存在性（候选命中 ready / 空 home needs_auth / env 候选）+
-//       claude/zcode 恒 ready（免检/占位）；P3' 缓存行为（无 opts 生产路径 45s TTL
-//       命中/reset 重探——SNAPSHOT 防 spawn 风暴语义锁死）
+//   P3  qwen-code/trae 凭据文件存在性（候选命中 ready / 空 home needs_auth / 单 env 键
+//       needs_auth——[W-ENGINEFIX 刀B] 1124 收紧）+ claude/zcode 恒 ready（免检/占位）；
+//       P3' 缓存行为（无 opts 生产路径 45s TTL 命中/reset 重探——SNAPSHOT 防 spawn 风暴语义锁死）
 //   P4  authFailureHint pattern 三命中 + 非登录文本 null + HINTS 文案规范（动词开头）+
 //       onTurnEnd 回合成功清位锚（session-manager relay 半）
 //
@@ -59,7 +59,11 @@ const CB_HEALTHY = mkScript("cb-healthy", "Signed in as tester@example.com (Plus
 
 // ---------- env 九键保存/清场/恢复（零生产触达） ----------
 const ENV_KEYS = ["CCR_CODEX_PATH", "CCR_CODEBUDDY_PATH", "CCR_TRAE_PATH", "CODEX_HOME", "OPENAI_API_KEY",
-  "QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "TRAE_API_KEY"] as const;
+  "QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "TRAE_API_KEY",
+  // [W-ENGINEFIX 刀B] 组合键密封（1124）：开发机常配 bigmodel 路由 env（ANTHROPIC_
+  // BASE_URL/MODEL 等）会与测试内单键拼成组合制选型→假 ready（本机实锤：P3c''' 单键
+  // 断言被环境染红）。qwen 组合制五组键全量入清场单，fixture 恒密封。
+  "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "OPENAI_BASE_URL", "OPENAI_MODEL", "QWEN_MODEL", "GEMINI_MODEL", "QWEN_OAUTH"] as const;
 const SAVED: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) { SAVED[k] = process.env[k]; delete process.env[k]; }
 const restoreEnv = () => { for (const k of ENV_KEYS) { if (SAVED[k] === undefined) delete process.env[k]; else process.env[k] = SAVED[k]; } };
@@ -150,7 +154,10 @@ try {
   assert(r.state === "needs_auth" && (r.auth_hint ?? "").length > 0, "P3b qwen 无凭据无 env → needs_auth+hint");
   process.env.QWEN_API_KEY = "qk-1";
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
-  assert(r.state === "ready", "P3c qwen env key 在场 → ready（候选 env 路径）");
+  // [W-ENGINEFIX 刀B]（1124 用户实锤）语义收紧翻面：单 env 键不再是选型——上游组合
+  // 制下 QWEN_API_KEY 单键不构成 auth 选型，判 ready=假阳性直通 spawn 后 CLI 裸炸
+  // 「No auth type is selected」（用户截图原文）。单键面与空 home 同判 needs_auth。
+  assert(r.state === "needs_auth", "P3c qwen 单 env 键（QWEN_API_KEY）→ needs_auth（1124 收紧：组合制选型下单键不选型，假 ready 直通 spawn 裸炸）");
   delete process.env.QWEN_API_KEY;
   // W-ENGREST-FIX（1109 对版 0.27.1）：settings 选型位 security.auth.selectedType → ready
   //（顶层 authType 不是读取位——validateNonInteractiveAuth 实测「No auth type is selected」）
@@ -161,10 +168,11 @@ try {
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
   assert(r.state === "needs_auth", "P3c'' qwen 顶层 authType 键不算选型（非读取位——旧形态误配不虚报 ready）");
   rmSync(join(HOME, ".qwen", "settings.json"));
-  // env 组合面（上游 getAuthTypeFromEnv 逐字对版：组合才选型，单键走宽松尾路）
+  // env 组合面（上游 getAuthTypeFromEnv 逐字对版：组合才选型——[W-ENGINEFIX 刀B] 1124
+  // 收紧后单键=needs_auth：宽松尾路单键面退役，假 ready 直通 spawn 即裸炸）
   process.env.ANTHROPIC_API_KEY = "ak-1";
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
-  assert(r.state === "ready", "P3c''' qwen ANTHROPIC_API_KEY 单键 → ready（宽松尾路，spawn 可试）");
+  assert(r.state === "needs_auth", "P3c''' qwen ANTHROPIC_API_KEY 单键 → needs_auth（1124 收紧：单键不选型——用户实锤假 ready 中标源）");
   process.env.ANTHROPIC_BASE_URL = "http://x";
   process.env.ANTHROPIC_MODEL = "m1";
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
@@ -172,7 +180,7 @@ try {
   delete process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_BASE_URL; delete process.env.ANTHROPIC_MODEL;
   process.env.OPENAI_API_KEY = "ok-1";
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
-  assert(r.state === "ready", "P3c''''' qwen OPENAI_API_KEY 单键 → ready（W-ENGREST-FIX 新增 openai 面候选）");
+  assert(r.state === "needs_auth", "P3c''''' qwen OPENAI_API_KEY 单键 → needs_auth（1124 收紧：openai 面同样组合制——单键候选面随宽松尾路退役）");
   delete process.env.OPENAI_API_KEY;
   // W-ENGREST-FIX（1109 对版）：trae 认证=YAML config（真 CLI 无 login 子命令）——
   // 探测=config 存在+api_key 非空（CCR_TRAE_CONFIG 显式位 || ~/.trae-agent/ 全局位，
