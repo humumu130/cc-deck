@@ -168,12 +168,14 @@ function activityFor(
     return { text: itemType ? `开始：${itemType}` : `${label} 工作中`, kind: "system", status: "WORKING", terminal: false };
   }
   if (normalizedType === "item.completed") {
-    if (itemType === "UserMessage") {
-      const prompt = clip(textOf(item.content), 4000);
+    if (itemType === "UserMessage" || itemType === "user_message") {
+      const prompt = clip(textOf(item.content ?? item.text ?? item.message), 4000);
       return { text: prompt ? `用户：${clip(prompt, 180)}` : "用户输入", kind: "user_message", status: "WORKING", terminal: false, prompt };
     }
-    if (itemType === "AgentMessage") {
-      const text = clip(textOf(item.content ?? item.text), 220);
+    if (itemType === "AgentMessage" || itemType === "agent_message") {
+      // 1124 用户实锤（codex 正文不上屏=「Codex 回复」占位）：rollout AgentMessage 正文在 item.message
+      // （content/text 双缺）；小写 agent_message 形态同分支兼容（agent-codex.ts 直连态已小写化）。
+      const text = clip(textOf(item.content ?? item.text ?? item.message), 4000);
       return { text: text ? `回复：${text}` : `${label} 回复`, kind: "assistant_text", status: "WORKING", terminal: false };
     }
     if (itemType === "CommandExecution") {

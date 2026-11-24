@@ -636,5 +636,10 @@ exit 0`);
 if (PREV_CODEX_PATH === undefined) delete process.env.CCR_CODEX_PATH; else process.env.CCR_CODEX_PATH = PREV_CODEX_PATH;
 resetCodexCliCache();
 rmSync(SBOX, { recursive: true, force: true });
+{ // 1124 用户实锤（codex 正文不上屏=「Codex 回复」占位）：rollout AgentMessage 正文在 item.message——锚定回落链
+  const ro = readFileSync(new URL("../src/engine-rollouts.ts", import.meta.url), "utf-8");
+  if (ro.includes("item.content ?? item.text ?? item.message")) { pass++; console.log("ok rollout AgentMessage message 回落（1124 codex 正文修复）"); }
+  else { fail++; console.log("FAIL rollout AgentMessage message 回落缺失"); }
+}
 console.log(fail === 0 ? `\nCODEX TESTS PASSED (${pass})` : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);
