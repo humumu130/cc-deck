@@ -210,7 +210,7 @@ import { TRAE_ACTIVITY_CAPABILITIES } from "./agent-trae.js";
 import { QWEN_ACTIVITY_CAPABILITIES } from "./agent-qwen.js";
 import { CODEBUDDY_ACTIVITY_CAPABILITIES } from "./agent-codebuddy.js";
 import { ZCODE_ACTIVITY_CAPABILITIES } from "./agent-zcode.js";
-import { createRegisteredEngine, getEngineDefinition, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
+import { createRegisteredEngine, getEngineDefinition, isReinjectionEngine, isSessionEngine, providerProfileFor, resolveForeignEngineModel } from "./engine-registry.js";
 import { preflightEngine } from "./agent-jsonl.js";
 import { applyLanConnectDecision } from "./lan-peers.js"; // CONNV4 批D：lan-connect 确认卡决议副作用（applyConfirmEffects 双分支调）
 
@@ -3704,7 +3704,15 @@ export class SessionManager {
     }
     this.evictOldSessions();
 
-    const selectedModel = opts?.model?.trim() || this.cfg.model;
+    // [W-ENGINEFIX 刀A]（1124 用户实锤）：异引擎模型分档——UI 不带模型时这里兜底
+    // 填的是全局 cfg.model（Claude 系串，如 glm-5.3[1m]），原文流向 codebuddy 即
+    // 「未知模型」拒绝创建。非 claude 引擎在落 state/spawn 之前先过分档单一事实源
+    // （engine-registry resolveForeignEngineModel）：异引擎串→空串（omit --model，
+    // 引擎自选默认），state.model 与 spawn 同源真值（端上不再显示误导性全局模型名）。
+    // codex 分支不经此（agent-codex 头注既有口径：模型不透传，_model 弃参）。
+    const engineRaw = opts?.engine && opts.engine !== "claude" ? opts.engine : undefined;
+    const rawModel = opts?.model?.trim() || this.cfg.model;
+    const selectedModel = engineRaw ? resolveForeignEngineModel(engineRaw, rawModel) : rawModel;
     const managed: ManagedSession = {
       agent: null,
       state: {

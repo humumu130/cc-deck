@@ -23,7 +23,9 @@
 //              Please use /login command to sign in to your account」）
 //   qwen-code  三层判定（W-ENGREST-FIX 1109 对版 0.27.1）：settings 选型位
 //              security.auth.selectedType → env 组合（上游 getAuthTypeFromEnv 逐字：
-//              anthropic/openai/gemini/QWEN_OAUTH）→ 旧单键+凭据文件候选宽松尾路
+//              anthropic/openai/gemini/QWEN_OAUTH）→ 凭据文件候选尾路（[W-ENGINEFIX
+//              刀B] 1124 收紧：单 env 键退役——组合制下单键不选型，假 ready 直通
+//              spawn 即 CLI 裸炸「No auth type is selected」）
 //   trae       config 文件判定（W-ENGREST-FIX 1109 对版）：CCR_TRAE_CONFIG ||
 //              ~/.trae-agent/trae_config.yaml 存在且 api_key 非空 → ready（真 CLI 无
 //              login 子命令，认证=YAML；与 agent-trae traeConfigPath 同源）
@@ -91,18 +93,13 @@ function codexConfigAuthPresent(homeDir: string): boolean {
   }
 }
 
-/** 凭据文件/env 候选命中判定（qwen-code/trae 共用：候选任一命中即 ready） */
-function credentialCandidatePresent(files: string[], envKeys: string[]): boolean {
-  if (envKeys.some((k) => process.env[k]?.trim())) return true;
-  return files.some(fileExists);
-}
-
 /** qwen 登录态判定（W-ENGREST-FIX 1109 对版 0.27.1 源码级）：非交互权威闸=「已选型」——
  * settings 读取位是 security.auth.selectedType（顶层 authType 非读取位；validateNon-
  * InteractiveAuth 实测「No auth type is selected」即此）；env 面按上游 getAuthTypeFromEnv
  * 组合制（单键不选型）：anthropic=API_KEY+BASE_URL+MODEL、openai=API_KEY+BASE_URL+
- * (OPENAI_MODEL|QWEN_MODEL)、gemini=API_KEY+MODEL、QWEN_OAUTH 单键即选。旧单键/文件
- * 候选保留为宽松尾路（fail-open：在场按可试判 ready，选型缺失由 spawn 报错可见）。 */
+ * (OPENAI_MODEL|QWEN_MODEL)、gemini=API_KEY+MODEL、QWEN_OAUTH 单键即选。尾路仅保留
+ * 凭据文件候选（[W-ENGINEFIX 刀B] 1124 收紧：单 env 键不构成选型——假 ready 直通
+ * spawn 后 CLI 裸炸「No auth type is selected」；见函数尾注）。 */
 function qwenAuthCandidatePresent(homeDir: string): boolean {
   try {
     const s = JSON.parse(readFileSync(join(homeDir, ".qwen", "settings.json"), "utf-8")) as { security?: { auth?: { selectedType?: unknown } } };
@@ -116,10 +113,13 @@ function qwenAuthCandidatePresent(homeDir: string): boolean {
   if (v("ANTHROPIC_API_KEY") && v("ANTHROPIC_BASE_URL") && v("ANTHROPIC_MODEL")) return true;
   if (v("OPENAI_API_KEY") && v("OPENAI_BASE_URL") && (v("OPENAI_MODEL") || v("QWEN_MODEL"))) return true;
   if (v("GEMINI_API_KEY") && v("GEMINI_MODEL")) return true;
-  return credentialCandidatePresent(
-    [join(homeDir, ".qwen", "oauth_creds.json"), join(homeDir, ".qwen", "google-accounts.json"), join(homeDir, ".qwen", "aws_credentials.json")],
-    ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"],
-  );
+  // [W-ENGINEFIX 刀B]（1124 用户实锤「No auth type is selected」裸炸）：宽松尾路收紧——
+  // 单 env 键（QWEN/ANTHROPIC/OPENAI/GEMINI_API_KEY 等）不再判 ready：上游组合制选型
+  // 下单键不是选型（ANTHROPIC_API_KEY 是全局常配 env，恰是假 ready 中标源——探针判
+  // ready → COMMAND_CREATE 闸放行 → CLI 非交互闸「No auth type is selected」裸报错）。
+  // 凭据文件候选（oauth 登录产物）保留 ready：登录已完成的持久化凭据不误拦（fail-open
+  // 精神保留给「真登录过」的形态，收紧只砍「从未选型」的假阳性）。
+  return [join(homeDir, ".qwen", "oauth_creds.json"), join(homeDir, ".qwen", "google-accounts.json"), join(homeDir, ".qwen", "aws_credentials.json")].some(fileExists);
 }
 
 /** trae 登录态判定（W-ENGREST-FIX 1109 对版）：真 trae-agent CLI 无 login 子命令
@@ -232,7 +232,10 @@ function probeEngineAuthDirect(engine: SessionEngine, opts?: AuthProbeOptions): 
  * required / 请先登录」——调用方（session-manager onTurnEnd ERROR 面）据此把会话标
  * needs_auth 态（state.auth_hint）随 SNAPSHOT 下发。 */
 export function authFailureHint(text: string, engine?: SessionEngine): string | null {
-  if (!/not logged in|authentication required|please use \/login|请先登录|账号未登录/i.test(text)) return null;
+  // [W-ENGINEFIX 刀B]（1124 用户实锤）：补 qwen 非交互选型缺失特征「No auth type is
+  // selected」——探针收紧后仍可能漏（探针故障 fail-open/新形态），spawn 后炸该文案时
+  // 会话进 needs_auth 态带 auth_hint（session-manager 退出尾行兜底链既有机制）。
+  if (!/not logged in|authentication required|please use \/login|请先登录|账号未登录|no auth type is selected/i.test(text)) return null;
   return (engine && HINTS[engine]) ?? "请在终端完成对应引擎的登录后重试";
 }
 
