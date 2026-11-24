@@ -20022,10 +20022,6 @@ function codexConfigAuthPresent(homeDir) {
     return false;
   }
 }
-function credentialCandidatePresent(files, envKeys) {
-  if (envKeys.some((k3) => process.env[k3]?.trim())) return true;
-  return files.some(fileExists);
-}
 function qwenAuthCandidatePresent(homeDir) {
   try {
     const s = JSON.parse(readFileSync23(join28(homeDir, ".qwen", "settings.json"), "utf-8"));
@@ -20040,10 +20036,7 @@ function qwenAuthCandidatePresent(homeDir) {
   if (v("ANTHROPIC_API_KEY") && v("ANTHROPIC_BASE_URL") && v("ANTHROPIC_MODEL")) return true;
   if (v("OPENAI_API_KEY") && v("OPENAI_BASE_URL") && (v("OPENAI_MODEL") || v("QWEN_MODEL"))) return true;
   if (v("GEMINI_API_KEY") && v("GEMINI_MODEL")) return true;
-  return credentialCandidatePresent(
-    [join28(homeDir, ".qwen", "oauth_creds.json"), join28(homeDir, ".qwen", "google-accounts.json"), join28(homeDir, ".qwen", "aws_credentials.json")],
-    ["QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"]
-  );
+  return [join28(homeDir, ".qwen", "oauth_creds.json"), join28(homeDir, ".qwen", "google-accounts.json"), join28(homeDir, ".qwen", "aws_credentials.json")].some(fileExists);
 }
 function traeConfigAuthPresent(homeDir) {
   const p = process.env.CCR_TRAE_CONFIG?.trim() || join28(homeDir, ".trae-agent", "trae_config.yaml");
@@ -20128,7 +20121,7 @@ ${r.stderr ?? ""}`;
   }
 }
 function authFailureHint(text, engine) {
-  if (!/not logged in|authentication required|please use \/login|请先登录|账号未登录/i.test(text)) return null;
+  if (!/not logged in|authentication required|please use \/login|请先登录|账号未登录|no auth type is selected/i.test(text)) return null;
   return (engine && HINTS[engine]) ?? "\u8BF7\u5728\u7EC8\u7AEF\u5B8C\u6210\u5BF9\u5E94\u5F15\u64CE\u7684\u767B\u5F55\u540E\u91CD\u8BD5";
 }
 function execFileText(cmd, args, timeoutMs) {
@@ -53070,12 +53063,22 @@ function isReinjectionEngine(value) {
 function getEngineDefinition(engine) {
   return engine in definitions ? definitions[engine] : void 0;
 }
+function resolveForeignEngineModel(engine, model) {
+  const m = (model || "").trim();
+  if (!m || m === "default" || m === "codebuddy") return "";
+  if (engine === "codebuddy" && (CODEBUDDY_MODELS.includes(m) || m.startsWith("custom:"))) return m;
+  return "";
+}
 function createRegisteredEngine(engine, opts) {
   const definition = getEngineDefinition(engine);
   if (!definition) return void 0;
   const check = definition.preflight(opts.providerProfile ?? profileFor(engine, opts.provider));
   if (!check.ok) throw new Error(`${definition.label} preflight \u5931\u8D25: ${check.errors.join("\uFF1B")}`);
-  return definition.create(opts);
+  const resolvedModel = resolveForeignEngineModel(engine, opts.model);
+  if ((opts.model || "").trim() !== resolvedModel && (opts.model || "").trim()) {
+    console.log(`[enginefix] ${engine} \u6A21\u578B\u56DE\u843D: \u300C${(opts.model || "").trim()}\u300D\u4E0D\u5728\u8BE5\u5F15\u64CE\u6A21\u578B\u6E05\u5355\uFF0C\u6539\u7528\u5F15\u64CE\u9ED8\u8BA4\uFF08omit --model\uFF09`);
+  }
+  return definition.create({ ...opts, model: resolvedModel });
 }
 function providerProfileFor(engine, provider) {
   return profileFor(engine, provider);
@@ -62034,7 +62037,9 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
     this.evictOldSessions();
-    const selectedModel = opts?.model?.trim() || this.cfg.model;
+    const engineRaw = opts?.engine && opts.engine !== "claude" ? opts.engine : void 0;
+    const rawModel = opts?.model?.trim() || this.cfg.model;
+    const selectedModel = engineRaw ? resolveForeignEngineModel(engineRaw, rawModel) : rawModel;
     const managed = {
       agent: null,
       state: {
@@ -76210,7 +76215,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.33";
+  const verRelay = "0.7.1-test.34";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
