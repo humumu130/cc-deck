@@ -2454,9 +2454,12 @@ export class SessionManager {
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     // 1123 用户实锤（test.28「空闲会话跳来跳去」）：同值 status/summary 重报（外部引擎周期
     // 回放帧）原先也无条件洗 updated_at → 面板空闲区按 recency 重排=卡乱跳。改为与下方 emit
-    // 同门（changed || summaryChanged || WORKING——WORKING 恒洗保活跃顶置语义）才洗；同值
-    // 帧不再扰动排序与落盘采样。
-    if (changed || summaryChanged || status === "WORKING") s.state.updated_at = at ?? Date.now();
+    // 同门（changed || summaryChanged）才洗；同值帧不再扰动排序与落盘采样。
+    // 1123 四现（t32 实锤「重启接管：终端进程仍在运行」卡反复跳顶）：WORKING 恒洗退役——
+    // revive-on-hydrate 扫描对常驻活进程会话每拍同值重报 WORKING，恒洗=每拍刷 updated_at
+    // =僵尸卡跳顶。活跃区排序用 turn_started_at（1026），裸 WORKING 重报无排序消费者；
+    // 真实活跃经客户端 SESSION_LOG 落 updated_at（onLog entry.ts）不受影响。
+    if (changed || summaryChanged) s.state.updated_at = at ?? Date.now();
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,
