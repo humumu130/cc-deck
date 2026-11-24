@@ -1491,8 +1491,13 @@
        等你）。作用域收窄 #session-state-dock——#mobile-detail-state-dock 共享类不受
        波及（手机共通面按任务书留评估不实施），动画/closing ✓/suspended ⚠ 共用键原样 */
     #session-state-dock .session-state-spin::before { content: "◌"; }
-    #session-state-dock[data-session-state="running"] .session-state-spin::before { content: "◐"; }
+    /* 1124 用户实锤（要回六芒星闪动）：running=✻ 六芒星旋转（旧版形态回归——W-DOCKFIX 换 ◐ 时
+       把 dock-spin 接线弄丢成静态星；旋转=transform 动画零重绘，animfast 耗电底线不破）；
+       waiting ◍ 呼吸/closing ✓/suspended ⚠/standby ◌ 语义位不动 */
+    #session-state-dock[data-session-state="running"] .session-state-spin::before { content: "✻"; }
+    #session-state-dock[data-session-state="running"] .session-state-spin { animation: dock-spin 2.8s linear infinite; }
     #session-state-dock[data-session-state="waiting"] .session-state-spin::before { content: "◍"; }
+    #session-state-dock[data-session-state="waiting"] .session-state-spin { animation: dock-breath 1.8s ease-in-out infinite; }
     /* 值守座（duty）：行半透明——有座无活的降存在感（六病空①②③的对症收笔） */
     #session-state-dock[data-duty] { opacity: .55; }
     @keyframes dock-spin { to { transform: rotate(360deg); } }
