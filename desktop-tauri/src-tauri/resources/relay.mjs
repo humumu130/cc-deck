@@ -71858,12 +71858,12 @@ function activityFor(type, body, label) {
     return { text: itemType ? `\u5F00\u59CB\uFF1A${itemType}` : `${label} \u5DE5\u4F5C\u4E2D`, kind: "system", status: "WORKING", terminal: false };
   }
   if (normalizedType === "item.completed") {
-    if (itemType === "UserMessage") {
-      const prompt = clip3(textOf2(item.content), 4e3);
+    if (itemType === "UserMessage" || itemType === "user_message") {
+      const prompt = clip3(textOf2(item.content ?? item.text ?? item.message), 4e3);
       return { text: prompt ? `\u7528\u6237\uFF1A${clip3(prompt, 180)}` : "\u7528\u6237\u8F93\u5165", kind: "user_message", status: "WORKING", terminal: false, prompt };
     }
-    if (itemType === "AgentMessage") {
-      const text = clip3(textOf2(item.content ?? item.text), 220);
+    if (itemType === "AgentMessage" || itemType === "agent_message") {
+      const text = clip3(textOf2(item.content ?? item.text ?? item.message), 4e3);
       return { text: text ? `\u56DE\u590D\uFF1A${text}` : `${label} \u56DE\u590D`, kind: "assistant_text", status: "WORKING", terminal: false };
     }
     if (itemType === "CommandExecution") {
