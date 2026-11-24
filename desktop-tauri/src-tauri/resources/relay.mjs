@@ -60906,7 +60906,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.refreshPendingUserActions();
     if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
-    if (changed || summaryChanged || status === "WORKING") s.state.updated_at = at ?? Date.now();
+    if (changed || summaryChanged) s.state.updated_at = at ?? Date.now();
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id2, "SESSION_UPDATED", {
         status,
