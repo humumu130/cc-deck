@@ -51,7 +51,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # DEV-25 sqlite ABI 治标：20→22 对齐生产运行时系统 node（v22.x = ABI 127）
+          # ——测试环境与生产同版，better-sqlite3 相关套件（sqlite-resilience 等）不再
+          # 跑在「CI node 20 绿、生产 node 22 炸」的盲区。与 desktop.yml mac job
+          # pin 同源对齐（同一提交内一起动）。
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             relay/package-lock.json
@@ -83,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 } # DEV-25：与 test job 同源对齐（本 job 只跑 node -e 守卫，无包产物）
       - name: 矩阵键守卫（双向：拼写向+丢键向）
         run: |
           node -e '
