@@ -20,6 +20,7 @@ import { PatrolModule } from "./patrol.js";
 // PatrolModule.start 在后，周期阈值同吃到）
 import { WatchFeedModule, preloadPatrolOverrides } from "./watch-feed.js";
 import { readDispatchLog } from "./org.js"; // M4：SIGTERM 退出诊断（活派单留档，graceful-restart 屏障的 relay 侧对称面）
+import { gracefulExitLines } from "./graceful-exit.js"; // W-RELDEATH：SIGTERM/SIGINT 告别行（治静默死排障盲区）
 import { readPluginConfig } from "./plugin-config.js";
 import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
@@ -107,13 +108,11 @@ process.on("unhandledRejection", (reason) => {
   // 重启后 reloadDispatchQueue 对账。纯诊断打印，不 gate 不等待（launchd SIGTERM→
   // SIGKILL 间隔秒级，长排空无意义——屏障在脚本层，职责见 scripts/graceful-restart.ts）。
   const shutdownDiag = (sig: string) => {
-    try {
-      const active = readDispatchLog().filter((r) => r.status === "dispatched" || r.status === "running");
-      if (active.length > 0) {
-        console.warn(`[graceful] ${sig} 退出时仍有 ${active.length} 个活派单（重启后 reloadDispatchQueue 恢复排队）：`);
-        for (const a of active) console.warn(`  · ${a.id} [${a.status}] ${a.title ?? ""}`);
-      }
-    } catch { /* 诊断尽力而为 */ }
+    // W-RELDEATH：告别行无条件打（旧版仅活派单时打印——SIGTERM 静默死排障盲区，
+    // 2026-11-24 生产换装 kill 后日志尾部零线索）；行构造抽 graceful-exit.ts 纯函数
+    let ledger: ReturnType<typeof readDispatchLog> | null;
+    try { ledger = readDispatchLog(); } catch { ledger = null; /* 账不可读降级，告别行照打 */ }
+    for (const l of gracefulExitLines(sig, process.pid, ledger)) console.warn(l);
     wipe();
     process.exit(0);
   };

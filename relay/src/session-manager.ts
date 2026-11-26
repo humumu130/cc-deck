@@ -34,6 +34,7 @@ import {
 import { projectBoard, clearBoardProjectionCache } from "./board-projection.js"; // W-BOARDV2（1111 用户定调「查表即真相」）：看板读时投影（黑板事件链→泳道）
 import { chainBaseSlug, findContCard, harvestKeyOf } from "./board-recon.js"; // W-CARDLIFE-R2：slug 锚（同链前代卡寻址——pr-report MERGED 闭链）；W-ORPHANCARD 刀一/刀二（chainBaseSlug 基族扩展+findContCard 续跑复用）
 import { supersededChainPrs, branchBaseOf, type OpenPrSnap } from "./board-truth.js"; // W-BOARDTRUTH 刀1：同链 PR 收割即闭判定（纯函数）
+import { ghRepoFlag } from "./gh-repo.js"; // W-RELDEATH：gh pr list/close 显式 -R（治内嵌 cwd 非 git 仓库的裸 stderr）
 import { appendDutyFeedLog, dutyActivityWindowMin, lastFrameAtFromEvents, sessionActiveByEvents, lastRealUserMessageAt, dutyUserActiveMin, dutyNoProgressDelayMs, type DutyFeedKind } from "./duty-feed.js"; // [W-DUTYWIRE] 纯函数底座（org.ts 同纪律：无环纯 fs）；W-DUTYBACKOFF：三刀数据面
 import { classifyDispatchFailure, isTransientFailure, scheduleTransientRetry, backoffDelayMs, type DispatchFailureReason } from "./dispatch-retry.js"; // #G5 失败分类+瞬态重试（S1：type 供收口行显式 failure_reason 透传）；W-RATELIMIT429 backoffDelayMs 限流指数退避
 import { archiveDispatchPrompt } from "./dispatch-run-archive.js"; // M1 run 留档①任务书快照（multica 借①）
@@ -5379,6 +5380,9 @@ export class SessionManager {
   private async closeSupersededChainPRs(mergedPrUrl: string, dispatchId: string): Promise<void> {
     const execFileAsync = promisify(execFile);
     const run = (args: string[]) => execFileAsync("gh", args, { encoding: "utf-8", timeout: 10_000 });
+    // W-RELDEATH：pr list/pr close 无 URL 锚点，显式带 -R（从 mergedPrUrl 解析）——内嵌
+    // relay cwd 非 git 仓库，gh 默认解析每调用打一条裸 stderr 污染 relay 日志
+    const repoFlag = ghRepoFlag([mergedPrUrl]);
     try {
       // R1：view 增 mergedAt（P2 时序门）+list 增 createdAt——gh 同名字段直传
       const view = JSON.parse(String((await run(["pr", "view", mergedPrUrl, "--json", "number,headRefName,mergedAt"])).stdout)) as { number: number; headRefName: string; mergedAt?: string };
@@ -5386,13 +5390,13 @@ export class SessionManager {
       const mergedBranch = String(view.headRefName || "");
       const mergedAt = view.mergedAt;
       if (!mergedNumber || !mergedBranch) { this.emitChainAudit("boardtruth-pr-close-degraded", `同链 PR 自动闭降级：后继 PR 元数据提取失败（${mergedPrUrl}）——人工核销`); return; }
-      const openPrs = JSON.parse(String((await run(["pr", "list", "--state", "open", "--json", "number,headRefName,title,url,createdAt", "--limit", "60"])).stdout)) as OpenPrSnap[];
+      const openPrs = JSON.parse(String((await run([...repoFlag, "pr", "list", "--state", "open", "--json", "number,headRefName,title,url,createdAt", "--limit", "60"])).stdout)) as OpenPrSnap[];
       const hits = supersededChainPrs(openPrs, mergedBranch, mergedNumber, mergedAt);
       if (!hits.length) return; // 无同链开 PR——常态静默（每 merged 都全量关才是异常）
       let closed = 0;
       for (const pr of hits) {
         try {
-          await run(["pr", "close", String(pr.number), "--comment", `已被 #${mergedNumber}（${mergedBranch}）返修链 superseded——已收割核销，本 PR 自动关闭（W-BOARDTRUTH 刀1；同链基族 ${branchBaseOf(mergedBranch)}）`]);
+          await run([...repoFlag, "pr", "close", String(pr.number), "--comment", `已被 #${mergedNumber}（${mergedBranch}）返修链 superseded——已收割核销，本 PR 自动关闭（W-BOARDTRUTH 刀1；同链基族 ${branchBaseOf(mergedBranch)}）`]);
           closed += 1;
           this.emitChainAudit("boardtruth-pr-superseded", `同链 PR #${pr.number}（${pr.headRefName}）自动闭——被 #${mergedNumber}（${mergedBranch}）superseded（dispatch ${dispatchId.slice(0, 8)} 收割即闭，第三现治本刀1）`);
         } catch (e) {
