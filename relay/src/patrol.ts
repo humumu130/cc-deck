@@ -175,6 +175,13 @@ export class PatrolModule {
     } catch {
       alerts.push({ key: "dataDir", text: "数据目录不可写（磁盘满或权限被收）" });
     }
+    // P0-B（DEV-19 2026-11-26）：hook 上报腿健康——bridge hook 的 post 失败此前只进
+    // hook-debug.log（①无观察者 ②超 256KB 自截断灭证，relay 11-24 23:46 死后全量
+    // post fail 无人知晓 26h+）。hook 现落 hook-post-fail.json 健康账（见
+    // relay/hooks/bridge-hook.mjs），本探针读账两路判：
+    //   ① 持续失败：relay 活着但 hook 打不进来（token 漂移/端口被占/热换窗过长）
+    //   ② 复活补报：relay 重启前 hook 以失败收场——停机窗断流一次性入账，复活不失忆
+    try { this.checkHookLeg(); } catch (e) { console.log(`[patrol] hook-leg check error: ${e instanceof Error ? e.message : e}`); }
     // W-CMDIMPL ②（#216 任务书）：cbc-update-prefetch 磁盘水位——Claude Code 每 CLI
     // 会话留 ~288MB prefetch 目录永不清理（1022 磁盘反复满真根因）。超 20 个自动清
     // （仅清 cbc-update-prefetch-* 前缀目录，误伤面为零）+ 通知
@@ -224,6 +231,52 @@ export class PatrolModule {
       else this.resolve(a.key);
     }
     this.appendReport(`light: ${alerts.map((a) => `${a.key}=${a.text || "OK"}`).join(" ")}`);
+  }
+
+  // ---------- P0-B（DEV-19）：hook 上报腿健康（hook-post-fail.json 读账） ----------
+  /** relay 本进程 boot 时刻（构造≈boot）——判「断流跨越重启窗」的锚 */
+  private readonly hookBootAt = Date.now();
+  /** 复活补报一次性闸（防每拍重推；账本翻 ok 或重启进程自然复位） */
+  private hookDarkReported = false;
+
+  private checkHookLeg(): void {
+    let st: { streak?: number; firstFailAt?: number; lastFailAt?: number; lastOkAt?: number; lastErr?: string | null };
+    try {
+      st = JSON.parse(readFileSync(join(this.opts.dataDir, "hook-post-fail.json"), "utf-8"));
+    } catch {
+      return; // 账本不存在/损坏：hook 腿无历史不算病（新装/bridge.json 从未出现过）——静默
+    }
+    const streak = Number(st.streak) || 0;
+    const firstFailAt = Number(st.firstFailAt) || 0;
+    const lastFailAt = Number(st.lastFailAt) || 0;
+    const lastOkAt = Number(st.lastOkAt) || 0;
+    const now = Date.now();
+    // ① 复活补报（一次性）：boot 前存在「未闭合失败段」——末次失败早于 boot，且
+    // 要么至今未翻 ok（lastOkAt<lastFailAt），要么 ok 翻在 boot 之后（relay 复活即
+    // 恢复，若不在此拍入账，翻转后证据仍在但永不再报）。boot 前已闭环的失败段
+    //（lastOkAt 落在 lastFailAt 与 boot 之间）不报——那是停机前的旧账，非断流窗
+    const openAtBoot = firstFailAt > 0 && firstFailAt < this.hookBootAt && lastFailAt < this.hookBootAt &&
+      (lastOkAt < lastFailAt || lastOkAt > this.hookBootAt);
+    if (!this.hookDarkReported && openAtBoot) {
+      this.hookDarkReported = true;
+      const fmt = (t: number) => new Date(t).toLocaleString("zh-CN", { hour12: false });
+      const activeSpanMin = Math.max(1, Math.round(((lastOkAt > this.hookBootAt ? lastOkAt : lastFailAt) - firstFailAt) / 60_000));
+      this.push("hook-dark-boot", `relay 停机窗内 hook 上报存在未闭合失败段——首败 ${fmt(firstFailAt)}，末次失败 ${fmt(lastFailAt)}（活跃断流约 ${activeSpanMin}min${lastOkAt > this.hookBootAt ? "，relay 起后已恢复" : "，恢复待确认（其后无会话活动）"}）。停机窗内会话的注入/审批/通知事件已丢，必要时核对 hook-debug.log.1`);
+    }
+    if (streak > 0) {
+      // ② 持续失败：仍在失败（新鲜窗内）且累计超阈 → 告警。时长量化到 30min 步进
+      //（同文去重账本口径：避免分钟数每拍变化变相刷屏——30min 内至多一推）
+      const freshMs = num(process.env.CCR_HOOKFAIL_FRESH_MS, 10 * 60_000);
+      const sustainMs = num(process.env.CCR_HOOKFAIL_SUSTAIN_MS, 10 * 60_000);
+      if (now - lastFailAt < freshMs && firstFailAt > 0 && now - firstFailAt >= sustainMs) {
+        const spanMin = Math.max(1, Math.floor(((now - firstFailAt) / 60_000) / 30) * 30);
+        this.push("hook-post-fail", `hook 上报持续失败 ≥${spanMin}min（${String(st.lastErr || "").slice(0, 80)}）——用户 CLI 事件进不了 relay，注入/审批/通知链 hook 腿断`);
+      }
+      return; // streak>0 期间不 resolve（等真正 ok 翻转再写恢复行）
+    }
+    this.hookDarkReported = false;
+    this.resolve("hook-post-fail");
+    this.resolve("hook-dark-boot");
   }
 
   // ---------- 全巡（30min）：worker 帧 / 看板漂移 ----------
