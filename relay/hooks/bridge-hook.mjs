@@ -3,11 +3,11 @@
 // 设计约束：任何情况下静默 exit 0，绝不干扰 CLI（bridge.json 不存在 = Relay 没跑，立即退出）
 // 单源双形态：本文件同时服务 dev 模式（relay/hooks/ -> ../data）与插件模式
 // （build-plugin.mjs 复制到 cc-deck/scripts/hook.mjs -> ~/.cc-deck/data 优先）
-import { readFileSync, writeFileSync, appendFileSync, existsSync, statSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, statSync, mkdirSync, readdirSync, rmSync, renameSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Relay 自己 spawn 的 CLI（managed 会话 / 标题生成）带 CCR_RELAY_CHILD=1，
 // 不上报桥接（否则会注册成多余的外部会话，与 managed 双注册）
@@ -23,14 +23,70 @@ const dataDirs = [...new Set([pluginData, join(selfDir, "data"), join(selfDir, "
   .filter((d) => existsSync(join(d, "bridge.json")));
 const dataDir = dataDirs[0] ?? join(selfDir, "..", "data");
 
-// 诊断日志（事件名/工具名/pid，不含用户内容；超 256KB 截断防无限增长）
+// 诊断日志（事件名/工具名/pid，不含用户内容；超 256KB 轮转防无限增长）
 const diagFile = join(dataDir, "hook-debug.log");
 function diag(line) {
   try {
     if (existsSync(diagFile) && statSync(diagFile).size > 256 * 1024) {
-      writeFileSync(diagFile, "");
+      // P0-B（DEV-19 2026-11-26）：轮转保留一代（.1）替代清空灭证——relay 死亡排查
+      // 中 11-21/22 的 post ok/fail 史在读取中途被「writeFileSync 置空」抹掉，取证
+      // 链当场断裂。保留上一代 256KB，事后可追溯；rename 失败（跨设备等极端）回落清空
+      try { rmSync(diagFile + ".1", { force: true }); renameSync(diagFile, diagFile + ".1"); }
+      catch { writeFileSync(diagFile, ""); }
     }
     appendFileSync(diagFile, `${new Date().toISOString()} ${line}\n`);
+  } catch {}
+}
+
+// ── P0-B（DEV-19）：hook 上报腿健康账 hook-post-fail.json ──
+// 事故链：relay 11-24 23:46 死后 hook 全量 post fail 只进 hook-debug.log——该日志
+// ①无任何观察者（relay/巡检都不读）②超限自清空灭证。本账本让 hook 腿「断了留痕、
+// 复活可查」：relay 轻探针（patrol.ts checkHookLeg）与独立哨兵
+//（scripts/patrol-standalone.sh）读它判持续失败/重启断流窗。写入纪律：成败态翻转
+// 必写，同态 30s 节流（hook 每事件一进程，读改写全在 try 内——账本异常绝不动主流程）
+const STATE_FILE = "hook-post-fail.json";
+const STATE_THROTTLE_MS = 30_000;
+
+/** 纯函数：由上态推下态（测试直测——见 scripts/test-hookfail.ts） */
+export function nextState(prev, ok, now, errText) {
+  const p = prev && typeof prev === "object" ? prev : {};
+  if (ok) {
+    return {
+      v: 1,
+      firstFailAt: Number(p.firstFailAt) || 0,
+      lastFailAt: Number(p.lastFailAt) || 0,
+      lastOkAt: now,
+      streak: 0,
+      lastErr: null,
+      lastWriteAt: now,
+    };
+  }
+  const carried = (Number(p.streak) || 0) > 0 && (Number(p.firstFailAt) || 0) > 0;
+  return {
+    v: 1,
+    firstFailAt: carried ? Number(p.firstFailAt) : now,
+    lastFailAt: now,
+    lastOkAt: Number(p.lastOkAt) || 0,
+    streak: (Number(p.streak) || 0) + 1,
+    lastErr: String(errText || "").slice(0, 200) || null,
+    lastWriteAt: now,
+  };
+}
+
+/** 纯函数：是否落盘（首次建档/成败翻转必写；同态 30s 节流防每事件一次的写盘churn） */
+export function shouldWriteState(prev, next) {
+  if (!prev || typeof prev !== "object") return true;
+  if ((Number(prev.streak) > 0) !== (Number(next.streak) > 0)) return true;
+  return Number(next.lastWriteAt) - Number(prev.lastWriteAt) >= STATE_THROTTLE_MS;
+}
+
+function recordPostOutcome(ok, errText) {
+  try {
+    const f = join(dataDir, STATE_FILE);
+    let prev = null;
+    try { prev = JSON.parse(readFileSync(f, "utf-8")); } catch {}
+    const next = nextState(prev, ok, Date.now(), errText);
+    if (shouldWriteState(prev, next)) writeFileSync(f, JSON.stringify(next));
   } catch {}
 }
 
@@ -229,8 +285,13 @@ async function main() {
   // 600s 长等天然覆盖重启窗口，无需多轮
   const rounds = event === "PreToolUse" || event === "SessionStart" ? 1 : 3;
   let res = null;
+  let lastFailText = ""; // P0-B（DEV-19）：喂健康账的最后一条失败原因（fetch 异常/非 2xx 状态）
   for (let round = 0; round < rounds && !res; round++) {
-    if (round) await new Promise((r) => setTimeout(r, 2000 * round).unref?.());
+    // P0-B（DEV-19）修 retry 死路：退避 timer 原先 .unref()——r0 失败（ECONNREFUSED
+    // 快败/超时中止）后事件循环已空，unref timer 不阻退出 → 进程在 r1 前就退，三轮
+    // 重试从未真正跑过（生产 hook-debug 只有 r0 行、从无 r1/r2 实锤；relay 热换 5~8s
+    // 窗的旁路事件本靠它兜底=一直裸奔）。退避有界（2s+4s），不 unref 只多活几秒
+    if (round) await new Promise((r) => setTimeout(r, 2000 * round));
     for (let i = 0; i < cfgs.length; i++) {
       const c = cfgs[i];
       // 超时经 AbortController 真正中止未决 fetch，且超时 timer 不再 unref：原先
@@ -248,7 +309,8 @@ async function main() {
           signal: ac.signal,
         });
       } catch (e) {
-        diag(`post fail (r${round} ${i}): ` + (ac.signal.reason?.message ?? e?.message ?? e));
+        lastFailText = String(ac.signal.reason?.message ?? e?.message ?? e);
+        diag(`post fail (r${round} ${i}): ` + lastFailText);
         res = null;
         continue;
       } finally {
@@ -258,10 +320,15 @@ async function main() {
         diag(`post ok (r${round} ${i})`);
         break;
       }
+      lastFailText = `HTTP ${res ? res.status : "?"}`;
       diag(`post ${res ? res.status : "?"} (r${round} ${i})，回退下一候选`);
       res = null;
     }
   }
+
+  // P0-B（DEV-19）：上报腿成败入账（hook-post-fail.json）——观察者见 patrol 轻探针/
+  // 独立哨兵。PreToolUse 长等场景同样先入账再等决定（账本反映的是「上报腿」而非审批）
+  recordPostOutcome(!!(res && res.ok), lastFailText);
 
   // 仅 PreToolUse 需要把决定回给 CLI；其余事件纯旁路
   if (event === "PreToolUse" && res && res.ok) {
@@ -296,6 +363,12 @@ async function main() {
   }
 }
 
-main()
-  .catch(() => {})
-  .finally(() => process.exit(0));
+// P0-B（DEV-19）：仅作为脚本直跑时执行主流程（settings.json/插件 hooks.json 均以
+// `node …/hook.mjs` 拉起本文件=直跑形态，生产行为零变）；被测试 import 时只拿
+// nextState/shouldWriteState 纯函数，不跑 main 不抢 stdin
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  main()
+    .catch(() => {})
+    .finally(() => process.exit(0));
+}
