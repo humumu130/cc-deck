@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- relay-sentinel launchd 模板（W-RELDEATH / DEV-18 P0-A「可复活」腿）。
+     安装：sed "s|__SENTINEL__|$HOME/.cc-deck/bin/relay-sentinel.sh|" 本模板
+       > ~/Library/LaunchAgents/online.humumu.ccdeck.relay-sentinel.plist && launchctl load 该文件
+     摘除：launchctl unload + 删 plist。哨只拉 App 不 spawn relay（内嵌独占不动摇），
+     维护窗 touch ~/.cc-deck/data/relay-sentinel.pause 即静默。 -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>online.humumu.ccdeck.relay-sentinel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__SENTINEL__</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>120</integer>
+  <key>StandardOutPath</key><string>/tmp/relay-sentinel-launchd.log</string>
+  <key>StandardErrorPath</key><string>/tmp/relay-sentinel-launchd.log</string>
+</dict>
+</plist>

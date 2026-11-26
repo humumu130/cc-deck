@@ -19,6 +19,7 @@ import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
 import { reconcileBoardCards, harvestKeyOf, zombieInvariantScan, zombieTtlMs, ZOMBIE_NOTE_MARK, reconHeartbeatLine, type HarvestEvidence } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）；R3 harvestKeyOf（已收割未翻判定）；W-BOARDTRUTH5 刀二僵尸不变量+刀三心跳
 import { unclaimedStaleDispatches, unclaimedTtlMs, prStaleBoardActions, type PrTruthSnap, type TruthBoardEntry } from "./board-truth.js"; // [W-BOARDTRUTH] 刀2 未认领 TTL+刀3 审查中泳道×PR 真值对账（第三现治本）
+import { ghRepoFlag } from "./gh-repo.js"; // W-RELDEATH：gh pr list 显式 -R（治内嵌 cwd 非 git 仓库的裸 stderr）
 import { appendDispatch } from "./org.js"; // W-BOARDTRUTH 刀2：撤单台账收口行
 import { readDispatchLog, orgDir, dispatchLogPath } from "./org.js";
 import { drillDue, runDrill } from "./drill.js";
@@ -379,13 +380,17 @@ export class PatrolModule {
     // 补网）。gh 不可用=降级跳过（审计留痕）——无把握不动（任务书「无把握项标待核销推
     // PM」：无 pr_url 的审查中卡=无真值源不臆断，由 submitted 滞留铃（上方）兜底推收割）。
     try {
-      const prRaw = execFileSync("gh", ["pr", "list", "--state", "all", "--json", "number,state,url,headRefName", "--limit", "100"], { encoding: "utf-8", timeout: 10_000 });
-      const prs = JSON.parse(prRaw) as PrTruthSnap[];
+      // W-RELDEATH：板先载（pr_url 在卡上）→ 解析 -R 再调 gh——内嵌 relay cwd 非 git
+      // 仓库，无 -R 的 gh pr list 每 patrol 拍一条「failed to run git」裸 stderr 混进
+      // relay 日志；解析不到回落 gh 默认解析（现状行为不变）
       const boards: Array<{ gid: string; entries: TruthBoardEntry[] }> = [];
       for (const g of listGroups().filter((x) => x.status === "active")) {
         const board = loadBoardFile(g.id);
         if (board) boards.push({ gid: g.id, entries: board.entries as unknown as TruthBoardEntry[] });
       }
+      const repoFlag = ghRepoFlag(boards.flatMap((b) => b.entries.map((e) => e.pr_url)));
+      const prRaw = execFileSync("gh", [...repoFlag, "pr", "list", "--state", "all", "--json", "number,state,url,headRefName", "--limit", "100"], { encoding: "utf-8", timeout: 10_000 });
+      const prs = JSON.parse(prRaw) as PrTruthSnap[];
       const acts = prStaleBoardActions(boards, prs);
       let doneN = 0, backlogN = 0;
       for (const a of acts) {
