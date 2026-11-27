@@ -2535,6 +2535,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
 
       function setConn(context, status, text, failKind = "none") {
         context.status = status;
+        // offlineui（t-0b360983 刀1）：源断连起点记账——转 offline/connecting 记时刻（connecting
+        // 也算断：握手未成即无数据），online 清零；已有起点保持（offline→connecting→offline 不重置表）
+        context._downAt = status === "online" ? 0 : (context._downAt || Date.now());
         context.statusText = text;
         context.failKind = failKind;
         const className = status === "online" ? "status-connected" : status === "connecting" ? "status-reconnecting" : "status-disconnected";
@@ -3002,6 +3005,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         const fg = c === cloudCtx; // CONNV4B-fix1（R2 P0 刀二）：七处全局写套前台门——warm ctx 状态迁移只写自身（status/failKind/retryAt/_everOnline），不触全局面（诊断留痕/总线 emit/地基徽标/云 UI/团队绑定）
         if (fg && (c.status !== status || c.statusText !== text)) cloudDiagNote("状态 " + status, text);
         c.status = status;
+        c._downAt = status === "online" ? 0 : (c._downAt || Date.now()); // offlineui（刀1）：断连起点记账（与 setConn 同规则——本处覆盖 warm ctx 直写路径，setConn 覆盖 fg 经地基徽标路径）
         c.statusText = text;
         // 失败归因（仅 offline 携带）：transport（自动+手动重试，绝不引导输码）/ unpaired（真未配对，
         // 引导输码）/ pair（配对受挫，换码）/ bridge（桥不可达，诊断文案保留为重试前缀）/ none
@@ -4185,6 +4189,16 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         if (src === "lan" || src === null) lanResyncOnce();
         if (src === "cloud" || src === null) cloudResyncOnce();
         return src;
+      };
+      // offlineui（t-0b360983）：源健康只读观测口——B2 会话列表失联投影（刀1）/发送终态分流
+      // （刀2）/诊断文案分流（刀3）/恢复自动补发的统一判据。downFor=已失联毫秒数
+      //（online 恒 0）。两侧独立读数互不覆盖——「云桥重连中≠本机源死」的分流锚；S.status
+      // 被任意源 ws 事件覆写的老杂音面就此退出消费（list[data-connection] 同款混叠不再新增引用）。
+      window.__ccDeck005SourceHealth = () => {
+        const one = (c) => (!c || c.status === "online")
+          ? { online: true, status: c ? c.status : "", downFor: 0 }
+          : { online: false, status: c.status, downFor: Math.max(0, Date.now() - (c._downAt || Date.now())) };
+        return { lan: one(ctx), cloud: cloudUIOn() ? one(cloudCtx) : null };
       };
       // W-PORT-A R-2：目标源显式通道（新建弹窗「创建到」行消费）——cloud=云 shim（在线才有），
       // local=LAN socket。与 RouteWs（按会话归属路由）互补：CREATE 类无 session_id 的命令按显式选择走。

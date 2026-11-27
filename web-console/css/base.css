@@ -4043,3 +4043,21 @@ html[data-theme="light"] .tag.retired-tag { color: var(--dim); }
    paused !important 一切动画（infinite 常驻+瞬时全暂停，回前台无缝续播——
    animation-play-state 保留进度不重播）。transition 不停：事件驱动非常驻烧点。 */
 html.app-hidden, html.app-hidden *, html.app-hidden *::before, html.app-hidden *::after { animation-play-state: paused !important; }
+
+/* ===== offlineui（t-0b360983，1124 homewin 实锤）刀1/刀2：源离线说谎面治本 =====
+   本机 relay 死时：会话卡仍绿点「在线」+列表照常（缓存快照无失联标识）、发送
+   「发送中…」无终态——「源已死 UI 还活着」三面。JS 侧 __ccDeck005SourceHealth
+   观测口+秒拍态位投影，此处消费两面： */
+/* 刀1 失联横幅（列表顶常驻，warn 视觉语言对齐团队抽屉 .d-stale）——文案由 JS 按
+   视角数据源分流：「本机服务未连接」≠「云桥通道未连接」（刀3 分流锚） */
+.src-stale-banner { margin: 6px 8px 2px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--warn, #C08A3E) 45%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--warn, #C08A3E) 12%, transparent); color: var(--warn, #C08A3E); font-size: var(--fs-micro, 10.5px); text-align: center; }
+/* 刀1 卡片降灰：状态灯（working 绿点等缓存值）去饱和+整卡降透明——快照明示陈旧；
+   点选/交互保留（读历史合法，只降视觉权重）；选中卡不降（用户正盯的那张保持全权） */
+[data-session-list][data-src-stale] .list-upper .queue-card { opacity: .62; }
+[data-session-list][data-src-stale] .list-upper .queue-card .status-dot { filter: grayscale(1); }
+[data-session-list][data-src-stale] .list-upper .queue-card.selected { opacity: 1; }
+[data-session-list][data-src-stale] .list-upper .queue-card.selected .status-dot { filter: none; }
+/* 刀2 重发钮：fail 回显（⚠ 未送达[:源因]）行内动作钮——源离线所致失败源恢复自动补发，
+   其余失败（NACK/断链）手动重发兜底 */
+.msg-echo .echo-state .echo-retry { margin-left: 6px; padding: 1px 8px; border: 1px solid color-mix(in srgb, var(--danger, #e5484d) 55%, transparent); border-radius: 6px; background: transparent; color: var(--danger, #e5484d); font-size: 10px; line-height: 1.5; cursor: pointer; }
+.msg-echo .echo-state .echo-retry:hover { background: color-mix(in srgb, var(--danger, #e5484d) 12%, transparent); }
