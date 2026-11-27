@@ -4459,9 +4459,12 @@
                 }
                 const mainWsOpen = () => { const w = window.__ccDeck005MainWs; return !!w && w.readyState === 1; };
                 // offlineui（t-0b360983 刀2/刀3）：sid→目标源失联文案——「本机服务未连接」/
-                // 「云桥通道未连接」（源判定借 ResyncSource 返回值=detectSourceOfSid 纯读结果，
-                // 顺带的 resync 动作有 5s 节流；三表 miss 时桥缓存通道字段兜底）。空串=目标源在线。
-                // echo 终态分流与 halfconn 受理 toast 共用此单口——「哪条线坏了」用户可分清。
+                // 「云桥通道未连接」。**非纯读**：源判定借 __ccDeck005ResyncSource 返回值
+                // （=detectSourceOfSid 结果），其附带 resync 动作（lanResyncOnce 临时 ws 4s 收口/
+                // cloudResyncOnce ping）有 5s 节流+busy 守卫——断链期最坏 1 次/5s，与 halfconn
+                // 既有 re-drive 同面不成风暴（审查 A 问题 6 核实口径）；三表 miss 时桥缓存
+                // relay_channel 兜底。空串=目标源在线。echo 终态分流与 halfconn 受理 toast
+                // 共用此单口——「哪条线坏了」用户可分清。
                 function downTextOfSid(sid) {
                   const h = window.__ccDeck005SourceHealth && window.__ccDeck005SourceHealth();
                   if (!h || !sid) return "";
@@ -4497,8 +4500,10 @@
                   if ((v === "cloud" || v === "aggregate") && h.cloud && !h.cloud.online && h.cloud.downFor >= SRC_STALE_MS) out.push("云桥通道未连接");
                   return out;
                 }
-                // offlineui（刀1）：失联投影秒拍——横幅常驻列表顶（不进 mountUpper reconcile 流）+
-                // data-src-stale 态位（CSS 消费：状态灯/卡片降灰）。态位未变零 DOM。
+                // offlineui（刀1·审查 P2-C 收口）：失联投影秒拍——横幅常驻列表顶（不进 mountUpper
+                // reconcile 流）+ data-src-stale（失联态总标）+ data-src-dim（降灰专用：单源视角恒挂
+                // ——列表数据即该源；**聚合视角仅双源皆死才挂**，单源死时活源会话卡不被容器级
+                // 降灰误伤成「小号说谎」）。态位未变零 DOM。
                 function tickSourceStale() {
                   if (!UI || !UI.sessionList) return;
                   const down = sourceDownTexts();
@@ -4508,10 +4513,15 @@
                   const list = UI.sessionList;
                   if (!down.length) {
                     delete list.dataset.srcStale; // 空 value 仍命中 [data-src-stale] 属性选择器——必须摘属性
+                    delete list.dataset.srcDim;
                     list.querySelector(".src-stale-banner")?.remove();
                     return;
                   }
-                  list.dataset.srcStale = down.length === 2 ? "both" : (down[0] === "本机服务未连接" ? "lan" : "cloud");
+                  const which = down.length === 2 ? "both" : (down[0] === "本机服务未连接" ? "lan" : "cloud");
+                  list.dataset.srcStale = which;
+                  const v = window.__ccDeck005SourceView ? window.__ccDeck005SourceView() : "local";
+                  if (v !== "aggregate" || down.length === 2) list.dataset.srcDim = which;
+                  else delete list.dataset.srcDim; // 聚合+单源死：横幅分流已明示哪条线坏，卡片降灰让位精确性
                   let bn = list.querySelector(".src-stale-banner");
                   if (!bn) {
                     bn = document.createElement("div");
@@ -4521,9 +4531,14 @@
                   }
                   bn.textContent = down.join(" · ") + " · 列表为缓存数据，恢复后自动更新";
                 }
-                // offlineui（刀2）：源恢复自动补发——offline→online 翻转瞬间，该源的 why-fail
-                // 回显逐条重走 dispatchEchoedText（新 command_id 新生命周期；原命令从未真发出无
-                // 重复风险）。每会话一条聚合 toast 给用户可见回执。
+                // offlineui（刀2·审查 P1-1/P2-D 收口）：源恢复自动补发——offline→online 翻转瞬间，
+                // 该源 why-fail 且 **sent≠true**（从未真发出——halfconn 受理源标 null 类）的回显逐条
+                // 重走 dispatchEchoedText。sent:true（已写进 socket 但 ACK 未回——failB2Flights 收割
+                // 类）**不自动补发**：结果不明，重复投递的决策留给用户手动重发钮（对齐 halfconn
+                // R1「src=null 不收割防幽灵重发真重复」的既有保守口径——relay 幂等锚只认
+                // command_id，新 id 重放管不到，relay 重启后幂等表失守连同 id 也挡不住）。
+                // 逐条 dispatch 成功才移除（失败留在池里下一翻转重试，先斩后奏=静默丢失）；
+                // 补发前现场健康门复查（翻转拍与真实恢复间的竞态：源表未重建路由 miss/又抖断）。
                 function tickEchoResend() {
                   const h = window.__ccDeck005SourceHealth && window.__ccDeck005SourceHealth();
                   if (!h) return;
@@ -4533,13 +4548,17 @@
                     const whyMatch = src === "lan" ? "本机服务未连接" : "云桥通道未连接";
                     let resent = 0;
                     for (const [sid, eq] of [...S.echo.entries()]) {
-                      const pend = eq.filter((x) => x.state === "fail" && x.why === whyMatch);
+                      const pend = eq.filter((x) => x.state === "fail" && x.why === whyMatch && !x.sent);
                       if (!pend.length) continue;
                       const s = S.sessions.get(sid);
                       if (!s || !canCmd(s)) continue;
-                      eq.splice(0, eq.length, ...eq.filter((x) => !(x.state === "fail" && x.why === whyMatch)));
-                      if (!eq.length) S.echo.delete(sid);
-                      for (const p of pend) if (dispatchEchoedText(sid, p.text)) resent++;
+                      if (downTextOfSid(sid)) continue; // P2-D 现场健康门：此刻目标源仍判失联（翻转竞态）不烧假发送
+                      for (const p of pend) {
+                        if (!dispatchEchoedText(sid, p.text)) continue;
+                        const i2 = eq.findIndex((x) => x.key === p.key);
+                        if (i2 >= 0) { eq.splice(i2, 1); if (!eq.length) S.echo.delete(sid); }
+                        resent++;
+                      }
                     }
                     if (resent > 0) b2Toast((src === "lan" ? "本机服务已恢复" : "云桥已恢复") + " · " + resent + " 条未送达消息已自动补发", 4200);
                   }
@@ -4549,9 +4568,11 @@
                   const eq = S.echo.get(sid);
                   if (!eq) return false;
                   const now = Date.now();
-                  // offlineui（刀2）：带 why 的 fail（源离线所致）不自撤——300s 长窗：源恢复时
-                  // tickEchoResend 自动补发/用户手动重发都在，15s 悄悄消失=「未送达的痕迹」再次说谎
-                  const keep = eq.filter((x) => now - x.ts < (x.state === "fail" ? (x.why ? 300_000 : 15_000) : x.state === "slow" ? 15_000 : 30_000)); // W-ECHOFIX：slow 展示窗同 fail 15s
+                  // offlineui（刀2·审查 P1-B 收口）：带 why 的 fail（源离线所致）**完全退出时间清扫**
+                  // ——只由三消费口移除：源恢复自动补发/用户手动重发/onLog 真实帧对账。任何时间窗
+                  //（初版 300s 同 15s 一样）都会在「用户离开超窗→回看历史触发渲染→sweep 静默删光→
+                  // 源恢复时查无 fail 零补发」序列下把未送达痕迹再吞一次——长窗只推迟不说谎的时点
+                  const keep = eq.filter((x) => (x.state === "fail" && x.why) || now - x.ts < (x.state === "fail" || x.state === "slow" ? 15_000 : 30_000)); // W-ECHOFIX：slow 展示窗同 fail 15s
                   if (keep.length === eq.length) return false;
                   if (keep.length) S.echo.set(sid, keep); else S.echo.delete(sid);
                   return true;
@@ -4567,8 +4588,9 @@
                   if (!s || !canCmd(s)) return false;
                   const id = sendCmd(s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", { session_id: sid, text });
                   if (!id) return false;
+                  const sent = _cmdSrc.get(id) != null; // offlineui（审查 P1-1 溯源标）：真发出（src=lan/cloud）vs halfconn 受理（src=null 未发出）——自动补发只认后者（前者结果不明，重复风险留给用户手动重发决策）
                   const eq = S.echo.get(sid) || [];
-                  eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text, ts: Date.now(), state: "sending" });
+                  eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text, ts: Date.now(), state: "sending", sent });
                   S.echo.set(sid, eq);
                   if (sidIsSelected(sid)) renderConversation();
                   const sf = (ack) => {
@@ -4621,7 +4643,7 @@
                     // ACK 失败/超时转「未送达」红角标，15s 后自撤防永久假消息
                     if (text) {
                       const eq = S.echo.get(s.session_id) || [];
-                      eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text, ts: Date.now(), state: "sending" });
+                      eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text, ts: Date.now(), state: "sending", sent: _cmdSrc.get(id) != null }); // offlineui（审查 P1-1）：sent 溯源标（真发出 vs halfconn 受理）
                       S.echo.set(s.session_id, eq);
                       if (sidIsSelected(s.session_id)) renderConversation();
                     }
@@ -6127,7 +6149,7 @@
                       // W-PORT-A R-4：手机渲染路径同享乐观回显（与桌面 sendMessage 同构——echo push + ACK 失败标记）
                       if (body) {
                         const eq = S.echo.get(sid) || [];
-                        eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text: body, ts: Date.now(), state: "sending" });
+                        eq.push({ key: "echo-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6), text: body, ts: Date.now(), state: "sending", sent: _cmdSrc.get(id) != null }); // offlineui（审查 P1-1）：sent 溯源标（真发出 vs halfconn 受理）
                         S.echo.set(sid, eq);
                         if (sidIsSelected(sid)) renderConversation();
                       }

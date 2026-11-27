@@ -50,7 +50,8 @@ server.on("upgrade", (req, sock, head) => {
       if (m.command_id && m.type) {
         if (killed) return;
         received.push({ type: m.type, text: m.payload && m.payload.text });
-        try { ws.send(JSON.stringify({ type: "COMMAND_ACK", payload: { command_id: m.command_id, ok: true } })); } catch {}
+        // ACK 延迟 8s：制造「真发出但未确认即断链」窗口（审查 P1-1 场景——sent:true 类）
+        setTimeout(() => { if (killed) return; try { ws.send(JSON.stringify({ type: "COMMAND_ACK", payload: { command_id: m.command_id, ok: true } })); } catch {} }, 8000);
       }
     });
     // SNAPSHOT：一枚 WORKING 会话（绿点降灰验证锚）
@@ -109,7 +110,9 @@ await wait(11000);
 const bn2 = await ev(`document.querySelector('.src-stale-banner') ? document.querySelector('.src-stale-banner').textContent : ''`);
 ok(bn2.includes("本机服务未连接") && bn2.includes("列表为缓存数据"), `②a kill 后 11s 内失联横幅（实测 ${JSON.stringify(bn2)}）【验收1前半】`);
 const stale2 = await ev(`document.querySelector('[data-session-list]').getAttribute('data-src-stale')`);
-ok(stale2 === "lan", `②b data-src-stale=lan（CSS 降灰挂点，实测 ${stale2}）`);
+ok(stale2 === "lan", `②b data-src-stale=lan（失联总标，实测 ${stale2}）`);
+const dim2 = await ev(`document.querySelector('[data-session-list]').getAttribute('data-src-dim')`);
+ok(dim2 === "lan", `②b2 data-src-dim=lan（单源视角降灰挂点，实测 ${dim2}）`);
 const dot2 = await ev(`getComputedStyle(document.querySelector('.queue-card:not(.selected) .status-dot')).filter`);
 ok(String(dot2).includes("grayscale"), `②c 状态灯降灰（未选中卡 computed filter=${dot2}；选中卡豁免=设计）`);
 const selDot2 = await ev(`getComputedStyle(document.querySelector('.queue-card.selected .status-dot')).filter`);
@@ -137,6 +140,21 @@ ok(h4.includes('"online":true'), `④b health 回在线（${h4.slice(0, 60)}）`
 ok(received.some(r => r.type === "COMMAND_MESSAGE" && String(r.text).includes("未送达验证")), `④c why-fail echo 自动补发真到达（mock 收到 ${JSON.stringify(received)}）【验收2后半】`);
 const echo4 = await ev(`[...document.querySelectorAll('.msg-echo .echo-state')].map(x => x.textContent).join(' | ')`);
 ok(!echo4.includes("未送达"), `④d 补发后 fail 回显出清（实测 ${JSON.stringify(echo4)}）`);
+
+// ---------- ⑤ 审查 P1-1 收口锚：已真发出未 ACK（sent:true）不自动补发 ----------
+await ev(`window.__ccDeck005B2.sendPrompt("${SID}", "探针-真发出未确认-②")`);
+await wait(1500); // 真发出（mock 收到）+ ACK 8s 延迟窗内
+killRelay();
+await wait(12000); // failB2Flights 即时收割 → sf(null) → fail+why（sent:true）
+const echo5 = await ev(`[...document.querySelectorAll('.msg-echo .echo-state')].map(x => x.textContent).join(' | ')`);
+ok(echo5.includes("未送达：本机服务未连接"), `⑤a 真发出未 ACK 断链→fail+源因（实测 ${JSON.stringify(echo5)}）`);
+ok(await ev(`!!document.querySelector('.msg-echo .echo-retry')`), "⑤b 重发钮在场（sent:true 留人工决策）");
+await reviveRelay();
+await wait(22000);
+const dup5 = received.filter(r => String(r.text || "").includes("真发出未确认"));
+ok(dup5.length === 0, `⑤c 恢复后**不**自动补发 sent:true 类（mock 恢复窗实收该文本 ${dup5.length} 条=0 条，received=${JSON.stringify(received)}）【P1-1 收口】`);
+const echo5b = await ev(`[...document.querySelectorAll('.msg-echo .echo-state')].map(x => x.textContent).join(' | ')`);
+ok(echo5b.includes("未送达：本机服务未连接"), `⑤d fail 回显仍常驻（退出时间清扫——补发/手动/对账三口才移除，实测 ${JSON.stringify(echo5b)}）【P1-B 收口】`);
 console.log(`\nOFFLINEUI probe: ${pass} passed, ${fail} failed（kill→横幅耗时窗 11s/恢复窗 22s，阈值断言见源码锚 SRC_STALE_MS=10000）`);
 try { ws.close(); } catch {}
 try { globalThis.__p.kill(); } catch {}

@@ -3051,7 +3051,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       function connectCloudForInner(ctx, manual) {
         const cfg = ctx.cfg;
         const base = cfg.wsUrl;
-        if (!base) { ctx.status = "offline"; ctx.statusText = "未配置"; ctx.failKind = "none"; renderCloudUI(); return; }
+        if (!base) { ctx.status = "offline"; ctx._downAt = ctx._downAt || Date.now(); ctx.statusText = "未配置"; ctx.failKind = "none"; renderCloudUI(); return; } // offlineui（刀1）：直写路径补断连记账（审查 P2-2——漏记则 downFor 恒 0、云侧失联横幅永不出现）
         loadCloudIdentity();
         const peer = cloudPeerOf(cfg);
         const pair = ctx.pendingPair || pendingPairOf(cfg.id);
@@ -4388,6 +4388,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         stopChannelWatchdog(c); // #259 通道看门狗一并掐（断链即无 hello 待回包）
         killWsTransport(c); // #268：统一收尸口
         c.status = "offline";
+        c._downAt = c._downAt || Date.now(); // offlineui（刀1）：cloudDisconnect 直写路径补断连记账（审查 P2-2 同款缺口）
         c.statusText = "已断开";
         c.failKind = ""; c.retryAt = 0; c.retryNote = "";
       }
