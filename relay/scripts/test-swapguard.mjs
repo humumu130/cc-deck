@@ -15,6 +15,7 @@ const appSrc = join(SANDBOX, "src", "FakeApp.app");
 const appDst = join(SANDBOX, "Applications", "FakeApp.app");
 mkdirSync(dataDir, { recursive: true });
 mkdirSync(join(appSrc, "Contents"), { recursive: true });
+mkdirSync(join(SANDBOX, "Applications"), { recursive: true }); // CI 根因修正：ditto 自建父目录、cp -a（Linux 回落）不建——夹具显式建齐
 writeFileSync(join(appSrc, "Contents", "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict/></plist>');
 writeFileSync(join(dataDir, "bridge.json"), JSON.stringify({ port: 58999 }));
 
@@ -42,6 +43,7 @@ try {
 const verdictPath = join(dataDir, "swap-nova.verdict");
 const logPath = join(dataDir, "swap-nova.log");
 const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+if (code !== 0) console.log(`---- swap-nova 输出（exit ${code}，排障用）----\n${out}\n---- log ----\n${log}`);
 
 assert(code === 0, `换装+--no-open 全链 exit 0（实测 ${code}——陈旧 verdict=3 未污染本轮判定）`);
 assert(!existsSync(verdictPath), "verdict 消费后清理（无残留传下轮）");
