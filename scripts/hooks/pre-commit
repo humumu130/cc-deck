@@ -1,5 +1,11 @@
 #!/bin/sh
 # 版本一致性强制校验：任一落点与 VERSION 不一致即拒绝提交（#394）
+# node 缺席兜底（DEV-21 增补）：无 node 的环境（multica worktree 形态）下裸 node
+# 报 command not found，会被下方文案误读成「版本号不同步」——明示真实原因并放行。
+if ! command -v node >/dev/null 2>&1; then
+  echo ">>> node 不在 PATH——版本一致性校验跳过（放行）。本提交未经 version.mjs 校验。"
+  exit 0
+fi
 node scripts/version.mjs --check || {
   echo ""
   echo ">>> 提交被拦截：版本号不同步。修复方式："
