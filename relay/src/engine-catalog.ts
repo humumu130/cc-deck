@@ -27,7 +27,7 @@ import { preflightEngine } from "./agent-jsonl.js";
 import { getEngineDefinition } from "./engine-registry.js";
 import { CODEBUDDY_MODELS } from "./agent-codebuddy.js";
 import { listGroups } from "./projects.js";
-import { probeEngineAuth } from "./engine-auth.js";
+import { engineAuthWarmRead } from "./engine-auth.js";
 import type { EngineCatalogEntry, SessionEngine } from "./types.js";
 
 const SIX_ENGINES: readonly SessionEngine[] = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
@@ -69,7 +69,8 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
       const pf = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
       // #102 批 A：preflight 过（CLI 在场）后二探登录态——needs_auth 黄点+auth_hint；
       // preflight 仍 pass（存在性维度独立，两维正交）
-      const auth = pf.ok ? probeEngineAuth(id) : { state: "ready" as const };
+      // DEV-23：SNAPSHOT 热路径暖读（绝不同步 spawn——codebuddy 探针 5s 冻结事件循环治根）
+      const auth = pf.ok ? engineAuthWarmRead(id) : { state: "ready" as const };
       return {
         id, label: "Codex",
         state: !pf.ok ? "unavailable" : auth.state === "needs_auth" ? "needs_auth" : "ready",
@@ -98,7 +99,8 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
     const pf = def.preflight();
     // #102 批 A：registry 三引擎（trae/qwen-code/codebuddy）同接登录态二探——
     // CodeBuddy「装了未登录」正是本批根因案例（1014 用户实测）
-    const auth = pf.ok ? probeEngineAuth(id) : { state: "ready" as const };
+    // DEV-23：SNAPSHOT 热路径暖读（绝不同步 spawn——codebuddy 探针 5s 冻结事件循环治根）
+    const auth = pf.ok ? engineAuthWarmRead(id) : { state: "ready" as const };
     return {
       id,
       label: def.label,

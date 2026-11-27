@@ -168,7 +168,10 @@ export function resetEngineAuthCache(): void {
 }
 
 /** 引擎登录态探针（preflightEngine 之后第二维：CLI 在场前提下的账号登录态）。
- * 带opts = 测试旁路（零缓存直探）；无 opts = 生产路径（45s TTL 缓存）。 */
+ * 带opts = 测试旁路（零缓存直探）；无 opts = 生产路径（45s TTL 缓存）。
+ * 注意：spawn 系引擎（codex/codebuddy）冷缓存会同步 spawnSync 阻塞至超时——
+ * 只适合命令处置路径（COMMAND_CREATE/派单拦截）；SNAPSHOT 等热路径走
+ * engineAuthWarmRead（缓存/文件判定优先，spawn 一律异步回填）。 */
 export function probeEngineAuth(engine: SessionEngine, opts?: AuthProbeOptions): EngineAuthProbe {
   if (!opts) {
     const hit = probeCache.get(engine);
@@ -177,6 +180,78 @@ export function probeEngineAuth(engine: SessionEngine, opts?: AuthProbeOptions):
   const probe = probeEngineAuthDirect(engine, opts);
   if (!opts) probeCache.set(engine, { at: Date.now(), probe });
   return probe;
+}
+
+// ---------- 热路径暖读 + 异步回填（DEV-23：SNAPSHOT 冻结治根） ----------
+// 缺陷链（本机实锤）：SNAPSHOT 组装 → engineCatalogSummary → probeEngineAuth(codebuddy)
+// → spawnSync('codebuddy-code',['auth','status'],{timeout:5000})——codebuddy CLI 冷启
+// 实测 34s（重 node 包），探针 5s 超时杀不掉已花的时间：spawnSync 同步冻结事件循环整
+// 5s，期间心跳//health/云桥帧全停，LAN/云两端首连 SNAPSHOT 延至 ~5.7s（test:settings-ws
+// 本地确定性红根因；CI 无 codebuddy ENOENT 秒回故 CI 绿）。45s TTL 缓存只把冻结降频
+// （每 TTL 过期一次），没消除。治根三件：
+//   ① engineAuthWarmRead：热路径专用——文件判定系（qwen/trae/认配置 codex）零 spawn
+//      现算；spawn 系读缓存（过期也回陈值，stale-while-revalidate）+ 触发异步重探；
+//      冷缓存 fail-open 回 ready（与探针故障 fail-open 同语义——5s 冻结换来的结果
+//      本来也是超时 fail-open ready，零信息损失）。
+//   ② warmEngineAuthCacheAsync：spawn 系探针改 execFile 异步跑，完成后写同一
+//      probeCache——冷窗 ≤5s 自愈，主线程全程不冻。
+//   ③ index.ts 启动段预热一次；此后每次暖读见过期即异步续探，自续滚。
+const SPAWN_PROBE_ENGINES: readonly SessionEngine[] = ["codex", "codebuddy"];
+const inFlightWarm = new Set<SessionEngine>();
+
+/** execFile 回调 err 的实面（Node 语义）：code 为字符串=拉起失败（ENOENT 等 spawn
+ * 错误）、数字=子进程退出码（非零退出≠探针故障）；killed=true=超时杀。对应同步版
+ * fail-open 闸认的 r.error||r.signal 同类面（P1 修复锚：非零退出不在 fail-open 面内）。 */
+type ExecProbeError = Error & { code?: number | string; killed?: boolean };
+
+/** spawn 系探针异步版（execFile + 同判据写缓存；判据与 probeEngineAuthDirect 逐字对齐
+ * ——fail-open 闸=仅拉起失败/超时杀，非零退出照常文本匹配，见回调内注） */
+function warmSpawnProbeAsync(engine: SessionEngine): void {
+  if (inFlightWarm.has(engine)) return;
+  inFlightWarm.add(engine);
+  // 认配置优先铁律同步版同款：codex 中转（config.toml bearer token / auth.json /
+  // OPENAI_API_KEY）在场 → 恒 ready 零 spawn——`codex login status` 对中转恒
+  // "Not logged in"，盲探会误写 needs_auth 把可用引擎锁出目录
+  if (engine === "codex" && codexConfigAuthPresent(homedir())) {
+    inFlightWarm.delete(engine);
+    probeCache.set(engine, { at: Date.now(), probe: readyProbe });
+    return;
+  }
+  const cmd = engine === "codex" ? (process.env.CCR_CODEX_PATH ?? "codex") : (process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code");
+  const args = engine === "codex" ? ["login", "status"] : ["auth", "status"];
+  execFile(cmd, args, { timeout: 5000, encoding: "utf-8" }, (err: ExecProbeError | null, stdout: string, stderr: string) => {
+    inFlightWarm.delete(engine);
+    // 判据对齐同步版（P1 修复）：fail-open 闸只认拉起失败（err.code 字符串如 ENOENT）
+    // /超时杀（err.killed）——同步版 r.error||r.signal 同面；非零退出（err.code 数字）
+    // 是探针命令的正常应答形态（未登录类 CLI 常以非零码吐 Authentication required），
+    // execFile 出错回调仍带输出——照常对 out 文本匹配。修前 (!err && …) 把一切 err
+    // 短路成 fail-open ready，「装了未登录」形态写脏 probeCache 旁路 #102 批 A 拦截。
+    const out = `${stdout ?? ""}\n${stderr ?? ""}`;
+    const failOpen = engine === "codex" ? /not logged in/i : /authentication required|not logged in|请先登录/i;
+    const probeFailure = !!err && (err.killed === true || typeof err.code === "string");
+    probeCache.set(engine, { at: Date.now(), probe: probeFailure ? readyProbe : failOpen.test(out) ? needsAuth(engine) : readyProbe });
+  });
+}
+
+/** 启动预热（index.ts 后台段一次）：codex 认配置在场则暖读永不 spawn（三源判定），
+ * 否则首个 SNAPSHOT 前探针已在跑——冷窗从「首连后串行 5s 冻结」变「启动即并行 5s」 */
+export function warmEngineAuthCacheAsync(): void {
+  for (const e of SPAWN_PROBE_ENGINES) warmSpawnProbeAsync(e);
+}
+
+/** 热路径暖读（SNAPSHOT/catalog 组装专用）：绝不同步 spawn——见上方缺陷链注 */
+export function engineAuthWarmRead(engine: SessionEngine): EngineAuthProbe {
+  if (!SPAWN_PROBE_ENGINES.includes(engine)) {
+    // 文件判定系（claude/zcode 恒 ready；qwen/trae 纯文件读亚毫秒）——现算即暖
+    return probeEngineAuthDirect(engine);
+  }
+  const hit = probeCache.get(engine);
+  if (hit) {
+    if (Date.now() - hit.at >= CACHE_TTL_MS) warmSpawnProbeAsync(engine); // 过期异步续探，本次回陈值
+    return hit.probe;
+  }
+  warmSpawnProbeAsync(engine);
+  return readyProbe; // 冷缓存 fail-open（超时同步探的结果同为 ready，零信息损失）
 }
 
 function probeEngineAuthDirect(engine: SessionEngine, opts?: AuthProbeOptions): EngineAuthProbe {
@@ -247,9 +322,14 @@ export function authFailureHint(text: string, engine?: SessionEngine): string | 
 // resetEngineAuthCache，缓存语义由调用方掌控。
 function execFileText(cmd: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; out: string }> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
-      // 探针故障 fail-open 与同步版同口径：error/signal → ready 由调用方兜
-      resolve({ ok: !err, out: `${stdout ?? ""}\n${stderr ?? ""}` });
+    execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err: ExecProbeError | null, stdout, stderr) => {
+      // 探针故障 fail-open 与同步版同口径（P3③ 收窄，对齐 warmSpawnProbeAsync 的 P1 闸）：
+      // 仅拉起失败（code 字符串如 ENOENT）/超时杀（killed）才 ok:false 由调用方兜
+      // ready；非零退出（code 数字）是探针命令正常应答形态（未登录类 CLI 常以非零码
+      // 吐失效文案），出错回调仍带输出 → ok:true 照常文本匹配。修前 ok:!err 把非零
+      // 退出一并 fail-open，与暖读修前同款分叉（批 B 面只影响登录 pane 轮验显示）。
+      const probeFailure = !!err && (err.killed === true || typeof err.code === "string");
+      resolve({ ok: !probeFailure, out: `${stdout ?? ""}\n${stderr ?? ""}` });
     });
   });
 }

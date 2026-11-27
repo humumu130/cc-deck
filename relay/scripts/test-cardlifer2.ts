@@ -386,13 +386,18 @@ async function main() {
       // SessionManager 全量环境，透传是纯直连赋值，锚断言足够硬）
       const smSrc = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf8");
       ok(smSrc.includes("no_pr: p.no_pr === true ? true : undefined") && smSrc.includes("...(input.no_pr === true ? { no_pr: true } : {})"), `R4⑬ 打标链透传锚（直连口+dispatched 行落值，命中 ${smSrc.includes("no_pr: p.no_pr === true") ? 2 : 0}/2 环）`);
-      // R4-R1 生产形态回归（P0-2 修正面）：真实台账抽样过判据——打标上线前全量未标
-      //（3653 行零 no_pr，双审定罪实证）→ 白名单空 → 真实 org 上 converge dryRun 对
-      // submitted 零兜底动作。CI 无生产目录时条件跳过（本地跑即硬闸）。只读（dryRun）。
+      // R4-R1 生产形态回归（P0-2 修正面；DEV-23 修过时断言）：原断言「真实台账零
+      // no_pr:true」冻结的是上线前快照（3653 行零 no_pr）——特性投产后 dispatched/done
+      // 行合法带标（R4⑫ 段链复制的产出形态），生产 132 条真标单把它永久弄红。持久
+      // 不变量=**上线前存量零误翻**：ts 早于特性上线（W-CARDLIFE-R4 第二轮，1106 并入）
+      // 的行不得带 no_pr:true——存量误翻才是 converge 白名单真要防的。CI 无生产目录
+      // 条件跳过（本地跑即硬闸）。只读。
       try {
         const prodLog = readFileSync(join(homedir(), ".cc-deck", "org", "dispatch-log.ndjson"), "utf8");
-        const noPrTrue = prodLog.split("\n").filter((l) => l.trim() && (JSON.parse(l) as { no_pr?: boolean }).no_pr === true).length;
-        ok(noPrTrue === 0, `R4⑪ 生产回归：真实台账零 no_pr:true（${prodLog.split("\n").filter((l) => l.trim()).length} 行，白名单空=上线前存量单零误翻）`);
+        const LAUNCH_TS = Date.UTC(2026, 10, 6); // 2026-11-06：no_pr 打标链上线（1106 并入 dev）
+        const rows = prodLog.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { ts?: number; no_pr?: boolean });
+        const preLaunchTagged = rows.filter((r) => r.no_pr === true && typeof r.ts === "number" && r.ts < LAUNCH_TS);
+        ok(preLaunchTagged.length === 0, `R4⑪ 生产回归：上线前（<2026-11-06）存量单零误翻（${rows.length} 行中 pre-launch no_pr:true=${preLaunchTagged.length}；投产后新单合法带标不计）`);
       } catch { console.log("  (skip) R4⑪ 生产台账不在场（CI 环境）——本地跑即硬闸"); }
     }
 
