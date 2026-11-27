@@ -20087,6 +20087,42 @@ function probeEngineAuth(engine, opts) {
   if (!opts) probeCache.set(engine, { at: Date.now(), probe });
   return probe;
 }
+var SPAWN_PROBE_ENGINES = ["codex", "codebuddy"];
+var inFlightWarm = /* @__PURE__ */ new Set();
+function warmSpawnProbeAsync(engine) {
+  if (inFlightWarm.has(engine)) return;
+  inFlightWarm.add(engine);
+  if (engine === "codex" && codexConfigAuthPresent(homedir10())) {
+    inFlightWarm.delete(engine);
+    probeCache.set(engine, { at: Date.now(), probe: readyProbe });
+    return;
+  }
+  const cmd = engine === "codex" ? process.env.CCR_CODEX_PATH ?? "codex" : process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code";
+  const args = engine === "codex" ? ["login", "status"] : ["auth", "status"];
+  execFile2(cmd, args, { timeout: 5e3, encoding: "utf-8" }, (err, stdout, stderr) => {
+    inFlightWarm.delete(engine);
+    const out = `${stdout ?? ""}
+${stderr ?? ""}`;
+    const failOpen = engine === "codex" ? /not logged in/i : /authentication required|not logged in|请先登录/i;
+    const probeFailure = !!err && (err.killed === true || typeof err.code === "string");
+    probeCache.set(engine, { at: Date.now(), probe: probeFailure ? readyProbe : failOpen.test(out) ? needsAuth(engine) : readyProbe });
+  });
+}
+function warmEngineAuthCacheAsync() {
+  for (const e of SPAWN_PROBE_ENGINES) warmSpawnProbeAsync(e);
+}
+function engineAuthWarmRead(engine) {
+  if (!SPAWN_PROBE_ENGINES.includes(engine)) {
+    return probeEngineAuthDirect(engine);
+  }
+  const hit = probeCache.get(engine);
+  if (hit) {
+    if (Date.now() - hit.at >= CACHE_TTL_MS) warmSpawnProbeAsync(engine);
+    return hit.probe;
+  }
+  warmSpawnProbeAsync(engine);
+  return readyProbe;
+}
 function probeEngineAuthDirect(engine, opts) {
   const home = opts?.homeDir ?? homedir10();
   const timeoutMs = opts?.timeoutMs ?? 5e3;
@@ -20145,7 +20181,8 @@ function authFailureHint(text, engine) {
 function execFileText(cmd, args, timeoutMs) {
   return new Promise((resolve11) => {
     execFile2(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
-      resolve11({ ok: !err, out: `${stdout ?? ""}
+      const probeFailure = !!err && (err.killed === true || typeof err.code === "string");
+      resolve11({ ok: !probeFailure, out: `${stdout ?? ""}
 ${stderr ?? ""}` });
     });
   });
@@ -53134,7 +53171,7 @@ function engineCatalogSummary(claudeModelFallback = "") {
     }
     if (id2 === "codex") {
       const pf2 = preflightEngine({ command: process.env.CCR_CODEX_PATH ?? "codex" });
-      const auth2 = pf2.ok ? probeEngineAuth(id2) : { state: "ready" };
+      const auth2 = pf2.ok ? engineAuthWarmRead(id2) : { state: "ready" };
       return {
         id: id2,
         label: "Codex",
@@ -53163,7 +53200,7 @@ function engineCatalogSummary(claudeModelFallback = "") {
       return { id: id2, label: id2, state: "unknown", capabilities: { resume: false, approval: false, artifacts: false }, preflight: { state: "unknown", reason: "\u6CE8\u518C\u8868\u7F3A\u5B9A\u4E49" }, models: [], default_for_roles: roles };
     }
     const pf = def.preflight();
-    const auth = pf.ok ? probeEngineAuth(id2) : { state: "ready" };
+    const auth = pf.ok ? engineAuthWarmRead(id2) : { state: "ready" };
     return {
       id: id2,
       label: def.label,
@@ -80609,6 +80646,10 @@ void (async () => {
       reportPath: join72(cfg.dataDir, "patrol-report.md"),
       enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol
     }).start();
+  }
+  try {
+    warmEngineAuthCacheAsync();
+  } catch {
   }
   bootMark("patrol+watchfeed");
   await yieldLoop();
