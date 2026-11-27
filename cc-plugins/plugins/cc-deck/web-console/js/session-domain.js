@@ -939,6 +939,20 @@
                   if (!fz || typeof fz.autoOpen !== "function") return;
                   for (const p of paths) if (!prev.set.has(p)) fz.autoOpen(sid, p);
                 }
+                // DL-P1-7（DEV-22 批 B·空闲跳序四现 saga 结构性收口）：updated_at 端上单点
+                // 守卫——本域一切「洗 updated_at」的路径必须过此口，禁止新写手绕口裸赋值
+                // （relay/scripts/test-updated-at-guard.ts 源码锚+行为断言锁死）。语义：
+                // ①ts 缺载/非数不伪造不推进（#271 口径）②同值/回拨不洗（空闲卡跳序根因
+                // 形态——relay 侧同值守卫为上游防线，此为端上末道）③force=真态变
+                // （WAITING/ERROR/DONE 等状态翻转）必推进。返回是否推进。
+                function touchUpdatedAt(sess, ts, force) {
+                  if (!sess) return false;
+                  const t = Number(ts) || 0;
+                  if (!t) return false;
+                  if (!force && (Number(sess.updated_at) || 0) >= t) return false;
+                  sess.updated_at = t;
+                  return true;
+                }
                 function onSessionUpdated(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p || typeof p !== "object") return;
@@ -948,7 +962,7 @@
                   // #271：缺载不伪造——旧 fallback `|| Date.now()` 会把定位补水/扫描校正等
                   // 不带 updated_at 的部分帧洗成接收时刻（置灰判定连带失效）；真活动时刻由
                   // 服务端载荷显式携带，缺载保持既有值
-                  s.updated_at = p.updated_at || s.updated_at;
+                  touchUpdatedAt(s, p.updated_at); // DL-P1-7：载荷显式携带才推进（缺载保持既有值）
                   renderMyList();
                   renderSlimDrawer(); // [t-7e0c6189] 第四列成员卡状态/摘要随更新刷新（隐藏态零开销早退）
                   if (sid === S.selected) renderAll();
@@ -967,7 +981,7 @@
                 function onWaiting(sid, p) {
                   const s = S.sessions.get(sid);
                   if (!s || !p) return;
-                  s.status = "WAITING"; s.waiting_request = p; s.waiting_started_at = Date.now(); s.updated_at = Date.now();
+                  s.status = "WAITING"; s.waiting_request = p; s.waiting_started_at = Date.now(); touchUpdatedAt(s, Date.now(), true); /* DL-P1-7：真态变必推进 */
                   renderMyList();
                   if (sid === S.selected) renderAll();
                   if (sid !== S.selected) b2Toast("「" + shortTitle(s) + "」等待你的确认");
@@ -977,12 +991,12 @@
                   if (!s) return;
                   s.waiting_request = null;
                   if (s.status === "WAITING") s.status = "WORKING";
-                  s.updated_at = Date.now();
+                  touchUpdatedAt(s, Date.now(), true); /* DL-P1-7：真态变必推进（WAITING→WORKING 回转） */
                   renderMyList();
                   if (sid === S.selected) renderAll();
                 }
-                function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.auth_hint = (p && p.auth_hint) || null; /* #102 批 A：登录态中途失效指引（非登录态故障为 null 清） */ s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
-                function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } s.updated_at = Date.now(); renderMyList(); if (sid === S.selected) renderAll(); }
+                function onErrorEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "ERROR"; s.waiting_request = null; s.last_error = (p && p.message) || ""; s.auth_hint = (p && p.auth_hint) || null; /* #102 批 A：登录态中途失效指引（非登录态故障为 null 清） */ touchUpdatedAt(s, Date.now(), true); renderMyList(); if (sid === S.selected) renderAll(); }
+                function onDoneEvt(sid, p) { const s = S.sessions.get(sid); if (!s) return; s.status = "DONE"; s.waiting_request = null; if (p) { if (typeof p.duration_ms === "number") s.duration_ms = p.duration_ms; s._terminal = p.terminal_reason || ""; } touchUpdatedAt(s, Date.now(), true); renderMyList(); if (sid === S.selected) renderAll(); }
                 // #B3-3 删会话连带清理输入历史桶（旧壳 #95 同口径）与草稿，防 localStorage 悬留
                 // W-MODE 协作模式切换帧（relay orgAction collab-mode set 成功边广播）：
                 // no-leader → 锚卡本地全套回收（复用 onDeleted：列表/转录/附图/草稿/选中态）。
@@ -1098,7 +1112,7 @@
                 function onLog(sid, entry) {
                   if (!sid || !entry || typeof entry !== "object") return;
                   const s = S.sessions.get(sid);
-                  if (s) s.updated_at = entry.ts || Date.now();
+                  if (s) touchUpdatedAt(s, entry.ts || Date.now()); /* DL-P1-7：真日志活动才推进；乱序旧 ts 不回拨 */
                   // #291 帧分类判活（增量面）：工具帧本地刷新 last_tool_use_at——relay 增量
                   // 帧不带此键（SNAPSHOT 全量权威），实时性由本行补（与 relay pushExternalLog/
                   // onLog 两咽喉同口径：tool_use/tool_result 刷，心跳类不刷）

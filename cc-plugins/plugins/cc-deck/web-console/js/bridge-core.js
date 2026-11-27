@@ -265,6 +265,18 @@
                 }
 
                 const SESSION_MERGE_TYPES = new Set(["SESSION_UPDATED", "SESSION_HEARTBEAT", "SESSION_DONE", "SESSION_ERROR", "SESSION_WAITING", "SESSION_WAITING_RESOLVED"]);
+                // DL-P1-7（DEV-22 批 B·空闲跳序四现 saga 结构性收口）：updated_at 单点守卫（桥持
+                // 会话副本同法；与 session-domain.js 同口径的本地副本——两 IIFE 互不 import）。
+                // 语义：ts 缺载不推进、同值/回拨不洗、force 真态变必推进。本域洗点唯一
+                // （SESSION_MERGE_TYPES 合并处），新写手禁止绕口裸赋值（test-updated-at-guard 锚锁）。
+                function touchUpdatedAt(sess, ts, force) {
+                  if (!sess) return false;
+                  const t = Number(ts) || 0;
+                  if (!t) return false;
+                  if (!force && (Number(sess.updated_at) || 0) >= t) return false;
+                  sess.updated_at = t;
+                  return true;
+                }
                 function handleFrame(frame, evSource) {
                   if (!frame || typeof frame.type !== "string") return;
                   if (frame.type === "COMMAND_ACK") {
@@ -382,7 +394,13 @@
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
                     if (session && frame.payload && typeof frame.payload === "object") {
-                      Object.assign(session, frame.payload, { session_id: frame.session_id, updated_at: frame.ts || session.updated_at });
+                      Object.assign(session, frame.payload, { session_id: frame.session_id });
+                      // DL-P1-7：载荷时刻优先、信封 ts 兜底；同值/回拨不洗——relay 同值守卫
+                      // （上游）失守时的端上末道防线，防桥副本排序面（:569/:620/:687 按
+                      // updated_at 排序）随同值帧反复跳序。心跳帧（PM 常驻保活每拍）不推进
+                      // updated_at——session-domain onHeartbeat 三现同法（t31 实锤），桥副本
+                      // 此前随信封 ts 每拍洗=同病第五写手，本口收编。
+                      if (frame.type !== "SESSION_HEARTBEAT") touchUpdatedAt(session, (frame.payload && frame.payload.updated_at) || frame.ts);
                       changed = true;
                     }
                   }

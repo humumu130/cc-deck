@@ -7,6 +7,9 @@
 #   后强覆盖（默认拒——防「repo 同步冲掉部署位热改」，REVEXCL-REVIEW 在途审项）。
 # 正确顺序铁律：**先回流（部署位热改收编进 repo 并提交）再分发**——本脚本检测到部署位
 # 含 repo 没有的内容即拒发并打印 diff 清单，回流后零 diff 通过。
+# A-4 硬化（DEV-22 批 B，2026-11-28，台账 §四A）：①覆盖前自动备份部署位旧件到
+#   $DST_DIR/backup/（留 10 代）——--force 误用不再=永久丢部署位热改唯一副本，回滚有据；
+#   ②拷贝后 cmp 逐字节实证（此前只 bash -n 语法闸 + 打印 md5 无人消费=探针无检查面）。
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +20,8 @@ DST="$DST_DIR/leader-dispatch"
 # 漂移 375 行未被闸拦=W-BOARDTRUTH5 回执「harvest 同病」预警实锤；回流完成后零 diff 通过）
 SRC2="$REPO_ROOT/cc-plugins/plugins/cc-deck/bin/leader-harvest"
 DST2="$DST_DIR/leader-harvest"
+BACKUP_DIR="$DST_DIR/backup"
+BACKUP_KEEP=10
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
@@ -40,8 +45,24 @@ check_pair () { # $1=repo 源 $2=部署位 $3=显示名
 check_pair "$SRC" "$DST" leader-dispatch
 check_pair "$SRC2" "$DST2" leader-harvest
 
-cp "$SRC" "$DST"; chmod +x "$DST"
-cp "$SRC2" "$DST2"; chmod +x "$DST2"
+# A-4 ①备份+②实证的分发步：凡部署位旧件存在且内容将变——先备份（正常「回流后零
+# diff」路径不产生备份噪音；--force 与「repo 较新」覆盖路径均有回滚副本，留 10 代），
+# 拷贝后 cmp 逐字节核对（探针消费面——此前 md5 只打印无人核）。
+deploy_copy () { # $1=repo 源 $2=部署位 $3=显示名
+  if [ -f "$2" ] && ! cmp -s "$1" "$2"; then
+    mkdir -p "$BACKUP_DIR"
+    _bk="$BACKUP_DIR/$(basename "$2").$(date '+%Y%m%d-%H%M%S').bak"
+    [ -e "$_bk" ] && _bk="$BACKUP_DIR/$(basename "$2").$(date '+%Y%m%d-%H%M%S')-$$.bak" # 同秒多次覆盖（秒级时戳撞名）回落 pid 后缀——不同热改不互覆
+    cp -p "$2" "$_bk"
+    echo "  备份：$(basename "$2") 旧件 → $_bk"
+    ls -t "$BACKUP_DIR/$(basename "$2")."*.bak 2>/dev/null | tail -n +$((BACKUP_KEEP + 1)) | while read -r _old; do rm -f "$_old"; done
+  fi
+  cp "$1" "$2"; chmod +x "$2"
+  cmp -s "$1" "$2" || { echo "ERR: [$3] 拷贝后 cmp 不一致（磁盘异常/并发改写？）：$2"; exit 1; }
+  echo "  [$3] 分发并逐字节实证 ✓"
+}
+deploy_copy "$SRC" "$DST" leader-dispatch
+deploy_copy "$SRC2" "$DST2" leader-harvest
 for _d in "$DST" "$DST2"; do bash -n "$_d" || { echo "ERR: 部署位拷贝后语法不过（不应发生——回滚检查）：$_d"; exit 1; }; done
 md5_of() { if command -v md5 >/dev/null 2>&1; then md5 -q "$1"; else md5sum "$1" | cut -d' ' -f1; fi; }
 echo "OK: leader-dispatch + leader-harvest 已分发 repo → $DST_DIR（单向：repo=唯一分发源）"
