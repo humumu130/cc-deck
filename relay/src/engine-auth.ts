@@ -168,7 +168,10 @@ export function resetEngineAuthCache(): void {
 }
 
 /** 引擎登录态探针（preflightEngine 之后第二维：CLI 在场前提下的账号登录态）。
- * 带opts = 测试旁路（零缓存直探）；无 opts = 生产路径（45s TTL 缓存）。 */
+ * 带opts = 测试旁路（零缓存直探）；无 opts = 生产路径（45s TTL 缓存）。
+ * 注意：spawn 系引擎（codex/codebuddy）冷缓存会同步 spawnSync 阻塞至超时——
+ * 只适合命令处置路径（COMMAND_CREATE/派单拦截）；SNAPSHOT 等热路径走
+ * engineAuthWarmRead（缓存/文件判定优先，spawn 一律异步回填）。 */
 export function probeEngineAuth(engine: SessionEngine, opts?: AuthProbeOptions): EngineAuthProbe {
   if (!opts) {
     const hit = probeCache.get(engine);
@@ -177,6 +180,68 @@ export function probeEngineAuth(engine: SessionEngine, opts?: AuthProbeOptions):
   const probe = probeEngineAuthDirect(engine, opts);
   if (!opts) probeCache.set(engine, { at: Date.now(), probe });
   return probe;
+}
+
+// ---------- 热路径暖读 + 异步回填（DEV-23：SNAPSHOT 冻结治根） ----------
+// 缺陷链（本机实锤）：SNAPSHOT 组装 → engineCatalogSummary → probeEngineAuth(codebuddy)
+// → spawnSync('codebuddy-code',['auth','status'],{timeout:5000})——codebuddy CLI 冷启
+// 实测 34s（重 node 包），探针 5s 超时杀不掉已花的时间：spawnSync 同步冻结事件循环整
+// 5s，期间心跳//health/云桥帧全停，LAN/云两端首连 SNAPSHOT 延至 ~5.7s（test:settings-ws
+// 本地确定性红根因；CI 无 codebuddy ENOENT 秒回故 CI 绿）。45s TTL 缓存只把冻结降频
+// （每 TTL 过期一次），没消除。治根三件：
+//   ① engineAuthWarmRead：热路径专用——文件判定系（qwen/trae/认配置 codex）零 spawn
+//      现算；spawn 系读缓存（过期也回陈值，stale-while-revalidate）+ 触发异步重探；
+//      冷缓存 fail-open 回 ready（与探针故障 fail-open 同语义——5s 冻结换来的结果
+//      本来也是超时 fail-open ready，零信息损失）。
+//   ② warmEngineAuthCacheAsync：spawn 系探针改 execFile 异步跑，完成后写同一
+//      probeCache——冷窗 ≤5s 自愈，主线程全程不冻。
+//   ③ index.ts 启动段预热一次；此后每次暖读见过期即异步续探，自续滚。
+const SPAWN_PROBE_ENGINES: readonly SessionEngine[] = ["codex", "codebuddy"];
+const inFlightWarm = new Set<SessionEngine>();
+
+/** spawn 系探针异步版（execFile + 同判据写缓存；判据与 probeEngineAuthDirect 逐字对齐） */
+function warmSpawnProbeAsync(engine: SessionEngine): void {
+  if (inFlightWarm.has(engine)) return;
+  inFlightWarm.add(engine);
+  // 认配置优先铁律同步版同款：codex 中转（config.toml bearer token / auth.json /
+  // OPENAI_API_KEY）在场 → 恒 ready 零 spawn——`codex login status` 对中转恒
+  // "Not logged in"，盲探会误写 needs_auth 把可用引擎锁出目录
+  if (engine === "codex" && codexConfigAuthPresent(homedir())) {
+    inFlightWarm.delete(engine);
+    probeCache.set(engine, { at: Date.now(), probe: readyProbe });
+    return;
+  }
+  const cmd = engine === "codex" ? (process.env.CCR_CODEX_PATH ?? "codex") : (process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code");
+  const args = engine === "codex" ? ["login", "status"] : ["auth", "status"];
+  execFile(cmd, args, { timeout: 5000, encoding: "utf-8" }, (err: Error | null, stdout: string, stderr: string) => {
+    inFlightWarm.delete(engine);
+    // 判据对齐同步版：故障/超时/信号 → fail-open ready（err 即 ENOENT/超时/非零退出的
+    // Error，与同步版 r.error||r.signal 同类面）；输出命中登录失效 → needs_auth
+    const out = `${stdout ?? ""}\n${stderr ?? ""}`;
+    const failOpen = engine === "codex" ? /not logged in/i : /authentication required|not logged in|请先登录/i;
+    probeCache.set(engine, { at: Date.now(), probe: (!err && failOpen.test(out)) ? needsAuth(engine) : readyProbe });
+  });
+}
+
+/** 启动预热（index.ts 后台段一次）：codex 认配置在场则暖读永不 spawn（三源判定），
+ * 否则首个 SNAPSHOT 前探针已在跑——冷窗从「首连后串行 5s 冻结」变「启动即并行 5s」 */
+export function warmEngineAuthCacheAsync(): void {
+  for (const e of SPAWN_PROBE_ENGINES) warmSpawnProbeAsync(e);
+}
+
+/** 热路径暖读（SNAPSHOT/catalog 组装专用）：绝不同步 spawn——见上方缺陷链注 */
+export function engineAuthWarmRead(engine: SessionEngine): EngineAuthProbe {
+  if (!SPAWN_PROBE_ENGINES.includes(engine)) {
+    // 文件判定系（claude/zcode 恒 ready；qwen/trae 纯文件读亚毫秒）——现算即暖
+    return probeEngineAuthDirect(engine);
+  }
+  const hit = probeCache.get(engine);
+  if (hit) {
+    if (Date.now() - hit.at >= CACHE_TTL_MS) warmSpawnProbeAsync(engine); // 过期异步续探，本次回陈值
+    return hit.probe;
+  }
+  warmSpawnProbeAsync(engine);
+  return readyProbe; // 冷缓存 fail-open（超时同步探的结果同为 ready，零信息损失）
 }
 
 function probeEngineAuthDirect(engine: SessionEngine, opts?: AuthProbeOptions): EngineAuthProbe {

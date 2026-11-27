@@ -19,6 +19,7 @@ import { PatrolModule } from "./patrol.js";
 // 会话）+ patrol overrides 启动预载（确认卡拍板过的阈值重启后持续生效——预载在前，
 // PatrolModule.start 在后，周期阈值同吃到）
 import { WatchFeedModule, preloadPatrolOverrides } from "./watch-feed.js";
+import { warmEngineAuthCacheAsync } from "./engine-auth.js";
 import { readDispatchLog } from "./org.js"; // M4：SIGTERM 退出诊断（活派单留档，graceful-restart 屏障的 relay 侧对称面）
 import { gracefulExitLines } from "./graceful-exit.js"; // W-RELDEATH：SIGTERM/SIGINT 告别行（治静默死排障盲区）
 import { readPluginConfig } from "./plugin-config.js";
@@ -808,6 +809,9 @@ if (process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && read
     enabled: () => process.env.CCR_WATCH_FEED !== "0" && process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
   }).start();
 }
+// DEV-23 暖读配套：spawn 系引擎登录态探针异步预热一次（此后暖读见过期自续探）——
+// 冷缓存同步 spawnSync 是 SNAPSHOT 首连 5s 冻结根因（settings-ws 本地红实锤）
+try { warmEngineAuthCacheAsync(); } catch { /* 预热尽力而为 */ }
 bootMark("patrol+watchfeed");
   await yieldLoop(); // P1-2：重步后让出（listen/HTTP 窗保活）
   console.log("CC Deck Relay 已启动");
