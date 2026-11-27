@@ -585,19 +585,41 @@
                   toast("已清空注意/动态 " + rows.length + " 条（需行动项保留）");
                 }
 
+                // [W-NOTIFYDEAD]（1127 二现）打开验收单全程可见：bridge.openAcceptance 已改 return
+                // Promise（旧 void 吞）——成功 toast（旧 resolve 静默=用户侧「无反应」实锤形态）；
+                // 异步失败 catch（OpenUrl 链内各失败段自带 toast，此处兜底不重复 okv===false 面）；
+                // 同步 throw（OpenUrl 未定义等）由调用处 catch。focusSource 键盘路径与点击委托共用。
+                function openAcceptanceObserved(id) {
+                  const r = bridge.openAcceptance(id);
+                  Promise.resolve(r).then((okv) => {
+                    if (okv === true) { try { toast("已打开验收单链接"); } catch (_) {} }
+                  }).catch((e) => {
+                    try { console.error("[notify] 打开验收单失败(异步)", e); } catch (_) {}
+                    try { toast("打开验收单失败：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), "error"); } catch (_) {}
+                  });
+                }
                 function focusSource(el) {
                   // #119：行内 act 直达来源域后收弹窗（V3「行动钮直达」语义——弹窗即走）
-                  if (el.hasAttribute("data-notify-open-acceptance")) { bridge.openAcceptance(el.dataset.notifyOpenAcceptance); setOpen(false); return; }
-                  const domain = el.dataset.notifyDomain;
-                  if (domain === "session") {
-                    bridge.railJump("session");
-                    if (el.dataset.notifySession) bridge.selectSessionCard(el.dataset.notifySession);
-                    if (el.dataset.notifySegment === "tasks") bridge.clickTab("#d-session .segment-bar", "任务");
-                    toast("已定位来源会话 · 写操作在原域完成");
-                  } else if (domain === "team") {
-                    bridge.railJump("team");
-                    bridge.clickTab("#d-team .segment-bar", el.dataset.notifyTeamAction === "confirm" ? "看板" : "成员");
-                    toast("已定位来源团队 · 确认/接替在原域完成");
+                  // [W-NOTIFYDEAD]（1127 二现）：本函数原裸跑——railJump/clickTab 任一环抛（时序/
+                  // 形态差）handler 即中断：无 toast、面板不收=死钮实锤形态（PM 线索③坐实）。
+                  // 全程 try/catch+失败可见 toast；失败时面板保持打开（钮可重试），成功才收。
+                  try {
+                    if (el.hasAttribute("data-notify-open-acceptance")) { openAcceptanceObserved(el.dataset.notifyOpenAcceptance); setOpen(false); return; }
+                    const domain = el.dataset.notifyDomain;
+                    if (domain === "session") {
+                      bridge.railJump("session");
+                      if (el.dataset.notifySession) bridge.selectSessionCard(el.dataset.notifySession);
+                      if (el.dataset.notifySegment === "tasks") bridge.clickTab("#d-session .segment-bar", "任务");
+                      toast("已定位来源会话 · 写操作在原域完成");
+                    } else if (domain === "team") {
+                      bridge.railJump("team");
+                      bridge.clickTab("#d-team .segment-bar", el.dataset.notifyTeamAction === "confirm" ? "看板" : "成员");
+                      toast("已定位来源团队 · 确认/接替在原域完成");
+                    }
+                  } catch (e) {
+                    try { console.error("[notify] 行动钮跳转失败", e); } catch (_) {}
+                    try { toast("跳转失败：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), "error"); } catch (_) {}
+                    return; // 面板不收——失败态钮原地可重试
                   }
                   setOpen(false);
                 }
@@ -707,9 +729,9 @@
                   if (target.closest("[data-notify-clear]")) { clearAllNotifications(); return; }
                   const open = target.closest("[data-notify-open-acceptance]");
                   if (open) {
-                    // W-NOTIFYFIX（用户死钮实锤）：点击链兜底——openAcceptance/openUrl 任一环
-                    // 同步抛错（如降级链依赖缺失形态）不得静默吞掉——toast 可见报错+console 留痕
-                    try { bridge.openAcceptance(open.dataset.notifyOpenAcceptance); }
+                    // W-NOTIFYFIX（首修）：同步抛错可见防线保留；W-NOTIFYDEAD（1127 二现）：异步面
+                    // 补观测（成功 toast+异步失败 catch——旧 void 吞 Promise 任一降级段静默=死钮）
+                    try { openAcceptanceObserved(open.dataset.notifyOpenAcceptance); }
                     catch (e) { try { console.error("[notify] 打开验收单失败", e); } catch (_) {} if (bridge && typeof bridge.toast === "function") bridge.toast("打开验收单失败：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), "error"); }
                     setOpen(false); return;
                   }
