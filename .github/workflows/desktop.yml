@@ -307,7 +307,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # DEV-25 sqlite ABI 治标：20→22 对齐生产运行时系统 node（v22.x = ABI 127）。
+          # node 20 下 relay npm ci 拉 better-sqlite3 prebuilt ABI 115 进包，App 内嵌
+          # relay 用系统 node dlopen 必炸 → 存储降级 json（DEV-18 回执新发现②定谳）。
+          # 与 relay.yml 两处 pin 同源对齐。Windows job（上方 build-tauri）暂持 20：
+          # 用户 Windows 机系统 node 未核实，不盲改其包内 ABI（晨间核实后定）。
+          node-version: 22
           cache: npm
           # W-RELAYFRESHCI：relay lock 入缓存键（重建步在 relay 目录 npm ci）
           cache-dependency-path: |
@@ -336,6 +341,41 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           node scripts/build-plugin.mjs
+
+      - name: sqlite ABI guard（DEV-25 治标回归闸）
+        # 闭包 better_sqlite3.node 的 ABI 必须与生产运行时系统 node（v22.x=ABI 127）
+        # 一致——node pin 对齐 22 后，此处三重实证防再漂移：
+        # ①构建 node 确为 22 档（防 setup-node 静默解析漂移/后人误把 pin 改回低版）；
+        # ②驱动在本 node 真实 dlopen+读写（防 npm 缓存陈旧 ABI 制品/坏编译件进包）；
+        # ③resources 闭包二进制与 relay 安装件逐字节一致（防 gather 漂移——包内
+        #   二进制非本 node 构建件）。对齐 Windows job 的 PE 形态闸（#158）：mac 侧
+        # 此前无任何 native 闸。
+        working-directory: relay
+        shell: bash
+        run: |
+          node -e '
+            const EXPECT_ABI = 127; // node 22 系列 MODULE_VERSION（生产运行时 v22.23.4 同档）
+            const abi = Number(process.versions.modules);
+            if (abi !== EXPECT_ABI) {
+              console.error("ERR: CI node ABI " + abi + " != " + EXPECT_ABI + "（node 22 档）——pin 漂移，先对齐生产运行时系统 node 再出包");
+              process.exit(1);
+            }
+            const Database = require("better-sqlite3");
+            const db = new Database(":memory:");
+            db.exec("create table t(x)");
+            db.prepare("insert into t values (?)").run(42);
+            const row = db.prepare("select x from t").get();
+            if (row.x !== 42) { console.error("ERR: sqlite 读写断言失败"); process.exit(1); }
+            db.close();
+            const fs = require("fs");
+            const rel = fs.readFileSync("node_modules/better-sqlite3/build/Release/better_sqlite3.node");
+            const clo = fs.readFileSync("../desktop-tauri/src-tauri/resources/node_modules/better-sqlite3/build/Release/better_sqlite3.node");
+            if (!rel.equals(clo)) {
+              console.error("ERR: resources 闭包 better_sqlite3.node 与 relay 安装件不一致（gather 漂移——包内二进制非本 node 22 构建件）");
+              process.exit(1);
+            }
+            console.log("OK: node " + process.version + " ABI " + abi + "；better-sqlite3 dlopen+读写通过；闭包二进制逐字节一致（" + (rel.length / 1024).toFixed(0) + " KB）");
+          '
 
       - name: Embedded relay freshness gate（W-RELAYFRESHCI 新鲜度硬闸）
         # 同 Windows job：版本戳四面 == 仓库 VERSION + 双副本 SHA + tag==VERSION
