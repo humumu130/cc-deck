@@ -418,12 +418,14 @@ export class CloudClient {
 
   // 出站链路心跳：10s 协议层 ping 保活 NAT 映射；无任何回包说明对端/路径已死
   // （半开 TCP 不触发 close），主动 terminate 走统一重连路径。
-  // DL-P1-6（2026-11-27 台账·云桥节律性断连）：单窗 24s 无回包即掐线对 CF 边缘
-  // 延迟尖峰过激（生产实证每 15-20min 一次 heartbeat timeout，每次 terminate-reconnect
-  // downtime ~4.8s 且触发设备表 auto-resume，与恢复死循环互为放大器）。改连续 N 窗
-  // 才断（缺省 N=2 → ~48s 无回包）：真半开链路多等一窗零代价（重连路径同款），瞬时
-  // 尖峰不再斩断健康链路。CCR_CLOUD_PONG_MISS_N 可调（1=旧行为）。应用层端到端探活
-  //（#146 连续 3 轮 hb 无 ack）不受影响——CF 代答 pong 的形态仍由它兜底。
+  // DL-P1-6（2026-11-27 台账·云桥节律性断连）：判死分支的可达面=**事件循环滞胀**
+  //（5s tick 发不出 ping → lastPingAt 停走 + 零收包双条件齐）——CF edge 会自动代答
+  // 协议层 pong，真半开/CF 回收链路一直由 #146 应用层端到端探活（连续 3 轮 hb 无
+  // ack）承载，不经本分支。原单窗 24s 滞胀即 terminate：生产实证每 15-20min 一次
+  // heartbeat timeout 节律断连（terminate-reconnect downtime ~4.8s/次且触发设备表
+  // auto-resume，与恢复死循环互为放大器）。改连续 N 窗才断（缺省 N=2 → 滞胀容忍
+  // 24s→48s）：瞬时滞胀不再斩断健康链路，真死链路由应用层探活照常兜底。
+  // CCR_CLOUD_PONG_MISS_N 可调（1=旧行为）。
   private startHeartbeat(): void {
     if (this.hbTimer) return;
     this.hbTimer = setInterval(() => {

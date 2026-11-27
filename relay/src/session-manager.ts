@@ -1328,6 +1328,16 @@ export class SessionManager {
     this.pendingUserActionsTimer.unref?.();
   }
 
+  /** 收尾停摆口（P1-1 返修配套，2026-11-28）：杀 60s 兜底轮——测试套件断言跑完后
+   * 该轮的晚到拍会在 env 已清/未钉态下解析缺省 orgDir（开发机=真生产 org 目录，
+   * CI=自建空家），既是 1122 族真实污染面也撞测试隔离硬闸（boardv2 CI 实锤栈：
+   * refreshPendingUserActions→…→orgDir 缺省分支）。测试 finally 里**先**调本口**再**
+   * 还原 env。生产 relay 不停（进程级生命周期，无收尾语义）。 */
+  stopPendingUserActionsTick(): void {
+    if (this.pendingUserActionsTimer) clearInterval(this.pendingUserActionsTimer);
+    this.pendingUserActionsTimer = null;
+  }
+
   // 产生源统一入口：B3a stableKey 防重——同 key 已在账即静默（重复事件/重放不双发，
   // 已决议的账同 key 重放也不复活）。revision 语义对齐 B3a：org-confirm=created_at、
   // waiting=request_id、dispatch 无 revision（一单一行）

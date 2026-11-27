@@ -96,6 +96,7 @@ async function main() {
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   let exit = 0;
+  let mgrRef: SessionManager | null = null; // P1-1 返修：finally 杀晚到清扫轮要拿句柄
   try {
     const cfg: RelayConfig = {
       port: 8795, token: "t", tokenGenerated: false, defaultCwd: "",
@@ -120,6 +121,7 @@ async function main() {
     const created: SpawnRec[] = [];
     const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
     const mgr = new SessionManager(bus, cfg);
+    mgrRef = mgr;
     mgr.setAgentFactory(makeFakeFactory(created));
     const lr = mgr.ensureLeader();
     assert(lr.ok === true, "环境就绪（Leader 首建）");
@@ -330,9 +332,16 @@ async function main() {
     console.error("套件异常:", e);
     exit = 1;
   } finally {
-    if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
-    if (prevRead === undefined) delete process.env.CCR_STORAGE_READ_MODE; else process.env.CCR_STORAGE_READ_MODE = prevRead;
-    if (prevTitle === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitle;
+    // P1-1 返修（2026-11-28 审查退回）：晚到异步段钉档收尾。真凶不是 60s 兜底轮（本
+    // 套件经 index.ts 才启动它，从未起过）——是假 agent 的 turnCloseMs 定时器在断言
+    // 收尾后晚到触发 onTurnEnd→…→refreshPendingUserActions（帧驱动挂点）→snapshot→
+    // dutyTargetId→readDutyFile→orgDir。若此刻 env 已还原，缺省解析直指生产 org
+    // （开发机=1122 族真隐患；CI=自建空家曾触发硬闸误杀）。治法双管：
+    //   ① env **钉满进程生命周期不还原**——独立直跑脚本无嵌套复用语义，晚到读者解析
+    //     到沙盒路径（目录已 rm→读侧防御空态），永不触生产；
+    //   ② 杀兜底轮（防御纵深——若未来经 ws-server 挂载形态启动了 tick）。
+    try { mgrRef?.stopPendingUserActionsTick(); } catch { /* 尽力而为 */ }
+    void prevOrg; void prevRead; void prevTitle; // 保留捕获变量（改钉满口径后不再还原）
     try { rmSync(ORG, { recursive: true, force: true }); } catch { /* 清理尽力而为 */ }
     try { rmSync(DATA, { recursive: true, force: true }); } catch { /* 清理尽力而为 */ }
   }
