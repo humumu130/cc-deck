@@ -124,5 +124,20 @@ console.log("件OU 源离线说谎面治本（t-0b360983，1124 homewin 实锤�
   ok(ssd.includes('(x.state === "fail" && x.why) || now - x.ts <') && ssd.includes('b2Toast(why ? why + " · 恢复后自动发送"') && ssd.includes("downTextOfSid(payload.session_id)") && st.includes('c._downAt = c._downAt || Date.now(); // offlineui（刀1）：cloudDisconnect'), "OU6 why-fail 退出时间清扫+受理 toast 分流+云侧直写记账（审查 P1-B/P2-2：源因 fail 只由补发/手动/对账移除永不超窗自删；云桥 cloudDisconnect/connectCloudForInner 直写路径补 _downAt——云侧横幅不缺位）");
 }
 
+console.log("件ND 1127 通知钮死钮二现（W-NOTIFYDEAD：origin 活连接兜底+开链悬挂可见+两链全程反馈）：");
+{
+  const sd = rf("web-console", "js", "settings-domain.js");
+  const nj = rf("web-console", "js", "notify.js");
+  const openAccBody = bc.slice(bc.indexOf("openAcceptance(id)"), bc.indexOf("openAcceptance(id)") + 1400);
+  ok(sd.includes("window.__ccDeck005MainWs && window.__ccDeck005MainWs.url"), "ND1 HttpOrigin 活连接兜底（cfg.wsUrl 空窗不再回落死源 tauri.localhost——1127「打开验收单」死钮主因：file/tauri 源协议过检+openExternal 假成功+零 toast）");
+  ok(sd.includes('"open-timeout"') && sd.includes("6000"), "ND2 openExternal 悬挂竞速 6s（WebView2 IPC 永不结算形态可观测：超时 toast+复制兜底——#268 Canceled 前科族）");
+  ok(openAccBody.includes("return window.__ccDeck005OpenUrl(url)") && !openAccBody.includes("void window.__ccDeck005OpenUrl"), "ND3 openAcceptance void→return（Promise 不再被吞——调用方可观测成功/失败）");
+  ok(nj.includes("function openAcceptanceObserved") && nj.includes("已打开验收单链接") && nj.includes("打开验收单失败(异步)"), "ND4 验收钮全程可见（成功 toast+异步失败 catch——resolve 静默曾=用户侧「无反应」）");
+  const fsBody = nj.slice(nj.indexOf("function focusSource"), nj.indexOf("function focusSource") + 1600);
+  ok(fsBody.includes("catch (e)") && fsBody.includes("跳转失败：") && fsBody.includes("// 面板不收"), "ND5 focusSource 全程防线（railJump/clickTab 抛→失败 toast+面板保持可重试——PM 线索③坐实形态）");
+  const toastBody = bc.slice(bc.indexOf("const toast = (() =>"), bc.indexOf("const toast = (() =>") + 1200);
+  ok(toastBody.includes('node.id = "toast"') && toastBody.includes('createElement("div")'), "ND6 bridge.toast 节点兜底（#toast 缺席不再静默 return——W-NOTIFYFIX「任何降级必须可见」补齐到桥面）");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

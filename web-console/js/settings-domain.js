@@ -893,8 +893,22 @@ function connectLan(ctx) {
           const u = String(url || "");
           if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接（非 http/https）：" + u.slice(0, 80), true); return false; }
           if (window.ccDeck && typeof window.ccDeck.openExternal === "function") {
-            try { await window.ccDeck.openExternal(u); return true; }
-            catch (e) { sharedToast("系统浏览器打开失败，已转复制兜底：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); return copyLink(u); }
+            // [W-NOTIFYDEAD]（1127 二现）：壳 IPC 悬挂形态（WebView2 消息被吞永不结算——#268
+            // Canceled 前科族）await 即永挂：无错无 toast=死钮。6s 竞速超时转「可见失败」——
+            // toast+复制兜底，绝不静默。成功路径 resolve 保持零多余 toast（probe-notifyfix B1 锚）。
+            let hangTimer = 0;
+            try {
+              await Promise.race([
+                window.ccDeck.openExternal(u),
+                new Promise((_, rej) => { hangTimer = setTimeout(() => rej(new Error("open-timeout")), 6000); }),
+              ]);
+              clearTimeout(hangTimer);
+              return true;
+            } catch (e) {
+              clearTimeout(hangTimer);
+              if (e && e.message === "open-timeout") { sharedToast("系统浏览器打开超时（6s 无响应）——链接已转复制，请粘贴到浏览器打开", true); return copyLink(u); }
+              sharedToast("系统浏览器打开失败，已转复制兜底：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); return copyLink(u);
+            }
           }
           let opened = null;
           try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (e) { opened = null; }
@@ -2446,6 +2460,17 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           const raw = String((typeof cloudUIOn !== "undefined" && cloudUIOn() ? cloudCtx.cfg.wsUrl : ctx.cfg.wsUrl) || "");
           const u = new URL(raw.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
           if (u.protocol === "http:" || u.protocol === "https:") return u.origin;
+        } catch (_) {}
+        // [W-NOTIFYDEAD]（1127 二现实锤「打开验收单」死钮）：cfg.wsUrl 空窗（桌面 shell 探测期/
+        // 未走 connectLan 形态）时旧版直落 location.origin——桌面=tauri.localhost（WebView2 为
+        // https 形态），协议检查通过+openExternal resolve「成功」→ 外部浏览器打开不可达页+零
+        // toast=用户侧死钮。活连接兜底：通知数据在流（面板有内容）则主 WS 必在，其实址即真源。
+        try {
+          const wu = String((window.__ccDeck005MainWs && window.__ccDeck005MainWs.url) || "");
+          if (/^wss?:\/\//i.test(wu)) {
+            const u2 = new URL(wu.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
+            if (u2.protocol === "http:" || u2.protocol === "https:") return u2.origin;
+          }
         } catch (_) {}
         return location.origin;
       };
