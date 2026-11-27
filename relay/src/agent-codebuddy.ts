@@ -115,7 +115,7 @@ export class CodeBuddyAgentSession extends JsonProcessAgentSession {
     const model = (this.opts.model || "").trim();
     if (model && model !== "default" && model !== "codebuddy") {
       if (!CODEBUDDY_MODELS.includes(model) && !model.startsWith("custom:")) {
-        throw new Error(`codebuddy 未知模型: ${model}（内置 20 个或 custom: 前缀自定义，见 CODEBUDDY_MODELS）`);
+        throw new Error(`codebuddy 未知模型: ${model}（内置 17 个或 custom: 前缀自定义，见 CODEBUDDY_MODELS）`);
       }
       args.push("--model", model.startsWith("custom:") ? model.slice(7) : model);
     }

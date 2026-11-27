@@ -18,18 +18,29 @@ js/bridge-core.js）各自持份（IIFE 互不 import，同口径复制）。语
 
 ## 写手清单（全量盘点，2026-11-28 树核证）
 
-### relay 侧（session-manager.ts——批 A 改派面，DEV-22 未动）
+### relay 侧（session-manager.ts——DEV-31 清件③已收编单点，2026-11-28）
 
 | 写手 | 历史修复笔 | 现状 |
 |---|---|---|
 | 同值 status 洗 | c5b65148（首现） | 已修（同值 status 不洗） |
 | todos/stats/pending 三写手 | 158184c9（二现） | 已修（同值守卫） |
 | revive-on-hydrate WORKING 恒洗 | 0f29bc7a（四现） | 已修（恒洗退役） |
-| subagents/其余增量键 | — | 逐点守卫，**无单点函数** |
+| **全写手单点收编** | DEV-31（2026-11-28） | **已落地**：`touchIfChanged(state, at?, force?)` 单点（session-manager 私有方法），29 处直写全过口 + `setExternalUsage`（lifecycle/context-link 搬运体）1 处同收编；裸赋值仅守卫体内 1 处（`test-updated-at-guard` R1 锚锁死） |
 
-**改派建议（leader → 批 A）**：relay 侧立同语义 `touchIfChanged()` 单点，session-manager
-一切写 updated_at 路径收编过口——端上已示范（双 IIFE 同法），并加 relay 侧「空闲 60s
-updated_at 不变」回归断言（端上装机回归清单同步，见 feedback-ledger 11 月回填 R1 行）。
+**relay 单点语义（DEV-31 定案，与端上三律同构、force 分工按 relay 真相源角色）**：
+
+1. **非数/非正 at 不推进**（显式坏 ts 不伪造接收时刻——比收编前更强：旧直写
+   `updated_at = at ?? now` 形态下 NaN/0 会直落盘，现一律拒写）；
+2. **非 force 同值/回拨不洗**（内容变写手：todos/subagents/pending/stats/artifacts/
+   title/usage——乱序旧转录 ts 不回拨排序面）；
+3. **force=真态变/权威校正必推进**（状态翻转/终态/退休/恢复 + 水合回放校正——
+   `setExternalStatus`/`emitUpdated`/`finishExternal` 等 at 是权威时刻的路径，回拨到
+   真相是校正不是洗；#271 boot 采纳与 #144 sweep 收殓语义逐字保留，回归锚 R4-2b/R4-3）。
+
+**心跳载荷（DEV-22 审查 ：13129 实锤，DEV-31 补键）**：SESSION_HEARTBEAT 载荷带既有
+`updated_at`（#157 帧完整性——防缺载兜底消费面回落信封 ts），心跳本身永不推进它；
+三端消费面（web onHeartbeat/桥 SESSION_HEARTBEAT 排除口/expo 只读 elapsed_ms）均不
+据它洗，纯帧完整性加固。
 
 ### 端上面（web-console——DEV-22 批 B 已收编）
 
@@ -47,6 +58,10 @@ updated_at 不变」回归断言（端上装机回归清单同步，见 feedback
 
 ## 回归与装机观察点
 
-- 机器面：`npm run test:ui-followup`（saga 原套件）+ `test-updated-at-guard`（34 项）+ `test:fc`。
+- 机器面：`npm run test:ui-followup`（saga 原套件）+ `test-updated-at-guard`（端上面
+  + relay R 组，DEV-31 后 56 项）+ `test:fc`。
+- relay 侧机器回归（DEV-31 落地）：`test-updated-at-guard` R4 行为组含「同值重报 ×12
+  （5s×12=60s 等价）updated_at 不变」断言——空闲 60s 不变契约的 relay 面等价形态；
+  真机 60s 静置仍按下方装机面走一轮收口。
 - 装机面（入 leader 晨报/回归轮）：空闲会话（含 PM 常驻保活席）静置 60s 列表零跳序——
   台账建议的端到端断言形态，真机一轮即可收口 R1 行。

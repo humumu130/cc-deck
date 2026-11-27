@@ -2117,7 +2117,7 @@ export class SessionManager {
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
       s.state.title = t;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state); // DEV-31 清件③：过单点（内容变，非 force）
       this.bus.emit(sessionId, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
@@ -2137,7 +2137,7 @@ export class SessionManager {
     const t = title.trim();
     if (!t) return;
     s.state.title = t;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state); // DEV-31 清件③：过单点（内容变，非 force）
     this.bus.emit(sessionId, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -2470,7 +2470,7 @@ export class SessionManager {
     // revive-on-hydrate 扫描对常驻活进程会话每拍同值重报 WORKING，恒洗=每拍刷 updated_at
     // =僵尸卡跳顶。活跃区排序用 turn_started_at（1026），裸 WORKING 重报无排序消费者；
     // 真实活跃经客户端 SESSION_LOG 落 updated_at（onLog entry.ts）不受影响。
-    if (changed || summaryChanged) s.state.updated_at = at ?? Date.now();
+    if (changed || summaryChanged) this.touchIfChanged(s.state, at, true); // DEV-31 清件③：过单点；force=at 是权威时刻（boot 采纳传转录真实时刻需可回拨校正，1123 同值守卫已挡同值重报）
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,
@@ -2489,7 +2489,7 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s || s.state.compacting === on) return;
     s.state.compacting = on;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（压缩态真翻转，force）
     if (on) {
       const t = setTimeout(() => {
         if (s.state.compacting) this.setExternalCompacting(id, false);
@@ -2664,7 +2664,7 @@ export class SessionManager {
     // 1123 二现（空闲仍跳）：同值写手全链守卫——todos 无变化不洗 updated_at 不发帧（与 setExternalSubagents 同法）
     if (JSON.stringify(s.state.todos ?? []) === JSON.stringify(list)) return;
     s.state.todos = list;
-    s.state.updated_at = at ?? Date.now();
+    this.touchIfChanged(s.state, at); // DEV-31 清件③：过单点（1123 二现门后，非 force——乱序旧转录 ts 不回拨）
     this.emitUpdated(s, true, at);
   }
 
@@ -2677,7 +2677,7 @@ export class SessionManager {
     const next = JSON.stringify(list);
     if (prev === next) return;
     s.state.subagents = list.length ? list : undefined;
-    s.state.updated_at = at ?? Date.now();
+    this.touchIfChanged(s.state, at); // DEV-31 清件③：过单点（1123 二现门后，非 force）
     // X0 件1：subagent kind 并集入装配观测缓存（能力只增不减——与活跃列表清空语义解耦）
     if (list.length) this.assemblyObserve(id, { kinds: list.map((x) => x.kind).filter(Boolean) });
     this.bus.emit(id, "SESSION_UPDATED", {
@@ -2698,8 +2698,11 @@ export class SessionManager {
     if (!s || !s.state.external) return;
     if (initialPrompt && !s.state.initial_prompt) s.state.initial_prompt = initialPrompt;
     if (s.state.title_locked) return;
+    // DEV-31 清件③：同值守卫补位（对齐 todos/stats/pending 三写手 1123 二现同法——
+    // 桥侧 CC 会话名/首 prompt 升级路径周期重报同名会洗 updated_at）+过单点（非 force）
+    if (s.state.title === title) return;
     s.state.title = title;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -2716,7 +2719,7 @@ export class SessionManager {
     // 1123 二现守卫：pending 清单无变化不洗 updated_at 不发帧
     if (JSON.stringify(s.state.pending_inputs ?? null) === JSON.stringify(list.length ? list : null)) return;
     s.state.pending_inputs = list.length ? list : undefined;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state); // DEV-31 清件③：过单点（1123 二现门后，非 force）
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -2733,7 +2736,7 @@ export class SessionManager {
     const p0 = s.state.stats;
     if (p0 && p0.files_changed === stats.files_changed && p0.lines_added === stats.lines_added && p0.lines_deleted === stats.lines_deleted) return;
     s.state.stats = stats;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state); // DEV-31 清件③：过单点（1123 二现门后，非 force）
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -2817,7 +2820,7 @@ export class SessionManager {
     }
     s.state.artifacts = list;
     if (silent) return;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state); // DEV-31 清件③：过单点（输出物真变化，非 force）
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -2893,7 +2896,7 @@ export class SessionManager {
       }
     }
     s.state.artifacts = list;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state); // DEV-31 清件③：过单点（输出物真合并，非 force）
     this.bus.emit(sessionId, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -3103,7 +3106,7 @@ export class SessionManager {
     this.applyDeclaredDeliverables(id);
     if (!s.state.artifacts) return;
     // at 语义同 setTodos：firstRead 输出物回放传转录时刻，防重启水合刷"最后活跃"（#157）
-    s.state.updated_at = at ?? Date.now();
+    this.touchIfChanged(s.state, at); // DEV-31 清件③：过单点（回放重建，非 force——重扫旧 ts 不回拨）
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -3129,7 +3132,7 @@ export class SessionManager {
     s.state.waiting_request = payload;
     s.state.waiting_started_at = at;
     this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点（awaituser R1 P2①）：外部等待项入等帧驱动——同 :1567 内部面口径
-    s.state.updated_at = at;
+    this.touchIfChanged(s.state, at, true); // DEV-31 清件③：过单点（WAITING 真态变，force）
     this.bus.emit(id, "SESSION_WAITING", payload);
   }
 
@@ -3264,7 +3267,7 @@ export class SessionManager {
     s.state.duration_ms = durationMs;
     s.state.waiting_request = undefined;
     s.state.waiting_started_at = undefined;
-    s.state.updated_at = at;
+    this.touchIfChanged(s.state, at, true); // DEV-31 清件③：过单点（DONE 终态；force=sweep 收殓传真实死亡时刻需可回拨校正，#144 口径）
     // #105：external 值守目标回合终态=统一值守检查点（对齐托管侧 onTurnEnd 的
     // Leader turn_end 语义——在岗证据重算行动位+worker_done 计数归零）。归零条件
     // 限定「本会话是当前值守目标」：其他 external 会话回合结束不碰值守账。compact
@@ -3487,7 +3490,7 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s || !s.state.external) return;
     s.state.remote_mode = enabled;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（远控模式真翻转，force）
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -4069,7 +4072,7 @@ export class SessionManager {
           this.transition(managed.state.session_id, "WAITING", "tool-wait"); /* W-SMIMPL③ 直写收口 */
           managed.state.waiting_request = p;
           managed.state.waiting_started_at = at;
-          managed.state.updated_at = at;
+          this.touchIfChanged(managed.state, at, true); // DEV-31 清件③：过单点（WAITING 真态变，force）
           // R1c 源②：WAITING 通知（stableKey=waiting:session:request_id 防重）
           this.syncWaitingNotification(managed);
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
@@ -4097,7 +4100,7 @@ export class SessionManager {
             // 会永久悬挂成假 action、badge 虚高（PM R1 终审 P2-1）
             this.resolveWaitingNotification(managed.state.session_id, requestId);
           }
-          managed.state.updated_at = Date.now();
+          this.touchIfChanged(managed.state, undefined, true); // DEV-31 清件③：过单点（WAITING→WORKING 回转真态变，force）
           this.bus.emit(managed.state.session_id, "SESSION_WAITING_RESOLVED", {
             request_id: requestId,
             decision,
@@ -4335,7 +4338,7 @@ export class SessionManager {
                 // 与 :3620 流关闭兜底同形：flag 透传让通知文案区分+不直达。
                 ? { receiptMissing: !receiptProbe.hasResultLine, interrupted: true }
                 : ok && !receiptProbe.hasResultLine ? { receiptMissing: true } : undefined);
-          managed.state.updated_at = Date.now();
+          this.touchIfChanged(managed.state, undefined, true); // DEV-31 清件③：过单点（回合终态 DONE/ERROR，force）
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
           // waiting_request 脱钩是审批弹窗死锁的根源，任何离开 WAITING 的路径都收口
@@ -4757,7 +4760,7 @@ export class SessionManager {
         s.state.last_error = `恢复失败: 上游 ${waitS} 秒无响应（疑挂死），已保留现场可重试`;
         s.state.saved = true;
         s.state.action_summary = "恢复失败";
-        s.state.updated_at = Date.now();
+        this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（ERROR 真态变，force）
         this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
         this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
         // W-LEADFIX：resume init 失败记账 → 连败进冷却（自动路径停拉，见
@@ -4807,7 +4810,7 @@ export class SessionManager {
       s.state.action_summary = "已恢复，等待输入";
       s.state.turn_started_at = undefined;
       s.state.last_error = undefined;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（revive DONE 真态变，force）
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.phase = "idle";
@@ -4861,7 +4864,7 @@ export class SessionManager {
       s.state.done_reason = undefined;
       s.state.action_summary = "恢复失败";
       s.state.saved = true; // 休眠卡保留：端上标「恢复失败」，可重试
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（ERROR 真态变，force）
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
       // W-LEADFIX：恢复失败同样进熔断记账（连败 → 冷却，自动路径停拉）；点卡重试
@@ -4950,7 +4953,7 @@ export class SessionManager {
     s.state.action_summary = "恢复中";
     s.state.done_reason = undefined;
     s.state.last_error = undefined;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（revive WORKING 真态变，force）
     // #7 看门狗：parked 恢复锚点起算（init 30s 超时兜底 pre-init 挂死）
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
@@ -5022,7 +5025,7 @@ export class SessionManager {
       s.state.done_reason = undefined;
       s.state.action_summary = "降级失败";
       s.state.saved = true;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（degrade-fail ERROR 真态变，force）
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.noteResumeFailure(s, "fresh 承接 init 超时");
       this.emitUpdated(s, true);
@@ -5056,7 +5059,7 @@ export class SessionManager {
     s.state.action_summary = "降级承接中";
     s.state.done_reason = undefined;
     s.state.last_error = undefined;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（degrade-fresh WORKING 真态变，force）
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
     s.wd.phase = "idle";
@@ -5424,7 +5427,7 @@ export class SessionManager {
     if (s && !s.state.title_locked) {
       s.state.title = title;
       s.state.title_locked = true;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（命名权威翻 locked 真态变，force）
       this.bus.emit(id, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
@@ -12775,7 +12778,7 @@ ${lines.join("\n")}
     s.state.waiting_request = undefined;
     s.state.waiting_started_at = undefined;
     s.state.last_error = undefined;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（retire DONE 终态，force）
     s.unacked = [];
     s.resumePending = undefined;
     s.wd.phase = "idle";
@@ -12789,7 +12792,7 @@ ${lines.join("\n")}
       if (s.state.org_parked !== gid) continue;
       s.state.org_parked = undefined;
       if (s.state.action_summary === "已随项目组挂起") s.state.action_summary = "";
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（解除挂起真态变，force）
       this.emitUpdated(s, true);
     }
   }
@@ -13174,7 +13177,7 @@ ${lines.join("\n")}
     s.state.waiting_request = undefined;
     this.refreshPendingUserActions(); // [W-AWAITUSER] 源②挂点（awaituser R1 P2①）：等待解除帧驱动减项——同 :1571 内部面口径
     s.state.waiting_started_at = undefined;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, undefined, true); // DEV-31 清件③：过单点（WAITING→WORKING 回转真态变，force）
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
 
@@ -13196,11 +13199,27 @@ ${lines.join("\n")}
     ctxWdOnBoundary(this, s, newStatus);
   }
 
+  /** DL-P1-7 relay 面（DEV-31 清件③）：updated_at 单点守卫——与端上 touchUpdatedAt
+   *（web-console 双 IIFE，docs/night-audit/updated-at-writers.md 契约）同语义三律：
+   *  ① 非数/非正 ts 不推进（显式坏 at 不伪造接收时刻，#271 口径）；② 非 force 同值/
+   *  回拨不洗（空闲跳序 saga 根形态——只有更新的真值才推进）；③ force=真态变/权威
+   *  校正必推进（状态翻转、sweep 收殓传真实死亡时刻、boot 采纳传转录真实时刻等
+   *  「at 本身就是权威」的路径——回拨到真相是校正不是洗）。session-manager 一切写
+   *  updated_at 路径收编过本口（建卡初始化=新对象非洗点，保持直写）；裸赋值禁令由
+   *  test-updated-at-guard R 组源码锚锁死，新写手绕口即红。 */
+  private touchIfChanged(state: SessionState, at?: number, force = false): boolean {
+    const t = at ?? Date.now();
+    if (!Number.isFinite(t) || t <= 0) return false; // 律①：显式坏 ts 不推进不伪造
+    if (!force && (state.updated_at ?? 0) >= t) return false; // 律②：同值/回拨不洗
+    state.updated_at = t;
+    return true;
+  }
+
   private emitUpdated(s: ManagedSession, force: boolean, at?: number): void {
     const now = Date.now();
     if (!force && now - s.lastUpdateEmit < UPDATE_THROTTLE_MS) return;
     s.lastUpdateEmit = now;
-    s.state.updated_at = at ?? now;
+    this.touchIfChanged(s.state, at ?? now, true); // DEV-31 清件③：过单点；force=水合/回放传真实活动时刻需可回拨校正（#157 语义原样保留）
     this.bus.emit(s.state.session_id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -13261,10 +13280,15 @@ ${lines.join("\n")}
       if (s.state.status === "WORKING" || s.state.status === "WAITING") {
         // W-DISPATCHFIX 验收③：心跳帧捎带真活性（心跳是 relay 定时器与子进程健康无关
         // ——「心跳在跳」不是活证据；死会话的灯色真态由本字段每 5s 刷新送达）
+        // DEV-31 清件③（DEV-22 审查 :13129 实锤，对齐 #157 帧完整性）：载荷补带既有
+        // updated_at——三端消费面（web onHeartbeat/桥 SESSION_HEARTBEAT 排除口/expo
+        // 只读 elapsed_ms）均不据它推进，纯防「缺载帧重放回落信封 ts」类兜底消费面
+        // 把心跳拍点误当活动时刻；携带的是既有值（同值不洗），心跳本身永不推进它。
         this.bus.emit(s.state.session_id, "SESSION_HEARTBEAT", {
           elapsed_ms: now - s.state.started_at,
           action_summary: s.state.action_summary,
           liveness: this.displayLivenessOf(s),
+          updated_at: s.state.updated_at,
         });
       }
     }

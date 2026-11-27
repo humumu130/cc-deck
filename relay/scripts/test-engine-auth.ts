@@ -62,8 +62,10 @@ const ENV_KEYS = ["CCR_CODEX_PATH", "CCR_CODEBUDDY_PATH", "CCR_TRAE_PATH", "CODE
   "QWEN_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "TRAE_API_KEY",
   // [W-ENGINEFIX 刀B] 组合键密封（1124）：开发机常配 bigmodel 路由 env（ANTHROPIC_
   // BASE_URL/MODEL 等）会与测试内单键拼成组合制选型→假 ready（本机实锤：P3c''' 单键
-  // 断言被环境染红）。qwen 组合制五组键全量入清场单，fixture 恒密封。
-  "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "OPENAI_BASE_URL", "OPENAI_MODEL", "QWEN_MODEL", "GEMINI_MODEL", "QWEN_OAUTH"] as const;
+  // 断言被环境染红）。qwen 组合制五组键全量入清场单，fixture 恒密封。DEV-31 清件②：
+  // vertex-ai 三键（GOOGLE_API_KEY/GOOGLE_MODEL/GOOGLE_CLOUD_PROJECT）同入密封。
+  "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "OPENAI_BASE_URL", "OPENAI_MODEL", "QWEN_MODEL", "GEMINI_MODEL", "QWEN_OAUTH",
+  "GOOGLE_API_KEY", "GOOGLE_MODEL", "GOOGLE_CLOUD_PROJECT"] as const;
 const SAVED: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) { SAVED[k] = process.env[k]; delete process.env[k]; }
 const restoreEnv = () => { for (const k of ENV_KEYS) { if (SAVED[k] === undefined) delete process.env[k]; else process.env[k] = SAVED[k]; } };
@@ -182,6 +184,19 @@ try {
   r = probeEngineAuth("qwen-code", { homeDir: HOME });
   assert(r.state === "needs_auth", "P3c''''' qwen OPENAI_API_KEY 单键 → needs_auth（1124 收紧：openai 面同样组合制——单键候选面随宽松尾路退役）");
   delete process.env.OPENAI_API_KEY;
+  // DEV-31 清件②（smoke:engines S2 归零）：vertex-ai 两路组合——此前零覆盖，已配
+  // vertex 的用户被误判 needs_auth 锁出目录。单键不选型口径与 anthropic/openai 同。
+  process.env.GOOGLE_MODEL = "gemini-x";
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "needs_auth", "P3c'''''' qwen GOOGLE_MODEL 单键 → needs_auth（vertex-ai 面同样组合制——单键不选型）");
+  process.env.GOOGLE_API_KEY = "gk-1";
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "ready", "P3c''''''' qwen vertex-ai 组合① GOOGLE_API_KEY+GOOGLE_MODEL → ready（API Key 路，DEV-31 补齐）");
+  delete process.env.GOOGLE_API_KEY;
+  process.env.GOOGLE_CLOUD_PROJECT = "proj-1";
+  r = probeEngineAuth("qwen-code", { homeDir: HOME });
+  assert(r.state === "ready", "P3c'''''''' qwen vertex-ai 组合② GOOGLE_CLOUD_PROJECT+GOOGLE_MODEL → ready（ADC 项目路，DEV-31 补齐）");
+  delete process.env.GOOGLE_CLOUD_PROJECT; delete process.env.GOOGLE_MODEL;
   // W-ENGREST-FIX（1109 对版）：trae 认证=YAML config（真 CLI 无 login 子命令）——
   // 探测=config 存在+api_key 非空（CCR_TRAE_CONFIG 显式位 || ~/.trae-agent/ 全局位，
   // 与 agent-trae traeConfigPath 同源）；模板态（api_key 空串）判 needs_auth 引导填写

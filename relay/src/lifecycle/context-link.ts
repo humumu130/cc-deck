@@ -24,7 +24,7 @@ export function setExternalUsage(mgr: any, id: string, usage: any, model?: strin
     // 口径）在别名方案下失真，统一按重挂规则升档
     s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
   }
-  s.state.updated_at = at ?? Date.now();
+  mgr.touchIfChanged(s.state, at); // DEV-31 清件③：过单点（usage 增量内容变，非 force——转录扫描旧 hydrateAt 不回拨；搬运纪律例外说明：本行是任务面主动改写，非 S5 机械搬运）
   mgr.bus.emit(id, "SESSION_UPDATED", {
     status: s.state.status,
     action_summary: s.state.action_summary,
