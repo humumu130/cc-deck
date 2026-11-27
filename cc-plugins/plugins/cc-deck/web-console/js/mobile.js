@@ -71,7 +71,11 @@
         const icon = s.status === "ERROR" ? "alert" : s.status === "WAITING" ? "clock" : "check";
         const ava = s.status === "ERROR" ? "status-alert" : s.status === "WAITING" ? "status-action" : "status-ok";
         const bg = mBgCount(s);
-        return `<div class="mobile-card" data-st="${esc(String(s.status || '').toLowerCase())}" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p>${esc(oneLine(s.action_summary) || oneLine(displayPath(s.cwd)) || w)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${mobileRetiredTag(s.session_id)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;      };
+        // DEV-30 P3-2：ERROR 卡补 last_error 优先级（旧序 action_summary||cwd 完全不显错误
+        // 红字=桌面 1315 序缺角）+ <p> 挂 title 悬停全文（错误行被单行省略截断，台账点）
+        const mSum = oneLine(s.action_summary) || oneLine(s.last_error) || oneLine(displayPath(s.cwd)) || w;
+        const mTitle = s.status === "ERROR" && s.last_error ? oneLine(s.last_error) : mSum;
+        return `<div class="mobile-card" data-st="${esc(String(s.status || '').toLowerCase())}" data-open-detail="${esc(s.session_id)}"><div class="row"><span class="avatar ${ava}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${icon}"></use></svg></span><strong>${esc(sessionTitle(s))}</strong></div><p title="${esc(mTitle)}">${esc(mSum)}</p><div class="identity-cluster">${engineBadge(s)}${sourceBadge(s)}${mobileRetiredTag(s.session_id)}${bg ? `<span class="bg-badge" title="后台子 Agent 在跑">⑂${bg}</span>` : ""}</div></div>`;      };
 
       // ---------- 导航栈 ----------
       let mobileReturn = "inbox";

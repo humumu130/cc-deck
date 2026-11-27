@@ -18,6 +18,12 @@
                 }
                 const desktopForm = window.__ccDeck005DesktopForm;
                 const tokenLive = () => { const v = window.__ccDeck005Token; return v === undefined ? TOKEN : String(v || ""); };
+                // DEV-30 ③（DEV-29 台账候选）：连接空态文案优先级单口——云桥在连（数据面活，
+                // file:// 直开亦可达）优先于「无 WS_BASE」origin 警告：旧序 file://+云桥连成后
+                // 仍喊「请通过 relay 同源 HTTP 页面连接」=误导。立案沿革：leader 原拍不立案
+                // （DEV-30 任务书增补）；2026-11-28 leader 终裁追认立案（依据：审查确认生产
+                // 路径零行为变化）。三消费点（副标题/中央空态/旧径兜底）归一此口，尾文案按消费点传入。
+                const connNote = (tail) => cloudLaneOn() ? tail : (!WS_BASE && !desktopForm()) ? "请通过 relay 同源 HTTP 页面连接" : !tokenLive() ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : tail;
 
                 // ---------- #158-批4a 路径展示/比较共享助手（本 IIFE 是文档序最早的内联脚本，在此幂等挂
                 // window；后续 team/B4/notify/地基/mobile 各 IIFE 解析期就要取别名，不重复定义） ----------
@@ -132,7 +138,7 @@
                   if (action && typeof action.fn === "function") {
                     const b = document.createElement("button");
                     b.type = "button";
-                    b.style.cssText = "margin-left:10px;padding:1px 10px;border:1px solid rgba(255,255,255,.45);border-radius:99px;background:transparent;color:inherit;font-size:12px;cursor:pointer;flex:none";
+                    b.style.cssText = "margin-left:10px;padding:1px 10px;border:1px solid rgba(255,255,255,.45);border-radius:99px;background:transparent;color:inherit;font-size:var(--fs-E);cursor:pointer;flex:none";
                     b.textContent = action.label || "重连";
                     b.addEventListener("click", () => { try { action.fn(); } catch {} t.classList.remove("show"); });
                     t.append(b);
@@ -2428,7 +2434,7 @@
                     // 此处置 null 会永久断引用（updateModelCapsule 读 null 恒 return → 胶囊恒
                     // hidden，用户实测「模型切换缺失」根因）；无会话时 updateModelCapsule(null)
                     // 走 ok=false → hidden=true 的正常隐藏路径
-                    UI.subHint(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : S.hasSnapshot ? "" : "等待 relay 连接…"); /* P2BATCH6 件7（A-P2-5）：hasSnapshot 态副标题置空——指引由中央空态独占（原三处同文案连排） */
+                    UI.subHint(connNote(S.hasSnapshot ? "" : "等待 relay 连接…")); /* DEV-30 ③：connNote 单口（云桥在连优先于无 origin 警告） */ /* P2BATCH6 件7（A-P2-5）：hasSnapshot 态副标题置空——指引由中央空态独占（原三处同文案连排） */
                     updateModelCapsule(null);
                     updatePermCapsule(null); // UIPOLISH3 件三：无会话权限胶囊隐藏
                     updateCtxMeter(null); // UIPOLISH2 件四：无会话水位胶囊隐藏
@@ -3103,9 +3109,9 @@
                       // 居中精修（Leader 追加件）：完全居中系统提示形态——收起=水平居中
                       // 一行小灰字（微信时间戳行视觉）；展开=居中无底色弱化块（限宽 85%）
                       return '<div class="automsg-row" data-x="' + ke + '" style="margin:2px 0 6px;text-align:center">'
-                        + '<span class="am-head" data-x="' + ke + '" role="button" tabindex="0" title="' + (open ? "收起" : "展开") + '自动注入消息原文" style="color:var(--faint);font-size:11px;line-height:16px;cursor:pointer;display:inline-block">'
+                        + '<span class="am-head" data-x="' + ke + '" role="button" tabindex="0" title="' + (open ? "收起" : "展开") + '自动注入消息原文" style="color:var(--faint);font-size:var(--fs-C);line-height:16px;cursor:pointer;display:inline-block">'
                         + (open ? "▾ 定时巡检" : "⏱ 定时巡检") + (e.ts ? " · " + fmtHM(e.ts) : "") + "</span>"
-                        + (open ? '<div style="color:var(--dim);font-size:11.5px;line-height:17px;margin:4px auto 0;max-width:85%;width:fit-content;text-align:left;white-space:pre-wrap;word-break:break-word">' + esc(src) + "</div>" : "")
+                        + (open ? '<div style="color:var(--dim);font-size:var(--fs-C);line-height:17px;margin:4px auto 0;max-width:85%;width:fit-content;text-align:left;white-space:pre-wrap;word-break:break-word">' + esc(src) + "</div>" : "")
                         + "</div>";
                     }
                     const long = src.length > 100;
@@ -3308,7 +3314,7 @@
                     const noteHtml = (t) => { const d = document.createElement("div"); d.className = "timeline-note" + (/^\s*⚠/.test(String(t ?? "")) ? " warn" : ""); d.textContent = t; return d.outerHTML; };
                     if (!s) {
                       host.setAttribute("data-empty", "1"); // P2BATCH6 件4（A-P2-12）：空态主区垂直居中标记（CSS 配套 min-height 60vh flex 居中——旧态贴 Tab 栏下方留 500px 空置）
-                      rk4(host, [["empty", noteHtml(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")]]);
+                      rk4(host, [["empty", noteHtml(connNote("从左侧选择会话查看对话"))]]); /* DEV-30 ③：connNote 单口 */
                       syncWaitCard(false); // 审查 P2-2（review-282d-a）：取消选中窗口清残留卡+waitElapsedTimer（旧路径靠 textContent="" 清节点但漏计时器——本路径双清）
                       return;
                     }
@@ -3377,7 +3383,7 @@
                   }
                   // ---- rk 缺席兜底：旧全量重灌逐字节保留（零删） ----
                   pane.textContent = "";
-                  if (!s) { pane.appendChild(noteNode(!WS_BASE && !desktopForm() ? "请通过 relay 同源 HTTP 页面连接" : (!tokenLive() && !cloudLaneOn()) ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : "从左侧选择会话查看对话")); return; }
+                  if (!s) { pane.appendChild(noteNode(connNote("从左侧选择会话查看对话"))); return; } /* DEV-30 ③：connNote 单口 */
                   const trunc = S.logsTruncated.get(s.session_id) || 0;
                   if (trunc > 0) pane.appendChild(noteNode("更早的 " + trunc + " 条已截断 · 仅显示最近记录"));
                   const list = S.timelines.get(s.session_id) || [];
@@ -3814,7 +3820,7 @@
                     if (!items.length) return;
                     html += '<div class="queue-group' + (groupClass ? " " + groupClass : "") + '" data-task-group="' + groupKey + '">' + label + "</div>";
                     // W-TASKFLOW 看板镜像徽标：source="board" 条目=团队看板单向投影（唯一事实源），双跑期可辨
-                    const srcChip = (t) => (t.source === "board" ? '<i style="font-style:normal;font-size:10px;line-height:1;padding:2px 5px;margin-right:6px;border-radius:4px;color:var(--brand);background:rgba(226,133,94,.12);border:1px solid rgba(226,133,94,.3);font-weight:600" title="团队看板镜像（以看板为准单向同步）">板</i>' : "");
+                    const srcChip = (t) => (t.source === "board" ? '<i style="font-style:normal;font-size:var(--fs-micro);line-height:1;padding:2px 5px;margin-right:6px;border-radius:4px;color:var(--brand);background:rgba(226,133,94,.12);border:1px solid rgba(226,133,94,.3);font-weight:600" title="团队看板镜像（以看板为准单向同步）">板</i>' : "");
                     for (const t of items) html += '<div class="check-row"' + (t.id != null ? ' data-tid="' + esc(String(t.id)) + '"' : "") + ">" + mk(t) + "<span>" + srcChip(t) + taskRefHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content || "")) + "</span>" + (t.id != null ? '<button type="button" class="task-x" data-task-hide="' + esc(String(t.id)) + '" title="隐藏此条" aria-label="隐藏任务 #' + esc(String(t.id)) + '">✕</button>' : "") + "</div>";
                   };
                   emit("已完成 · " + doneList.length + "/" + doneAll.length, doneList, () => "<b>✓</b>", "group-done", "done");

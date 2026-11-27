@@ -394,7 +394,12 @@
                   } else if (SESSION_MERGE_TYPES.has(frame.type)) {
                     const session = typeof frame.session_id === "string" ? bridge.sessions.get(frame.session_id) : null;
                     if (session && frame.payload && typeof frame.payload === "object") {
-                      Object.assign(session, frame.payload, { session_id: frame.session_id });
+                      // DEV-30 ④（DEV-22 审查 P3-1 备案）：assign 前剥 updated_at——载荷自带
+                      // 旧键若随 assign 先落盘，下行走守卫时 sess.updated_at 已被洗成载荷旧值，
+                      // touchUpdatedAt 同值守卫视为「无变化」放行=回拨既成（守卫后跑救不回）。
+                      // 时刻只能经守卫口进（含心跳缺载不推进口径）。
+                      const { updated_at: _stripTs, ...rest } = frame.payload;
+                      Object.assign(session, rest, { session_id: frame.session_id });
                       // DL-P1-7：载荷时刻优先、信封 ts 兜底；同值/回拨不洗——relay 同值守卫
                       // （上游）失守时的端上末道防线，防桥副本排序面（:569/:620/:687 按
                       // updated_at 排序）随同值帧反复跳序。心跳帧（PM 常驻保活每拍）不推进
