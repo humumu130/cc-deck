@@ -505,3 +505,26 @@ VERSION（唯一事实源，七落点由 version.mjs --write 派生）
 | L-1029-7 | **并行会话共享 stash 栈撞车**：worktree 共享主仓 .git 的 refs/stash（stash 是 per-repo 非 per-worktree）——两会话 stash 窗口重叠时交叉互弹：A 的暂存弹进 B 工作树、B 的 147 行内容弹进 A 树顶掉 A 全部改动 | 1029 20:1x UI 批与 multica 批实测（UI 侧 fsck 认领 stash 提交恢复+20/20 复验无损；multica 内容 374 行备份 /tmp/w-uifeedback-probe/foreign-multica-content.diff，已通报两 worker 取回） | 通报+取回；经验入库（UI 批 worker 已申报 #pitfall） | 派单纪律硬条：**多会话并行期禁用 git stash**（基线对照用 worktree 内临时 commit）；根治=dispatch 任务书模板加禁令行 |
 
 | L-1029-8 | **派单→板卡状态联动断裂**：今晚 15+ 单派发建卡全停 backlog（进行中甬道空+待认领堆积——用户面板实见）；dispatch 建卡与状态翻态（claimed/doing/done）联动在假死清席/重派循环/queued→drain 路径下脱钩 | 1029 20:4x 面板实见：9 张 backlog 卡含已收割 6 单+在跑 2 单；手工归位（6→done/2→doing/删重复 1/补 2） | 手工归位+本表 | 排查 org dispatch 建卡后的状态翻态链在哪条路径丢失（重派复用既有卡时 move 缺失嫌疑大）——follow-up 查修单 |
+
+## 13. 11 月实战断点增补（DEV-22 批 B 补账，2026-11-28；源=docs/night-audit/defect-ledger.md 深挖）
+
+> 破账补账：本表末次增补 1029 后，11 月断点全部未入账（DL-P2-2 实勘）。本节由缺陷台账
+> （DEV-20 挖掘，79b51e55 入 dev）改写灌入——证据锚与建议全文见台账对应条目，此处按
+> 损失点表口径收口。两大系统性根因簇（台账 §六 结论）：**防线建了没通电**（boardrecon
+> observe 干跑/patrol 全红不升级/seatlive 告警投死通道/feedback-ledger 建而不用）与
+> **修现象不修注册面**（空闲跳序四刀每刀拔一个写手/引擎每批修一个词表）。
+
+| # | 损失点 | 实证 | 处置/缓解 | 根治建议 |
+|---|---|---|---|---|
+| L-1101-1 | **PM 值守链实质死亡 14 天无人知**（第五现进行中）：duty 738 轮 736 sleep；seatlive（1106 四现治本）只修检测没修触达——streak 告警发了 18 次全投 relay 面板通道，relay 活着才可见 | duty-rounds.ndjson 11-13 起；NOTIFY_CHAIN_AUDIT no_pm_target 连击告警 ×18 | Multica 夜班队在 relay 之外自救承接 | no_pm_target 连击 N 轮→手机推送/macOS 通知直连（独立于 relay）；「PM 位空悬>1h」入 patrol 必报项（批 A 面） |
+| L-1104-1 | **pmseat 三进程碰撞**：同凭证三 CLI 进程并发+relay 重启窗多投递；worktree 一笔三作者归属冻结待裁 | 1104 夜三方仲裁记录（memory 锚 ccdeck-pmseat-collision-1104） | 冻结待用户裁定 | 会话-进程绑定账（cli-pids 注册回读窗收窄）与派发锁 |
+| L-1111-1 | **全员急停后无自愈**：额度临爆用户令全员急停，cron/派发链静止后靠人工记忆恢复——无「急停态」一等的记账与到期提醒 | 1111 全员急停记录（全局 CLAUDE.md 专节） | 用户发话后 PM 重建值守 | 急停态落数据层（带 TTL/恢复清单），恢复动作机器可执行 |
+| L-1123-1 | **注入链全灭 33h+ 独立故障**：九功能位「无帧(999m)」而 relay 仍 200——DRAINFIX 修耗电疑似砍静默帧上报；巡查员席位空置 34 拍哑然 | patrol-report.md 11-23 14:13 起；watch-feed 零在册 ×34 | DEV-19 探针误报治本+hook 断流自愈（da776cd3 已并） | patrol 无帧阈值告警+帧上报最小心跳（批 A 面 DL-P1-5 关联） |
+| L-1124-1 | **换装杀 relay>48h 全链瘫**：test.33→34 装机换 app 杀 sidecar、新 app 未拉起+无监督闭环；同日部署 bundle 含 headless spawner 在非 git cwd 裸错 8 次；better-sqlite3 ABI 115↔127 dlopen 炸=sqlite 恒降级 json | embedded-relay.log 止于 11-24 23:46；version-revert-log hdiutil 时刻对齐；ERR_DLOPEN_FAILED | DEV-18 根修+DEV-25 CI node 20→22 对齐（42ea07ab 已并）；DEV-22 本地出包链 ABI 闸补齐 | 换装窗 relay 生命周期归属（谁拉起）；app-missing 告警的消费口（两现无人处置） |
+| L-1124-2 | **空闲跳序四现 saga**（修现象不修注册面的标志案例）：一个根因藏 ≥6 写手四轮才逐个拔——同值 status/todos/stats/pending/onHeartbeat/WORKING 恒洗 | git 四笔 c5b65148→158184c9→426629d9→0f29bc7a；用户 11-23/24 连续实锤 | 四刀已并；DEV-22 端上单点守卫 touchUpdatedAt+回归套件（34 断言）收编第五写手（桥副本心跳信封 ts） | relay 侧写手同过 touchIfChanged() 单点（批 A 改派面）；「空闲 60s updated_at 不变」入装机回归清单 |
+| L-1124-3 | **引擎异构报错家族**（qwen/codebuddy/codex ≥5 批）：CLI 行为漂移无对版测试网，换引擎即炸；词表外静默降级唯一可察点 console.log | 台账 DL-P1-8 谱系+artifacts 两笔未闭环（词表 hy4flash 系漂移/qwen vertex-ai 两组合零命中） | DEV-22 冒烟哨兵 smoke:engines 在位（漂移 3 项机器可检，改派 relay/src 修）；装机核对清单在 docs/operations | 词表补齐+探针组合（改派单）；归零后 smoke:engines 挂 CI matrix 成闸 |
+| L-1127-5 | **验收单机制死亡**：23 张 pending 仅 1 回流，最老 29 天——机制与用户实时反馈行为根本错配 | ~/.cc-deck/data/acceptances/ 实勘 | 无（台账立此存照） | TTL/口头裁决代关或正式退役改实时反馈+git tag 档案（批 A 面 DL-P1-3） |
+| L-1127-1 | **feedback-ledger 建而不用**（流程级最重发现）：10-11 立账自带「停已修待验超一个发版周期=主动追问」硬规则，实际 ~122 个 test 版本零入账、18 行全烂尾——「反复反馈未闭环」的制度性根因 | DL-P2-1 实勘（git tag 计数） | DEV-22 批 B：11 月 15 主题回填入账+对账闸挂出包链（release-test [0.6/7]） | 出包闸长期跑（结构违规拦/滞留打印追问）；回填行随装机回归轮收口 |
+| L-1127-2 | **磁盘水位告警无人消费+prefetch 泄漏未根治**：WARN 每 5 分钟刷屏无人看；Claude Code 每会话 288MB update-prefetch 永不自清（单日 668 个=68GB） | disk-watchdog.log 11-25 起；1022 实锤 | DEV-22 批 B：prefetch 入清扫白名单+专项子命令（cron 样例在脚本尾注）+WARN 消费账（1h 节流/持续 6h 直发通知中心） | launchd 部署 prefetch sweep（Leader 批准后执行，plist 样例已备） |
+| L-1127-3 | **测试隔离洞未落地**（1122 事故预防面）：320 测试脚本仅 165 钉 CCR_DATA_DIR，全局 fail-fast 硬闸不存在，worker 跑测试可直接写生产 sqlite 库 | INCIDENT-1122-prod-db-pollution.md 承诺「本批我可直接落」未落 | 无 | 测试引导统一钉沙盒+未钉即 fail-fast（批 A 面 DL-P1-9） |
+| L-1127-4 | **dev bundle 提交欠账复发**：relay/src engfailopen（#161，f0301828）并入后 build-plugin 产物未随提交——cc-plugins 副本与重建 diff +47 行，出包 S1 闸将红 | DEV-22 批实勘（本地重建即现形） | 未随批收（归出包批） | 出包批补一笔 build 刷新；pre-commit 钩子对 relay/src 改动提示 bundle 跟随（结构性防复发） |

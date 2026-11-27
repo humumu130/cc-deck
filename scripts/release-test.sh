@@ -25,6 +25,12 @@ git diff --quiet || { echo "ERR: 工作区有未提交改动，先收口"; exit 
 echo "[0.5/7] CLI 分发源同步（leader-dispatch）"
 bash scripts/sync-leader-cli.sh || { echo "ERR: leader-dispatch 分发未过（部署位有未回流热改？回流清单见 W-BOARDTRUTH5 回执）——先回流再出包"; exit 1; }
 
+# DL-P2-1（DEV-22 批 B，2026-11-28）：feedback-ledger 对账闸——「唯一闭环账本」结构违规
+# 拦出包（缺列/状态非枚举=账失真）；「已修待验/真机待验」滞留>7 天只打印追问清单交
+# PM 晨报（军规「不许沉默搁置」的机器提醒，不拦出包——追问是人的动作不是闸的动作）。
+echo "[0.6/7] feedback-ledger 对账闸"
+bash scripts/feedback-ledger-check.sh || { echo "ERR: feedback-ledger 结构违规——修 docs/operations/feedback-ledger.md 再出包"; exit 1; }
+
 echo "[1/7] VERSION → $V"
 echo "$V" > VERSION
 echo "[2/7] version.mjs --write 七落点"

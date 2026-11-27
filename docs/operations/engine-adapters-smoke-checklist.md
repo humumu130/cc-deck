@@ -42,3 +42,27 @@
 
 - 每项核完在本文档行尾标 `✓（日期/版本）` 或 `✗（现象）`；✗ 项开修复单。
 - ZCode 不在本期（006 §3.4 遥测风险），勿顺手实装。
+
+## 机器化（DL-P1-8，DEV-22 批 B，2026-11-28）
+
+清单机器哨兵：`relay/scripts/engine-smoke.ts`（`npm run smoke:engines`，relay 目录下）。
+三类覆盖与人工项的对应：
+
+| 机器段 | 覆盖 | 对应人工项 |
+|---|---|---|
+| S1 词表卫生 | CODEBUDDY 词表无重复/形态合法/别名目标不越界 + **文案「内置 N 个」计数 vs 词表实长**（A-13 同族哨兵） | C 系前置 |
+| S2 探针组合 | engine-auth.ts 源码审计 env 组合表（当前锚 qwen vertex-ai 两组合，新引擎接入补表行） | T4/Q4/C4 的静态半 |
+| S3 装机在场 | 五 CLI `which` + `--help` 退出码 | T1/Q1/C1 前置 |
+
+口径：
+- **不在 CI matrix**（.github/workflows 面 2026-11-28 归 DEV-25/leader）：基线未清零前挂
+  CI = 恒红噪音。当前已知漂移 3 项（见下方漂移账），全在 relay/src 面——修完归零后由
+  leader 把 `smoke:engines` 加进 relay.yml 的 script matrix 即成 CI 冒烟闸；过渡期 CI 采集
+  用 `--soft`（只报告不拦）。
+- 输出三档：✓ / ✗（漂移，行动列含改派指引）/ SKIP（未装 CLI 的人工装机项）。
+- 人工装机项（T2/T3/Q2/Q3/C2/C3/G1/G2 需真跑 CLI）仍按上方各表执行，结论回写行尾。
+
+**当前漂移账（2026-11-28 首跑，npm run smoke:engines = 9 ✓ / 3 ✗）**：
+①文案计数「内置 20 个」≠ 词表实长 17（agent-codebuddy.ts，A-13）；②③qwen vertex-ai
+GOOGLE_API_KEY+GOOGLE_MODEL / GOOGLE_CLOUD_PROJECT+GOOGLE_MODEL 探针组合零命中
+（engine-auth.ts，DL-P1-8 artifacts 深挖②）。三项均为 relay/src 改派面。
