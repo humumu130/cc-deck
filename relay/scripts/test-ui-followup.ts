@@ -114,6 +114,16 @@ console.log("件U 1123 test.28 五刀（图钉右簇/聚合源标/桥层打标/�
   ok(ssd.includes('s.last_heartbeat_at = Date.now();') && ssd.includes('const u = s.last_heartbeat_at ?? s.updated_at;') && !ssd.includes('s.updated_at = Date.now();\n                  if (p && typeof p.action_summary'), "U6 心跳不洗 updated_at（1123 三现真凶：PM 常驻保活空闲态心跳每拍拉顶空闲区——onHeartbeat 改记专用键，isRealWorking 第二判据换源消费+老快照回落兼容）");
 }
 
+console.log("件OU 源离线说谎面治本（t-0b360983，1124 homewin 实锤：缓存在线标识+「发送中」永挂无终态+归因混杂）：");
+{
+  ok(st.includes("__ccDeck005SourceHealth") && st.includes("downFor: Math.max(0, Date.now() - (c._downAt || Date.now()))") && st.includes('c._downAt = status === "online" ? 0 : (c._downAt || Date.now())') && st.includes("cloudUIOn() ? one(cloudCtx) : null"), "OU1 源健康观测口（地基 setConn/cloudSetConn 双写 _downAt 断连起点账本+lan/cloud 独立读数——「云桥重连中≠本机源死」分流锚）");
+  ok(ssd.includes("SRC_STALE_MS = 10000") && ssd.includes("tickSourceStale") && ssd.includes('bn.className = "src-stale-banner"') && ssd.includes('const which = down.length === 2 ? "both"') && ssd.includes("列表为缓存数据，恢复后自动更新"), "OU2 会话卡诚实（秒拍态位投影：断连超 10s 列表顶横幅+data-src-stale——快照明示陈旧，恢复即摘）");
+  ok(css.includes(".src-stale-banner") && css.includes("[data-session-list][data-src-dim] .list-upper .queue-card .status-dot { filter: grayscale(1); }") && css.includes(".msg-echo .echo-state .echo-retry") && ssd.includes('else delete list.dataset.srcDim'), "OU3 失联横幅/状态灯降灰/重发钮三态 CSS（审查 P2-C：降灰拆 data-src-dim 专用属性——聚合视角单源死不挂防活源卡误伤；选中卡豁免不降权）");
+  ok(ssd.includes("function downTextOfSid") && ssd.includes('return "本机服务未连接"') && ssd.includes('return "云桥通道未连接"') && ssd.includes("markEchoFail(sid, text, why)") && ssd.includes("eq[i].why = why || \"\""), "OU4 发送终态分流（ack 超时按目标源健康判定——目标源离线=fail 带源因，云视角下 mainWsOpen 恒开的 slow 谎报路径封死）");
+  ok(ssd.includes("function echoStateHtml") && ssd.includes('data-echo-retry=') && ssd.includes("function retryEcho") && ssd.includes("function dispatchEchoedText") && ssd.includes("sent: _cmdSrc.get(id) != null") && ssd.includes('x.why === whyMatch && !x.sent') && ssd.includes("条未送达消息已自动补发"), "OU5 重发钮+恢复自动补发（审查 P1-1：sent 溯源标——只自动补发从未真发出的 halfconn 受理类，已发出未 ACK 留人工重发；成功才移除+现场健康门）");
+  ok(ssd.includes('(x.state === "fail" && x.why) || now - x.ts <') && ssd.includes('b2Toast(why ? why + " · 恢复后自动发送"') && ssd.includes("downTextOfSid(payload.session_id)") && st.includes('c._downAt = c._downAt || Date.now(); // offlineui（刀1）：cloudDisconnect'), "OU6 why-fail 退出时间清扫+受理 toast 分流+云侧直写记账（审查 P1-B/P2-2：源因 fail 只由补发/手动/对账移除永不超窗自删；云桥 cloudDisconnect/connectCloudForInner 直写路径补 _downAt——云侧横幅不缺位）");
+}
+
 console.log("件ND 1127 通知钮死钮二现（W-NOTIFYDEAD：origin 活连接兜底+开链悬挂可见+两链全程反馈）：");
 {
   const sd = rf("web-console", "js", "settings-domain.js");
