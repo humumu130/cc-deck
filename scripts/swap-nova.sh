@@ -92,7 +92,14 @@ BAK="${APP_DST%.app}-bak-$(date '+%Y%m%d-%H%M%S').app"
 if [ -d "$APP_DST" ]; then
   mv "$APP_DST" "$BAK" || die 4 "旧 App 移走失败（$BAK）"
 fi
-ditto "$SRC_APP" "$APP_DST" || die 4 "ditto 拷贝失败（$SRC_APP → $APP_DST）"
+# 拷贝引擎：macOS 用 ditto（保元数据/时戳，生产行为字节不变）；非 mac（Linux CI
+# 跑 test:swapguard 全链沙盒）回落 cp -a——swap-nova 生产面是 mac 换装，回落只为
+# 测试链路可跑（CI runner 实测 ditto 缺席 exit 4 根因，2026-11-28 P1-1 返修随批）
+if command -v ditto >/dev/null 2>&1; then
+  ditto "$SRC_APP" "$APP_DST" || die 4 "ditto 拷贝失败（$SRC_APP → $APP_DST）"
+else
+  cp -a "$SRC_APP" "$APP_DST" || die 4 "cp -a 拷贝失败（$SRC_APP → $APP_DST，非 mac 无 ditto）"
+fi
 INSTALLED_VER="$(cur_ver "$APP_DST")"
 [ "$INSTALLED_VER" = "$NEW_VER" ] || log "⚠️ 装后版本($INSTALLED_VER)与产物($NEW_VER)不一致（ditto -p 保时戳的已知面，人工核）"
 [ -n "$MOUNT_POINT" ] && hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1
