@@ -787,7 +787,7 @@
     .head-sub .head-ctx-meter { flex: none; min-height: 20px; font-size: var(--fs-D); }
     .head-sub .head-proj-pill { flex: none; padding: 1px 8px; border: 1px solid color-mix(in srgb, var(--brand) 32%, transparent); border-radius: 999px; color: var(--brand-strong, var(--brand)); font-size: var(--fs-D); font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* W-PROJTEAM1 件④：团队域 head 所属项目胶囊（项目=基座挂靠心智） */
     .head-sub:empty { display: none; }
-    html[data-theme="light"] .head-sub { color: color-mix(in srgb, var(--text-strong) 62%, var(--bg1)); } /* DEV-30 P3-1：浅色档 head-sub 提对比（台账：暗色可读浅色偏弱；62% mix 次于正文 70% 档——次级信息条定位不变） */
+    html[data-theme="light"] .head-sub { color: var(--dim); color: color-mix(in srgb, var(--text-strong) 62%, var(--bg1)); } /* DEV-30 P3-1：浅色档 head-sub 提对比（台账：暗色可读浅色偏弱；62% mix 次于正文 70% 档——次级信息条定位不变）；var(--dim) 静态兜底=B1② 双写（旧内核回退次级灰不失层） */
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 8px; }
     /* W-UIPOLISH4 件十四①（2026-10-12 用户截图「挤成一团」）：详情 head 四 tab 间距 17→20px
        （用户口径 ≥16-20，取上限；只收会话域，团队/项目/设置多 tab 域不扩防溢出）。 */
@@ -1993,10 +1993,10 @@
        DEV-30 P2-3：胶囊族归一——四态统一「软底 12%＋同相描边 32%」（.tag.authn/.tag.dispatch-pending
        同语言；旧态 working/done/error 无描边、waiting/offline 走中性实底=描边/实底两族混用）；
        补 state-waiting 缺位规则（--st-blocked 同相）。1014 五色灯语言（status-dot 本体）不动。 */
-    #d-team .member-state.state-working { color: var(--st-working); background: transparent; background: color-mix(in srgb, var(--st-working) 12%, transparent); border-color: color-mix(in srgb, var(--st-working) 32%, transparent); }
-    #d-team .member-state.state-waiting { color: var(--st-blocked); background: transparent; background: color-mix(in srgb, var(--st-blocked) 12%, transparent); border-color: color-mix(in srgb, var(--st-blocked) 32%, transparent); }
-    #d-team .member-state.state-done { color: var(--st-idle); background: transparent; background: color-mix(in srgb, var(--st-idle) 12%, transparent); border-color: color-mix(in srgb, var(--st-idle) 32%, transparent); }
-    #d-team .member-state.state-error { color: var(--st-error); background: transparent; background: color-mix(in srgb, var(--st-error) 12%, transparent); border-color: color-mix(in srgb, var(--st-error) 32%, transparent); }
+    #d-team .member-state.state-working { color: var(--st-working); background: transparent; background: color-mix(in srgb, var(--st-working) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-working) 32%, transparent); }
+    #d-team .member-state.state-waiting { color: var(--st-blocked); background: transparent; background: color-mix(in srgb, var(--st-blocked) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-blocked) 32%, transparent); }
+    #d-team .member-state.state-done { color: var(--st-idle); background: transparent; background: color-mix(in srgb, var(--st-idle) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-idle) 32%, transparent); }
+    #d-team .member-state.state-error { color: var(--st-error); background: transparent; background: color-mix(in srgb, var(--st-error) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-error) 32%, transparent); }
     #d-team .member-card .identity-cluster { margin-top: 8px; }
     #d-team .member-summary { display: block; min-height: 18px; margin-top: 9px; overflow: hidden; color: var(--dim); font-size: var(--fs-C); text-overflow: ellipsis; white-space: nowrap; }
     #d-team .watchdog-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
@@ -3609,7 +3609,7 @@
     /* DEV-30 P2-4：时间戳灰单源——浅色档补齐来源卡（:2296）与移动卡（:3800）两处漏网：
        旧态仅面板行吃 70% mix，同屏来源卡/移动卡仍 --faint=两种灰并存（26分钟前 vs 4分钟前
        视觉不同即此）。三处同色收敛，暗色本就同 var(--faint) 无需动。 */
-    html[data-theme="light"] #d-notify .notify-source-card .nrow-time, html[data-theme="light"] .mobile-notify-card .nrow-time { color: color-mix(in srgb, var(--text-strong) 70%, var(--bg1)); }
+    html[data-theme="light"] #d-notify .notify-source-card .nrow-time, html[data-theme="light"] .mobile-notify-card .nrow-time { color: var(--dim); color: color-mix(in srgb, var(--text-strong) 70%, var(--bg1)); }
     @keyframes badge-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
     .rail-btn[data-domain="notify"] .badge { transition: transform 220ms var(--ease-spring); }
     .rail-btn[data-domain="notify"] .badge.notify-badge-pop { animation: badge-pop 220ms var(--ease-spring); }
@@ -3728,7 +3728,7 @@ html[data-theme="light"] .ver-mismatch-banner[data-mismatch="core"] { background
 /* ---------- B1 徽章 token 层（唯一 Badge 组件；后续全站替换的落点） ---------- */
 .cc-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: none; height: 20px; padding: 2px 8px; border-radius: 999px; font-size: var(--fs-C); font-weight: 500; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
 .cc-badge.is-neutral { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.10); color: #9ca3af; }
-.cc-badge.is-accent { background: var(--info-bg); border-color: color-mix(in srgb, var(--info) 32%, transparent); color: var(--info); } /* DEV-30 P2-6：外来蓝 #60a5fa/#2563eb 收编 --info 族（双值游离于色预算立法外；--info/--info-bg 双主题各自定义，浅色覆写行退役） */
+.cc-badge.is-accent { background: var(--info-bg); border-color: var(--info); border-color: color-mix(in srgb, var(--info) 32%, transparent); color: var(--info); } /* DEV-30 P2-6：外来蓝 #60a5fa/#2563eb 收编 --info 族（双值游离于色预算立法外；--info/--info-bg 双主题各自定义，浅色覆写行退役）；border-color 静态兜底=B1② 双写（旧内核全强度 info 描边可读） */
 .cc-badge.is-live { background: rgba(251,191,36,.15); border-color: rgba(251,191,36,.32); color: #fbbf24; }
 .cc-badge.is-run { background: rgba(53,220,151,.16); border-color: rgba(53,220,151,.42); color: var(--done); } /* 运行中=全站唯一保留饱和实底语义的态（C5 绿） */
 .cc-badge.is-warn { background: rgba(229,137,91,.13); border-color: rgba(229,137,91,.34); color: var(--st-blocked); } /* 待填/待处理橙（C5） */

@@ -18,10 +18,11 @@
                 }
                 const desktopForm = window.__ccDeck005DesktopForm;
                 const tokenLive = () => { const v = window.__ccDeck005Token; return v === undefined ? TOKEN : String(v || ""); };
-                // DEV-30 ③（DEV-29 台账候选，leader 拍板立案）：连接空态文案优先级单口——云桥在连
-                // （数据面活，file:// 直开亦可达）优先于「无 WS_BASE」origin 警告：旧序 file://+云桥
-                // 连成后仍喊「请通过 relay 同源 HTTP 页面连接」=误导。三消费点（副标题/中央空态/
-                // 旧径兜底）归一此口，尾文案按消费点传入。
+                // DEV-30 ③（DEV-29 台账候选）：连接空态文案优先级单口——云桥在连（数据面活，
+                // file:// 直开亦可达）优先于「无 WS_BASE」origin 警告：旧序 file://+云桥连成后
+                // 仍喊「请通过 relay 同源 HTTP 页面连接」=误导。立案沿革：leader 原拍不立案
+                // （DEV-30 任务书增补）；2026-11-28 leader 终裁追认立案（依据：审查确认生产
+                // 路径零行为变化）。三消费点（副标题/中央空态/旧径兜底）归一此口，尾文案按消费点传入。
                 const connNote = (tail) => cloudLaneOn() ? tail : (!WS_BASE && !desktopForm()) ? "请通过 relay 同源 HTTP 页面连接" : !tokenLive() ? (desktopForm() ? "正在连接本机 relay…" : "请通过带 ?token= 的 relay 链接连接") : tail;
 
                 // ---------- #158-批4a 路径展示/比较共享助手（本 IIFE 是文档序最早的内联脚本，在此幂等挂
