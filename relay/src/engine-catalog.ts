@@ -100,7 +100,7 @@ export function engineCatalogSummary(claudeModelFallback = ""): EngineCatalogEnt
     // #102 批 A：registry 三引擎（trae/qwen-code/codebuddy）同接登录态二探——
     // CodeBuddy「装了未登录」正是本批根因案例（1014 用户实测）
     // DEV-23：SNAPSHOT 热路径暖读（绝不同步 spawn——codebuddy 探针 5s 冻结事件循环治根）
-      const auth = pf.ok ? engineAuthWarmRead(id) : { state: "ready" as const };
+    const auth = pf.ok ? engineAuthWarmRead(id) : { state: "ready" as const };
     return {
       id,
       label: def.label,

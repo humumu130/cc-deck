@@ -199,7 +199,13 @@ export function probeEngineAuth(engine: SessionEngine, opts?: AuthProbeOptions):
 const SPAWN_PROBE_ENGINES: readonly SessionEngine[] = ["codex", "codebuddy"];
 const inFlightWarm = new Set<SessionEngine>();
 
-/** spawn 系探针异步版（execFile + 同判据写缓存；判据与 probeEngineAuthDirect 逐字对齐） */
+/** execFile 回调 err 的实面（Node 语义）：code 为字符串=拉起失败（ENOENT 等 spawn
+ * 错误）、数字=子进程退出码（非零退出≠探针故障）；killed=true=超时杀。对应同步版
+ * fail-open 闸认的 r.error||r.signal 同类面（P1 修复锚：非零退出不在 fail-open 面内）。 */
+type ExecProbeError = Error & { code?: number | string; killed?: boolean };
+
+/** spawn 系探针异步版（execFile + 同判据写缓存；判据与 probeEngineAuthDirect 逐字对齐
+ * ——fail-open 闸=仅拉起失败/超时杀，非零退出照常文本匹配，见回调内注） */
 function warmSpawnProbeAsync(engine: SessionEngine): void {
   if (inFlightWarm.has(engine)) return;
   inFlightWarm.add(engine);
@@ -213,13 +219,17 @@ function warmSpawnProbeAsync(engine: SessionEngine): void {
   }
   const cmd = engine === "codex" ? (process.env.CCR_CODEX_PATH ?? "codex") : (process.env.CCR_CODEBUDDY_PATH ?? "codebuddy-code");
   const args = engine === "codex" ? ["login", "status"] : ["auth", "status"];
-  execFile(cmd, args, { timeout: 5000, encoding: "utf-8" }, (err: Error | null, stdout: string, stderr: string) => {
+  execFile(cmd, args, { timeout: 5000, encoding: "utf-8" }, (err: ExecProbeError | null, stdout: string, stderr: string) => {
     inFlightWarm.delete(engine);
-    // 判据对齐同步版：故障/超时/信号 → fail-open ready（err 即 ENOENT/超时/非零退出的
-    // Error，与同步版 r.error||r.signal 同类面）；输出命中登录失效 → needs_auth
+    // 判据对齐同步版（P1 修复）：fail-open 闸只认拉起失败（err.code 字符串如 ENOENT）
+    // /超时杀（err.killed）——同步版 r.error||r.signal 同面；非零退出（err.code 数字）
+    // 是探针命令的正常应答形态（未登录类 CLI 常以非零码吐 Authentication required），
+    // execFile 出错回调仍带输出——照常对 out 文本匹配。修前 (!err && …) 把一切 err
+    // 短路成 fail-open ready，「装了未登录」形态写脏 probeCache 旁路 #102 批 A 拦截。
     const out = `${stdout ?? ""}\n${stderr ?? ""}`;
     const failOpen = engine === "codex" ? /not logged in/i : /authentication required|not logged in|请先登录/i;
-    probeCache.set(engine, { at: Date.now(), probe: (!err && failOpen.test(out)) ? needsAuth(engine) : readyProbe });
+    const probeFailure = !!err && (err.killed === true || typeof err.code === "string");
+    probeCache.set(engine, { at: Date.now(), probe: probeFailure ? readyProbe : failOpen.test(out) ? needsAuth(engine) : readyProbe });
   });
 }
 
@@ -312,9 +322,14 @@ export function authFailureHint(text: string, engine?: SessionEngine): string | 
 // resetEngineAuthCache，缓存语义由调用方掌控。
 function execFileText(cmd: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; out: string }> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
-      // 探针故障 fail-open 与同步版同口径：error/signal → ready 由调用方兜
-      resolve({ ok: !err, out: `${stdout ?? ""}\n${stderr ?? ""}` });
+    execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err: ExecProbeError | null, stdout, stderr) => {
+      // 探针故障 fail-open 与同步版同口径（P3③ 收窄，对齐 warmSpawnProbeAsync 的 P1 闸）：
+      // 仅拉起失败（code 字符串如 ENOENT）/超时杀（killed）才 ok:false 由调用方兜
+      // ready；非零退出（code 数字）是探针命令正常应答形态（未登录类 CLI 常以非零码
+      // 吐失效文案），出错回调仍带输出 → ok:true 照常文本匹配。修前 ok:!err 把非零
+      // 退出一并 fail-open，与暖读修前同款分叉（批 B 面只影响登录 pane 轮验显示）。
+      const probeFailure = !!err && (err.killed === true || typeof err.code === "string");
+      resolve({ ok: !probeFailure, out: `${stdout ?? ""}\n${stderr ?? ""}` });
     });
   });
 }
