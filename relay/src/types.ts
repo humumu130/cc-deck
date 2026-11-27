@@ -444,6 +444,9 @@ export interface SessionHeartbeatPayload {
   // 定时器、与子进程健康无关——「心跳在跳」从来不是活证据）。WORKING/WAITING 会话
   // 每拍携带；dead=停摆（端上灯色/板面成员列消费——批E 接渲染，数据面本批到位）。
   liveness?: "alive" | "between-turns" | "dead";
+  // DEV-31 心跳补键（DEV-22 审查 :13129 实锤）：携带既有值、消费面不据它推进
+  //（#157 帧完整性——防缺载兜底回落信封 ts；先例：liveness / SessionUpdatedPayload）。
+  updated_at?: number;
 }
 
 // 任务完成汇报（#204）：权威任务轮询 diff 出"本次完成"时下发，

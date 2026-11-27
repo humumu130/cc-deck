@@ -130,7 +130,7 @@ console.log("R relay 面单点守卫（DEV-31 清件③——session-manager tou
   ok(bareWrites(cl) === 0, `R1-2 lifecycle/context-link 零裸赋值（实得 ${bareWrites(cl)}）`);
   // 洗点接线锚：代表性写手各至少一次过口（分 force/非 force 两类语义）。
   const touchCalls = (sm.match(/this\.touchIfChanged\(/g) || []).length + (cl.match(/mgr\.touchIfChanged\(/g) || []).length;
-  ok(touchCalls >= 29, `R2-1 写手收编计数 ≥29（session-manager 29 处直写全过口+context-link 1 处；实得 ${touchCalls}）`);
+  ok(touchCalls === 30, `R2-1 写手收编计数恰 30（session-manager 29 处直写全过口+context-link 1 处；松锚可漏放回退如 28＋1，复审 P3-2 收紧；实得 ${touchCalls}）`);
   ok(sm.includes("this.touchIfChanged(s.state, at, true); // DEV-31 清件③：过单点；force=at 是权威时刻"), "R2-2 setExternalStatus 过口（force=boot 采纳转录真实时刻可回拨校正，#271 面）");
   ok(sm.includes("this.touchIfChanged(s.state, at); // DEV-31 清件③：过单点（1123 二现门后，非 force"), "R2-3 setTodos/setExternalSubagents 过口（非 force——乱序旧转录 ts 不回拨）");
   ok(sm.includes("this.touchIfChanged(s.state, at ?? now, true); // DEV-31 清件③"), "R2-4 emitUpdated 枢纽过口（force=水合/回放真实活动时刻，#157 语义原样）");
@@ -171,13 +171,13 @@ console.log("R4 relay 行为断言（真实例：空闲 60s 不变/回拨不洗/
     for (let i = 0; i < 12; i++) mgr.setExternalStatus(id, "WORKING", "接入中");
     ok(st.updated_at === before, `R4-1 同值重报 ×12（60s 等价）updated_at 不变（前 ${before} 后 ${st.updated_at}）`);
     // R4-2 同值 todos 重报（清单零变化）——1123 二现门：不洗不发帧。
-    mgr.setTodos(id, [{ content: "t0", status: "pending", activeForm: "" }], before + 5000);
+    mgr.setTodos(id, [{ content: "t0", status: "pending", active_form: "" }], before + 5000);
     const before2 = st.updated_at;
-    mgr.setTodos(id, [{ content: "t0", status: "pending", activeForm: "" }], before2 + 5000);
+    mgr.setTodos(id, [{ content: "t0", status: "pending", active_form: "" }], before2 + 5000);
     ok(st.updated_at === before2, `R4-2 同值 todos 重报不洗（前 ${before2} 后 ${st.updated_at}）`);
     // R4-2b 内容真变+旧 at：收敛到权威旧时刻（emitUpdated force 的 #157 水合校正语义——
     // 回拨到真相是校正不是洗；与收编前行为逐字等价，回归锚防语义漂移）。
-    mgr.setTodos(id, [{ content: "t1", status: "pending", activeForm: "" }], before2 - 1000);
+    mgr.setTodos(id, [{ content: "t1", status: "pending", active_form: "" }], before2 - 1000);
     ok(st.updated_at === before2 - 1000, `R4-2b 内容变+旧 at 收敛到权威时刻（实得 ${st.updated_at}，期 ${before2 - 1000}）`);
     // R4-3 真态变+旧 at（status 翻转+权威旧时刻）——force 必推进（#271 boot 采纳/收殓
     // 校正语义保留：回拨到真相是校正不是洗）。
@@ -185,9 +185,15 @@ console.log("R4 relay 行为断言（真实例：空闲 60s 不变/回拨不洗/
     ok(st.updated_at === before - 2000, `R4-3 真态变 force 推进到权威旧时刻（实得 ${st.updated_at}，期 ${before - 2000}）`);
     // R4-4 坏 ts 不伪造：显式 NaN/0 at 不推进（律①——不拿接收时刻冒充活动时刻）。
     const before4 = st.updated_at;
-    mgr.setTodos(id, [{ content: "t2", status: "pending", activeForm: "" }], NaN);
-    mgr.setTodos(id, [{ content: "t3", status: "pending", activeForm: "" }], 0);
+    mgr.setTodos(id, [{ content: "t2", status: "pending", active_form: "" }], NaN);
+    mgr.setTodos(id, [{ content: "t3", status: "pending", active_form: "" }], 0);
     ok(st.updated_at === before4, `R4-4 非数/非正 at 不推进不伪造（前 ${before4} 后 ${st.updated_at}）`);
+    // R4-5 律②隔离面（复审 P3-1）：setExternalUsage 是唯一「非 force 且无 emitUpdated
+    // force 跟进」的 at 写手（context-link 搬运体，直发 SESSION_UPDATED）——usage 内容
+    // 真变 + 旧 at（转录扫描乱序形态）仍拒回拨。删掉律②此处即回拨即红（R4-2 被同值
+    // 守卫早退、R4-2b/3 被 force 主导，均隔离不出律②）。
+    mgr.setExternalUsage(id, { input_tokens: 120, output_tokens: 30, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, undefined, undefined, before4 - 5000);
+    ok(st.usage?.input_tokens === 120 && st.updated_at === before4, `R4-5 setExternalUsage 内容变+旧 at 不回拨（律②唯一无 force 跟进路径；usage 已写 ${st.usage?.input_tokens}、时刻保持 ${st.updated_at}）`);
   } finally {
     if (prevData === undefined) delete process.env.CCR_DATA_DIR; else process.env.CCR_DATA_DIR = prevData;
     if (prevPlugin === undefined) delete process.env.CC_DECK_PLUGIN; else process.env.CC_DECK_PLUGIN = prevPlugin;
