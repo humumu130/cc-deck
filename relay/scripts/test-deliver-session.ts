@@ -64,7 +64,11 @@ assert(r.ok && r.session_id === CARD_B, `② ext- 前缀形态回归 → 挂 ${C
 //（本机快机难复现，探针实证 ①刷 A/②刷 B 链）。②后隔 5ms 显式再拔 B（建卡段同款手法
 // 补 deliver 段缺口）——B 恒严格最新，③确定性选 B。
 Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
-mgr.setExternalStatus(CARD_B, "WORKING", "正在忙"); // B updated_at 严格 > A（③前最后一拔）
+// 文案必须与 ② 前那次不同：1123 同值不洗语义（session-manager setExternalStatus 的
+// changed||summaryChanged 门）下，同 status+同 summary 的重拔是 no-op——CI 慢机上 ①②
+// 两笔 deliver 各刷 A/B 的 updated_at 落同一毫秒时，旧守卫（同文案重拔）拔不动 B，
+// 平局按插入序取 A → ③ 红（#161 合入后 run 46046644757 实锤）。换文案才真洗 updated_at。
+mgr.setExternalStatus(CARD_B, "WORKING", "正在忙（③前最后一拔）"); // B updated_at 严格 > A
 // ③ 回落兜底不破：未知 sid + cwd 命中 → deliverByCwd 语义（挂最近活跃的 B）
 r = mgr.deliverBySession("unknown-sid-0000", root, f2);
 assert(r.ok && r.session_id === CARD_B, "③ 未知 sid 回落 cwd 启发式 → 最近活跃卡");

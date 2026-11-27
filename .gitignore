@@ -73,3 +73,4 @@ cc-plugins/plugins/cc-deck/web-console/preview/
 # 落、relay dispatch-lock.ts 读；不入 git——纯运行时协调物，勿污染 worker 的 git status 认领）
 .cc-deck-lock
 .harvest-lock
+.multica/

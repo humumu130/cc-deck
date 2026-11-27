@@ -206,6 +206,9 @@ review_brief() { # $1=pr $2=branch $3=title $4=receipt $5=did8
 3. 结论分级：P0（必须修）/ P1（应修）/ P2+（建议）
 4. 意见落 PR 评论（可链接留痕）：gh pr comment $1 --body "<审查结论+逐条 finding（文件:行号）>"
 5. 评论末行固定：「审查结论：通过｜P0 <n> 条｜P1 <n> 条」
+6. 反方视角轮（A-10③，DEV-22 批 B）：假想「此 PR 会引入回归」——找一条最可能被打破的
+   既有行为/边界（调用点、时序、空态），给出触发路径与复核办法；找不出要明说「反方轮未
+   找到可触发回归」而非略过（单视角结论不直接采信——与全局审查军规同口径）。
 回执不另写文件（PR 评论即留痕）；你的派单台账由 relay 收口。
 BRIEF
 }
@@ -224,6 +227,18 @@ if ! python3 "$lock_bin" hlock acquire "$hlock" --pid "$$" --dispatch-id "${did:
   die 1 "收割锁原子获取判负（另一收割实例在跑/竞态输锁/fs 异常）: $hlock（撞车事故源：1101 定性 P0）"
 fi
 trap 'rm -f "$hlock"' EXIT
+
+# ---------- A-10①②（DEV-22 批 B，台账 §四A）：review-ledger begin/end 配对守卫 ----------
+# 缺口：--merge 直收（未经 --review）写 end 无 begin=孤儿段行；--merge 重跑/幂等续收
+# 重复写 end=重复段行（错位无守卫+幂等去重缺）。本地配对账（仅 relay 写成功才记行，
+# 写失败重试天然幂等；ndjson 同 did+phase 多行也只增审计噪音不破坏收敛——记录侧仍去重）：
+rpair="$data/review-pairs.ndjson"
+rl_seen() { # $1=dispatch_id $2=phase
+  [ -f "$rpair" ] && grep -q "\"dispatch_id\": *\"$1\", *\"phase\": *\"$2\"" "$rpair"
+}
+rl_note() { # $1=dispatch_id $2=phase $3=额外 json 片段（可空，形如 ,"pr":"…"）
+  printf '{"dispatch_id":"%s","phase":"%s","ts":%s%s}\n' "$1" "$2" "$(date +%s)" "${3:-}" >> "$rpair"
+}
 
 # ---------- W-PRREVIEW：--review 互审管线（前置位：先审后闸——CI 红不进审查更不进收割） ----------
 do_pr_review() {
@@ -283,7 +298,9 @@ do_pr_review() {
   #    先于 gid 分支写：无 gid 回落 PM 子代理同样在审查期）。**note 嵌 PR URL**——
   #    W-PRBACKFLOW 评论回流按台账行 receipt 里的 PR URL 圈轮询集（relay 单一事实源）
   beg="$(printf '{"action":"review-ledger","dispatch_id":"%s","phase":"begin","note":"PR %s 互审发起（CI green 后，评论将回流交付会话）"}' "$did" "$pr" | relay_post)"
-  printf '%s' "$beg" | grep -q '"ok": *true' && echo "✓ 台账 begin 段行（in_review）：原单链 ${did:0:8}" || echo "⚠ review-ledger begin 写失败（relay 不可达/原单不在台账？）——org log-append 手工补"
+  printf '%s' "$beg" | grep -q '"ok": *true' \
+    && { echo "✓ 台账 begin 段行（in_review）：原单链 ${did:0:8}"; rl_seen "$did" begin || rl_note "$did" begin ",\"pr\":\"$pr\""; } \
+    || echo "⚠ review-ledger begin 写失败（relay 不可达/原单不在台账？）——org log-append 手工补"
   # 4) 互审员路由（要求2：在编 worker 同域熟手优先；排除集=交付者+同 slug 关联会话）
   if [ -z "$gid" ]; then
     echo "ℹ 无 gid（随手办账外形态）——无在编路由面，回落 PM 子代理本地审"
@@ -593,9 +610,21 @@ if [ "$merge_mode" = 1 ]; then
   fi
   hg_extra=""
   [ "$base_override" = 1 ] && hg_extra="${hg_extra},\"base_override\":true"
-  printf '{"action":"review-ledger","dispatch_id":"%s","phase":"end","note":"PR squash-merge 收割（leader-harvest --merge，单笔纪律不变）","merge_commit_sha":"%s","dev_contains":"%s"%s}' "$did" "${hg_msha:-}" "${hg_dev_contains:-unverified}" "$hg_extra" | relay_post | grep -q '"ok": *true' \
-    && echo "✓ 台账 end 段行（done 收口视图恢复）：原单链 ${did:0:8}" \
-    || echo "⚠ review-ledger end 写失败（relay 不可达？）——org log-append 手工补一行"
+  # A-10①：end 前保证 begin 在账——--merge 直收（未经 --review）/begin 写失败形态补记
+  # begin 段行（note 标补记），时序证据链不缺头；A-10②：end 幂等去重（--merge 重跑/
+  # 幂等续收不重复写 end 段行）。
+  if ! rl_seen "$did" begin; then
+    echo "⚠ 未见 begin 段行（--merge 直收或 begin 写失败？）——补记 begin 再收口（A-10①）"
+    printf '{"action":"review-ledger","dispatch_id":"%s","phase":"begin","note":"补记：--merge 收口时未见互审 begin（A-10① 配对守卫）"}' "$did" | relay_post | grep -q '"ok": *true' \
+      && rl_note "$did" begin ",\"compensated\":true"
+  fi
+  if rl_seen "$did" end; then
+    echo "◐ end 段行已记（幂等跳过，A-10②）"
+  else
+    printf '{"action":"review-ledger","dispatch_id":"%s","phase":"end","note":"PR squash-merge 收割（leader-harvest --merge，单笔纪律不变）","merge_commit_sha":"%s","dev_contains":"%s"%s}' "$did" "${hg_msha:-}" "${hg_dev_contains:-unverified}" "$hg_extra" | relay_post | grep -q '"ok": *true' \
+      && { echo "✓ 台账 end 段行（done 收口视图恢复）：原单链 ${did:0:8}"; rl_note "$did" end ",\"pr\":\"$pr_merge\""; } \
+      || echo "⚠ review-ledger end 写失败（relay 不可达？）——org log-append 手工补一行"
+  fi
   receipt_pm_note "- squash-merge 收割：$pr_merge（CI green，--merge）"
 fi
 # W-ORG-DEFECTS 件2：闸全绿=单终态，顺手清 worktree 互斥锁（relay 收口边/harvest 收尾/2h

@@ -254,6 +254,23 @@ function snapshotSettings(c: TestClient): EmpSt | undefined {
   return (snap?.payload as { settings?: EmpSt } | undefined)?.settings;
 }
 
+/** P2（DEV-23 修复轮）：首 SNAPSHOT 轮询取帧（≤3s、150ms 间隔）——冷环境异步探针
+ * 子进程争抢可拖慢首个 SNAPSHOT 到达（审查实锤首跑 got=undefined/复跑绿的环境条
+ * 件性；A/B/C 三块首读同形，修复轮实测 B 块冷态同中），轮询消条件性；上限钉 3s
+ * 不得再宽——修前缺陷形态（探针同步冻结事件循环 ≥5s、首 SNAPSHOT 延至 ~5.7s）
+ * 必须仍红（修复轮 A/B 实证：修前 src + 本窗 → Block A got=undefined 即止），检出
+ * 线不降。后续
+ * SETTINGS_UPDATED/ack 等帧是命令响应序（waitAck 阻塞+帧序断言保序），非冷启竞态，不动。 */
+async function awaitSnapshotSettings(c: TestClient, ms = 3000): Promise<EmpSt | undefined> {
+  const deadline = Date.now() + ms;
+  let st = snapshotSettings(c);
+  while (!st && Date.now() < deadline) {
+    await wait(150);
+    st = snapshotSettings(c);
+  }
+  return st;
+}
+
 // ---------- Block A：新装默认开 + 首启物化（8801） ----------
 {
   const DATA = mkdtempSync(join(tmpdir(), "ccr-setws-a-"));
@@ -261,8 +278,7 @@ function snapshotSettings(c: TestClient): EmpSt | undefined {
   try {
     const c = connect(`ws://127.0.0.1:8801/ws?token=${r.token}`);
     await c.opened;
-    await wait(400);
-    const st = snapshotSettings(c);
+    const st = await awaitSnapshotSettings(c);
     assert(
       !!st && st.employee_home === true && st.source === "file" && st.value === join(DATA, "claude-home"),
       `A: 新装 SNAPSHOT 默认开 + 首启物化（source=file 非 default，防 SNAPSHOT 振荡）got=${JSON.stringify(st)}`,
@@ -288,8 +304,7 @@ function snapshotSettings(c: TestClient): EmpSt | undefined {
     const base = `ws://127.0.0.1:8802/ws?token=${token}`;
     const c2 = connect(base); // 「他端」先连（验收点 3 的协议基底：他端切换本端秒收）
     await c2.opened;
-    await wait(400);
-    const st0 = snapshotSettings(c2);
+    const st0 = await awaitSnapshotSettings(c2);
     assert(
       !!st0 && st0.employee_home === false && st0.source === "file" && st0.value === null,
       `B: 存量 SNAPSHOT 默认关（物化后 source=file，value=null）got=${JSON.stringify(st0)}`,
@@ -365,8 +380,7 @@ function snapshotSettings(c: TestClient): EmpSt | undefined {
   try {
     const c = connect(`ws://127.0.0.1:8803/ws?token=${r.token}`);
     await c.opened;
-    await wait(400);
-    const st = snapshotSettings(c);
+    const st = await awaitSnapshotSettings(c);
     assert(
       !!st && st.source === "env" && st.employee_home === true && st.value === EMP_HOME,
       `C: env 锁定 SNAPSHOT {source:env, value=显式路径} got=${JSON.stringify(st)}`,

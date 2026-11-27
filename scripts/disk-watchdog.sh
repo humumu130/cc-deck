@@ -9,6 +9,10 @@
 #   scripts/disk-watchdog.sh check        # 单次检查（launchd 定时调用 / 手动）
 #   scripts/disk-watchdog.sh report       # 只读报告（水位+白名单占用），零删除——盘点用
 #   scripts/disk-watchdog.sh status       # 最近一次动作日志尾部
+#   scripts/disk-watchdog.sh prefetch [report|clean]  # DL-P2-3：Claude Code update-prefetch
+#                                       # 泄漏专项（每 CLI 会话留 288MB 预取目录永不自清，
+#                                       # 2026-10-22 实锤单日 668 个=68GB；缺省 clean，
+#                                       # report 只盘点。cron/launchd 定期跑=泄漏根治口）
 #
 # 部署（由 Leader 决定执行）：
 #   launchd：每 30 分钟一查（plist 样例见脚本尾注释）
@@ -37,12 +41,29 @@ CLEAN_GLOBS=(
   "/private/tmp/cc-deck-w-*"        # worker worktree 沙盒：从主仓 git 创建，删后可重建（收割后即废弃；保留 48h 内新建的防误杀在用沙盒——按 mtime 过滤）
   "/private/tmp/w-*"                # worker 探针/沙盒产物目录：测试脚本输出，可再生
   "/private/tmp/claude-*/tasks/*.output"  # Claude 后台任务输出缓存：会话内可重读，过期即弃
+  "/private/var/folders/*/*/T/cbc-update-prefetch-*"  # DL-P2-3：Claude Code update-prefetch 泄漏（每 CLI 会话 288MB 永不自清，1022 实锤；预取缓存随时可删——CLI 需要时重拉）
   "$HOME/.npm/_cacache"             # npm 下载缓存：registry 可重拉（npm cache clean 等价物）
   "$HOME/Library/Caches/ms-playwright/chromium-*"  # Playwright 浏览器缓存：npx playwright install 可重装（保留一份最新版——按 mtime 保留最新 1 个）
 )
 # VM 快照镜像（swap/休眠）只报告不动：/System/Volumes/VM 由 macOS 管
 
 log() { mkdir -p "$(dirname "$LOG")"; echo "[$(date '+%F %T')] $*" >> "$LOG"; }
+
+# DL-P2-3（DEV-22 批 B）：WARN 消费口状态账——水位告警的「节流 + 持续升级」记忆。
+# 缺口（台账）：WARN 每 5 分钟刷屏无人消费；升级外发又依赖 relay 存活（同 DL-P1-5 通道
+# 病）。本账三键：warn_since（本轮 WARN 起算）/warn_notified（上次外发，≥1h 节流）/
+# warn_escalated（上次直发 macOS 通知中心，≥6h 一次——独立于 relay 的通道）。
+STATE="$HOME/.cc-deck/data/disk-watchdog.state"
+state_get() { [ -f "$STATE" ] && sed -n "s/^$1=//p" "$STATE" | tail -1; }
+state_set() {
+  mkdir -p "$(dirname "$STATE")"
+  { grep -v "^$1=" "$STATE" 2>/dev/null; echo "$1=$2"; } > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+}
+state_clear_warn() {  # 水位回落/已动手：清 WARN 三键（下轮重新起算）
+  for k in warn_since warn_notified warn_escalated; do
+    grep -v "^$k=" "$STATE" 2>/dev/null > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  done
+}
 
 notify() { # $1=级别 $2=正文
   local payload
@@ -113,6 +134,29 @@ rotate_log() {
 
 CMD="${1:-check}"
 case "$CMD" in
+  prefetch)
+    # DL-P2-3：prefetch 泄漏专项（$2=report 只盘点 / 缺省 clean）——不等 90% 水位，
+    # cron/launchd 定期跑即根治口（1022 实锤：668 目录/68GB/日，巡检联动优先查此处）
+    PF_GLOB="/private/var/folders/*/*/T/cbc-update-prefetch-*"
+    pf_cnt=0; pf_kb=0
+    for p in $PF_GLOB; do
+      [ -e "$p" ] || continue
+      sz=$(du -sk "$p" 2>/dev/null | awk '{print $1}')
+      pf_cnt=$((pf_cnt + 1)); pf_kb=$((pf_kb + ${sz:-0}))
+      if [ "${2:-clean}" = "report" ]; then
+        echo "$(du -sh "$p" 2>/dev/null | awk '{print $1}')	$p"
+      else
+        rm -rf "$p" && log "prefetch-cleaned: $p (${sz:-0}KB)"
+      fi
+    done
+    if [ "${2:-clean}" = "report" ]; then
+      echo "total: ${pf_cnt} dirs, $((pf_kb / 1024))MB"
+    else
+      echo "prefetch 清理：${pf_cnt} 目录，释放 $((pf_kb / 1024))MB（详单见 $LOG）"
+      [ "$pf_cnt" -gt 0 ] && log "prefetch sweep: ${pf_cnt} dirs, $((pf_kb / 1024))MB freed"
+    fi
+    exit 0
+    ;;
   report)
     echo "volume: $VOLUME  used: $(pct_of_data_volume)%"
     for g in "${CLEAN_GLOBS[@]}"; do
@@ -130,7 +174,7 @@ case "$CMD" in
   check)
     ;;
   *)
-    echo "usage: $0 check|report|status" >&2
+    echo "usage: $0 check|report|status|prefetch [report|clean]" >&2
     exit 2
     ;;
 esac
@@ -148,11 +192,37 @@ if [ "$PCT" -ge "$ACT_PCT" ]; then
     esac
   done
   AFTER=$(pct_of_data_volume)
-  notify confirm "数据卷 ${PCT}%≥${ACT_PCT}%：已清白名单再生目录（worktree 沙盒/探针产物/npm 缓存/旧 Playwright），释放 $((freed_bytes/1024))MB，现 ${AFTER}%。详单见 disk-watchdog.log"
+  notify confirm "数据卷 ${PCT}%≥${ACT_PCT}%：已清白名单再生目录（worktree 沙盒/探针产物/prefetch 泄漏/npm 缓存/旧 Playwright），释放 $((freed_bytes/1024))MB，现 ${AFTER}%。详单见 disk-watchdog.log"
   log "ACT done: freed $((freed_bytes/1024))MB, ${PCT}% -> ${AFTER}%"
+  state_clear_warn  # 已动手=本轮告警周期终结
 elif [ "$PCT" -ge "$WARN_PCT" ]; then
   log "WARN: data volume ${PCT}%"
-  notify warning "数据卷 ${PCT}%（阈值 ${WARN_PCT}%）——暂未动手，白名单占用见 disk-watchdog.sh report；持续上涨将在 ${ACT_PCT}% 自动清再生目录"
+  # DL-P2-3 消费口：①外发节流 ≥1h（原每 5 分钟刷屏=告警疲劳无人消费形态）；②持续 ≥6h
+  # 直发 macOS 通知中心（osascript 原生通道——不依赖 relay 存活，DL-P1-5 同族通道病在
+  # 磁盘域的先手修补）；③prefetch 泄漏提示常驻（磁盘反复满的第一嫌疑，1022 实锤）
+  now_s=$(date +%s)
+  ws="$(state_get warn_since)"; ws="${ws:-0}"
+  [ "$ws" -gt 0 ] || { state_set warn_since "$now_s"; ws=$now_s; log "WARN begin: 水位 ${PCT}% 起算消费账"; }
+  ln="$(state_get warn_notified)"; ln="${ln:-0}"
+  if [ $((now_s - ln)) -ge 3600 ]; then
+    notify warning "数据卷 ${PCT}%（阈值 ${WARN_PCT}%）——暂未动手，白名单占用见 disk-watchdog.sh report；持续上涨将在 ${ACT_PCT}% 自动清再生目录；磁盘反复满先查 prefetch 泄漏（disk-watchdog.sh prefetch report）"
+    state_set warn_notified "$now_s"
+  fi
+  sustained=$((now_s - ws))
+  if [ "$sustained" -ge 21600 ]; then
+    en="$(state_get warn_escalated)"; en="${en:-0}"
+    if [ $((now_s - en)) -ge 21600 ]; then
+      if command -v osascript >/dev/null 2>&1; then
+        osascript -e "display notification \"数据卷 ${PCT}% 已持续 ≥6 小时（disk-watchdog WARN 无人消费升级）——跑 scripts/disk-watchdog.sh report 看白名单占用；prefetch 泄漏跑 prefetch 子命令清\" with title \"disk-watchdog 持续告警\"" >/dev/null 2>&1 && log "ESCALATE: WARN 持续 ${sustained}s——已直发 macOS 通知中心（独立于 relay）" && state_set warn_escalated "$now_s"
+      fi
+    fi
+  fi
+else
+  # 水位回落：清消费账（下次越线重新起算），恢复只记一次
+  if [ -n "$(state_get warn_since)" ]; then
+    log "recovered: 水位 ${PCT}% < ${WARN_PCT}%——WARN 消费账清零"
+    state_clear_warn
+  fi
 fi
 
 # ---- launchd 部署样例（Leader 批准后执行；30 分钟一查）----
@@ -169,3 +239,17 @@ fi
 # </dict></plist>
 # PLIST
 # launchctl load ~/Library/LaunchAgents/com.ccdeck.disk-watchdog.plist
+#
+# ---- DL-P2-3 prefetch 泄漏根治 cron 样例（每 2h 一清，不等水位）----
+# cat > ~/Library/LaunchAgents/com.ccdeck.prefetch-sweep.plist <<'PLIST'
+# <?xml version="1.0" encoding="UTF-8"?>
+# <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+# <plist version="1.0"><dict>
+#   <key>Label</key><string>com.ccdeck.prefetch-sweep</string>
+#   <key>ProgramArguments</key><array><string>/bin/bash</string>
+#     <string>/Users/xdd/dev/cc-deck/scripts/disk-watchdog.sh</string><string>prefetch</string></array>
+#   <key>StartInterval</key><integer>7200</integer>
+#   <key>RunAtLoad</key><true/>
+# </dict></plist>
+# PLIST
+# launchctl load ~/Library/LaunchAgents/com.ccdeck.prefetch-sweep.plist
