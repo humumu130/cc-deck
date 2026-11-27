@@ -75,14 +75,18 @@ appendDispatch({ ts: 1400, id: "d-retry", tier: "随手办", target: "org-leader
 // （行序状态机语义：重遇终态行=再现行=重投推进），watchdog（done）故殿后至行16
 appendDispatch({ ts: 4100, id: "d-anchor-ghost", tier: "正经立项", target: "org-leader", status: "dispatched", session_id: "s-relay-1", project_anchor: "/px/ghost", actor: "leader" }, fx);
 appendDispatch({ ts: 4200, id: "d-sess-ghost", tier: "咨询", target: "org-leader", status: "running", session_id: "s-ghost", actor: "user" }, fx);
-appendDispatch({ ts: 4400, id: "d-noactor", tier: "随手办", target: "org-leader", status: "running", session_id: "" }, fx); // 旧数据无 actor
-appendDispatch({ ts: 4500, id: "d-badactor", tier: "随手办", target: "org-leader", status: "running", session_id: "", actor: 123 as unknown as string }, fx); // actor 类型坏
+// DL-P1-4 基线债修订：下述 6 行是**旧数据形态**（无 actor / actor 类型坏 / 无 actor
+// 的派生段链）——现代 appendDispatch schema 校验已正确拒写（W-CMDIMPL T0b 写严格），
+// 本测的是**读侧对遗留文件的容错**，故改手搓直写（与下方 3 脏行同法）。原写经
+// appendDispatch 造态在 schema 收严后恒拒=9 行落盘对 19 期望的永久假红（基线债之一）。
+appendFileSync(logFile, JSON.stringify({ ts: 4400, id: "d-noactor", tier: "随手办", target: "org-leader", status: "running", session_id: "" }) + "\n", "utf8"); // 旧数据无 actor
+appendFileSync(logFile, JSON.stringify({ ts: 4500, id: "d-badactor", tier: "随手办", target: "org-leader", status: "running", session_id: "", actor: 123 }) + "\n", "utf8"); // actor 类型坏
 // 派生段 id 撞名复现（REVIEW3 P2-1 / FIX-B ①）：行12 独立 root id 恰带 "#r2" 尾开段；
 // 行13/14 root x 常态收敛 done；行15 x 终态后再现行=重投 → 派生 "x#r2" 撞行12 → duplicate-id 账拒行
-appendDispatch({ ts: 5, id: "x#r2", tier: "咨询", target: "x", status: "dispatched", session_id: "" }, fx);
-appendDispatch({ ts: 6, id: "x", tier: "咨询", target: "x", status: "dispatched", session_id: "" }, fx);
-appendDispatch({ ts: 7, id: "x", tier: "咨询", target: "x", status: "done", session_id: "" }, fx);
-appendDispatch({ ts: 8, id: "x", tier: "咨询", target: "x", status: "dispatched", session_id: "" }, fx);
+appendFileSync(logFile, JSON.stringify({ ts: 5, id: "x#r2", tier: "咨询", target: "x", status: "dispatched", session_id: "" }) + "\n", "utf8");
+appendFileSync(logFile, JSON.stringify({ ts: 6, id: "x", tier: "咨询", target: "x", status: "dispatched", session_id: "" }) + "\n", "utf8");
+appendFileSync(logFile, JSON.stringify({ ts: 7, id: "x", tier: "咨询", target: "x", status: "done", session_id: "" }) + "\n", "utf8");
+appendFileSync(logFile, JSON.stringify({ ts: 8, id: "x", tier: "咨询", target: "x", status: "dispatched", session_id: "" }) + "\n", "utf8");
 appendDispatch({ ts: 4300, id: "d-watchdog", tier: "看门狗", target: "org-leader", status: "done", receipt: "自愈动作", session_id: "", actor: "leader" }, fx);
 // 脏行手搓（真写路径不可产）：bad-json / 缺 id / status 词表外
 appendFileSync(logFile, "这不是json\n", "utf8");
@@ -212,9 +216,10 @@ assert(r3.counts.dispatch === 11 && listLoss(port, logFile).length === 7,
   "续跑零重复零叠加：已导行 UPDATE 幂等（10+#r2=11）、脏行/撞名行重遇 dup 守卫 loss 不叠（仍 7）");
 assert(port.query("PRAGMA foreign_key_check").length === 0, "续跑后仍零悬空 FK");
 
-// 失效重放：mtime 推进（源变语义）→两域联动重灌、行数不残留
-utimesSync(logFile, new Date(Date.now() + 5), new Date(Date.now() + 5));
-const r4 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir });
+// 失效重放（DL-P1-4 基线债修订：dispatchappend（t-a5e9f79e·1105）把 dispatch 源改
+// appendOnly 增量续读后 mtime 不再杀 checkpoint——原「utimes 推 mtime 失效」法退役
+// 成永久假红。改用 schemaVersion 推进强制全量重放（语义同：源变=重灌））
+const r4 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir }, { schemaVersion: 9991 });
 assert(r4.skipped === false && r4.rescanned.length === 2 && r4.counts.dispatch === 11 && r4.counts.lesson === 0,
   "dispatch 失效重放：两域联动重灌、行数与重放前一致（lesson 停灌恒 0）");
 assert(port.query<{ id: string }>("SELECT id FROM dispatch WHERE id = 'd-ok#r2' AND attempt_no = 2 AND parent_dispatch_id = 'd-ok'").length === 1,
@@ -222,8 +227,8 @@ assert(port.query<{ id: string }>("SELECT id FROM dispatch WHERE id = 'd-ok#r2' 
 assert(listLoss(port, logFile).length === 7 && listLoss(port, boardsDir).length === 0, "重放后 dispatch 源 loss 重建同数、boards 源零 loss（lesson 停灌）");
 
 // 小批事务：batchSize=2 逐批 flush（重放清域单次+跨批段链父行保留）——批间边界正确性
-utimesSync(logFile, new Date(Date.now() + 10), new Date(Date.now() + 10)); // 先失效（r4 后 cp 已命中，否则快进）
-const r5 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir }, { batchSize: 2 });
+// （失效法同 r4：schemaVersion 再推进（mtime 法已随 appendOnly 退役））
+const r5 = importDispatchLesson(port, { dispatchLogFile: logFile, boardsDir: boardsDir }, { batchSize: 2, schemaVersion: 9992 });
 assert(r5.counts.dispatch === 11 && r5.counts.lesson === 0 && r5.dispatchProcessed === 21,
   "小批重放（batchSize=2，21 行/11 批）：批间 flush 行数不变（lesson 停灌恒 0）");
 

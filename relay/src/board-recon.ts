@@ -13,6 +13,8 @@
 // 档位（任务书验收 2：首跑 observe）：CCR_BOARDRECON_MODE=observe（缺省——研判清单
 // +审计+通知，不动板）/auto（翻面动作执行：孤儿→backlog）。两档对账与告警照常，
 // 差别只在是否落 upsert。
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { ProjectBoard } from "./projects.js";
 
 export interface ReconSession {
@@ -103,6 +105,32 @@ export function harvestKeyOf(text: string): string {
   const m = String(text || "").match(/w-([a-z0-9][a-z0-9-]{1,40})/i);
   if (m) return `w-${m[1].toLowerCase()}`;
   return String(text || "").replace(/\s+/g, "").slice(0, 10).toLowerCase();
+}
+
+/** A-3（2026-11-27 台账·artifacts 遗留池 P2-2）：回执尾行合规扫描（证据③构建——
+ * 原 patrol.runBoardRecon 内联块提取单源可测）。纯尾字判据（「结果：」+「改动文件：」）
+ * 会被 WIP 回执的模板预填尾行骗过——加 mtime 静默窗交叉校验：worker 分件提交中会
+ * 持续触碰回执文件（mtime 新鲜=写窗口内），其尾行不算合规证据，防「提前尾行强翻
+ * 在跑任务」。真交付后文件停止变化，静默期满即恢复证据资格（与 6h 僵尸 TTL 组合，
+ * 只挡「正在写」不挡「写完许久」）。缺省 30min
+ *（CCR_BOARDRECON_RECEIPT_QUIESCENT_MS 可调，显式 0=关）。 */
+export function compliantReceiptSlugs(artDir: string, now = Date.now()): Set<string> {
+  const slugs = new Set<string>();
+  const raw = Number(process.env.CCR_BOARDRECON_RECEIPT_QUIESCENT_MS);
+  const quietMs = Number.isFinite(raw) && raw >= 0 ? raw : 30 * 60_000;
+  try {
+    for (const f of readdirSync(artDir)) {
+      const m = f.match(/^w-[a-z0-9][a-z0-9-]{1,40}\.md$/i);
+      if (!m) continue;
+      try {
+        const full = join(artDir, f);
+        if (quietMs > 0 && now - statSync(full).mtimeMs < quietMs) continue; // A-3：写窗口内（WIP 在写）不算合规证据
+        const tail = readFileSync(full, "utf-8").slice(-400);
+        if (tail.includes("结果：") && tail.includes("改动文件：")) slugs.add(m[0].replace(/\.md$/i, "").toLowerCase());
+      } catch { /* 单文件读失败跳过 */ }
+    }
+  } catch { /* artifacts 目录不可读=证据③缺席 */ }
+  return slugs;
 }
 
 export interface ReconResult {
@@ -334,8 +362,9 @@ export interface ZombieEvidenceAction {
  * 但让僵尸进入值守视野）。**形态免疫**=判据只看不变量（卡态/龄/交付证据），不看
  * no_pr/派单路径/收割器形态——五现的教训即路径形态必变。
  * 防误杀护栏（与 R3 harvested-unflipped 同三护栏）：①无时戳不臆断（updated_at/ts
- * 全缺 skip）②空键/回落键全板碰撞 skip（证据归属不可分辨）③已带僵尸标记 note skip
- * （告警幂等——一次即记）。skipEntryIds=本拍 reconcileBoardCards 已出判定的卡
+ * 全缺 skip）②空键/回落键全板碰撞 skip（证据归属不可分辨）③已带僵尸标记 note 且
+ * 三证全无 skip（告警幂等——一次即记；晚到证据在场则放行强翻，A-2 后标记不挡证据）。
+ * skipEntryIds=本拍 reconcileBoardCards 已出判定的卡
  * （两器不重复动作：孤儿归位 vs 证据强翻同拍冲突时 R3 先判，本刀让位）。
  */
 export function zombieInvariantScan(input: {
@@ -373,7 +402,11 @@ export function zombieInvariantScan(input: {
       if (e.status !== "claimed" && e.status !== "submitted" && e.status !== "backlog") continue;
       const isBacklogNoId = e.status === "backlog" && !e.dispatch_id;
       if (skip.has(e.id)) continue; // 本拍 R3 已判定——两器不重复动作
-      if (String(e.note || "").includes(ZOMBIE_NOTE_MARK)) continue; // 告警幂等锚（第二轮不再重复）
+      // A-2（2026-11-27 台账·artifacts 遗留池 P2-1）：僵尸告警标记不再无条件先行——
+      // 原序「标记→continue」在证据评估之前，已告警卡后来补交回执/台账落 done/dev 收
+      // 编（晚到证据）永不被强翻，僵尸卡告警后即死锁。标记只对**告警面**幂等（无证据
+      // 不重复告警），证据面照判：marked∧证据在 → 照常出强翻 action。
+      const marked = String(e.note || "").includes(ZOMBIE_NOTE_MARK);
       const updated = Number(e.updated_at || e.ts || 0);
       if (!updated) continue; // 无时戳不臆断
       const ageMs = now - updated;
@@ -393,6 +426,7 @@ export function zombieInvariantScan(input: {
         ? new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![a-z0-9-])", "i").test(ev.devLogText)
         : ev.devLogText.toLowerCase().includes(key);
       const evidence: ZombieEvidenceAction["evidence"] = ledgerOk ? "ledger-done" : receiptOk ? "receipt-line" : devHit ? "dev-log" : null;
+      if (marked && evidence === null) continue; // 告警幂等锚：已标记且仍无证据——不重复告警（A-2 后移位；证据在则放行强翻）
       actions.push({ gid, entryId: e.id, text: String(e.text || ""), status: e.status, ageMs, evidence });
     }
   }

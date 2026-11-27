@@ -92,7 +92,14 @@ BAK="${APP_DST%.app}-bak-$(date '+%Y%m%d-%H%M%S').app"
 if [ -d "$APP_DST" ]; then
   mv "$APP_DST" "$BAK" || die 4 "旧 App 移走失败（$BAK）"
 fi
-ditto "$SRC_APP" "$APP_DST" || die 4 "ditto 拷贝失败（$SRC_APP → $APP_DST）"
+# 拷贝引擎：macOS 用 ditto（保元数据/时戳，生产行为字节不变）；非 mac（Linux CI
+# 跑 test:swapguard 全链沙盒）回落 cp -a——swap-nova 生产面是 mac 换装，回落只为
+# 测试链路可跑（CI runner 实测 ditto 缺席 exit 4 根因，2026-11-28 P1-1 返修随批）
+if command -v ditto >/dev/null 2>&1; then
+  ditto "$SRC_APP" "$APP_DST" || die 4 "ditto 拷贝失败（$SRC_APP → $APP_DST）"
+else
+  cp -a "$SRC_APP" "$APP_DST" || die 4 "cp -a 拷贝失败（$SRC_APP → $APP_DST，非 mac 无 ditto）"
+fi
 INSTALLED_VER="$(cur_ver "$APP_DST")"
 [ "$INSTALLED_VER" = "$NEW_VER" ] || log "⚠️ 装后版本($INSTALLED_VER)与产物($NEW_VER)不一致（ditto -p 保时戳的已知面，人工核）"
 [ -n "$MOUNT_POINT" ] && hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1
@@ -100,6 +107,11 @@ log "换装完成：$OLD_VER → $INSTALLED_VER（备份 $BAK）"
 
 # ── 复活段：python3 setsid 双叉脱组——杀树（killpg）杀不到本段 ──
 VERDICT="$DATA_DIR/swap-nova.verdict"
+# DEV-18 审查 P2（2026-11-27 移交本批）：发射 payload 前清陈旧 verdict——上一轮若在
+# 「payload 落 verdict 后、本脚本收尸 rm 前」被杀（或超时窗遗留），本轮等待循环首拍
+# 即见旧文件：读到的 exit code 属于上一轮（可能 0）→ 假绿收割。发射前 rm = 等待窗内
+# 出现的 verdict 必属本轮 payload。
+rm -f "$VERDICT"
 # mktemp 模板 X 串必须在尾部：`.XXXXXX.sh` 中缀形态会被 BSD mktemp 当字面文件名，
 # 第二次换装即 O_EXCL 撞死（沙盒复跑实锤）→ payload 空 → 复活段无声丢失
 PAYLOAD="$(mktemp /tmp/swap-nova-payload.XXXXXX)"
