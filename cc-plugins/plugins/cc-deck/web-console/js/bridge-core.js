@@ -60,7 +60,18 @@
                   let timer = null;
                   return (message, kind) => {
                     node = node || document.getElementById("toast");
-                    if (!node) return;
+                    // [W-NOTIFYDEAD]（1127）：#toast 缺席（极端时序/宿主形态差）不再静默 return——
+                    // 与 settings-domain sharedToast 同款 body 自挂兜底（W-NOTIFYFIX「任何降级必须
+                    // 可见」纪律补齐到桥面），节点后续复用。
+                    if (!node) {
+                      try {
+                        node = document.createElement("div");
+                        node.id = "toast";
+                        node.className = "toast";
+                        node.setAttribute("role", "status");
+                        (document.body || document.documentElement).appendChild(node);
+                      } catch (_) { return; }
+                    }
                     const host = document.querySelector("#stage-mobile.active") ? document.querySelector(".mobile-frame") : document.querySelector(".desktop-frame");
                     if (host && node.parentElement !== host) host.append(node);
                     node.textContent = (kind === "error" ? "⚠ " : "") + message; // W3P-P2-5：错误级前置警示符（样式随 toast-error 类）
@@ -162,10 +173,13 @@
                     if (!safe) return;
                     // #158-批4a：绝对地址基于 relay 实连信息推导（桌面形态 location 是 tauri.localhost、
                     // 云通道是 cc.humumu.online 代理——相对解析/硬编码端口在这些形态必断链）；
-                    // 地基维护 __ccDeck005HttpOrigin()（wsUrl→http origin，推导不出回落 location.origin）
+                    // 地基维护 __ccDeck005HttpOrigin()（wsUrl→http origin，推导不出回落 location.origin；
+                    // [W-NOTIFYDEAD] 活连接 mainWs.url 兜底——cfg 空窗不再回落死源 tauri.localhost）
                     const origin = (typeof window.__ccDeck005HttpOrigin === "function" && window.__ccDeck005HttpOrigin()) || location.origin;
                     const url = String(origin).replace(/\/+$/, "") + "/acceptance/" + safe;
-                    void window.__ccDeck005OpenUrl(url); // 统一 Promise 化打开链：桌面 openExternal / 浏览器被拦降级复制+toast
+                    // [W-NOTIFYDEAD]（1127 二现）：void 吞 Promise=任一降级段静默死钮——改 return
+                    // 交调用方观测（notify 侧成功/失败/超时全程可见；链内各失败段自带 toast 不变）
+                    return window.__ccDeck005OpenUrl(url); // 统一 Promise 化打开链：桌面 openExternal（6s 悬挂竞速）/ 浏览器被拦降级复制+toast
                   },
                   bannerOf(text) { return bannerNode(text); },
                   subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },

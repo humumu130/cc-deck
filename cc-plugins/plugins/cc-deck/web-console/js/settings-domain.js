@@ -893,8 +893,22 @@ function connectLan(ctx) {
           const u = String(url || "");
           if (!/^https?:\/\//i.test(u)) { sharedToast("无效链接（非 http/https）：" + u.slice(0, 80), true); return false; }
           if (window.ccDeck && typeof window.ccDeck.openExternal === "function") {
-            try { await window.ccDeck.openExternal(u); return true; }
-            catch (e) { sharedToast("系统浏览器打开失败，已转复制兜底：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); return copyLink(u); }
+            // [W-NOTIFYDEAD]（1127 二现）：壳 IPC 悬挂形态（WebView2 消息被吞永不结算——#268
+            // Canceled 前科族）await 即永挂：无错无 toast=死钮。6s 竞速超时转「可见失败」——
+            // toast+复制兜底，绝不静默。成功路径 resolve 保持零多余 toast（probe-notifyfix B1 锚）。
+            let hangTimer = 0;
+            try {
+              await Promise.race([
+                window.ccDeck.openExternal(u),
+                new Promise((_, rej) => { hangTimer = setTimeout(() => rej(new Error("open-timeout")), 6000); }),
+              ]);
+              clearTimeout(hangTimer);
+              return true;
+            } catch (e) {
+              clearTimeout(hangTimer);
+              if (e && e.message === "open-timeout") { sharedToast("系统浏览器打开超时（6s 无响应）——链接已转复制，请粘贴到浏览器打开", true); return copyLink(u); }
+              sharedToast("系统浏览器打开失败，已转复制兜底：" + (e && e.message ? String(e.message).slice(0, 60) : "?"), true); return copyLink(u);
+            }
           }
           let opened = null;
           try { opened = window.open(u, "_blank", "noopener,noreferrer"); } catch (e) { opened = null; }
@@ -2447,6 +2461,17 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
           const u = new URL(raw.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
           if (u.protocol === "http:" || u.protocol === "https:") return u.origin;
         } catch (_) {}
+        // [W-NOTIFYDEAD]（1127 二现实锤「打开验收单」死钮）：cfg.wsUrl 空窗（桌面 shell 探测期/
+        // 未走 connectLan 形态）时旧版直落 location.origin——桌面=tauri.localhost（WebView2 为
+        // https 形态），协议检查通过+openExternal resolve「成功」→ 外部浏览器打开不可达页+零
+        // toast=用户侧死钮。活连接兜底：通知数据在流（面板有内容）则主 WS 必在，其实址即真源。
+        try {
+          const wu = String((window.__ccDeck005MainWs && window.__ccDeck005MainWs.url) || "");
+          if (/^wss?:\/\//i.test(wu)) {
+            const u2 = new URL(wu.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:"));
+            if (u2.protocol === "http:" || u2.protocol === "https:") return u2.origin;
+          }
+        } catch (_) {}
         return location.origin;
       };
 
@@ -2535,6 +2560,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
 
       function setConn(context, status, text, failKind = "none") {
         context.status = status;
+        // offlineui（t-0b360983 刀1）：源断连起点记账——转 offline/connecting 记时刻（connecting
+        // 也算断：握手未成即无数据），online 清零；已有起点保持（offline→connecting→offline 不重置表）
+        context._downAt = status === "online" ? 0 : (context._downAt || Date.now());
         context.statusText = text;
         context.failKind = failKind;
         const className = status === "online" ? "status-connected" : status === "connecting" ? "status-reconnecting" : "status-disconnected";
@@ -3002,6 +3030,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         const fg = c === cloudCtx; // CONNV4B-fix1（R2 P0 刀二）：七处全局写套前台门——warm ctx 状态迁移只写自身（status/failKind/retryAt/_everOnline），不触全局面（诊断留痕/总线 emit/地基徽标/云 UI/团队绑定）
         if (fg && (c.status !== status || c.statusText !== text)) cloudDiagNote("状态 " + status, text);
         c.status = status;
+        c._downAt = status === "online" ? 0 : (c._downAt || Date.now()); // offlineui（刀1）：断连起点记账（与 setConn 同规则——本处覆盖 warm ctx 直写路径，setConn 覆盖 fg 经地基徽标路径）
         c.statusText = text;
         // 失败归因（仅 offline 携带）：transport（自动+手动重试，绝不引导输码）/ unpaired（真未配对，
         // 引导输码）/ pair（配对受挫，换码）/ bridge（桥不可达，诊断文案保留为重试前缀）/ none
@@ -3047,7 +3076,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
       function connectCloudForInner(ctx, manual) {
         const cfg = ctx.cfg;
         const base = cfg.wsUrl;
-        if (!base) { ctx.status = "offline"; ctx.statusText = "未配置"; ctx.failKind = "none"; renderCloudUI(); return; }
+        if (!base) { ctx.status = "offline"; ctx._downAt = ctx._downAt || Date.now(); ctx.statusText = "未配置"; ctx.failKind = "none"; renderCloudUI(); return; } // offlineui（刀1）：直写路径补断连记账（审查 P2-2——漏记则 downFor 恒 0、云侧失联横幅永不出现）
         loadCloudIdentity();
         const peer = cloudPeerOf(cfg);
         const pair = ctx.pendingPair || pendingPairOf(cfg.id);
@@ -4186,6 +4215,16 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         if (src === "cloud" || src === null) cloudResyncOnce();
         return src;
       };
+      // offlineui（t-0b360983）：源健康只读观测口——B2 会话列表失联投影（刀1）/发送终态分流
+      // （刀2）/诊断文案分流（刀3）/恢复自动补发的统一判据。downFor=已失联毫秒数
+      //（online 恒 0）。两侧独立读数互不覆盖——「云桥重连中≠本机源死」的分流锚；S.status
+      // 被任意源 ws 事件覆写的老杂音面就此退出消费（list[data-connection] 同款混叠不再新增引用）。
+      window.__ccDeck005SourceHealth = () => {
+        const one = (c) => (!c || c.status === "online")
+          ? { online: true, status: c ? c.status : "", downFor: 0 }
+          : { online: false, status: c.status, downFor: Math.max(0, Date.now() - (c._downAt || Date.now())) };
+        return { lan: one(ctx), cloud: cloudUIOn() ? one(cloudCtx) : null };
+      };
       // W-PORT-A R-2：目标源显式通道（新建弹窗「创建到」行消费）——cloud=云 shim（在线才有），
       // local=LAN socket。与 RouteWs（按会话归属路由）互补：CREATE 类无 session_id 的命令按显式选择走。
       window.__ccDeck005WsFor = (source) => {
@@ -4374,6 +4413,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { tr
         stopChannelWatchdog(c); // #259 通道看门狗一并掐（断链即无 hello 待回包）
         killWsTransport(c); // #268：统一收尸口
         c.status = "offline";
+        c._downAt = c._downAt || Date.now(); // offlineui（刀1）：cloudDisconnect 直写路径补断连记账（审查 P2-2 同款缺口）
         c.statusText = "已断开";
         c.failKind = ""; c.retryAt = 0; c.retryNote = "";
       }

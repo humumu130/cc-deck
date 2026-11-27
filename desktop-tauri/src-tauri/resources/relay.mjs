@@ -19127,6 +19127,24 @@ function prStaleBoardActions(boards, prs) {
   return actions;
 }
 
+// src/gh-repo.ts
+function repoSlugFromGitHubUrl(url) {
+  const u = url.trim();
+  const https = u.match(/^https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#]|$)/);
+  if (https) return `${https[1]}/${https[2]}`;
+  const ssh = u.match(/^git@github\.com:([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/);
+  if (ssh) return `${ssh[1]}/${ssh[2]}`;
+  return null;
+}
+function ghRepoFlag(urls) {
+  for (const u of urls) {
+    if (typeof u !== "string" || !u) continue;
+    const slug = repoSlugFromGitHubUrl(u);
+    if (slug) return ["-R", slug];
+  }
+  return [];
+}
+
 // src/duty-feed.ts
 import { closeSync as closeSync3, openSync as openSync3, readSync as readSync2, statSync as statSync10 } from "node:fs";
 import { join as join23 } from "node:path";
@@ -63342,6 +63360,7 @@ provider=${opts.provider ?? "default"}` : void 0,
   async closeSupersededChainPRs(mergedPrUrl, dispatchId) {
     const execFileAsync = promisify(execFile5);
     const run3 = (args) => execFileAsync("gh", args, { encoding: "utf-8", timeout: 1e4 });
+    const repoFlag = ghRepoFlag([mergedPrUrl]);
     try {
       const view = JSON.parse(String((await run3(["pr", "view", mergedPrUrl, "--json", "number,headRefName,mergedAt"])).stdout));
       const mergedNumber = Number(view.number) || 0;
@@ -63351,13 +63370,13 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.emitChainAudit("boardtruth-pr-close-degraded", `\u540C\u94FE PR \u81EA\u52A8\u95ED\u964D\u7EA7\uFF1A\u540E\u7EE7 PR \u5143\u6570\u636E\u63D0\u53D6\u5931\u8D25\uFF08${mergedPrUrl}\uFF09\u2014\u2014\u4EBA\u5DE5\u6838\u9500`);
         return;
       }
-      const openPrs = JSON.parse(String((await run3(["pr", "list", "--state", "open", "--json", "number,headRefName,title,url,createdAt", "--limit", "60"])).stdout));
+      const openPrs = JSON.parse(String((await run3([...repoFlag, "pr", "list", "--state", "open", "--json", "number,headRefName,title,url,createdAt", "--limit", "60"])).stdout));
       const hits2 = supersededChainPrs(openPrs, mergedBranch, mergedNumber, mergedAt);
       if (!hits2.length) return;
       let closed = 0;
       for (const pr2 of hits2) {
         try {
-          await run3(["pr", "close", String(pr2.number), "--comment", `\u5DF2\u88AB #${mergedNumber}\uFF08${mergedBranch}\uFF09\u8FD4\u4FEE\u94FE superseded\u2014\u2014\u5DF2\u6536\u5272\u6838\u9500\uFF0C\u672C PR \u81EA\u52A8\u5173\u95ED\uFF08W-BOARDTRUTH \u52001\uFF1B\u540C\u94FE\u57FA\u65CF ${branchBaseOf(mergedBranch)}\uFF09`]);
+          await run3([...repoFlag, "pr", "close", String(pr2.number), "--comment", `\u5DF2\u88AB #${mergedNumber}\uFF08${mergedBranch}\uFF09\u8FD4\u4FEE\u94FE superseded\u2014\u2014\u5DF2\u6536\u5272\u6838\u9500\uFF0C\u672C PR \u81EA\u52A8\u5173\u95ED\uFF08W-BOARDTRUTH \u52001\uFF1B\u540C\u94FE\u57FA\u65CF ${branchBaseOf(mergedBranch)}\uFF09`]);
           closed += 1;
           this.emitChainAudit("boardtruth-pr-superseded", `\u540C\u94FE PR #${pr2.number}\uFF08${pr2.headRefName}\uFF09\u81EA\u52A8\u95ED\u2014\u2014\u88AB #${mergedNumber}\uFF08${mergedBranch}\uFF09superseded\uFF08dispatch ${dispatchId.slice(0, 8)} \u6536\u5272\u5373\u95ED\uFF0C\u7B2C\u4E09\u73B0\u6CBB\u672C\u52001\uFF09`);
         } catch (e) {
@@ -76215,7 +76234,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const verLegacy = readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
   const ver005Live = () => readVer(ver005Path, /__ccDeck005Version\s*=\s*"([^"]+)"/);
   const verLegacyLive = () => readVer(verLegacyPath, /CONSOLE_VERSION\s*=\s*"([^"]+)"/);
-  const verRelay = "0.7.1-test.34";
+  const verRelay = "0.7.1-test.35";
   if (ver005 && verLegacy && ver005 !== verLegacy) {
     console.error(`[pallette] \u26A0\uFE0F \u7248\u672C\u62FC\u76D8\uFF1A\u53CC\u58F3 console \u4E0D\u540C\u7248\uFF08005=${ver005} / legacy=${verLegacy}\uFF09\u2014\u2014\u70ED\u6362\u5355\u4EF6\u5E26\u75C5\u4E0A\u7EBF\u7684\u9AD8\u5371\u5F62\u6001\uFF081104 Nova \u4E8B\u6545\u653E\u5927\u5668\uFF09\uFF0C\u8BF7\u6574\u6279\u91CD\u5E03`);
   }
@@ -77917,6 +77936,11 @@ var PatrolModule = class {
       alerts.push({ key: "dataDir", text: "\u6570\u636E\u76EE\u5F55\u4E0D\u53EF\u5199\uFF08\u78C1\u76D8\u6EE1\u6216\u6743\u9650\u88AB\u6536\uFF09" });
     }
     try {
+      this.checkHookLeg();
+    } catch (e) {
+      console.log(`[patrol] hook-leg check error: ${e instanceof Error ? e.message : e}`);
+    }
+    try {
       const tmpRoot = "/private/var/folders";
       const hit = [];
       const scan = (d2, depth) => {
@@ -77970,6 +77994,43 @@ var PatrolModule = class {
       else this.resolve(a.key);
     }
     this.appendReport(`light: ${alerts.map((a) => `${a.key}=${a.text || "OK"}`).join(" ")}`);
+  }
+  // ---------- P0-B（DEV-19）：hook 上报腿健康（hook-post-fail.json 读账） ----------
+  /** relay 本进程 boot 时刻（构造≈boot）——判「断流跨越重启窗」的锚 */
+  hookBootAt = Date.now();
+  /** 复活补报一次性闸（防每拍重推；账本翻 ok 或重启进程自然复位） */
+  hookDarkReported = false;
+  checkHookLeg() {
+    let st2;
+    try {
+      st2 = JSON.parse(readFileSync59(join69(this.opts.dataDir, "hook-post-fail.json"), "utf-8"));
+    } catch {
+      return;
+    }
+    const streak = Number(st2.streak) || 0;
+    const firstFailAt = Number(st2.firstFailAt) || 0;
+    const lastFailAt = Number(st2.lastFailAt) || 0;
+    const lastOkAt = Number(st2.lastOkAt) || 0;
+    const now = Date.now();
+    const openAtBoot = firstFailAt > 0 && firstFailAt < this.hookBootAt && lastFailAt < this.hookBootAt && (lastOkAt < lastFailAt || lastOkAt > this.hookBootAt);
+    if (!this.hookDarkReported && openAtBoot) {
+      this.hookDarkReported = true;
+      const fmt = (t) => new Date(t).toLocaleString("zh-CN", { hour12: false });
+      const activeSpanMin = Math.max(1, Math.round(((lastOkAt > this.hookBootAt ? lastOkAt : lastFailAt) - firstFailAt) / 6e4));
+      this.push("hook-dark-boot", `relay \u505C\u673A\u7A97\u5185 hook \u4E0A\u62A5\u5B58\u5728\u672A\u95ED\u5408\u5931\u8D25\u6BB5\u2014\u2014\u9996\u8D25 ${fmt(firstFailAt)}\uFF0C\u672B\u6B21\u5931\u8D25 ${fmt(lastFailAt)}\uFF08\u6D3B\u8DC3\u65AD\u6D41\u7EA6 ${activeSpanMin}min${lastOkAt > this.hookBootAt ? "\uFF0Crelay \u8D77\u540E\u5DF2\u6062\u590D" : "\uFF0C\u6062\u590D\u5F85\u786E\u8BA4\uFF08\u5176\u540E\u65E0\u4F1A\u8BDD\u6D3B\u52A8\uFF09"}\uFF09\u3002\u505C\u673A\u7A97\u5185\u4F1A\u8BDD\u7684\u6CE8\u5165/\u5BA1\u6279/\u901A\u77E5\u4E8B\u4EF6\u5DF2\u4E22\uFF0C\u5FC5\u8981\u65F6\u6838\u5BF9 hook-debug.log.1`);
+    }
+    if (streak > 0) {
+      const freshMs = num3(process.env.CCR_HOOKFAIL_FRESH_MS, 10 * 6e4);
+      const sustainMs = num3(process.env.CCR_HOOKFAIL_SUSTAIN_MS, 10 * 6e4);
+      if (now - lastFailAt < freshMs && firstFailAt > 0 && now - firstFailAt >= sustainMs) {
+        const spanMin = Math.max(1, Math.floor((now - firstFailAt) / 6e4 / 30) * 30);
+        this.push("hook-post-fail", `hook \u4E0A\u62A5\u6301\u7EED\u5931\u8D25 \u2265${spanMin}min\uFF08${String(st2.lastErr || "").slice(0, 80)}\uFF09\u2014\u2014\u7528\u6237 CLI \u4E8B\u4EF6\u8FDB\u4E0D\u4E86 relay\uFF0C\u6CE8\u5165/\u5BA1\u6279/\u901A\u77E5\u94FE hook \u817F\u65AD`);
+      }
+      return;
+    }
+    this.hookDarkReported = false;
+    this.resolve("hook-post-fail");
+    this.resolve("hook-dark-boot");
   }
   // ---------- 全巡（30min）：worker 帧 / 看板漂移 ----------
   runFull() {
@@ -78117,13 +78178,14 @@ var PatrolModule = class {
       console.warn(`[patrol] boardtruth TTL \u626B\u5931\u8D25\uFF08\u8DF3\u8FC7\uFF09: ${e instanceof Error ? e.message : String(e)}`);
     }
     try {
-      const prRaw = execFileSync7("gh", ["pr", "list", "--state", "all", "--json", "number,state,url,headRefName", "--limit", "100"], { encoding: "utf-8", timeout: 1e4 });
-      const prs = JSON.parse(prRaw);
       const boards = [];
       for (const g2 of listGroups().filter((x) => x.status === "active")) {
         const board = loadBoardFile(g2.id);
         if (board) boards.push({ gid: g2.id, entries: board.entries });
       }
+      const repoFlag = ghRepoFlag(boards.flatMap((b) => b.entries.map((e) => e.pr_url)));
+      const prRaw = execFileSync7("gh", [...repoFlag, "pr", "list", "--state", "all", "--json", "number,state,url,headRefName", "--limit", "100"], { encoding: "utf-8", timeout: 1e4 });
+      const prs = JSON.parse(prRaw);
       const acts = prStaleBoardActions(boards, prs);
       let doneN = 0, backlogN = 0;
       for (const a of acts) {
@@ -78643,6 +78705,18 @@ var PatrolModule = class {
     }
   }
 };
+
+// src/graceful-exit.ts
+function gracefulExitLines(sig, pid, entries) {
+  const active = (entries ?? []).filter((r) => r.status === "dispatched" || r.status === "running");
+  const countText = entries === null ? "\u6D3E\u5355\u8D26\u4E0D\u53EF\u8BFB" : `\u6D3B\u6D3E\u5355 ${active.length}`;
+  const lines = [`[graceful] \u6536\u5230 ${sig}\uFF0Crelay \u9000\u51FA\uFF08pid=${pid}\uFF0C${countText}\uFF09`];
+  if (active.length > 0) {
+    lines.push(`  \uFF08\u91CD\u542F\u540E reloadDispatchQueue \u6062\u590D\u6392\u961F\uFF09\uFF1A`);
+    for (const a of active) lines.push(`  \xB7 ${a.id ?? "?"} [${a.status ?? "?"}] ${a.title ?? ""}`);
+  }
+  return lines;
+}
 
 // src/cloud-identity.ts
 import { existsSync as existsSync47, readFileSync as readFileSync60, writeFileSync as writeFileSync38 } from "node:fs";
@@ -80020,14 +80094,13 @@ process.on("unhandledRejection", (reason) => {
   };
   process.on("exit", wipe);
   const shutdownDiag = (sig) => {
+    let ledger;
     try {
-      const active = readDispatchLog().filter((r) => r.status === "dispatched" || r.status === "running");
-      if (active.length > 0) {
-        console.warn(`[graceful] ${sig} \u9000\u51FA\u65F6\u4ECD\u6709 ${active.length} \u4E2A\u6D3B\u6D3E\u5355\uFF08\u91CD\u542F\u540E reloadDispatchQueue \u6062\u590D\u6392\u961F\uFF09\uFF1A`);
-        for (const a of active) console.warn(`  \xB7 ${a.id} [${a.status}] ${a.title ?? ""}`);
-      }
+      ledger = readDispatchLog();
     } catch {
+      ledger = null;
     }
+    for (const l of gracefulExitLines(sig, process.pid, ledger)) console.warn(l);
     wipe();
     process.exit(0);
   };
