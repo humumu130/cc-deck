@@ -289,7 +289,9 @@ async function main() {
     assert(reviveSrc.includes('autoTierOf("revive")') && reviveSrc.includes("[observe] 自动拉活干跑"), "revive 族挂档（off/observe 干跑+通知账一行式）");
     assert(patrolSrc.includes("recordWouldDo(this.opts.dataDir"), "observe 记账走 recordWouldDo 单口（observe-log.ndjson）");
     // 注意力经济学：面板需人置顶（既有三分组维持）+ 健康态折叠（observe3 新增）
-    assert(notifySrc.includes('group("需你行动", "r", actionRows, "")'), "面板需人置顶（需你行动组首位——既有三分组维持）");
+    // 锚随 #159 notifydead 演进更新：actionRows 现经 rowsOf(aggregate(...)) 聚合渲染
+    //（cnt=原始组行数 rail 同源）——「需你行动组首位」语义本体不变
+    assert(notifySrc.includes('group("需你行动", "r"'), "面板需人置顶（需你行动组首位——既有三分组维持；#159 聚合化后锚随调用形更新）");
     assert(notifySrc.includes("dynamicCollapsed") && notifySrc.includes("data-notify-grp-toggle"), "健康态（动态组）默认折叠+组头开合（observe3）");
     assert(notifySrc.includes("#dyn-collapsed"), "折叠态入渲染签名（切换必重渲——跳帧短路防）");
     assert(cssSrc.includes(".ngrp-fold") && cssSrc.includes(".ngrp .caret"), "折叠 CSS 在（复用既有 token 零新色）");

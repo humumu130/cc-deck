@@ -6,6 +6,22 @@ import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import type { CloudIdentity } from "./cloud-identity.js";
 
+/** DL-P1-6（2026-11-27 台账·云桥心跳节律性断连）：协议层判死连续窗数 N——缺省 2
+ *（~48s 无任何回包才 terminate），CCR_CLOUD_PONG_MISS_N=1 回到旧单窗行为（逃生门）。
+ * 纯函数导出供测试直测（套件断言缺省值/env 覆盖/非法回落）。 */
+export function pongMissLimit(): number {
+  const v = Number(process.env.CCR_CLOUD_PONG_MISS_N);
+  return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 2;
+}
+
+/** DL-P1-6：route-miss 补发退避——设备三振出局（park）史越厚，miss 后的 resume 补发
+ * 等得越久（生产实证 wb-c896f2f3699b9e94 全天 miss→parked→retry→unparked ≥6 轮：立即
+ * 补发喂出乒乓循环）。base 8s × 2^min(史,4) 封顶 128s；纯函数导出供测试直测。 */
+export function routeRetryDelayMs(parkCount: number): number {
+  const base = 8_000;
+  return Math.min(base * 2 ** Math.min(Math.max(parkCount, 0), 4), 128_000);
+}
+
 /** W-SRC2 #134：云通道 SNAPSHOT 会话自报 relay_source（与 ws-server LAN 快照同源同构，
  * #117 教训——两出口必须同键）。空名零注入原样；s.relay_source 已带（理论不发生）不覆盖 */
 function withRelaySource(sessions: ReturnType<SessionManager["snapshot"]>, relayName: string | undefined): ReturnType<SessionManager["snapshot"]> {
@@ -183,6 +199,10 @@ export class CloudClient {
   // 除外），僵尸从第 1 秒被隔离、健康设备零误伤；风暴 terminate 保留给桥级信号
   private deviceMissCount = new Map<string, number>();
   private parkedDevices = new Set<string>();
+  // DL-P1-6：per-device park 时刻账（30min 滑窗）——route miss 补发退避的史厚依据
+  //（反复三振出局的设备补发等更久，防 miss→park→unpark→miss 乒乓；时间自衰减，
+  // hello 恢复 30min 后史清零重新信任）
+  private deviceParkAt = new Map<string, number[]>();
   // W-ZOMBIEx ②（派单收紧口径）：dev 最近 hello 时刻——风暴统计只认「近 5min 有
   // hello」的设备（cloudfix3 只排除 parked；未达 park 阈值但长期零 hello 的僵尸
   // 同样不该绑架换桥——hello 是「设备还活着」的唯一铁证）
@@ -396,17 +416,26 @@ export class CloudClient {
     });
   }
 
-  // 出站链路心跳：10s 协议层 ping 保活 NAT 映射；25s 无任何回包说明对端/路径已死
+  // 出站链路心跳：10s 协议层 ping 保活 NAT 映射；无任何回包说明对端/路径已死
   // （半开 TCP 不触发 close），主动 terminate 走统一重连路径。
+  // DL-P1-6（2026-11-27 台账·云桥节律性断连）：单窗 24s 无回包即掐线对 CF 边缘
+  // 延迟尖峰过激（生产实证每 15-20min 一次 heartbeat timeout，每次 terminate-reconnect
+  // downtime ~4.8s 且触发设备表 auto-resume，与恢复死循环互为放大器）。改连续 N 窗
+  // 才断（缺省 N=2 → ~48s 无回包）：真半开链路多等一窗零代价（重连路径同款），瞬时
+  // 尖峰不再斩断健康链路。CCR_CLOUD_PONG_MISS_N 可调（1=旧行为）。应用层端到端探活
+  //（#146 连续 3 轮 hb 无 ack）不受影响——CF 代答 pong 的形态仍由它兜底。
   private startHeartbeat(): void {
     if (this.hbTimer) return;
     this.hbTimer = setInterval(() => {
       const ws = this.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       // 只在「ping 出去但 pong 没回来」时判死：业务空闲（手机挂另一座桥、网页后台
-      // 冻结）不算链路死——此前按任意收包计时，安静 25s 即掐线，CF 桥闪断循环根因
-      if (this.lastPingAt > 0 && Date.now() - this.lastPingAt > 24_000 && Date.now() - this.lastRecv > 24_000) {
-        console.log("[cloud] heartbeat timeout (pong missing >24s), terminating for reconnect");
+      // 冻结）不算链路死——此前按任意收包计时，安静 25s 即掐线，CF 桥闪断循环根因。
+      // DL-P1-6：判死阈值=24s×N（连续 N 窗无回包才断）——单窗尖峰容忍
+      const missN = pongMissLimit();
+      const silenceMs = Date.now() - this.lastRecv;
+      if (this.lastPingAt > 0 && Date.now() - this.lastPingAt > 24_000 && silenceMs > 24_000 * missN) {
+        console.log(`[cloud] heartbeat timeout (pong missing ${Math.round(silenceMs / 1000)}s > 24s×${missN}), terminating for reconnect`);
         ws.terminate();
         return;
       }
@@ -748,6 +777,8 @@ export class CloudClient {
         this.deviceMissCount.set(to, dm);
         if (dm >= 3) {
           this.parkedDevices.add(to);
+          // DL-P1-6：park 史记账（30min 滑窗——补发退避依据）
+          this.deviceParkAt.set(to, [...(this.deviceParkAt.get(to) ?? []).filter((ts) => nowMs - ts < 30 * 60_000), nowMs]);
           this.routeRetryTimers.delete(to); // 清 pending resume（park 后不补发）
           console.log(`[cloud] device parked early (miss x${dm}, pre-rotation): ${to}`);
         }
@@ -791,14 +822,19 @@ export class CloudClient {
         if (this.phones.has(to)) {
           const prev = this.routeRetryTimers.get(to);
           if (prev) clearTimeout(prev);
+          // DL-P1-6：三振史厚退避（30min 滑窗内 park 次数）——首犯 8s 照旧，反复
+          // 出局设备 16s/32s/64s/128s 封顶：立即补发喂出的 miss→park→unpark→miss
+          // 乒乓（wb-c896f2f3699b9e94 全天 ≥6 轮）降温
+          const parks = (this.deviceParkAt.get(to) ?? []).filter((ts) => nowMs - ts < 30 * 60_000);
+          const delay = routeRetryDelayMs(parks.length);
           const t = setTimeout(() => {
             this.routeRetryTimers.delete(to);
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
             const s2 = this.phones.get(to);
             if (!s2 || s2.active) return; // hello/ping 已激活：无事可做
-            console.log(`[cloud] route retry after miss: resume ${to} from_seq=${retryFrom}`);
+            console.log(`[cloud] route retry after miss (${Math.round(delay / 1000)}s backoff, parks=${parks.length}): resume ${to} from_seq=${retryFrom}`);
             this.resumePhone(to, retryFrom);
-          }, 8_000);
+          }, delay);
           t.unref?.();
           this.routeRetryTimers.set(to, t);
         }

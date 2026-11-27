@@ -100,6 +100,11 @@ log "换装完成：$OLD_VER → $INSTALLED_VER（备份 $BAK）"
 
 # ── 复活段：python3 setsid 双叉脱组——杀树（killpg）杀不到本段 ──
 VERDICT="$DATA_DIR/swap-nova.verdict"
+# DEV-18 审查 P2（2026-11-27 移交本批）：发射 payload 前清陈旧 verdict——上一轮若在
+# 「payload 落 verdict 后、本脚本收尸 rm 前」被杀（或超时窗遗留），本轮等待循环首拍
+# 即见旧文件：读到的 exit code 属于上一轮（可能 0）→ 假绿收割。发射前 rm = 等待窗内
+# 出现的 verdict 必属本轮 payload。
+rm -f "$VERDICT"
 # mktemp 模板 X 串必须在尾部：`.XXXXXX.sh` 中缀形态会被 BSD mktemp 当字面文件名，
 # 第二次换装即 O_EXCL 撞死（沙盒复跑实锤）→ payload 空 → 复活段无声丢失
 PAYLOAD="$(mktemp /tmp/swap-nova-payload.XXXXXX)"

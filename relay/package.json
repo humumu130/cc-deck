@@ -132,6 +132,7 @@
     "test:pmappoint-gap": "tsx scripts/test-pmappoint-gap.ts",
     "test:engsec": "tsx scripts/test-engsec.ts",
     "test:resume-reboot": "tsx scripts/test-resume-reboot.ts",
+    "test:resume-degrade": "tsx scripts/test-resume-degrade.ts",
     "test:pmresume": "tsx scripts/test-pmresume.ts",
     "bench:read": "tsx scripts/bench-read-mode.ts",
     "rehearse:rollback": "tsx scripts/rehearse-cutover-rollback.ts",
@@ -199,7 +200,11 @@
     "test:connv4c1": "tsx scripts/test-connv4c1.ts",
     "test:lan-peers": "tsx scripts/test-lan-peers.ts",
     "test:lanpeers-web": "tsx scripts/test-lanpeers-web.ts",
-    "test:lan-boot": "tsx scripts/test-lan-boot.ts"
+    "test:lan-boot": "tsx scripts/test-lan-boot.ts",
+    "test:patrol-escalate": "tsx scripts/test-patrol-escalate.ts",
+    "test:cloud-hbthrottle": "tsx scripts/test-cloud-hbthrottle.ts",
+    "test:data-guard": "tsx scripts/test-data-guard.ts",
+    "test:swapguard": "node scripts/test-swapguard.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

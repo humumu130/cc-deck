@@ -4830,6 +4830,22 @@ export class SessionManager {
       if (!s.logs.some((e) => e.kind === "assistant_text")) {
         reason += "（该会话首次回合未完成即中断，直接恢复走不通；给会话发一条消息可自动回退新会话续命）";
       }
+      // DL-P1-1（2026-11-27 台账：0f6906c5 三天 9 连败/冷却 22 次/熔断 8 次）：指路
+      // 消息自愈只对「有人发消息」的会话生效——PM 保活/auto-revive 这类**无消息自动
+      // 路径**永远等不来那条消息，冷却→重试→熔断循环空转三天。降级判定与消息路径
+      //（resumeAgent init 超时的 fresh 回退）同源三条件 hasMemory：无记忆可丢 + 连败
+      // ≥2 → 直接 fresh 承接（同卡换新 SDK 流），不再进冷却循环。有记忆形态不降级
+      //（静默抹上下文风险，维持 ERROR+saved 可重试）。
+      const degradeable =
+        !s.state.external &&
+        (s.resumeFailStreak ?? 0) + 1 >= 2 &&
+        !s.logs.some((e) => e.kind === "assistant_text") &&
+        (s.state.usage?.output_tokens ?? 0) === 0 &&
+        !(s.state.engine !== "codex" && transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state)));
+      if (degradeable) {
+        this.degradeToFreshSession(s, (s.resumeFailStreak ?? 0) + 1, reason);
+        return;
+      }
       this.transition(s.state.session_id, "ERROR", "revive-fail"); /* W-SMIMPL③ 直写收口 */
       s.state.last_error = `恢复失败: ${reason}`;
       s.state.done_reason = undefined;
@@ -4885,11 +4901,13 @@ export class SessionManager {
       },
     };
     // 初始化看门狗：CLI 卡住不吐 init 时不让会话永远吊在「恢复中」（时长自适应，
-    // 见上方 initWaitMs——独立 30s 硬编码已废）
+    // 见上方 initWaitMs——独立 30s 硬编码已废）。hung 先捕获：fail 内 DL-P1-1 降级
+    // 分支会换新流接管 s.agent——外层收尸 stop 只准打旧挂死流，不得误杀降级新流
     timer = setTimeout(() => {
       timer = null;
+      const hung = s.agent;
       fail(`初始化超时（${Math.max(1, Math.round(initWaitMs / 1000))}s）`);
-      void s.agent?.stop();
+      void hung?.stop();
     }, initWaitMs);
     timer.unref?.();
     let agent: AgentLike;
@@ -4927,6 +4945,113 @@ export class SessionManager {
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
     s.wd.phase = "idle";
+    this.emitUpdated(s, true);
+  }
+
+  /** DL-P1-1（2026-11-27 夜间缺陷台账·恢复死循环治根）：「首回合未完成即中断」形态
+   * 的 resume 恒超时（CLI 对无 assistant 帧的悬空 transcript 挂死），无消息自动路径
+   *（PM 保活/auto-revive 的 reviveSaved）在冷却→重试→熔断间循环永不自愈——生产实证
+   * 同一会话三天 9 连败。降级=消息路径早已存在的 fresh 回退同款语义搬到自动路径：
+   * 同卡换新 SDK 流承接（无记忆可丢），relay_session_id 由 agentCallbacks.onInit 无条件
+   * 回写新流（#26 锚收敛），冷却期 suppress 入队的积压随 init 到达补投
+   *（flushResumeBacklog）。streak 计数**不**在降级边记（fresh init 成功即熔断复位；
+   * fresh 也挂死才回落 noteResumeFailure 冷却——双段都挂=环境级故障，退避兜底）。 */
+  private degradeToFreshSession(s: ManagedSession, streak: number, reason: string): void {
+    // 挂死流收尸（同 resumeAgent fresh 回退口径：killTree+stop 双保险——挂死 CLI 常
+    // 不响应 interrupt，ended≠进程死）。先摘 s.agent 引用再杀，防收尸窗内他路误读活流
+    const hung = s.agent;
+    s.agent = null;
+    s.resumePending = undefined;
+    if (hung?.childPid) void this.watchdogProcs.killTree(hung.childPid).catch(() => {});
+    if (hung) void hung.stop().catch(() => {});
+    // 换流代际先行（agentCallbacks 闭包按创建时 streamGen 比对——必须在递增后取回调）
+    s.streamGen++;
+    const degradeStart = Date.now();
+    const base = this.agentCallbacks(s);
+    let freshTimer: ReturnType<typeof setTimeout> | null = null;
+    let freshInited = false;
+    const fcb: AgentCallbacks = {
+      ...base,
+      onInit: (sdkIdNew, model, permissionMode) => {
+        freshInited = true;
+        if (freshTimer) clearTimeout(freshTimer);
+        // 积压快照先于 base（base 会清 hold:"init" 账——suppress 入队的无 hold 积压
+        // 不受影响，快照口径与 reviveSaved 的 onInit 包裹对齐）
+        const backlog = s.unacked.filter((m) => m.ts < degradeStart && !m.renewable);
+        base.onInit(sdkIdNew, model, permissionMode); // relay_session_id 回写新流+熔断复位
+        if (backlog.length > 0 && s.agent && !s.agent.ended) {
+          this.flushResumeBacklog(s, degradeStart);
+          this.transition(s.state.session_id, "WORKING", "degrade-fresh"); /* W-SMIMPL③ 直写收口 */
+          s.state.turn_started_at = Date.now(); // #291 同款：积压补投起回合秒表
+          s.state.action_summary = "已降级新会话，处理排队消息";
+        } else {
+          this.transition(s.state.session_id, "DONE", "degrade-fresh"); /* W-SMIMPL③ 直写收口 */
+          s.state.done_reason = "已降级新会话（等待输入）";
+          s.state.action_summary = "已降级新会话，等待输入";
+          s.state.turn_started_at = undefined;
+        }
+        s.state.saved = undefined;
+        s.state.historical = false;
+        s.state.org_parked = undefined; // 降级即脱离挂起休眠（同 resumeAgent/reviveSaved 口径）
+        this.emitUpdated(s, true);
+      },
+    };
+    // 降级 spawn 也带看门狗：fresh 挂死（环境级故障）回落 ERROR+熔断记账——降级不是
+    // 无限重试许可证，双段皆挂时由冷却退避压制（有界）
+    const freshWaitMs = resumeInitTimeoutFor(undefined); // 新流无 transcript 体量，base 窗
+    let freshRef: AgentLike | null = null; // 看门狗判据锚（只收尸自己拉起的那条流）
+    freshTimer = setTimeout(() => {
+      freshTimer = null;
+      if (freshInited || !freshRef || s.agent !== freshRef) return; // 已 init/流已换（stale timer）——不动作
+      const hung2 = freshRef;
+      s.agent = null;
+      if (hung2?.childPid) void this.watchdogProcs.killTree(hung2.childPid).catch(() => {});
+      void hung2?.stop().catch(() => {});
+      this.transition(s.state.session_id, "ERROR", "degrade-fail"); /* W-SMIMPL③ 直写收口 */
+      s.state.last_error = `降级新会话承接超时（${Math.max(1, Math.round(freshWaitMs / 1000))}s 无 init，环境级故障疑）`;
+      s.state.done_reason = undefined;
+      s.state.action_summary = "降级失败";
+      s.state.saved = true;
+      s.state.updated_at = Date.now();
+      this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
+      this.noteResumeFailure(s, "fresh 承接 init 超时");
+      this.emitUpdated(s, true);
+    }, freshWaitMs);
+    freshTimer.unref?.();
+    let fresh: AgentLike;
+    try {
+      fresh = this.newAgent(s.state.cwd, s.state.model, fcb, undefined, {
+        permissionMode: this.resumePermMode(s),
+        configHome: this.employeeHome(s.state),
+        ...(s.state.employee ? { employee: true } : {}),
+        orgWorker: !!s.state.project_gid && s.state.session_id !== this.leaderId,
+        turnReport: !!s.state.project_gid && s.state.session_id !== this.leaderId,
+        ...(s.state.engine ? { engine: s.state.engine } : {}),
+      });
+    } catch (e) {
+      if (freshTimer) clearTimeout(freshTimer);
+      s.resumePending = undefined;
+      this.noteResumeFailure(s, `降级 spawn 失败（${e instanceof Error ? e.message : String(e)}）`);
+      throw e;
+    }
+    s.agent = fresh;
+    freshRef = fresh;
+    // W-BOARDV2：回接黑板上报口（降级新流——同 reviveSaved 接线）
+    if (s.state.employee && fresh.setWorkerBoard) {
+      const boardSid = s.state.session_id;
+      fresh.setWorkerBoard((event, detail) => this.workerBoardEvent(boardSid, event, detail));
+    }
+    this.transition(s.state.session_id, "WORKING", "degrade-fresh"); /* W-SMIMPL③ 直写收口 */
+    s.state.turn_started_at = Date.now();
+    s.state.action_summary = "降级承接中";
+    s.state.done_reason = undefined;
+    s.state.last_error = undefined;
+    s.state.updated_at = Date.now();
+    s.lastProgressAt = Date.now();
+    s.lastProgressKind = "";
+    s.wd.phase = "idle";
+    this.pushExternalLog(s.state.session_id, "system",
+      `自动降级：恢复连败 ${streak} 次且该会话首回合未完成（${reason.slice(0, 60)}），旧会话记录无法直接恢复——已改用新会话承接本卡（原对话内容无可保留），排队消息将自动补投`);
     this.emitUpdated(s, true);
   }
 

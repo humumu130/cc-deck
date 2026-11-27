@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 // 循环 import 安全：settings.ts ← config.ts 只在函数体内互调（parseEmployeeConfigDir
 // / isFreshInstall 均运行期取 live binding），无模块初始化期交叉
 import { isFreshInstall } from "./settings.js";
+import { assertTestNotTouchingProd } from "./test-data-guard.js"; // DL-P1-9：测试隔离硬闸（解析单点拦截）
 
 // #17 三态解析（纯函数，无副作用——告警由调用方负责）：
 // "" / null → null（关闭）；"auto" → dataDir 下 claude-home（resolve 绝对化）；
@@ -52,12 +53,15 @@ export interface RelayConfig {
 // loadConfig 同源判定但不该触发目录创建。插件 bundle（CC_DECK_PLUGIN 由 esbuild
 // define 注入）数据固定 ~/.cc-deck/data，与插件升级/卸载解耦；开发模式默认 relay/data
 export function resolveDataDir(): string {
-  return (
+  const d =
     process.env.CCR_DATA_DIR ??
     ((process.env.CC_DECK_PLUGIN as string | undefined)
       ? join(homedir(), ".cc-deck", "data")
-      : join(process.cwd(), "data"))
-  );
+      : join(process.cwd(), "data"));
+  // DL-P1-9：测试隔离硬闸——测试语境解析到生产家（~/.cc-deck）即抛错拒跑
+  //（1122 生产 sqlite 重灌事故的复发通道；见 src/test-data-guard.ts 头注）
+  assertTestNotTouchingProd("dataDir", d);
+  return d;
 }
 
 // W-SANDBOXFIX P1 判定（2026-10-16）：CCR_DATA_DIR 显式隔离（沙盒/多实例）且值

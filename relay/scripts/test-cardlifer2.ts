@@ -386,13 +386,26 @@ async function main() {
       // SessionManager 全量环境，透传是纯直连赋值，锚断言足够硬）
       const smSrc = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf8");
       ok(smSrc.includes("no_pr: p.no_pr === true ? true : undefined") && smSrc.includes("...(input.no_pr === true ? { no_pr: true } : {})"), `R4⑬ 打标链透传锚（直连口+dispatched 行落值，命中 ${smSrc.includes("no_pr: p.no_pr === true") ? 2 : 0}/2 环）`);
-      // R4-R1 生产形态回归（P0-2 修正面）：真实台账抽样过判据——打标上线前全量未标
-      //（3653 行零 no_pr，双审定罪实证）→ 白名单空 → 真实 org 上 converge dryRun 对
-      // submitted 零兜底动作。CI 无生产目录时条件跳过（本地跑即硬闸）。只读（dryRun）。
+      // R4-R1 生产形态回归（P0-2 修正面·DL-P1-4 基线债修订）：原断言「真实台账零
+      // no_pr:true」是打标上线前的**一次性**白名单空窗闸——上线后生产合法累积
+      // no_pr:true 行（--no-pr 派单受理落标），该断言永久假红（基线债三件之一）。
+      // 修订为可持续的 schema 兼容闸：存量行（无 no_pr 键）与新行（键只在 true 时
+      // 落）共存不炸、全量行可解析——这是判据消费面（白名单外不翻）真正依赖的
+      // 不变量。CI 无生产目录时条件跳过（本地跑即硬闸）。只读。
       try {
-        const prodLog = readFileSync(join(homedir(), ".cc-deck", "org", "dispatch-log.ndjson"), "utf8");
-        const noPrTrue = prodLog.split("\n").filter((l) => l.trim() && (JSON.parse(l) as { no_pr?: boolean }).no_pr === true).length;
-        ok(noPrTrue === 0, `R4⑪ 生产回归：真实台账零 no_pr:true（${prodLog.split("\n").filter((l) => l.trim()).length} 行，白名单空=上线前存量单零误翻）`);
+        const prodLog = readFileSync(join(homedir(), ".cc-deck", "org", "dispatch-log.ndjson"), "utf-8");
+        const lines = prodLog.split("\n").filter((l) => l.trim());
+        let parsed = 0, marked = 0, legacy = 0, badShape = 0;
+        for (const l of lines) {
+          try {
+            const r = JSON.parse(l) as { no_pr?: unknown };
+            parsed++;
+            if (r.no_pr === true) { marked++; continue; }
+            if (r.no_pr === undefined) legacy++;
+            else badShape++; // false/非布尔——落标纪律是「只在 true 落键」，其他形态即漂移
+          } catch { badShape++; }
+        }
+        ok(parsed === lines.length && badShape === 0, `R4⑪ 生产回归：台账 ${lines.length} 行全量可解析且 no_pr 键形态合规（存量无键 ${legacy}/显式 true ${marked}，无 false/脏形态）`);
       } catch { console.log("  (skip) R4⑪ 生产台账不在场（CI 环境）——本地跑即硬闸"); }
     }
 
