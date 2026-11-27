@@ -139,5 +139,49 @@ const nativeMagic = (file) => {
 const nativeKind = nativeMagic(join(out, "scripts", "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node"));
 console.warn(`[native] 闭包 better_sqlite3.node = ${nativeKind}——只保证 ${process.platform}-${process.arch} 可载；Windows 发布须由 CI desktop.yml 的 prebuild-install 步覆盖为 win32-x64（#158）`);
 
+// DL-P1-2（DEV-22 批 B·2026-11-28）：本地出包链 sqlite ABI 闸——CI 侧三重闸在
+// .github/workflows/desktop.yml（DEV-25 #158），但本地链（本脚本=deploy-web.sh/
+// release-test.sh 唯一打包口）此前零 ABI 检查：构建机 node 档位漂移即重演 11-24
+// 生产事故（app Resources 闭包 ABI 115 vs 内嵌 relay 运行时 node 127 →
+// ERR_DLOPEN_FAILED → sqlite 恒降级 json 档，DL-P1-2 定谳）。三重（与 CI 同法）：
+//   ① 当前构建 node ABI 档位核对——App 内嵌 relay 的运行时解析序=app-data/node
+//     v22.14.0（ABI 127）→ 系统节点，缺省期望 127（node 22 族）；CC_DECK_EXPECT_ABI
+//     可覆盖（如刻意用他档构建验证降级路径）。档位不符=fail-fast，防 nvm 切档后
+//     无感出坏包。
+//   ② 闭包二进制在当前 node 真实 dlopen+建表读写往返（:memory: 零残留）——防
+//     npm 缓存陈旧 ABI 制品/坏编译件进包（dlopen 过=本档真可用，非仅魔数对）。
+//   ③ 两发布形态闭包逐字节一致（插件 scripts/node_modules vs 桌面 resources/
+//     node_modules）——防 gather 漂移（两份分别 rmSync 重建，理论上必一致，实证之）。
+const EXPECT_ABI = Number(process.env.CC_DECK_EXPECT_ABI || 127);
+const abiNow = Number(process.versions.modules);
+if (abiNow !== EXPECT_ABI) {
+  console.error(`ERR: [abi-gate] 当前构建 node ABI ${abiNow} != 期望 ${EXPECT_ABI}（node 22 族=App 内嵌 relay 运行时档）——切换 node（nvm use 22）或确认后 CC_DECK_EXPECT_ABI=${abiNow} 覆盖。档位漂移出包=11-24 ERR_DLOPEN_FAILED 事故重演（DL-P1-2）`);
+  process.exit(1);
+}
+console.log(`[abi-gate] ① 构建节点 ABI=${abiNow}（node ${process.versions.node}）✓`);
+try {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const Database = req(join(out, "scripts", "node_modules", "better-sqlite3"));
+  const db = new Database(":memory:");
+  db.exec("create table abi_probe(x)");
+  db.prepare("insert into abi_probe values (?)").run("ok");
+  const back = db.prepare("select x from abi_probe").get();
+  db.close();
+  if (back?.x !== "ok") throw new Error(`读写往返值不符：${JSON.stringify(back)}`);
+  console.log("[abi-gate] ② 闭包 dlopen+建表读写往返 ✓");
+} catch (e) {
+  console.error(`ERR: [abi-gate] 闭包 better-sqlite3 在当前 node 不可用（${e?.code || e?.message}）——relay/node_modules 二进制与本 node 档位失配（DL-P1-2：npm ci 重装对齐后再打包）`);
+  process.exit(1);
+}
+const bsBin = (p) => readFileSync(join(p, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node"));
+const cloPlug = bsBin(join(out, "scripts"));
+const cloDesk = bsBin(join(root, "desktop-tauri", "src-tauri", "resources"));
+if (!cloPlug.equals(cloDesk)) {
+  console.error("ERR: [abi-gate] 两发布形态闭包二进制不一致（gather 漂移——插件 scripts/ 与桌面 resources/ 的 better_sqlite3.node 逐字节比对失败）");
+  process.exit(1);
+}
+console.log(`[abi-gate] ③ 双闭包逐字节一致（${cloPlug.length} bytes）✓`);
+
 console.log(`\n插件已打包到: ${out}`);
 console.log("本地验证: claude plugin marketplace add <此目录绝对路径> && claude plugin install cc-deck@cc-deck-plugins");
