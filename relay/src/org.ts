@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync, 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDataDirIsolated } from "./config.js";
+import { assertTestNotTouchingProd } from "./test-data-guard.js"; // DL-P1-9：测试隔离硬闸（org 面拦截）
 import { archiveDispatchTerminal } from "./dispatch-run-archive.js"; // M1 run 留档终态钩子（模块无环：只依赖 node/config/artifacts）
 import { readDispatchFromDbCached, resolveDirs, viaReadMode, dispatchEntriesFromDb, advanceOrgSourceCheckpoint } from "./storage/read-mode.js";
 import { writeDispatchToDb } from "./storage/write-dispatch.js"; // #292 cutover 批1 v2：append 后同步落库
@@ -117,7 +118,12 @@ export const ORG_LEADER_BOOTSTRAP_PROMPT =
 // 维持 ~/.cc-deck/org 原样。横幅 once 备案（orgDir 是热路径，防刷屏）
 let orgDirBannerShown = false;
 export function orgDir(): string {
-  if (process.env.CCR_ORG_DIR) return process.env.CCR_ORG_DIR;
+  if (process.env.CCR_ORG_DIR) {
+    // DL-P1-9：测试隔离硬闸——org 台账/板文件是 1122 事故两大污染面之一，显式
+    // CCR_ORG_DIR 指到生产家同样拦（见 src/test-data-guard.ts 头注）
+    assertTestNotTouchingProd("orgDir", process.env.CCR_ORG_DIR);
+    return process.env.CCR_ORG_DIR;
+  }
   if (isDataDirIsolated()) {
     const dir = join(process.env.CCR_DATA_DIR as string, "org");
     if (!orgDirBannerShown) {
@@ -126,7 +132,9 @@ export function orgDir(): string {
     }
     return dir;
   }
-  return join(homedir(), ".cc-deck", "org");
+  const prod = join(homedir(), ".cc-deck", "org");
+  assertTestNotTouchingProd("orgDir", prod); // DL-P1-9：无隔离缺省=生产 org——测试语境拒跑
+  return prod;
 }
 
 export function ensureOrgDir(dir?: string): string {

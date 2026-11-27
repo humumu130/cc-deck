@@ -6,8 +6,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
-import { reconcileBoardCards, type ReconSession, type ReconDispatchRow, zombieInvariantScan, zombieTtlMs, ZOMBIE_NOTE_MARK, reconHeartbeatLine, type HarvestEvidence } from "../src/board-recon.js";
+import { readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { reconcileBoardCards, compliantReceiptSlugs, type ReconSession, type ReconDispatchRow, zombieInvariantScan, zombieTtlMs, ZOMBIE_NOTE_MARK, reconHeartbeatLine, type HarvestEvidence } from "../src/board-recon.js";
 import type { BoardEntry } from "../src/projects.js";
 import type { ProjectBoard } from "../src/projects.js";
 
@@ -168,8 +168,7 @@ async function main(): Promise<void> {
     assert(!r.actions.some((a) => a.entryId === "k7"), "skipEntryIds 让位（本拍 R3 已判定卡——两器不重复动作）");
   }
 
-  console.log("④c 刀二幂等（两轮零重复副作用）:");
-  {
+  console.log("④c 刀二幂等（两轮零重复副作用）:");  {
     const harvest: HarvestEvidence = { doneLedger: new Map([["w-idem", { count: 1, hasReceipt: true }]]), devLogText: "", receiptSlugs: new Set() };
     const round1 = mkBoard([
       mkEntry({ id: "i1", status: "claimed", text: "[任务] W-IDEM 强翻卡", updated_at: now - 7 * 3600_000 }),
@@ -184,6 +183,37 @@ async function main(): Promise<void> {
     ]);
     const r2 = zombieInvariantScan({ boards: [{ gid: "g", board: round2 }], harvest, now, ttlMs: 6 * 3600_000 });
     assert(r2.actions.length === 0, "第二轮零判定（翻后离辖+标记锚滤除——两轮零重复副作用，幂等成立）");
+  }
+
+  console.log("④d A-2/A-3（2026-11-27 台账两刀：标记让位证据 + 回执静默窗）:");
+  {
+    // A-2：已标记卡晚到证据 → 照常强翻（原序「标记→continue」先行=告警后永不被翻）
+    const harvest: HarvestEvidence = { doneLedger: new Map([["w-late", { count: 1, hasReceipt: true }]]), devLogText: "", receiptSlugs: new Set() };
+    const b = mkBoard([
+      mkEntry({ id: "m1", status: "claimed", text: "[任务] W-LATE 晚证卡", updated_at: now - 7 * 3600_000, note: `${ZOMBIE_NOTE_MARK} 11/09] 滞留 7h 三证全无——已告警` }),
+      mkEntry({ id: "m2", status: "claimed", text: "[任务] W-LATE2 无证卡", updated_at: now - 7 * 3600_000, note: `${ZOMBIE_NOTE_MARK} 11/09] 滞留 7h 三证全无——已告警` }),
+    ]);
+    const r = zombieInvariantScan({ boards: [{ gid: "g", board: b }], harvest, now, ttlMs: 6 * 3600_000 });
+    assert(r.actions.find((a) => a.entryId === "m1")?.evidence === "ledger-done", "A-2① 已标记卡晚到台账证据 → 照常出强翻（标记只对告警面幂等，不挡证据）");
+    assert(!r.actions.some((a) => a.entryId === "m2"), "A-2② 已标记且仍无证据 → 不重复告警（幂等锚语义保留）");
+  }
+  {
+    // A-3：回执证据 mtime 静默窗——WIP 在写（mtime 新鲜）不算合规证据
+    const dir = mkdtempSync(join(tmpdir(), "a3-rcpt-"));
+    const tail = "\n结果：修复完成｜改动文件：relay/src/x.ts\n";
+    writeFileSync(join(dir, "w-quiet.md"), `# 回执\n${tail}`);
+    writeFileSync(join(dir, "w-fresh.md"), `# WIP 回执\n${tail}`); // 尾行模板预填（WIP 形态）
+    const twoHAgo = new Date(Date.now() - 2 * 3600_000);
+    utimesSync(join(dir, "w-quiet.md"), twoHAgo, twoHAgo); // 静默期满（交付后未再触碰）
+    const slugs = compliantReceiptSlugs(dir);
+    assert(slugs.has("w-quiet") && !slugs.has("w-fresh"), `A-3① 静默期满计证据、写窗口内不计（实测 ${[...slugs].join(",")}——WIP 尾行不可强翻在跑任务）`);
+    process.env.CCR_BOARDRECON_RECEIPT_QUIESCENT_MS = "0";
+    const off = compliantReceiptSlugs(dir);
+    assert(off.has("w-quiet") && off.has("w-fresh"), "A-3② 显式 0=关阀（静默窗逃生门——旧行为全收）");
+    delete process.env.CCR_BOARDRECON_RECEIPT_QUIESCENT_MS;
+    const pt = readFileSync(join(process.cwd(), "src", "patrol.ts"), "utf8");
+    assert(pt.includes("compliantReceiptSlugs("), "A-3③ patrol 消费单源（内联块已收编，不二写）");
+    rmSync(dir, { recursive: true, force: true });
   }
 
   console.log("⑤ W-BOARDTRUTH5 刀三：生效探针心跳行 + 常驻挂点源锚:");

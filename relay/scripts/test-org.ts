@@ -20,7 +20,12 @@ const dir = mkdtempSync(join(tmpdir(), "cc-deck-org-"));
 
 // ---------- orgDir：默认路径 + env 覆盖逐次求值 ----------
 console.log("orgDir:");
+// DL-P1-9：缺省解析断言是纯字符串比对（零生产读写）——豁免窗只包这一行（开发机
+// 生产家在场时，test-* 语境界内的 orgDir() 缺省解析被硬闸拒跑；后续段落全部显式
+// dir=tmpdir 夹具，不受影响）
+process.env.CCR_TEST_PROD_DATA_OK = "1";
 assert(orgDir() === join(process.env.HOME ?? "", ".cc-deck", "org"), "默认 ~/.cc-deck/org");
+delete process.env.CCR_TEST_PROD_DATA_OK;
 process.env.CCR_ORG_DIR = "/tmp/cc-deck-org-env-a";
 assert(orgDir() === "/tmp/cc-deck-org-env-a", "CCR_ORG_DIR 覆盖即时生效");
 process.env.CCR_ORG_DIR = "/tmp/cc-deck-org-env-b";

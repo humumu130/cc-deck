@@ -14,10 +14,10 @@
 import { statfsSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { statSync } from "node:fs";
-import { execFileSync } from "node:child_process"; // W-BOARDRECON-R3：dev log 证据子进程（10min 缓存）
+import { execFileSync, execFile } from "node:child_process"; // W-BOARDRECON-R3：dev log 证据子进程（10min 缓存）；DL-P1-5：升级通知异步发射
 import { homedir } from "node:os";
 import { listGroups, loadBoardFile, upsertBoardEntry, convergeBoardsWithDispatchLog } from "./projects.js";
-import { reconcileBoardCards, harvestKeyOf, zombieInvariantScan, zombieTtlMs, ZOMBIE_NOTE_MARK, reconHeartbeatLine, type HarvestEvidence } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）；R3 harvestKeyOf（已收割未翻判定）；W-BOARDTRUTH5 刀二僵尸不变量+刀三心跳
+import { reconcileBoardCards, harvestKeyOf, zombieInvariantScan, zombieTtlMs, ZOMBIE_NOTE_MARK, reconHeartbeatLine, compliantReceiptSlugs, type HarvestEvidence } from "./board-recon.js"; // [W-BOARDRECON] 三方对账器（孤儿归位+数字一致性——1104 第三现）；R3 harvestKeyOf（已收割未翻判定）；W-BOARDTRUTH5 刀二僵尸不变量+刀三心跳；A-3 compliantReceiptSlugs（证据③构建单源+mtime 静默窗）
 import { unclaimedStaleDispatches, unclaimedTtlMs, prStaleBoardActions, type PrTruthSnap, type TruthBoardEntry } from "./board-truth.js"; // [W-BOARDTRUTH] 刀2 未认领 TTL+刀3 审查中泳道×PR 真值对账（第三现治本）
 import { ghRepoFlag } from "./gh-repo.js"; // W-RELDEATH：gh pr list 显式 -R（治内嵌 cwd 非 git 仓库的裸 stderr）
 import { appendDispatch } from "./org.js"; // W-BOARDTRUTH 刀2：撤单台账收口行
@@ -71,6 +71,14 @@ export class PatrolModule {
   private reconDelayTimer: NodeJS.Timeout | null = null;
   // 去重账本：key → 上次告警文本（onset-only）
   private lastAlerts = new Map<string, string>();
+  // DL-P1-5（2026-11-27 台账·巡逻全红 3.5 天零触达）：持续告警升级账——push 的投递
+  // 通道（notifyDone→通知账→端上面板）与 relay 同生死且依赖有人看面板；生产实证
+  // 11-23 14:13 起九功能位全红持续 3.5 天、relay 活着的 33h 里也没有任何升级动作
+  // 触达用户。同文本告警持续超阈（缺省 2h，CCR_PATROL_ESCALATE_MS 可调，0=关）→
+  // 走独立于 relay UI 的通道升级：macOS 本地通知（osascript 直弹系统通知中心）+
+  // 报告落盘行。文本变化=新 onset 重新计时（同 onset 只升一次）。
+  private alertOnset = new Map<string, { text: string; at: number }>();
+  private escalatedKeys = new Set<string>();
   // observe3 R1 P2⑧：observe 档独立去重账（不写 lastAlerts——防 observe→auto 切换后
   // 同文告警被「observe 期见过」吞掉；observe 期间同文不重复记账用本账）
   private observeSeen = new Map<string, string>();
@@ -701,18 +709,7 @@ export class PatrolModule {
             }
           } catch { /* git 不可达=证据②缺席（①③仍可用） */ }
         }
-        const receiptSlugs = new Set<string>();
-        try {
-          const artDir = process.env.CCR_ARTIFACTS_DIR ?? join(homedir(), ".cc-deck", "artifacts");
-          for (const f of readdirSync(artDir)) {
-            const m = f.match(/^w-[a-z0-9][a-z0-9-]{1,40}\.md$/i);
-            if (!m) continue;
-            try {
-              const tail = readFileSync(join(artDir, f), "utf-8").slice(-400);
-              if (tail.includes("结果：") && tail.includes("改动文件：")) receiptSlugs.add(m[0].replace(/\.md$/i, "").toLowerCase());
-            } catch { /* 单文件读失败跳过 */ }
-          }
-        } catch { /* artifacts 目录不可读=证据③缺席 */ }
+        const receiptSlugs = compliantReceiptSlugs(process.env.CCR_ARTIFACTS_DIR ?? join(homedir(), ".cc-deck", "artifacts"));
         return { doneLedger, devLogText: this.reconDevLogCache.text, receiptSlugs };
       })();
       const flagNow = new Set<string>();
@@ -907,7 +904,12 @@ export class PatrolModule {
   // ---------- 去重推送（onset-only）+ 报告落盘 ----------
   private push(key: string, text: string): void {
     const prev = this.lastAlerts.get(key);
-    if (prev === text) return; // 同条件未变化：不重推
+    if (prev === text) {
+      // DL-P1-5：同文重复拍在 dedup 早退**前**探测升级——持续中的告警才有「持续
+      // 时长」可言（dedup 早退后不探测=持续 3.5 天也永不升级的生产实证形态）
+      this.maybeEscalate(key, text);
+      return; // 同条件未变化：不重推
+    }
     // observe3（patrol 族单咽喉）+R1 双修：observe 档干跑——研判照常、动作只记 observe
     // 账+web 一行式。P2⑧：observe **不写 lastAlerts**（防 observe→auto 切换后同文告警
     // 被「observe 期见过」吞掉——去重走独立 observeSeen 账）；P2①：observe 记录补
@@ -929,6 +931,9 @@ export class PatrolModule {
       return;
     }
     this.lastAlerts.set(key, text);
+    // DL-P1-5：持续告警升级探测（面板通道外的独立触达——见 alertOnset 头注）。无
+    // 投递目标形态更要测（告警根本没人可推=升级最该响的形态）
+    this.maybeEscalate(key, text);
     // 投递目标兜底链（与 /api/notify handleNotify 同款）：WORKING external → external → 首个
     const sessions = this.mgr.snapshot();
     const target =
@@ -940,6 +945,32 @@ export class PatrolModule {
     if (!target) { this.appendReport(`ALERT-NO-TARGET [${key}] ${text}`); return; }
     this.mgr.notifyDone(target.session_id, [`⚠️ 巡检：${text}`], 0);
     this.appendReport(`ALERT [${key}] ${text}`);
+  }
+
+  /** DL-P1-5：同文本告警持续超阈 → 独立通道升级（一次/onset）。macOS 本地通知由
+   * execFile 异步发射（不阻塞巡检拍）；非 darwin/发射失败静默（报告 ESCALATED 行已
+   * 落盘保底——文件面也是 relay 之外的独立观察点）。 */
+  private maybeEscalate(key: string, text: string): void {
+    const raw = Number(process.env.CCR_PATROL_ESCALATE_MS);
+    const windowMs = Number.isFinite(raw) && raw >= 0 ? raw : 2 * 3600_000;
+    if (windowMs === 0) return; // 逃生阀（显式 0=关）
+    const prev = this.alertOnset.get(key);
+    if (!prev || prev.text !== text) {
+      this.alertOnset.set(key, { text, at: Date.now() });
+      this.escalatedKeys.delete(key);
+      return;
+    }
+    if (Date.now() - prev.at < windowMs) return;
+    if (this.escalatedKeys.has(key)) return; // 同 onset 只升一次
+    this.escalatedKeys.add(key);
+    const mins = Math.max(1, Math.round((Date.now() - prev.at) / 60_000));
+    const body = `巡检告警 [${key}] 持续 ${mins} 分钟未恢复：${text.slice(0, 120)}`;
+    this.appendReport(`ESCALATED [${key}] ${body}`);
+    if (process.platform === "darwin") {
+      try {
+        execFile("osascript", ["-e", `display notification "${body.replace(/["\\]/g, "'")}" with title "cc-deck 巡检升级（独立通道）"`], () => { /* 发射结果不阻塞巡检 */ });
+      } catch { /* 升级尽力而为（报告行已落盘） */ }
+    }
   }
 
   /** #199 B1：熔断到期补试——leader resumeCooldownUntil 在 [过期, 过期+light 周期] 窗内
@@ -965,6 +996,8 @@ export class PatrolModule {
 
   private resolve(key: string): void {
     this.observeSeen.delete(key); // observe3 R1：observe 去重账同刻清（恢复后新 onset 重新记账）
+    this.alertOnset.delete(key); // DL-P1-5：恢复即清升级账（新 onset 重新计时）
+    this.escalatedKeys.delete(key);
     if (this.lastAlerts.delete(key)) {
       this.appendReport(`RECOVERED [${key}]`);
     }

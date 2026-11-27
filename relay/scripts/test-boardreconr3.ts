@@ -87,7 +87,10 @@ const mkBoard = (entries: Array<Partial<ProjectBoard["entries"][number]>>): Proj
   const pj = readFileSync(join(process.cwd(), "src", "projects.ts"), "utf8");
   ok(pj.includes("journal_action ??"), "B4 upsert journal 轻口透传（缺省 update/create 不变）");
   const hv = readFileSync(join(process.cwd(), "..", "cc-plugins", "plugins", "cc-deck", "bin", "leader-harvest"), "utf8");
-  ok(hv.includes("W-BOARDRECON-R3 手工收割翻卡") && hv.includes("org board move"), "B5 手工收割 SOP 提示（机制提醒不靠记性）");
+  // DL-P1-4 基线债修订：原锚「W-BOARDRECON-R3 手工收割翻卡」文案随 v3 演进（1104
+  // 板面说谎第四现后翻卡只在真收割 --final 执行）漂移成永久假红。现锚=v3 真语义：
+  // API 通道翻卡（org board move）+缺省不翻（闸绿≠收成）——SOP 机制本体仍在。
+  ok(hv.includes("'board', 'move'") && hv.includes("W-HARVEST-BOARDFLIP") && hv.includes("缺省不翻"), "B5 手工收割 SOP 提示（v3：API 通道翻卡+闸绿≠收成缺省不翻——机制提醒不靠记性）");
 }
 
 // ---------- C 真板 dry-run（判定面验证——只读不翻） ----------
