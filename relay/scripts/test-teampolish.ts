@@ -49,7 +49,7 @@ const zhLen = (s: string) => [...s].reduce((n, ch) => n + (/[\u2E80-\u9FFF\uF900
 
 // ---------- A1+C4 排印 / A2 同质感 / A3 高度 ----------
 {
-  ok(/\.create-pop h3 \{[^}]*font-size: 14px;[^}]*font-weight: 600;/.test(css), "A1 h3 14px/600（标题-正文倒挂归位，全 create 弹窗共享）");
+  ok(/\.create-pop h3 \{[^}]*font-size: var\(--fs-A\);[^}]*font-weight: 600;/.test(css), "A1 h3 14px/600（标题-正文倒挂归位，全 create 弹窗共享）——DEV-30 字号阶梯化：14px→var(--fs-A)（默认密度恒等 14px，随界面字号/密度档缩放；档位语义=A 档即 14/600 归位义不变）");
   ok(/\.create-label \{[^}]*font: 600 var\(--fs-B\) var\(--sans\);[^}]*letter-spacing: 0;/.test(css), "A1+C4 label 600 12px sans ls=0（mono/uppercase 退役，CJK 字距不再落空）");
   ok(!/create-label[^}]*--mono/.test(css), "A1+C4 label 无 mono 残留");
   ok(!td.includes('"secondary-btn create-browse"'), "A2 浏览钮删 secondary-btn 类（与输入同质感）");

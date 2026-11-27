@@ -47,6 +47,7 @@ const forced = (ssd.match(/touchUpdatedAt\(s, Date\.now\(\), true\)/g) || []).le
 ok(forced === 4, `A3-3 真态变四洗点全走 force 口（onWaiting/onWaitingResolved/onErrorEvt/onDoneEvt，实得 ${forced}）`);
 ok(bc.includes('frame.type !== "SESSION_HEARTBEAT") touchUpdatedAt'), "A3-4 桥副本合并：心跳帧不洗 updated_at（三现同法——PM 常驻保活每拍信封 ts=第五写手，本口收编）");
 ok(bc.includes("(frame.payload && frame.payload.updated_at) || frame.ts"), "A3-5 桥副本合并：载荷时刻优先、信封 ts 兜底");
+ok(bc.includes("const { updated_at: _stripTs, ...rest } = frame.payload") && bc.includes("Object.assign(session, rest, { session_id: frame.session_id })"), "A3-8 桥副本合并 assign 前剥 updated_at（DEV-30 ④ / DEV-22 审查 P3-1：载荷旧键随 assign 先落盘→守卫同值放行=回拨既成，必须剥键先行）");
 ok(ssd.includes("updated_at: Date.now(), todos: [], artifacts: []"), "A3-6 SESSION_CREATED 建卡初始化不受影响（新对象非洗点）");
 ok(bc.includes("started_at: frame.ts, updated_at: frame.ts"), "A3-7 桥副本新建卡初始化不受影响");
 
@@ -84,6 +85,35 @@ if (fnText && fnTextBc) {
     ok(f(s, 1700000001000, true) === true && s.updated_at === 1700000001000, `B6-${label} force 真态变必推进（即便回拨）`);
     const s2 = mk();
     ok(f(s2, "1700000005000") === true && s2.updated_at === 1700000005000, `B7-${label} 数字字符串 ts 归一推进`);
+  }
+}
+
+console.log("B8 合并块行为断言（剥键+守卫真码直跑，DEV-30 ④）：");
+{
+  // 从 bridge-core 抽真实合并三行（strip/assign/touch）组函数体隔离求值——不是复制品，
+  // 源码漂移（剥键被拆/守卫被绕）即取不到块或断言翻红。
+  const start = bc.indexOf("const { updated_at: _stripTs");
+  const end = bc.indexOf("changed = true;", start);
+  ok(start >= 0 && end > start, "B8-0 桥合并块可定位（剥键行丢失=源码漂移）");
+  if (start >= 0 && end > start && fnTextBc) {
+    const guard = new Function(`return (${fnTextBc});`)() as (sess: { updated_at?: number } | null, ts: unknown, force?: boolean) => boolean;
+    const body = bc.slice(start, end); // 含注释原样，语句序列可直接作函数体
+    // eslint-disable-next-line no-new-func
+    const merge = new Function("session", "frame", "touchUpdatedAt", `"use strict";\n${body}\nreturn session;`) as (s: Record<string, unknown>, f: { type: string; session_id: string; ts: number; payload: Record<string, unknown> }, touch: (sess: { updated_at?: number } | null, ts: unknown, force?: boolean) => boolean) => Record<string, unknown>;
+    // 场景一（DEV-22 审查 P3-1 本体）：载荷自带旧 updated_at（100）< 现值 200——剥键后
+    // assign 不落旧键、守卫同值/回拨放行 → 排序面不回拨（修复前：assign 洗成 100，守卫
+    // 视为同值放行=回拨既成）。
+    const s1: Record<string, unknown> = { session_id: "s1", title: "旧题", updated_at: 200 };
+    merge(s1, { type: "SESSION_UPDATED", session_id: "s1", ts: 150, payload: { title: "新题", updated_at: 100 } }, guard);
+    ok(s1.updated_at === 200 && s1.title === "新题", `B8-1 载荷旧 updated_at 不回拨（业务键已并、时刻保持 200；实得 ${s1.updated_at}）`);
+    // 场景二：载荷新时刻（300）正常经守卫推进。
+    const s2m: Record<string, unknown> = { session_id: "s2", updated_at: 200 };
+    merge(s2m, { type: "SESSION_UPDATED", session_id: "s2", ts: 250, payload: { updated_at: 300 } }, guard);
+    ok(s2m.updated_at === 300, `B8-2 载荷新时刻经守卫推进（实得 ${s2m.updated_at}）`);
+    // 场景三：心跳帧不推进（信封 ts 350 > 现值 300 也不洗）。
+    const s3: Record<string, unknown> = { session_id: "s3", updated_at: 300 };
+    merge(s3, { type: "SESSION_HEARTBEAT", session_id: "s3", ts: 350, payload: { beat: 1 } }, guard);
+    ok(s3.updated_at === 300, `B8-3 心跳帧不洗 updated_at（实得 ${s3.updated_at}）`);
   }
 }
 

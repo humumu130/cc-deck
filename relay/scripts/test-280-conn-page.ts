@@ -114,5 +114,24 @@ ok(sd.includes("出示配对码") && sd.includes("data-conn-section=\"this-machi
     "W3 #272 兼容：桌面卡+移动 lane 双落点锚仍在（B8 回归不破）");
 }
 
+// ---------- C connNote 连接空态文案单口（DEV-30 ③，leader 2026-11-28 终裁追认立案） ----------
+// 靶面 web-console/js/session-domain.js：云桥在连（数据面活，file:// 直开亦可达）优先于
+// 「无 WS_BASE」origin 警告——旧三元链 file://+云桥连成后仍喊「请通过 relay 同源 HTTP 页面
+// 连接」=误导。单口归一防回退：定义唯一 + 三消费点（副标题/中央空态/旧径兜底）全走此口 +
+// 三段文案各自只在定义处出现一次（消费点回退直写三元链即文案重复计数翻红）。
+{
+  const sdm = readFileSync(join(root, "web-console", "js", "session-domain.js"), "utf-8");
+  ok((sdm.match(/const connNote = /g) || []).length === 1 && sdm.includes("const connNote = (tail) => cloudLaneOn() ? tail :"),
+    "C1 connNote 单口定义唯一且优先级序=云桥在连 > origin 警告 > token 引导（文件内第二处定义即翻红）");
+  const calls = (sdm.match(/connNote\(/g) || []).length;
+  ok(calls === 3 && sdm.includes("UI.subHint(connNote(") && sdm.includes("noteHtml(connNote(") && sdm.includes("noteNode(connNote("),
+    "C2 三消费点全走 connNote（副标题/中央空态/旧径兜底，now=" + calls + "——消费点回退直写即计数破 3）");
+  const originCopy = (sdm.match(/["']请通过 relay 同源 HTTP 页面连接["']/g) || []).length;
+  const desktopCopy = (sdm.match(/["']正在连接本机 relay…["']/g) || []).length;
+  const tokenCopy = (sdm.match(/["']请通过带 \?token= 的 relay 链接连接["']/g) || []).length;
+  ok(originCopy === 1 && desktopCopy === 1 && tokenCopy === 1,
+    `C3 三段空态文案字符串字面量各只在单口一次（origin=${originCopy}/desktop=${desktopCopy}/token=${tokenCopy}——消费点回退直写三元链即字面量翻倍；注释「」提及不计）`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exitCode = fail ? 1 : 0;

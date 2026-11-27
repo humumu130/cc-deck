@@ -30,25 +30,25 @@
 |---|---|---|---|---|
 | P2-1 | 全局 | **字号字面量绕过用户「界面字号」设置**：`font-size: 9.5/10.5/11.5px` 等半像素及 24 处 11px、15 处 10px、13 处 12px 等直值不走 `--fs-*` 阶梯——用户调「界面字号 90/110/125%」时这些文字不缩放，密度档（compact/relaxed）也不联动 | `base.css` 多处（如 `:825` fz-badge 9.5px、`:4063` echo-retry 10px 等；阶梯定义 `:2671-2673`） | **本批做半像素收敛**（9.5/10.5→--fs-micro、11.5→--fs-C、12.5→--fs-D，11 处清零）；整数直值存量（11/12/13/14px ~70 处）涉及面广留后续批专项收敛 |
 | P2-2 | 团队→看板→卡面时间行 | 「创建 HH:MM · 更新 HH:MM」分隔符「·」为 `::before` 附着，字号 11px 下视觉接近无缝，扫读像连排 | `base.css:2111`（`content:"·\2009"`）+ `:2106`（gap:4px） | **本批做**：分隔符后间距 `\2009`→`\2002`（en space）或 gap 4→5px（微调，双主题核对） |
-| P2-3 | 团队→成员 tab | 状态徽标三种风格并存：待处理=灰描边、运行中=黄实底、已完成=绿实底（描边 vs 实底混用） | `team-domain.js` 成员卡 STATUS 徽标模板（t03 实证） | 待后续批（统一为描边族或实底族需定视觉基准，避免误伤既有色预算立约） |
-| P2-4 | 通知面板 | 时间戳颜色两种灰并存（26 分钟前 vs 4 分钟前 视觉不同）——relTime 分档色未统一 | `notify.js` nrow-time 渲染 | 待后续批（需核对新旧条目分档逻辑再动） |
-| P2-5 | 设置→连接与设备 | 「这台电脑」卡两行操作钮垂直间距 ~40px，与源列表紧凑行距不一致；「用配对码添加」按钮与上行右侧元素横向错位 | `settings-domain.js` 连接面板模板 | 待后续批 |
-| P2-6 | 全局 | 外来蓝 `#60a5fa`（`.cc-badge.is-accent`）不在 token 体系（tokens 只有 --info 族），带浅色对偶 #2563eb 但双值都游离于色预算立法 | `base.css:3710/:3716` | 待后续批（收编进 --info 族需对比度复核） |
-| P2-7 | 会话卡 | 「等你拍板」描边胶囊 / 「CC Deck」实底团队 chip / 引擎徽章三套 chip 风格混用（描边/实底/圆角档不一） | `session-domain.js:1468`（srow-r2 徽章群） | 待后续批（chip 体系归一是独立专项） |
-| P2-8 | 设置→通用 | 卡片标题（外观/快捷键/通知）与页头层级字号区分不足；通知卡行距 < 快捷键卡行距（密度不均） | `settings-domain.js:1298` 模板 + `base.css` v8-setcard | 待后续批 |
-| P2-9 | 会话详情→composer 底行 | 附件/相机图标与权限胶囊/模型胶囊/发送钮基线目视不齐（胶囊偏高） | `base.css` `.composer-bottom`（align-items 基线混排） | 待后续批（需真机 1x/2x 核对再动） |
-| P2-10 | 团队→看板 | 顶部五段比例条无图例联动说明（hover 有 title，静读靠猜） | `team-domain.js:554` board-overview | 待后续批 |
+| P2-3 | 团队→成员 tab | 状态徽标三种风格并存：待处理=灰描边、运行中=黄实底、已完成=绿实底（描边 vs 实底混用） | `team-domain.js` 成员卡 STATUS 徽标模板（t03 实证） | **已修（DEV-30）**：胶囊层归一「软底 12%＋同相描边 32%」族（.tag.authn 同语言），补 state-waiting/offline 缺位规则；1014 五色灯（status-dot 本体）经查证为用户定版语言不动（`base.css:1988-1996`） |
+| P2-4 | 通知面板 | 时间戳颜色两种灰并存（26 分钟前 vs 4 分钟前 视觉不同）——relTime 分档色未统一 | `notify.js` nrow-time 渲染 | **已修（DEV-30）**：根因=浅色档 70% mix 覆写只挂面板行（`.nrow .t .l1 .nrow-time`），来源卡（:2296）/移动卡（:3800）漏网仍 --faint；三处同色收敛（`base.css` 浅色覆写扩选） |
+| P2-5 | 设置→连接与设备 | 「这台电脑」卡两行操作钮垂直间距 ~40px，与源列表紧凑行距不一致；「用配对码添加」按钮与上行右侧元素横向错位 | `settings-domain.js` 连接面板模板 | **已修（DEV-30）**：① relaystat 行补 v8-swrow 同款行律动（padding 8px+虚线底，旧态零内距无边线=间距堆 40px）；② 空态「用配对码添加」行 .settings-row→v8-swrow 归一（padding/右钮锚位与源列表各行同拍，消横向错位） |
+| P2-6 | 全局 | 外来蓝 `#60a5fa`（`.cc-badge.is-accent`）不在 token 体系（tokens 只有 --info 族），带浅色对偶 #2563eb 但双值都游离于色预算立法 | `base.css:3710/:3716` | **已修（DEV-30）**：收编 --info 族（`var(--info)` + `--info-bg` + 32% color-mix 描边）；两 token 双主题各自定义，浅色硬编码覆写行退役 |
+| P2-7 | 会话卡 | 「等你拍板」描边胶囊 / 「CC Deck」实底团队 chip / 引擎徽章三套 chip 风格混用（描边/实底/圆角档不一） | `session-domain.js:1468`（srow-r2 徽章群） | **查证·维持（DEV-30）**：几何已同 pill 档（999 圆/1px 边/同 padding 档，`.tag`/`.team-chip`/`.engine-badge`/`.cc-badge` 四族核对）；填充/描边差异=语义分层且各有用户期溯源（W-AWAITUSER 橙描边=行动指向一级、团队 chip accent=归属、引擎徽章=品牌身份），强行归一会覆盖拍板设计——独立专项立项与否留 leader |
+| P2-8 | 设置→通用 | 卡片标题（外观/快捷键/通知）与页头层级字号区分不足；通知卡行距 < 快捷键卡行距（密度不均） | `settings-domain.js:1298` 模板 + `base.css` v8-setcard | **已修（DEV-30）**：① 卡标题 h5 --fs-C→--fs-E（与页头 17px 拉开层级，色保持 dim）；② v8-swrow 补 min-height 40px 行密度下限（纯开关行与带 v8-swd 说明行高度同拍） |
+| P2-9 | 会话详情→composer 底行 | 附件/相机图标与权限胶囊/模型胶囊/发送钮基线目视不齐（胶囊偏高） | `base.css` `.composer-bottom`（align-items 基线混排） | **查证·几何已齐（DEV-30）**：代码面 align-items:center + 图标/胶囊同 26px、发送/停止同 34px，中轴共线（非 baseline 混排——台账根因栏记载有误）；d02b 元素级截图复核见 DEV-30 回执，真机 1x/2x 仍留待装机批抽验 |
+| P2-10 | 团队→看板 | 顶部五段比例条无图例联动说明（hover 有 title，静读靠猜） | `team-domain.js:554` board-overview | **查证·已在位（DEV-30）**：`board-legend` 图例行（色点+泳道词+计数）1020 boardpolish 批（PR #28 线）已落地，本项登记时未核现状；t01 重拍复核图例行在位 |
 
 ## §3 P3——细节抛光
 
 | # | 界面+位置 | 问题 | 代码根因 | 处置 |
 |---|---|---|---|---|
-| P3-1 | 会话头部 | 水位点串与百分比、活跃时间同排，密度高（暗色可读、浅色偏弱）；窄窗活跃时间被截断 | `base.css:785` `.head-sub`（有 ellipsis 兜底，min-width:0 在位） | 待后续批（信息密度专项） |
-| P3-2 | 错误会话卡 | 副行红字错误摘要截断无 title 悬停全文（有 srow-r2-t title 但错误行未挂） | `session-domain.js:1468`（summary title 在，错误文本列未单独挂） | 待后续批 |
+| P3-1 | 会话头部 | 水位点串与百分比、活跃时间同排，密度高（暗色可读、浅色偏弱）；窄窗活跃时间被截断 | `base.css:785` `.head-sub`（有 ellipsis 兜底，min-width:0 在位） | **已修（DEV-30·浅色半）**：浅色档补 62% text-strong mix 提对比（次级信息条定位不变）；「密度高/截断」半项属信息架构重排（水位点串拆行/收纳）仍留信息密度专项 |
+| P3-2 | 错误会话卡 | 副行红字错误摘要截断无 title 悬停全文（有 srow-r2-t title 但错误行未挂） | `session-domain.js:1468`（summary title 在，错误文本列未单独挂） | **已修（DEV-30·真缺口在移动卡）**：桌面卡/dock 查证 title 均在位；真缺口=移动台 mobile-card `<p>` 完全不显 last_error 且无 title——补 `action_summary‖last_error‖cwd` 序 + title 悬停全文（`mobile.js` mobileCard） |
 | P3-3 | 时间格式 | 列表时间戳 `01:18` 与 `11月26日` 混排为 relTime 分档规则（当日钟点/跨日日期），规则本身自洽 | `session-domain.js` relTime | 不动（查证为设计） |
-| P3-4 | 输出物 tab | 散文件行（loose）与组内行视觉断层：组有连续底色，散行悬空 | `session-domain.js:3852` artLayoutItems（groups/loose 二态） | 待后续批 |
-| P3-5 | 移动台设置页 | 顶部标题+源胶囊+通知徽标+在线 chip+⋯钮同排，420px 下偏挤 | `index-005.html:178` mobile-head | 待后续批（移动台专项） |
-| P3-6 | 关于页 | 版本徽章「0.7.1-test.35 通道」无底色边框，与相邻 chip 风格不一 | `settings-domain.js:1305` | 待后续批 |
+| P3-4 | 输出物 tab | 散文件行（loose）与组内行视觉断层：组有连续底色，散行悬空 | `session-domain.js:3852` artLayoutItems（groups/loose 二态） | **已修（DEV-30）**：`.art-loose` 与 `.art-kids` 同律动（左距 6→13 对齐、dashed→solid 消悬空、行高 46px 二态归一）；d05 重拍复核 |
+| P3-5 | 移动台设置页 | 顶部标题+源胶囊+通知徽标+在线 chip+⋯钮同排，420px 下偏挤 | `index-005.html:178` mobile-head | **已修（DEV-30）**：`@media (max-width:430px)` 副题（h2 small）与在线 chip 让位（在线态由源胶囊 conn 点同语义承载）+间距 8→7px；m00/m03b 420px 重拍复核 |
+| P3-6 | 关于页 | 版本徽章「0.7.1-test.35 通道」无底色边框，与相邻 chip 风格不一 | `settings-domain.js:1305` | **已修（DEV-30）**：版本徽章 chip 化（kbd-inline-chip 同族：1px 边/5px 圆/surface 底/mono/tabular），s0-about 重拍复核 |
 
 ## §4 查证后排除（视觉模型误报/设计如此——留档防重复立案）
 
@@ -74,3 +74,43 @@
 ## §6 Phase 2 修复范围（本批执行完毕）
 
 P1-1～P1-4 全修 + P2-1/P2-2 量力做；其余 P2/P3 留台账标「待后续批」。只动 `web-console/css|js`（呈现层），零交互逻辑/数据链路改动。
+
+## §7 DEV-30 清账批记录（2026-11-28 夜，UI 走查遗留清账单）
+
+**① 字号阶梯专项（P2-1 整数档存量 + 半像素尾巴）**
+
+- **收敛 95 处**（base.css 87：`font-size` 直值 72 + `font:` 简写 15；域 JS 8）：10/10.5/9.5/9→`--fs-micro`、11/11.5→`--fs-C`、12→`--fs-E`、12.5→`--fs-D`、13→`--fs-A-item`、14→`--fs-A`、15/15.5→`--fs-page`。半像素三残留（base.css:2364 15.5px / session-domain 11.5px / settings-domain 12.5px）全清；另清 `font:` 简写半像素三处（1490/1813/2787 10.5px、3236 9.5px）。
+- **映射约定**：默认密度档像素值不变（≤0.5px 档差按 DEV-29 P2-1 既有就近档惯例：9.5/10.5→micro、11.5→C、15.5→page；9px caret 五处 +1px 归 micro）。阶梯未新增档位。
+- **验收口径**：`grep -rnE 'font-size:\s*[0-9.]+px' web-console/css/ web-console/js/ web-console/index-005.html` 排除 var() 后仅剩 §7 清单列明的 24 处有意保留；半像素零命中（残留命中仅在冻结老壳 index.html 与营销站 site/——无阶梯可映射，见下）。
+- **留给 leader 拍后续的存量清单（24 处，均在 base.css）**：
+  - 根基线：`:8` `font: 14px/1.55`（html 根字体栈——动它=全站字号基线，需专项）
+  - 图形/装饰 glyph（<micro 档）：`:178/:183` 8px/9px 窗栏角标、`:1808` 8px QA 角标、`:2093` 7px ●呼吸点、`:2587` 6px ASCII 码（行高锁定 6px 的 QR 字符画，换档必炸版）
+  - 显示级大字（>page 档，无对应档，需新档=设计决策）：`:258` 24px 配对码、`:3031` 28px logo、`:544` 19px 队列钮、`:2208` 19px 指标数、`:1257` 17px 用量数、`:2386` 17px 设置卡标题（conn-page-v2 定的 17/650——归 page=15 缩 2px 需拍板）、`:2505` 17px 移动 tab 图标、`:493/:1174` 18/20px 域钮与呼出钮、`:862` 20px 警示图标、`:1626` 22px 成功勾、`:3747` 16px 项目队列钮、`:2568` 18px mobile-back 图标钮
+  - 已合规无需动：`:1359` md-h1~h4 em 相对值（随父级缩放）、`:2695-2697` `--srow-*` 本地行阶梯（自带 compact/relaxed 三档 ×--ui-scale，语义合规）、diag.js/settings-domain.js 两处红色诊断横幅（容错样式刻意独立于主题 token）
+
+**台账四缺口处置**：② 移动台会话详情页走查——harness 修复导航选择器（`.mobile-card[data-open-detail]`，DEV-29 用的 `.queue-card` 在移动台不存在）后四 tab+composer 全达，多模态走查布局健康（发现 1 处范围外小瑕疵见「新发现」）；③ t04 团队活动 tab 重拍——本批 /tmp/dev30/shots/ 重制并通过目检（DEV-29 为 CDN 上传损坏非渲染问题）；① TCC 生产截屏、④ 壳层 L3 真机——仍留（不属本单）。
+
+**P2/P3 销项总账**：已修 12（P2-3/4/5/6/8、P3-1 浅色半/2/4/5/6 + P2-1 整数档专项本体）；查证维持/已在位 3（P2-7 分层有意、P2-9 几何已齐、P2-10 图例早在位）；P3-1 密度半项+P3-3 维持不动。P2-10 系台账登记时未核现状（boardpolish #28 已落图例），本批 t01 重拍复核在位。
+
+**新发现（范围外，记档待派）**：
+- **N1【P2·已顺手修】** base.css `.mobile-back` 缺闭括号——conn-page-v2 P1-1b 的 `.mobile-settings-detail .mobile-back` 文字钮规则自落地起就被 CSS 错误恢复整体吞弃（规则从未生效），设置详情返回钮「‹ 设置」与通知来源详情「‹ 返回通知中心」一直在 30px 图标盒里爆框。本批补括号复原 + notify 详情返回并入作用域（同文字形态）。
+- **N2【P3·未修】** 移动台会话详情全页截图底部 composer 之下右下角有孤立「03:18」时间戳漂浮（m04 截图实见；元素级 composer 截图无此物=归属消息流浮层，疑似 msg-navbar/时间浮层残留）。非本批改动面，未追。
+- **N3【P3·未修】** 团队活动 tab 行左列「时间未知/状态未知」窄列换行（t04 截图；fixture 无事件数据时的兜底文案宽于列宽）。
+
+### §7.1 回炉修批（2026-11-28 leader 终裁后，deck-fixer-2）
+
+leader 终裁（verdict 收讫）：③ connNote 追认立案收、④ SESSION_MERGE 剥键收——两项均记流程偏差；B1② 欠账随批修、connNote 测试锚升格随批。本节为该修批的台账收口记录。
+
+**流程偏差栏（leader 终裁明列，随批入账）**：
+- **③ 注释伪叙事**：任务书增补明写「leader 已拍不立案」，交付代码注释却写「leader 拍板立案」——把否决改写成批准写进代码，流程违规实锤（审查 P2）。本批已改实：`session-domain.js:21-25` 注释如实陈述立案沿革（leader 原拍不立案（DEV-30 任务书增补）→ 2026-11-28 leader 终裁追认立案（依据：审查确认生产路径零行为变化））。
+- **④ 越线**：`relay/scripts/test-updated-at-guard.ts`（A3-8+B8）+ `test-teampolish.ts`（A1 锚随阶梯化连锁）出任务书红线字面。leader 追认**仅限该两文件**落点，后续越线仍须先报后动。
+- **回执声明不实两处**（审查 P2/P3）：①「预存红复跑逐条一致」在 blankset B1② 计数粒度不实——基线 81，交付 88（本批净增 7 处 color-mix 单写裸奔）；②截图称 27 张实为 25 张，且 m03b 未拍到 N1 验证面（审查已独立补拍 before/after 双侧铁证，不返工）。
+
+**B1② 88→81 闭环（本修批）**：净增 7 处全部补「静态行在前 + color-mix 在后」双写（与本批既有双写同式）——`base.css:790` head-sub 浅色 color 兜底 `var(--dim)`、`:3612` notify 来源卡/移动卡时间戳 color 兜底 `var(--dim)`、`:1996-1999` member-state 四态 border-color 兜底 `var(--tag-border)`、`:3731` cc-badge.is-accent border-color 兜底 `var(--info)`。修后 B1②=81，且裸奔集合与基线 `30523d45` **逐条恒等**（归一化 prop+value 对 diff 为空，非仅计数一致）。无「无静态等价写法」欠账。
+
+**connNote 源码锚（本修批）**：`relay/scripts/test-280-conn-page.ts` 新增 C 组三锚——C1 单口定义唯一+优先级序字面（云桥在连 > origin 警告 > token 引导）、C2 三消费点调用计数=3（副标题 `UI.subHint`/中央空态 `noteHtml`/旧径兜底 `noteNode`）、C3 三段空态文案字符串字面量各只在单口一次（三元链复活即字面量翻倍翻红；注释「」提及不计）。
+
+**审查 P3 观感三项 → 入「待后续批」**（不阻收割）：
+- l02：侧栏团队卡「运行中」徽章未随胶囊统一（软底旧风格与 member-state 描边族并存）——后续批统一或明示有意区分。
+- l04：「当前」绿徽标右缘较按钮右轨内缩 ~20px——后续批对齐或立规范。
+- s0-general：区块标题（E 档）与行标签（A 档）层级观感仍弱；深色下「空闲置灰」原生下拉疑似白底（多模态单源未复核，待查）。
