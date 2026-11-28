@@ -2,6 +2,14 @@
 // 打包 CC Deck 插件：bundle relay 成单文件 + 汇集静态资源到 cc-plugins/plugins/cc-deck/
 // 用法：node scripts/build-plugin.mjs [版本号]（relay 目录下；版本缺省回落仓库根 VERSION——
 //       2026-10-10 A1 收敛后 VERSION 是唯一事实源，显式传参仅应急覆盖用）
+//
+// 【R2①（DEV-44，2026-11-28）产物出 git】本脚本是 cc-plugins 产物副本的**唯一**落笔处：
+// scripts/relay.mjs、scripts/hook.mjs、scripts/node_modules/、web-console/、mobile/、
+// docs/system-design/、bin/inject.cs 七族产物已 .gitignore 出库（git 历史保留），新
+// clone 的插件目录只有 tracked 源件（bin/CLI 族、commands/、guard 脚本、plugin.json、
+// README）——本地开发/装插件先跑本脚本；消费面（desktop.yml/android.yml 出包 job、
+// deploy-web.sh、release-test.sh）一律「先构建后引用」，CI 侧由 W-RELAYFRESHCI
+// 重建步+check-embedded-freshness.mjs 硬闸兜底。
 import { build } from "esbuild";
 import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";

@@ -47,12 +47,14 @@ if [ "${2:-}" = "--with-cf" ]; then
 else
   bash scripts/deploy-web.sh --skip-cf
 fi
-# 幂等显式闸（审查 P1）：[3/7] 已跑 build-plugin 并提交，[3.5] 重跑 S1 应零 diff——
-# 出现 diff = esbuild 环境漂移产出了异源产物，带着它 tag 会烙错版本，必须停
+# 幂等显式闸（审查 P1）：[3/7] 已跑 build-plugin，[3.5] 重跑 S1 应零 diff——出现
+# diff = esbuild 环境漂移产出了异源产物，带着它 tag 会烙错版本，必须停。R2①（DEV-44）
+# 后产物副本不入 git，本 diff 面收窄为 tracked 源（版本落点等）；产物面幂等由
+# [4/7] check-bundle-sync 的重建对比闸承担
 git diff --quiet || { echo "ERR: [3.5/7] deploy-web 后工作区出现新 diff（S1 产物非幂等，esbuild 环境漂移？）："; git status --short | head -5; exit 1; }
-echo "[4/7] 守卫（不绿即停，绝不 tag）"
+echo "[4/7] 发布期自检（R2① 语义：[3/7] 已先 build 刷新，此处不绿即停，绝不 tag）"
 bash scripts/check-bundle-sync.sh | tail -2
-bash scripts/check-bundle-sync.sh | grep -q "✅ bundle 同步检查通过" || { echo "ERR: 守卫未过，已停止（可 git reset --soft HEAD~1 回退 bump 后修）"; exit 1; }
+bash scripts/check-bundle-sync.sh | grep -q "✅ bundle 同步自检通过" || { echo "ERR: 守卫未过，已停止（可 git reset --soft HEAD~1 回退 bump 后修）"; exit 1; }
 echo "[5/7] tag v$V-nova"
 git tag "v$V-nova"
 echo "[6/7] push 分支+tag"

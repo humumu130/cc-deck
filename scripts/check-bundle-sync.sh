@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
-# bundle 同步护栏：发版/构建前必跑——校验三处 relay.mjs 一致 + 插件 Web 副本全量
-# 清单一致 + git 工作区干净。不一致立即 exit 1（2026-09-14 版本链断裂事故的防再犯护栏）
+# bundle 同步自检：发布期校验——三处 relay.mjs 一致 + 插件 Web 副本全量清单一致 +
+# git 工作区干净 + 同参重建对比 + 冒烟 + 版本闸。不一致立即 exit 1（2026-09-14
+# 版本链断裂事故的防再犯护栏）
+#
+# 【DEV-44 / arch R2①（2026-11-28）语义退役】本闸从「门禁比对」退役为「发布期自检」：
+# cc-plugins 产物副本已出 git（.gitignore+rm --cached，git 历史保留），对照对象从
+# 「git 里的产物」变为「磁盘上的构建产物」——因此口径是**先 build 刷新再 check**：
+#   本地出包链 scripts/release-test.sh [3/7] 先跑 build-plugin.mjs 重建、[4/7] 才进本闸；
+#   CI 出包链（desktop.yml/android.yml）W-RELAYFRESHCI 当场重建步 + 新鲜度硬闸
+#   （check-embedded-freshness.mjs）同序。
+# 日常开发/提交不再依赖本闸对 tracked 副本做对齐（无 tracked 副本可对齐）；
+# 新 clone 未构建时 B1=MISSING 属预期，先跑 relay/scripts/build-plugin.mjs。
 # 用法：scripts/check-bundle-sync.sh [--strict] [--check-all]
 #   --strict     把「已装 app 落后」警告升红（发版前最终口径）
 #   --check-all  加生产面全量对照（relay-service + Nova app，日常闸不碰生产面，
@@ -30,7 +40,8 @@ B3=$( { shasum -a 256 '/Applications/CC Deck.app/Contents/Resources/resources/re
 # （营销站，只随 S4 CF 整目录上传）与 wrangler.jsonc（旧 CF 杂件待清）不进副本
 # 口径，与 build-plugin.mjs 拷贝清单一致。修复口径已变：副本=纯构建产物禁手工
 # 编辑，漂移一律重跑 relay/scripts/build-plugin.mjs（或 scripts/deploy-web.sh
-# 单命令同步全部面）。
+# 单命令同步全部面）；R2①（DEV-44）后副本更已出 git——对照的是磁盘构建态，
+# 源清单仍取 git ls-files web-console（源目录照常 tracked）。
 # relay-service / Nova 生产面（原 S1/S2 + #123 Nova 段）移入 --check-all：日常闸
 # 只对仓库内两份（root vs cc-plugins），不碰生产面——落后分支线的工作区根源对
 # 新鲜部署面（常已刷至更新发版线）必红，2026-10-23 实测「狼来了」；发版链的
@@ -39,7 +50,7 @@ WC_LIST=$(git ls-files web-console | grep -v '^web-console/site/' | grep -v '^we
 [ -n "$WC_LIST" ] || { echo "❌ git ls-files web-console 为空（仓库异常？）"; exit 1; }
 
 FAIL=0
-[ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
+[ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（磁盘产物异源/半截构建——重跑 relay/scripts/build-plugin.mjs 刷新两份）"; FAIL=1; }
 [ "$B2" = "$B3" ] || { echo "⚠️  desktop-tauri resources ≠ /Applications 已装（Mac app 未热替换最新，构建前可接受，发版前必须替换）"; [ "$STRICT" = "1" ] && FAIL=1; }
 [ "$B1" = "MISSING" ] && { echo "❌ cc-plugins bundle 不存在（先跑 build-plugin.mjs）"; FAIL=1; }
 WMISS=0
@@ -94,7 +105,8 @@ if [ "$CHECK_ALL" = "1" ]; then
   check_face "Nova app 面"     '/Applications/CC Deck Nova.app/Contents/Resources/web-console'
 fi
 
-# git 工作区必须干净（发版前未提交改动 = 产物与仓库不一致的风险源）
+# git 工作区必须干净（发版前未提交改动 = 版本落点/源码与出包状态不一致的风险源；
+# R2① 后产物副本不入 git，本项只盯 tracked 源面）
 if [ -n "$(git status --porcelain)" ]; then
   echo "❌ git 工作区有未提交改动："
   git status --short | head -5
@@ -229,4 +241,4 @@ if [ "$FAIL" = "1" ]; then
   echo "——检查未通过，禁止打 tag/发版"
   exit 1
 fi
-echo "✅ bundle 同步检查通过（relay.mjs 三处一致 + Web 副本全量清单一致 + 工作区干净 + 冒烟/版本闸绿）"
+echo "✅ bundle 同步自检通过（发布期口径，R2① 后对照磁盘构建态：relay.mjs 三处一致 + Web 副本全量清单一致 + 工作区干净 + 冒烟/版本闸绿）"
