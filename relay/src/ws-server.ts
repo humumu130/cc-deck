@@ -1048,7 +1048,7 @@ export function startServer(
       }
       if (!isLoopback || !allowOrigin) { res.writeHead(404).end(); return; }
       // #25：探测抽到 lan-ip.ts（两段式）——用户公司机实测 lan_ip:""（网卡名撞过滤词
-      // 吃光全部地址），回退段无视网卡名取私网 IP。单测 scripts/test-lanip.mjs
+      // 吃光全部地址），回退段无视网卡名取私网 IP。单测 tests/test-lanip.mjs
       const lanIp = detectLanIp(networkInterfaces());
       res.writeHead(200, {
         "content-type": "application/json",

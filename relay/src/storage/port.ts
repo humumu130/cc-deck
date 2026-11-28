@@ -15,7 +15,7 @@
 //     判定/回执校验不经总线广播。
 // 理由：值守只保存跨事实源的派生观察、去重和审计（019 §1），消费面是审计追溯而非业务
 // 状态机；入库会把旁路日志升格成实体、引入 FK/迁移/投影连带漂移。护栏测试
-// scripts/test-duty-boundary.ts（npm run test:duty-boundary）静态+运行双面断言本边界——
+// tests/test-duty-boundary.ts（npm run test:duty-boundary）静态+运行双面断言本边界——
 // 未来若需破界（duty 入库/入流），先改 019 规格与冻结件，再改注记与测试，三处同步。
 
 

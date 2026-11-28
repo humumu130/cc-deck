@@ -111,7 +111,7 @@ export function resetRestartLedgerForTests(): void {
   try { rmSync("/tmp/ccr-restart-ledger-test", { recursive: true, force: true }); } catch { /* 尽力而为 */ }
 }
 
-// 测试直接跑时（tsx scripts/test-...）自建沙盒
+// 测试直接跑时（tsx tests/test-...）自建沙盒
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*\//, ""))) {
   // 占位：纯函数模块无 main
 }
