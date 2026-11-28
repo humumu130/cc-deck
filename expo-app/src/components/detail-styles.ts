@@ -102,7 +102,7 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   dockLineAct: { flex: 1, minWidth: 0, fontSize: 11, color: c.dim, lineHeight: 15 },
   stripBtnWarn: {
     height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
-    borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: withA(c.error, 0.3), alignItems: "center", justifyContent: "center",
   },
   stripBtnWarnT: { color: c.error, fontSize: 11, fontWeight: "600" },
   statusLine: { flexDirection: "row", alignItems: "center", gap: 7, flex: 1, minWidth: 0 },
@@ -155,14 +155,14 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 当前项：整行选中底 + 右缘 ✓（不靠游离符号——设计自审结论）
   permRowCur: { backgroundColor: c.tintStrong },
   // 跳过行武装态（首击待确认）：红 tint 选中，视觉从属底部确认区
-  permRowArm: { backgroundColor: withA(c.waiting, 0.08) },
+  permRowArm: { backgroundColor: withA(c.error, 0.08) },
   permNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   permName: { color: c.text, fontSize: 13, fontWeight: "600", lineHeight: 17 },
   permBadge: {
     height: 15, paddingHorizontal: 4, borderRadius: 4, alignItems: "center", justifyContent: "center",
-    backgroundColor: withA(c.waiting, 0.1), borderWidth: 1, borderColor: withA(c.waiting, 0.45),
+    backgroundColor: withA(c.error, 0.1), borderWidth: 1, borderColor: withA(c.error, 0.45),
   },
-  permBadgeT: { color: c.waiting, fontSize: 9, lineHeight: 11, fontWeight: "600" },
+  permBadgeT: { color: c.error, fontSize: 9, lineHeight: 11, fontWeight: "600" },
   permDesc: { color: c.dim, fontSize: 10, lineHeight: 13, marginTop: 1 },
   permCheck: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   // W-PORT-B P0-1 引入；W-HEADFIX（1109 B 刀1）：迁「更多」tab 时形态统一——描边式
@@ -190,11 +190,11 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   modelApplyT: { color: c.brandA, fontSize: 11.5, fontWeight: "700" },
   // 危险确认区：左缘 3px 红从属条（视觉上从属跳过行）+ 整宽双按钮
   permConfirm: {
-    backgroundColor: withA(c.waiting, 0.06), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
-    borderLeftWidth: 3, borderLeftColor: withA(c.waiting, 0.55),
+    backgroundColor: withA(c.error, 0.06), borderWidth: 1, borderColor: withA(c.error, 0.3),
+    borderLeftWidth: 3, borderLeftColor: withA(c.error, 0.55),
     borderRadius: 10, padding: 10, marginTop: 6,
   },
-  permConfirmT: { color: c.waiting, fontSize: 10.5, lineHeight: 14 },
+  permConfirmT: { color: c.error, fontSize: 10.5, lineHeight: 14 },
   permConfirmBtns: { flexDirection: "row", gap: 8, marginTop: 8 },
   permCancel: {
     flex: 1, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center",
@@ -203,7 +203,7 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permCancelT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   permGo: {
     flex: 1, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.waiting, overflow: "hidden",
+    backgroundColor: c.error, overflow: "hidden",
   },
   permGoT: { color: "#fff", fontSize: 12, fontWeight: "600" },
   // 任务/定时/统计视图容器
@@ -387,7 +387,7 @@ export const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   diffHunk: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.working, backgroundColor: withA(c.working, 0.07) },
   diffAdd: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.done, backgroundColor: withA(c.done, 0.08) },
-  diffDel: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.waiting, backgroundColor: withA(c.waiting, 0.07) },
+  diffDel: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.working, backgroundColor: withA(c.working, 0.07) },
   diffCtx: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.faint },
   trResult: { color: c.faint, fontSize: 11.5, marginBottom: 8 },
   trSystem: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 8 },

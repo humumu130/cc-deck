@@ -895,7 +895,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvDelT: { color: c.faint, fontSize: 15 },
   // ① 配对状态徽标（替代旧 ☁ 图标，信息更明确）：已配对=绿 / 未配对=灰 / 配对失效=红
   srvBadgeNo: { color: c.faint, fontSize: 10.5, fontWeight: "600" },
-  srvBadgeDead: { color: c.waiting, fontSize: 10.5, fontWeight: "700" },
+  srvBadgeDead: { color: c.working, fontSize: 10.5, fontWeight: "700" },
   pairRow: { marginTop: 4, alignSelf: "flex-start", flexDirection: "row", gap: 8 },
   pairBtn: {
     paddingHorizontal: 16, paddingVertical: 7, borderRadius: 17, borderWidth: 1,
@@ -923,8 +923,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
     paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,
   },
-  inputErr: { borderColor: withA(c.waiting, 0.6) },
-  errT: { color: c.waiting, fontSize: 12.5, marginTop: 4, marginBottom: 6, alignSelf: "flex-start" },
+  inputErr: { borderColor: withA(c.working, 0.6) },
+  errT: { color: c.working, fontSize: 12.5, marginTop: 4, marginBottom: 6, alignSelf: "flex-start" },
   btn: { width: "100%", maxWidth: 340, marginTop: 8, borderRadius: 14, overflow: "hidden" },
   btnGrad: { height: 48, alignItems: "center", justifyContent: "center" },
   btnText: { color: "#fff", fontSize: 15.5, fontWeight: "700" },

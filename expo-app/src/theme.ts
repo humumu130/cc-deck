@@ -83,10 +83,12 @@ export const DARK: ThemeColors = {
   brandA: "#EC9A73",
   brandB: "#C96442",
   brandHover: "#F0AF91",
-  // 1019 用户拍板：工作/待处理黄灯提亮提饱和（原 #FFC53D 明度不够）——
-  // 状态灯词表口径：黄=工作中/待处理，绿=空闲/完成（done 同源），红=错误
+  // 1019 用户拍板：工作黄灯提亮提饱和（原 #FFC53D 明度不够）。
+  // DEV-40 T4 状态词汇表（docs/design/status-vocabulary.md §三）：waiting 与 working 分相
+  // （纪律①色相恒等——修前 waiting=#FFD24D 与 working 同值同相，端上实心点无从区分两态；
+  // 1019 注释「黄=工作中/待处理」系对当时现状的描述，本批收敛为橙相=桌面 --st-blocked 同源）
   working: "#FFD24D",
-  waiting: "#FFD24D",
+  waiting: "#E5895B",
   error: "#F0524F",
   done: "#35DC97",
   blocked: "#E5895B",
@@ -145,9 +147,10 @@ export const LIGHT: ThemeColors = {
   brandA: "#B85228",
   brandB: "#96391A",
   brandHover: "#C2603E",
-  // 浅色档同步提亮（原 #E0A43C 偏闷）：满饱和亮琥珀，白底上仍可辨
+  // 浅色档同步提亮（原 #E0A43C 偏闷）：满饱和亮琥珀，白底上仍可辨；waiting=橙相
+  //（DEV-40 T4 词表纪律①：亮档饱和度可自调、色相不可换——#C05B33 与 blocked 同源）
   working: "#FFB020",
-  waiting: "#FFB020",
+  waiting: "#C05B33",
   error: "#D63B3B",
   done: "#22A06B",
   blocked: "#C05B33",

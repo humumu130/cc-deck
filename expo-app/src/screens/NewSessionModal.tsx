@@ -550,8 +550,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
     paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,
   },
-  inputErr: { borderColor: withA(c.waiting, 0.6) },
-  errT: { color: c.waiting, fontSize: 12, marginBottom: 10 },
+  inputErr: { borderColor: withA(c.working, 0.6) }, // DEV-40 T4：警示琥珀指 working（原借 waiting，词表后 waiting=橙相）
+  errT: { color: c.working, fontSize: 12, marginBottom: 10 },
   // 75-E 引擎/模型选择器：摘要行（大触控行，panel2 底同 input 材质）+ 紧凑浮层两层
   engSummary: {
     flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12,

@@ -92,7 +92,7 @@
                 const HIST_PREFIX = "cc.input.hist.";               // #95 按会话分桶的输入历史
                 const HIST_MAX = 200;
                 const IMG_MAX = 8, FILE_MAX = 5, FILE_SIZE_MAX = 20 * 1024 * 1024; // B20 附件上限提升（图 8 / 文件 5）
-                const STATUS_TAG = { WORKING: ["运行中", "done"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] }; // W-V8 批2a：运行中绿系（v8 语义对调，info 蓝退役）
+                const STATUS_TAG = { WORKING: ["运行中", "st-working"], WAITING: ["待处理", "st-waiting"], ERROR: ["错误", "st-error"], DONE: ["完成", "st-done"] }; // DEV-40 T4：改走 .tag.st-* 状态胶囊族（词表 §三色相恒等——修前 done 绿=done 相/info 蓝两版乱面即 l02；W-V8 批2a 旧绿系语义档退役）
                 const DOCK_STATE = { WORKING: "running", WAITING: "waiting", ERROR: "suspended", DONE: "closing" }; // B21 态图标承态，状态词退役
 
                 const S = {
@@ -2844,7 +2844,7 @@
                     const done = todos.filter((t) => t.status === "completed").length;
                     const open = todos.filter((t) => t.status !== "completed").slice(0, 4);
                     const eng = engineMetaOf(s); // W-ENGLM D/E：共享解析（glm 入表；未收录显示原名不错显 Claude）
-                    const st = STATUS_TAG[s.status] || ["完成", "done"];
+                    const st = STATUS_TAG[s.status] || ["完成", "st-done"];
                     const inspSrc = String(s.relay_source || S.relayName || ""); // t25fix #5：详情面板源徽章（单源模式 CSS 隐藏）
                     // W-DRAWMERGE（用户 1025 补充定稿）：PM 会话检查器瘦身——用量/输出物两块
                     // 在他 tab 已有（详情 tab/输出物看板），PM 检查器聚焦团队内容（团队成员块+

@@ -906,7 +906,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   const dead = art?.exists === false;
   const outside = art?.origin === "outside" || (!!art && !rel && art.origin !== "cwd");
   const kind = artKindOf(name);
-  const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
+  const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.working, zip: c.dim, gen: c.faint }; // DEV-40 T4：img 琥珀改指 working（图标轴借状态 token，词表后 waiting=橙，保原观）
   // #79 拉取 + 分级路由：图片/HTML/文本直接内嵌预览，复杂格式落缓存后交系统应用。
   // 缓存命中（path+last_at 未变）秒开不重拉——文件在电脑上更新则键失效自动拉最新
   const cacheKey = art ? `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}` : "";
@@ -1149,7 +1149,7 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
               >
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={d.permNameRow}>
-                    <Text style={[d.permName, danger && { color: c.waiting }]}>{PERM_MODE_ZH[m]}</Text>
+                    <Text style={[d.permName, danger && { color: c.error }]}>{PERM_MODE_ZH[m]}</Text>
                     {danger ? (
                       <View style={d.permBadge}>
                         <Text style={d.permBadgeT}>危险</Text>
@@ -2615,7 +2615,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             const byRec = (a: ArtifactItem, b: ArtifactItem) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
             const created = arts.filter((t) => t.op === "create").sort(byRec);
             const edited = arts.filter((t) => t.op !== "create").sort(byRec);
-            const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
+            const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.working, zip: c.dim, gen: c.faint }; // DEV-40 T4：img 琥珀改指 working（图标轴借状态 token，词表后 waiting=橙，保原观）
             // E3a 分组投影统一走 artifactRowsOf：B4a group_key/directory_label 优先
             //（不透明 id 分桶、relay 展示名、单文件组照组渲染），旧 relay 无 B4a 字段
             // 回退 #222 父目录口径（同键 ≥2 才聚合、单文件目录与根散件保持散行）；
@@ -3065,7 +3065,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
             />
             <Pressable
               style={[d.stripBtnWarn, d.opRipple]}
-              android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
+              android_ripple={{ color: withA(c.working, 0.15), borderless: false }}
               onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
             >
               <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
@@ -3201,7 +3201,7 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
                   <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "global")}>
                     <Text style={d.btnAllowT}>所有会话</Text>
                   </PressScale>
-                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => setRmOpen(false)}>
+                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.working, 0.18)} haptic onPress={() => setRmOpen(false)}>
                     <Text style={d.btnRejectT}>✕ 返回</Text>
                   </PressScale>
                 </View>
@@ -3210,11 +3210,11 @@ export default function DetailScreen({ sid, onBack, initialView, onOpenArtPool, 
               /* 005 #166 三级按钮：拒绝=次级描边、允许并记住=第三钮（同次级档次）、
                   允许=唯一实心主钮（done 色）；仅浏览口径下全 disabled 压灰 */
               <View style={[d.wbtns, WAITBOX_READONLY && d.roDim]}>
-                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
+                <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.working, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => decide(false)}>
                   <Text style={d.btnRejectT}>✕ 拒绝</Text>
                 </PressScale>
                 {wr!.remember ? (
-                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
+                  <PressScale style={[d.btnRemember, d.opRipple]} ripple={withA(c.working, 0.18)} haptic disabled={WAITBOX_READONLY} onPress={() => setRmOpen(true)}>
                     <Text style={d.btnRememberT}>允许并记住</Text>
                   </PressScale>
                 ) : null}

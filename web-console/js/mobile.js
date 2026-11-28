@@ -29,10 +29,10 @@
       const svg = (name) => `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
       const ENGINE_SHORT = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen", codebuddy: "CodeBuddy", zcode: "ZCode" };
       const ENGINE_BADGE = { claude: "claude", codex: "codex", trae: "trae", "qwen-code": "qwen", codebuddy: "codebuddy", zcode: "zcode" };
-      const STATUS_TAG = { WORKING: ["运行中", "info"], WAITING: ["待处理", "action"], ERROR: ["错误", "danger"], DONE: ["完成", "done"] };
+      const STATUS_TAG = { WORKING: ["运行中", "st-working"], WAITING: ["待处理", "st-waiting"], ERROR: ["错误", "st-error"], DONE: ["完成", "st-done"] }; // DEV-40 T4：.tag.st-* 状态胶囊族（词表 §三——修前手机「运行中」info 蓝违色相恒等律）
       // #291 帧分类判活：WORKING 过真判定（#d-session 域 session-domain 挂的全局；缺=老壳降级原样）——待命不占在跑计数
       const isRealW = (s) => (window.__ccDeck005IsRealWorking ? window.__ccDeck005IsRealWorking(s) : true);
-      const stTag = (s) => (s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"] : (STATUS_TAG[s.status] || ["完成", "done"]); // #287 值守 PM 待命态替代 DONE 假死；UI 反馈批 1029 件A：桥缓存 pm_standby 只随快照派生，PM 开工翻 WORKING 后陈标残留=干活中显「待命」矛盾——非 WORKING 态才标（干活期走 STATUS_TAG 正常显示）
+      const stTag = (s) => (s.pm_standby && s.status !== "WORKING") ? ["待命", "st-standby"] : (STATUS_TAG[s.status] || ["完成", "st-done"]); // #287 值守 PM 待命态替代 DONE 假死（DEV-40 T4：待命走 st-standby 灰胶囊——词表 S2，旧 waiting 类无定义恒落中性底）；UI 反馈批 1029 件A：桥缓存 pm_standby 只随快照派生，PM 开工翻 WORKING 后陈标残留=干活中显「待命」矛盾——非 WORKING 态才标（干活期走 STATUS_TAG 正常显示）
       const mToast = (msg) => { const t = document.getElementById("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(mToast._t); mToast._t = setTimeout(() => t.classList.remove("show"), 2400); };
       const allSessions = () => [...bridge.sessions.values()];
       const needAction = (s) => s.status === "WAITING" || s.status === "ERROR";

@@ -677,7 +677,7 @@
                 const basename = (path) => window.__ccDeck005PathUi.baseName(path);
                 const STATUS_WORD = { WORKING: "运行中", WAITING: "待处理", ERROR: "错误", DONE: "完成" };
                 const STATUS_DOT = { WORKING: "working", WAITING: "waiting", ERROR: "error", DONE: "done" };
-                const STATUS_TAG = { WORKING: "info", WAITING: "action", ERROR: "danger", DONE: "done" };
+                const STATUS_TAG = { WORKING: "st-working", WAITING: "st-waiting", ERROR: "st-error", DONE: "st-done" }; // DEV-40 T4：对齐状态胶囊族（词表 §三；本图当前无消费面=防复活漂移种）
 
                 // W-PROJTEAM1 期一（1109 用户拍板「项目⊇团队」）：团队层读侧派生——relay
                 // teamStateOf 同口径端上镜像。三态：键缺席=存量组自动升格有团队（formedAt
