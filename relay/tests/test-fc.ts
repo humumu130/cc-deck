@@ -344,7 +344,7 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
     ok(sd.includes('viewSource() === "aggregate" && message.type !== "SNAPSHOT" && (context === cloudCtx || context === ctx))'), "CV4B-F4 P2-1：aggregate Team 门前台两源白名单（warm ctx 的 BOARD/ORG 增量不混入聚合视图）");
     ok(sd.includes("setPendingPair(c.cfg.id, null); } catch (_) {} } // CONNV4B-fix1"), "CV4B-F5 P2-2：destroyCtx 清 sessionStorage per-source pendingPair 键（防孤儿键+陈旧 pair 覆盖新鲜 rk）");
     ok(sd.includes('fgStatus: String(cloudCtx.status || "")') && sd.includes("warmStatus: warmId ?"), "CV4B-F6 ConnPool 观测面扩（fgStatus/warmStatus——独立状态机探针断言面）");
-    const pb = readFileSync(join(root, "relay", "scripts", "probe-connv4b.mjs"), "utf-8");
+    const pb = readFileSync(join(root, "relay", "probes", "probe-connv4b.mjs"), "utf-8");
     ok(pb.includes("④b CONNV4B-fix1 锚A") && pb.includes("fgStatus !== st.warmStatus") && pb.includes("④c CONNV4B-fix1 锚B"), "CV4B-F7 探针三锚入库（warm 自身状态机活+fg/warm 独立值观察+armed-destroy 时序——串台形态同对象恒等必红）");
   }
   }
