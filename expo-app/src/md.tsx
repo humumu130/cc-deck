@@ -251,7 +251,7 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
 // 外层 codeBlockT）；add/del（diff 专用）映射主题 done/waiting，与工具 diff 行同色语言
 function synColorOf(t: SynTok, c: ThemeColors, mode: "dark" | "light"): string {
   if (t.c === "add") return c.done;
-  if (t.c === "del") return c.waiting;
+  if (t.c === "del") return c.working; // DEV-40 T4：del 删除线琥珀走 working 黄（原借 waiting——词表后 waiting=橙相，警示琥珀统一指 working 保原观）
   return (mode === "dark" ? SYN_DARK : SYN_LIGHT)[t.c];
 }
 

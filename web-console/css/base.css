@@ -750,6 +750,17 @@
     .tag.dispatch-pending { flex: none; background: transparent; background: color-mix(in srgb, var(--working) 12%, transparent); color: var(--working); border: 1px solid transparent; border: 1px solid color-mix(in srgb, var(--working) 32%, transparent); } /* W-DISPVIS C2：成员卡「已派单·等待处理」角标 */
     .eng-auth-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--working); margin-left: 5px; vertical-align: middle; }
     .tag.info { background: var(--info-bg); color: var(--info); }
+    /* DEV-40 T4 状态词汇表（docs/design/status-vocabulary.md §三）：运行态词形全局胶囊族
+       .tag.st-*——「软底 12%＋同相描边 32%＋同相文字」配方与 #d-team member-state（DEV-30
+       P2-3 定版）同源同款，供检查器会话块/手机卡/桥副本等文字胶囊位复用；旧 .tag.done/
+       .action/.danger/info 语义档保留给非状态用途，不得再作运行态词形（修前实锤：检查器
+       「运行中」走 done 绿、手机走 info 蓝=同一态三色相，违词表纪律①色相恒等）。静态兜底行
+       在前＋color-mix 在后（B1② 双写军规，blankset 计数随动）。 */
+    .tag.st-working { background: transparent; background: color-mix(in srgb, var(--st-working) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-working) 32%, transparent); color: var(--st-working); }
+    .tag.st-waiting { background: transparent; background: color-mix(in srgb, var(--st-blocked) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-blocked) 32%, transparent); color: var(--st-blocked); }
+    .tag.st-done { background: transparent; background: color-mix(in srgb, var(--st-idle) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-idle) 32%, transparent); color: var(--st-idle); }
+    .tag.st-error { background: transparent; background: color-mix(in srgb, var(--st-error) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-error) 32%, transparent); color: var(--st-error); }
+    .tag.st-standby { background: transparent; background: color-mix(in srgb, var(--st-closed) 12%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-closed) 32%, transparent); color: var(--dim); } /* 待命/离席共用灰相（S2/S6 同灰族，词表 §三）；文字用 dim 保可读 */
     /* #172-F1 高度链：workspace 是 column flex 容器（grid 子项），缺 min-height:0 时内容撑开会把
        footer(composer) 推出视口——补 min-height:0 放行收缩（与 #162 同族，162 修 desktop-screen 级） */
     .workspace { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
@@ -1677,7 +1688,7 @@
     .m-kids .m-row { min-height: 46px; }
     .m-kids-loose { display: grid; margin-left: 2px; border-left: 1px dashed var(--line-soft); }
     .m-foot {padding: 18px 4px 4px; margin-top: 8px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: var(--fs-B); text-align: center;}
-    .segment-bar .faint, .inspector-title > span:last-child, .metric b, .mobile-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .segment-bar .faint, .inspector-title > span:last-child:not(.tag), .metric b, .mobile-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; } /* DEV-40 T4：:not(.tag) 放行状态胶囊（.tag.st-* 同相文字——灯黄本就是暗底文字安全档，被本行压成近白=胶囊丢第三通道） */
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
     .lane-head {display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: var(--fs-D); font-weight: 700;}
@@ -3272,17 +3283,17 @@
     /* #B3-19 状态灯静态光圈：error/waiting 补 1px 淡光圈（working 走既有呼吸动画；
        W-V8 批2：done=灰退隐态摘光圈——完成不该比进行中还亮） */
     .status-dot.error { box-shadow: none; box-shadow: 0 0 7px var(--status-error-glow), 0 0 0 1px color-mix(in srgb, var(--error) 35%, transparent); }
-    .status-dot.waiting { box-shadow: none; box-shadow: 0 0 6px var(--status-waiting-glow), 0 0 0 1px color-mix(in srgb, var(--working) 35%, transparent); }
+    .status-dot.waiting { box-shadow: none; box-shadow: 0 0 6px var(--status-waiting-glow), 0 0 0 1px color-mix(in srgb, var(--st-blocked) 35%, transparent); } /* DEV-40 T4：光圈环随 1014 五色灯归位橙相（原 --working 黄=B3-19 时代漂移，与 :713 空心橙环/lamp-dot.blocked「同源」注释相悖——词表纪律①） */
     /* 浅色 LED 化：亮底上淡色圆点发灰——补 1px 深化描边定型 */
     html[data-theme="light"] .status-dot { box-shadow: none; box-shadow: 0 0 0 1px color-mix(in srgb, #22364A 32%, transparent); }
     html[data-theme="light"] .status-dot.error { box-shadow: none; box-shadow: 0 0 6px var(--status-error-glow), 0 0 0 1px color-mix(in srgb, var(--error) 50%, transparent); }
-    html[data-theme="light"] .status-dot.waiting { box-shadow: none; box-shadow: 0 0 6px var(--status-waiting-glow), 0 0 0 1px color-mix(in srgb, var(--working) 50%, transparent); }
+    html[data-theme="light"] .status-dot.waiting { box-shadow: none; box-shadow: 0 0 6px var(--status-waiting-glow), 0 0 0 1px color-mix(in srgb, var(--st-blocked) 50%, transparent); }
     /* 会话列表头像角标灯（font2 拍板）：10px 灯体 + 2px 底色切角环 + 3px 状态色 20% 光环，
        环结构统一明暗两主题（bg1 随主题取值），状态只注入 --dot-halo 色源 */
     #d-session .srow-ava .status-dot.done { --dot-halo: var(--faint); }
     #d-session .srow-ava .status-dot.error { --dot-halo: var(--error); }
-    #d-session .srow-ava .status-dot.waiting { --dot-halo: var(--working); }
-    #d-session .srow-ava .status-dot.working { --dot-halo: var(--done); }
+    #d-session .srow-ava .status-dot.waiting { --dot-halo: var(--st-blocked); } /* DEV-40 T4：halo 随词表归位（原 --working 黄=同漂移族） */
+    #d-session .srow-ava .status-dot.working { --dot-halo: var(--st-working); } /* DEV-40 T4：halo 归位工作黄（原 --done 绿=W-V8 批2a「运行中绿系」时代残留，与 1014 五色灯/本批 tag 收敛同族） */
     /* dock 状态灯同族光圈（--session-state-color 随态位） */
     .session-state-dot { box-shadow: none; box-shadow: 0 0 6px color-mix(in srgb, var(--session-state-color) 38%, transparent), 0 0 0 1px color-mix(in srgb, var(--session-state-color) 32%, transparent); }
     @media (max-width: 959px) {
@@ -3729,12 +3740,13 @@ html[data-theme="light"] .ver-mismatch-banner[data-mismatch="core"] { background
 .cc-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: none; height: 20px; padding: 2px 8px; border-radius: 999px; font-size: var(--fs-C); font-weight: 500; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
 .cc-badge.is-neutral { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.10); color: #9ca3af; }
 .cc-badge.is-accent { background: var(--info-bg); border-color: var(--info); border-color: color-mix(in srgb, var(--info) 32%, transparent); color: var(--info); } /* DEV-30 P2-6：外来蓝 #60a5fa/#2563eb 收编 --info 族（双值游离于色预算立法外；--info/--info-bg 双主题各自定义，浅色覆写行退役）；border-color 静态兜底=B1② 双写（旧内核全强度 info 描边可读） */
-.cc-badge.is-live { background: rgba(251,191,36,.15); border-color: rgba(251,191,36,.32); color: #fbbf24; }
-.cc-badge.is-run { background: rgba(53,220,151,.16); border-color: rgba(53,220,151,.42); color: var(--done); } /* 运行中=全站唯一保留饱和实底语义的态（C5 绿） */
+.cc-badge.is-live { background: transparent; background: color-mix(in srgb, var(--st-working) 15%, transparent); border-color: var(--tag-border); border-color: color-mix(in srgb, var(--st-working) 32%, transparent); color: #fbbf24; color: var(--st-working); } /* DEV-40 T4：第二黄 #fbbf24 字面量收编 --st-working（词表纪律①黄相唯一值；静态兜底行在前=color-mix 在后，B1② 双写军规——rgba 兜底不计静态，走 transparent/var 档同 member-state 族） */
+.cc-badge.is-run { background: rgba(255,210,77,.16); border-color: rgba(255,210,77,.42); color: var(--st-working); } /* 运行中=全站唯一保留饱和实底语义的态（C5 实底角色保留；DEV-40 T4 审查B P1-1：色相绿→黄归位词表 S1——带「运行中」词面的徽章不得渲 done 相，rgba 静态族无 color-mix 不计 B1②） */
 .cc-badge.is-warn { background: rgba(229,137,91,.13); border-color: rgba(229,137,91,.34); color: var(--st-blocked); } /* 待填/待处理橙（C5） */
 .cc-badge.is-alert { background: rgba(224,138,133,.14); border-color: rgba(224,138,133,.34); color: #E08A85; } /* 需行动降饱和红（A3） */
 html[data-theme="light"] .cc-badge.is-neutral { background: rgba(15,23,42,.05); border-color: rgba(15,23,42,.12); color: #6b7280; }
 html[data-theme="light"] .cc-badge.is-live { background: rgba(180,83,9,.12); border-color: rgba(180,83,9,.28); color: #b45309; }
+html[data-theme="light"] .cc-badge.is-run { background: rgba(180,83,9,.14); border-color: rgba(180,83,9,.38); color: #b45309; } /* DEV-40 T4 审查B P1-1：色相归黄后需亮档覆写（绿值时代两主题通用；值族=is-live 同款亮档黄） */
 html[data-theme="light"] .cc-badge.is-warn { background: rgba(194,65,12,.10); border-color: rgba(194,65,12,.28); color: #c2410c; }
 html[data-theme="light"] .cc-badge.is-alert { background: #FDE8E8; border-color: rgba(192,57,43,.28); color: #C0392B; } /* A3 拍板值原样（浅色域） */
 

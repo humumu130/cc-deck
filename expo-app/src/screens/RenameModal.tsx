@@ -73,8 +73,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 10, backgroundColor: c.panel2, paddingHorizontal: 12,
     paddingVertical: 10, marginBottom: 16,
   },
-  inputErr: { borderColor: withA(c.waiting, 0.6) },
-  errT: { color: c.waiting, fontSize: 12, marginTop: -10, marginBottom: 12 },
+  inputErr: { borderColor: withA(c.working, 0.6) },
+  errT: { color: c.working, fontSize: 12, marginTop: -10, marginBottom: 12 },
   btnRow: { flexDirection: "row", gap: 10 },
   btn: {
     flex: 1, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center",

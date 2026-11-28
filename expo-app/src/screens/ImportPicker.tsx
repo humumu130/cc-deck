@@ -389,7 +389,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptySubT: { color: c.faint, fontSize: 11.5 },
   busyT: { color: c.dim, fontSize: 12.5, marginTop: 6 },
   okT: { color: c.done, fontSize: 12.5, fontWeight: "700", marginTop: 6 },
-  failT: { color: c.waiting, fontSize: 12.5, marginTop: 6 },
+  failT: { color: c.working, fontSize: 12.5, marginTop: 6 }, // DEV-40 T4：警示琥珀指 working（原借 waiting，词表后 waiting=橙相）
   // #90 授权入网次级链接行（主操作是选连接回传，这里是「只授权不搬配置」的另一意图）
   grantRow: { alignItems: "center", paddingVertical: 8, marginTop: 2 },
   grantT: { color: c.brandA, fontSize: 12, fontWeight: "600" },

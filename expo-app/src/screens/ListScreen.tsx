@@ -1423,12 +1423,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const artPoolOn = useMemo(() => snap.sources.some(artPoolGate), [snap.sources]);
 
   // #357 连接 chip 三态色（用户定）：已连接=绿 / 连接中·重连中=黄 / 连不上=红
+  //（DEV-40 T4：末档原走 c.waiting——该 token 历史上是红、1019 转黄后此处静默变黄违 #357
+  // 用户定版；词表纪律④红只给错误，连不上=错误态，归位 c.error）
   const connColor =
     connected || snap.connState === "online"
       ? c.done
       : snap.connState === "connecting" || snap.connState === "reconnecting"
         ? c.working
-        : c.waiting;
+        : c.error;
 
   const [collapseIdle, setCollapseIdle] = useState(false);
   useEffect(() => {
@@ -2337,7 +2339,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   teamEntryMore: { color: c.faint, fontSize: 9.5, marginLeft: 2 },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 6 }, /* #83 同缩进 */
   /* #192 WAITING 卡摘要报警（对齐桌面 .card-summary.waiting；dangerFg 双主题保 AA） */
-  sumWaiting: { color: c.dangerFg, fontWeight: "600" },
+  sumWaiting: { color: c.blocked, fontWeight: "600" }, // DEV-40 T4：等你态字色走橙（原 dangerFg 红违词表纪律④红只给错误）
   foot: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 6 }, /* #83 同缩进 */
   // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
   meta: { fontSize: 10, color: c.faint, flexShrink: 1 },

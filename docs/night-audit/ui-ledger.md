@@ -30,11 +30,11 @@
 |---|---|---|---|---|
 | P2-1 | 全局 | **字号字面量绕过用户「界面字号」设置**：`font-size: 9.5/10.5/11.5px` 等半像素及 24 处 11px、15 处 10px、13 处 12px 等直值不走 `--fs-*` 阶梯——用户调「界面字号 90/110/125%」时这些文字不缩放，密度档（compact/relaxed）也不联动 | `base.css` 多处（如 `:825` fz-badge 9.5px、`:4063` echo-retry 10px 等；阶梯定义 `:2671-2673`） | **本批做半像素收敛**（9.5/10.5→--fs-micro、11.5→--fs-C、12.5→--fs-D，11 处清零）；整数直值存量（11/12/13/14px ~70 处）涉及面广留后续批专项收敛 |
 | P2-2 | 团队→看板→卡面时间行 | 「创建 HH:MM · 更新 HH:MM」分隔符「·」为 `::before` 附着，字号 11px 下视觉接近无缝，扫读像连排 | `base.css:2111`（`content:"·\2009"`）+ `:2106`（gap:4px） | **本批做**：分隔符后间距 `\2009`→`\2002`（en space）或 gap 4→5px（微调，双主题核对） |
-| P2-3 | 团队→成员 tab | 状态徽标三种风格并存：待处理=灰描边、运行中=黄实底、已完成=绿实底（描边 vs 实底混用） | `team-domain.js` 成员卡 STATUS 徽标模板（t03 实证） | **已修（DEV-30）**：胶囊层归一「软底 12%＋同相描边 32%」族（.tag.authn 同语言），补 state-waiting/offline 缺位规则；1014 五色灯（status-dot 本体）经查证为用户定版语言不动（`base.css:1988-1996`） |
+| P2-3 | 团队→成员 tab | 状态徽标三种风格并存：待处理=灰描边、运行中=黄实底、已完成=绿实底（描边 vs 实底混用） | `team-domain.js` 成员卡 STATUS 徽标模板（t03 实证） | **已修（DEV-30）**：胶囊层归一「软底 12%＋同相描边 32%」族（.tag.authn 同语言），补 state-waiting/offline 缺位规则；1014 五色灯（status-dot 本体）经查证为用户定版语言不动（`base.css:1988-1996`）。**DEV-40 复核在位**：配方升为全局 `.tag.st-*` 状态胶囊族（词表 §三），member-state 本体未动 |
 | P2-4 | 通知面板 | 时间戳颜色两种灰并存（26 分钟前 vs 4 分钟前 视觉不同）——relTime 分档色未统一 | `notify.js` nrow-time 渲染 | **已修（DEV-30）**：根因=浅色档 70% mix 覆写只挂面板行（`.nrow .t .l1 .nrow-time`），来源卡（:2296）/移动卡（:3800）漏网仍 --faint；三处同色收敛（`base.css` 浅色覆写扩选） |
 | P2-5 | 设置→连接与设备 | 「这台电脑」卡两行操作钮垂直间距 ~40px，与源列表紧凑行距不一致；「用配对码添加」按钮与上行右侧元素横向错位 | `settings-domain.js` 连接面板模板 | **已修（DEV-30）**：① relaystat 行补 v8-swrow 同款行律动（padding 8px+虚线底，旧态零内距无边线=间距堆 40px）；② 空态「用配对码添加」行 .settings-row→v8-swrow 归一（padding/右钮锚位与源列表各行同拍，消横向错位） |
 | P2-6 | 全局 | 外来蓝 `#60a5fa`（`.cc-badge.is-accent`）不在 token 体系（tokens 只有 --info 族），带浅色对偶 #2563eb 但双值都游离于色预算立法 | `base.css:3710/:3716` | **已修（DEV-30）**：收编 --info 族（`var(--info)` + `--info-bg` + 32% color-mix 描边）；两 token 双主题各自定义，浅色硬编码覆写行退役 |
-| P2-7 | 会话卡 | 「等你拍板」描边胶囊 / 「CC Deck」实底团队 chip / 引擎徽章三套 chip 风格混用（描边/实底/圆角档不一） | `session-domain.js:1468`（srow-r2 徽章群） | **查证·维持（DEV-30）**：几何已同 pill 档（999 圆/1px 边/同 padding 档，`.tag`/`.team-chip`/`.engine-badge`/`.cc-badge` 四族核对）；填充/描边差异=语义分层且各有用户期溯源（W-AWAITUSER 橙描边=行动指向一级、团队 chip accent=归属、引擎徽章=品牌身份），强行归一会覆盖拍板设计——独立专项立项与否留 leader |
+| P2-7 | 会话卡 | 「等你拍板」描边胶囊 / 「CC Deck」实底团队 chip / 引擎徽章三套 chip 风格混用（描边/实底/圆角档不一） | `session-domain.js:1468`（srow-r2 徽章群） | **销项（DEV-40·T4 定案成文）**：DEV-30 查证维持（几何已同 pill 档；填充/描边差异=语义分层且各有用户期溯源）——DEV-40 状态词汇表 §四把该分层立为 chip 三层规范（行动指向橙描边/归属 accent/身份品牌色），「维持」从口头结论升为成文规范（`docs/design/status-vocabulary.md`），后续状态类 UI 过闸必查 |
 | P2-8 | 设置→通用 | 卡片标题（外观/快捷键/通知）与页头层级字号区分不足；通知卡行距 < 快捷键卡行距（密度不均） | `settings-domain.js:1298` 模板 + `base.css` v8-setcard | **已修（DEV-30）**：① 卡标题 h5 --fs-C→--fs-E（与页头 17px 拉开层级，色保持 dim）；② v8-swrow 补 min-height 40px 行密度下限（纯开关行与带 v8-swd 说明行高度同拍） |
 | P2-9 | 会话详情→composer 底行 | 附件/相机图标与权限胶囊/模型胶囊/发送钮基线目视不齐（胶囊偏高） | `base.css` `.composer-bottom`（align-items 基线混排） | **查证·几何已齐（DEV-30）**：代码面 align-items:center + 图标/胶囊同 26px、发送/停止同 34px，中轴共线（非 baseline 混排——台账根因栏记载有误）；d02b 元素级截图复核见 DEV-30 回执，真机 1x/2x 仍留待装机批抽验 |
 | P2-10 | 团队→看板 | 顶部五段比例条无图例联动说明（hover 有 title，静读靠猜） | `team-domain.js:554` board-overview | **查证·已在位（DEV-30）**：`board-legend` 图例行（色点+泳道词+计数）1020 boardpolish 批（PR #28 线）已落地，本项登记时未核现状；t01 重拍复核图例行在位 |
@@ -111,7 +111,7 @@ leader 终裁（verdict 收讫）：③ connNote 追认立案收、④ SESSION_M
 **connNote 源码锚（本修批）**：`relay/scripts/test-280-conn-page.ts` 新增 C 组三锚——C1 单口定义唯一+优先级序字面（云桥在连 > origin 警告 > token 引导）、C2 三消费点调用计数=3（副标题 `UI.subHint`/中央空态 `noteHtml`/旧径兜底 `noteNode`）、C3 三段空态文案字符串字面量各只在单口一次（三元链复活即字面量翻倍翻红；注释「」提及不计）。
 
 **审查 P3 观感三项 → 入「待后续批」**（不阻收割）：
-- l02：侧栏团队卡「运行中」徽章未随胶囊统一（软底旧风格与 member-state 描边族并存）——后续批统一或明示有意区分。
+- ~~l02：侧栏团队卡「运行中」徽章未随胶囊统一（软底旧风格与 member-state 描边族并存）~~ **已修（DEV-40）**：根因=检查器会话块 STATUS_TAG 走 `.tag.done` 绿软底（W-V8 批2a 旧绿系），与 member-state 描边族两语言并存。全局立 `.tag.st-*` 状态胶囊族（软底 12%+同相描边 32%，配方=member-state 同款，`base.css` .tag.info 后），session-domain/mobile/bridge-core 三 STATUS_TAG 全数改走 st-*；手机「运行中」info 蓝、检查器「运行中」done 绿两处乱面同批收敛（状态词汇表 `docs/design/status-vocabulary.md` §三/§五）。
 - l04：「当前」绿徽标右缘较按钮右轨内缩 ~20px——后续批对齐或立规范。
 - s0-general：区块标题（E 档）与行标签（A 档）层级观感仍弱；深色下「空闲置灰」原生下拉疑似白底（多模态单源未复核，待查）。
 
@@ -128,4 +128,15 @@ leader 终裁（verdict 收讫）：③ connNote 追认立案收、④ SESSION_M
 - **P3-6 ✓**：版本徽章 chip 化（1px 边/surface 底），装机关于页显示 `0.7.1-test.37 通道 test`。
 - **N1 ✓（字节面）**：装机 base.css:2584 `.mobile-settings-detail .mobile-back` 规则完整可解析（补括号复原随包分发）；自动化点进详情页未达（导航选择器面），规则生效以字节+规则语义背书，移动真机一眼留用户。
 - 真机 app 窗口浅色实看：布局无新增 P1 级失调；app 内深色档（console 自带主题，不随系统翻转）未自动化点换，harness 暗色矩阵已覆盖装机字节，真机深色一眼留用户。
+
+## §9 DEV-40 状态词汇表批（2026-11-28 夜，S2-W1 代码批 T4 件）
+
+来源：竞品调研 T4/U1（orca 六态 glyph＋tint 纪律）——状态可视化「词汇表不统一」是台账实锤（P2-3/P2-7/l02 三拖尾同根）。本批立规范＋落地替换：
+
+- **规范落盘**：`docs/design/status-vocabulary.md`（六态定义/染色纪律四条/glyph 三端矩阵/chip 三层规范/新状态面检查单）。
+- **代码收敛**（词表 §五 全清单）：全局 `.tag.st-*` 状态胶囊族（base.css，配方=member-state 同款）；session-domain/mobile/bridge-core 三 STATUS_TAG 改走 st-*（检查器「运行中」绿、手机「运行中」蓝两乱面销）；`.cc-badge.is-live` 第二黄 #fbbf24 收编 `--st-working`；expo `theme.ts` waiting 分相（#E5895B/#C05B33，原与 working 同值同相）；expo「需要确认」红字改橙（dangerFg→blocked，纪律④）；#357 连接 chip 末档归位红（c.error——原借 waiting，token 历史红转黄后静默违用户定版）；expo 权限危险确认族归位红（detail-styles perm* 八处——注释明书「红 tint/红从属条」而 token 已非红，同 trap）；警示琥珀借用八处位 15 声明改指 working 保原观（md del/ImportPicker failT/NewSessionModal×2/SetupScreen×3/RenameModal×2/detail-styles diffDel·KC img·ripple×4）。
+- **审查闸返修收敛**（review-dev40-a/b 两路回执，P1×1+P2 随批×4）：项目长页 vrow 徽章 `.cc-badge.is-run`「运行中」绿→黄归位 S1＋亮档覆写、离线徽章橙→中性灰（B P1-1）；设置域首屏占位会话卡 tagClass info 蓝→chipClass 走 st-* 族（A P2-1，tagClass 拆字段只司 CTA 判定）；expo SetupScreen 连接末档橙→红对齐 #357（A/B P2 交叉）；`--status-working-glow` 双主题绿残留黄化（⑂/agdot 呼吸光圈，B P2）；pc3-dot 聚合点轴与 dispatch-pending 入词表 §四 豁免登记（非状态轴/定版面，改色走设计变更单）。
+- **销项**：l02（§7.1 待后续批→已修）、P2-7（维持→定案成文）、P2-3（复核在位）。
+- **机器面**：`test:005-blankset` B1② 裸奔集与基线恒等（81 条同签名——本批新增 color-mix 全双写）；`test:fc`/`test:teampolish` 全绿。
+- **新发现（范围外）**：expo `theme.ts` waiting token 历史三迁（红→黄→橙）静默改色多处的「跨端 token 同名异色陷阱」已有先例注释（SettingsPage:748 P81-8EFIX）——词表落地后此类陷阱由 §三 矩阵显式约束，但 expo 侧无机器锚（状态色值无 grep 闸），建议后续批补「expo 状态色值锚」测试（对照 theme.ts 与 web tokens.css 同相断言）。
 

@@ -919,7 +919,7 @@ function SettingsPageBase({
                      3.5s 自动收回（armDelete 每次重置计时） */
                   <Pressable
                     style={d.srvDelArm}
-                    android_ripple={{ color: withA(delArm?.sure ? c.error : c.waiting, 0.15), borderless: false, radius: 13 }}
+                    android_ripple={{ color: withA(delArm?.sure ? c.error : c.working, 0.15), borderless: false, radius: 13 }}
                     onPress={() => {
                       if (delArm?.sure) { setDelArm(null); remove(e); }
                       else armDelete(e.id, true);
@@ -1598,7 +1598,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvEdit: { width: 30, height: 40, alignItems: "center", justifyContent: "center" },
   // #46 长按亮出的删除按钮（替常驻 ✕）
   srvDelArm: { paddingHorizontal: 10, height: 40, alignItems: "center", justifyContent: "center" },
-  srvDelArmT: { color: c.waiting, fontSize: 12.5, fontWeight: "700" },
+  srvDelArmT: { color: c.working, fontSize: 12.5, fontWeight: "700" },
   // #130 添加入口改虚线幽灵卡（原右下角孤悬蓝字链接）：与服务器卡同宽的占位卡。
   // 虚线描边由 JSX 内 SVG Rect 绘制（RN Android dashed+borderRadius 缺角）
   ghostWrap: { marginBottom: 8 },
@@ -1662,7 +1662,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   // pairRefreshT 已删（W-MSET3 ⑤ ↻ 字符图标退役 → ICON_REFRESH 线图标）
   pairHintT: { color: c.faint, fontSize: 10, marginTop: 6, textAlign: "center" },
-  pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
+  pairErrT: { color: c.working, fontSize: 11.5, marginBottom: 8 },
   // #212 记住规则行：首行 tool（等宽粗体）+ scope 徽章 + [源名] + 删除，次行
   // pattern 等宽小字（命令前缀/目录路径）；卡形态与服务器行同语言
   ruleRow: {
@@ -1678,7 +1678,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ruleScopeT: { color: c.dim, fontSize: 9, fontWeight: "600", lineHeight: 11 },
   ruleSrc: { flex: 1, color: c.faint, fontSize: 9.5, textAlign: "right" },
   ruleDelT: { color: c.faint, fontSize: 11, marginLeft: "auto" },
-  ruleDelArmT: { color: c.waiting, fontSize: 11, fontWeight: "700", marginLeft: "auto" },
+  ruleDelArmT: { color: c.working, fontSize: 11, fontWeight: "700", marginLeft: "auto" },
   rulePat: { color: c.dim, fontSize: 10, fontFamily: "monospace", lineHeight: 13.5, marginTop: 3 },
   // #121 空闲变灰数字输入：窄框右锚（lever 同位），单位注脚。
   // #130 反馈（2026-09-21 用户真机）：输入框 30 高偏肥——降 26；负数说明已收进
