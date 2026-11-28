@@ -33,13 +33,16 @@ const escalatedCount = () => (reportText().match(/ESCALATED \[/g) ?? []).length;
 
 // ---------- 场景 A：持续超阈升级（一次/onset） ----------
 {
-  // 窗 500ms（本机事件循环有启动抖动，窄窗必 flaky——余量 3~5 倍起）
-  process.env.CCR_PATROL_ESCALATE_MS = "500";
+  // 窗 2000ms（DEV-33 预批修法，S3 终审参数）：CI 低配 runner 上 120ms 睡眠可实际
+  // 超睡 >500ms（run 46087000346 实锤 A1 假红）——窗 500→2000＋首睡眠 120→400，
+  // 不升方向余量 5 倍；后续「须超窗」睡眠同步抬到 ≥2200ms（定时器只晚不早，
+  // ≥2200ms 恒 > 2000ms 窗，升方向无假绿）。
+  process.env.CCR_PATROL_ESCALATE_MS = "2000";
   push("worker-stale", "3 个会话 WORKING 停滞>40min：x、y、z");
-  await sleep(120);
+  await sleep(400);
   push("worker-stale", "3 个会话 WORKING 停滞>40min：x、y、z"); // 窗内重复：不升
   assert(escalatedCount() === 0, "A1 窗内同文重复不升级");
-  await sleep(450); // 累计 ~570ms > 500ms 窗
+  await sleep(1800); // 累计 ~2200ms > 2000ms 窗
   push("worker-stale", "3 个会话 WORKING 停滞>40min：x、y、z");
   assert(escalatedCount() === 1, "A2 持续超阈 → ESCALATED 报告行落盘（面板外独立观察点）");
   await sleep(550);
@@ -52,12 +55,12 @@ const escalatedCount = () => (reportText().match(/ESCALATED \[/g) ?? []).length;
 // ---------- 场景 B：文本变化=新 onset；resolve 清账 ----------
 {
   push("worker-stale", "5 个会话 WORKING 停滞>40min：a、b、c、d、e"); // 文本变=新 onset
-  await sleep(550);
+  await sleep(2200);
   push("worker-stale", "5 个会话 WORKING 停滞>40min：a、b、c、d、e");
   assert(escalatedCount() === 2, "B1 文本变化=新 onset 重新可升（恶化形态不被旧 onset 吞）");
   resolveKey("worker-stale");
   push("worker-stale", "5 个会话 WORKING 停滞>40min：a、b、c、d、e"); // 恢复后新 onset
-  await sleep(550);
+  await sleep(2200);
   push("worker-stale", "5 个会话 WORKING 停滞>40min：a、b、c、d、e");
   assert(escalatedCount() === 3, "B2 resolve 清账（恢复后复发=新持续段可再升）");
 }
