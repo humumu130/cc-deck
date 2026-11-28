@@ -5,6 +5,7 @@
 //   A2 裸赋值清零（\.updated_at = 全仓只剩守卫函数体内 1 处/文件——新写手绕口即红）
 //   A3-A8 洗点接线锚（六洗点全走守卫口+心跳不洗双面+建卡初始化路径不受影响）
 //   B1-B7 守卫行为断言（提取函数体 eval 直跑：缺载/同值/回拨不推进，真值/force 推进）
+//   X1-X6 expo 面（DEV-40·R4 立即件——store.ts SESSION_UPDATED 守卫收编，三端同答案）
 // 范式：test-ui-followup 源码锚（web-console 是 IIFE 脚本无法 import，行为面走提取
 // eval——守卫函数体自包含无外部依赖，可安全隔离求值）。
 // 直跑：env -u CCR_ORG_DIR -u CCR_DATA_DIR npx tsx scripts/test-updated-at-guard.ts
@@ -60,7 +61,8 @@ console.log("B 守卫行为断言（提取函数体隔离求值）：");
 const extract = (src: string, fname: string): string => {
   const i = src.indexOf(`function ${fname}(`);
   if (i < 0) return "";
-  const m = src.slice(i).match(new RegExp(`^function ${fname}\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\s*\\}`));
+  // TS 签名容差（DEV-40 X 组）：`) : boolean {` 的返回注解可选段——web 两份无注解不受扰
+  const m = src.slice(i).match(new RegExp(`^function ${fname}\\([^)]*\\)\\s*(:\\s*\\S+\\s*)?\\{[\\s\\S]*?\\n\\s*\\}`));
   return m ? m[0] : "";
 };
 const fnText = extract(ssd, "touchUpdatedAt");
@@ -198,6 +200,46 @@ console.log("R4 relay 行为断言（真实例：空闲 60s 不变/回拨不洗/
     if (prevData === undefined) delete process.env.CCR_DATA_DIR; else process.env.CCR_DATA_DIR = prevData;
     if (prevPlugin === undefined) delete process.env.CC_DECK_PLUGIN; else process.env.CC_DECK_PLUGIN = prevPlugin;
     rmSync(dd, { recursive: true, force: true });
+  }
+}
+
+console.log("X expo 面（DEV-40·R4 立即件——store.ts SESSION_UPDATED 守卫收编，三端同答案）：");
+{
+  const st = rf("expo-app", "src", "store.ts");
+  console.log("X1 单点守卫在位：");
+  ok(st.includes("export function touchUpdatedAt(sess"), "X1-1 store.ts 模块级定义守卫（含语义注释=写手契约可读）");
+  ok(st.includes("DL-P1-7（DEV-40·R4 立即件）"), "X1-2 守卫带 saga 溯源注释（谱系=updated-at-writers.md）");
+  console.log("X2 裸赋值清零（绕口新写手即红）：");
+  ok(bareWrites(st) === 1, `X2-1 store.ts 裸赋值仅守卫体内 1 处（实得 ${bareWrites(st)}）`);
+  console.log("X3 洗点接线锚（载荷消费+心跳不洗+建卡不受影响）：");
+  ok(st.includes("touchUpdatedAt(s, (msg.payload as { updated_at?: number }).updated_at);"), "X3-1 SESSION_UPDATED 洗点经守卫口（载荷显式携带才推进，缺载保持既有值——#271 口径）");
+  const updSeg = st.slice(st.indexOf("case \"SESSION_UPDATED\""), st.indexOf("case \"SESSION_HEARTBEAT\""));
+  ok(!/,\s*true\)/.test(updSeg), "X3-2 SESSION_UPDATED 洗点不带 force（载荷时刻是唯一推进源——与 web onSessionUpdated 同款非 force 口）");
+  ok(updSeg.includes("DEV-40 补律②"), "X3-3 洗点带律②溯源注释（同值/回拨不洗——本单补齐面可读）");
+  const hbAt = st.indexOf("case \"SESSION_HEARTBEAT\"");
+  const hbSeg = st.slice(hbAt, st.indexOf("case \"SESSION_WAITING\"", hbAt));
+  ok(hbSeg.includes("s.elapsed_hint = msg.payload.elapsed_ms;") && !/\.updated_at\s*=(?![=>])/.test(hbSeg), "X3-4 心跳块零 updated_at 写（expo 只读 elapsed_ms——三现口径不回退）");
+  ok(st.includes("started_at: msg.ts,\n          updated_at: msg.ts,"), "X3-5 SESSION_CREATED 建卡初始化不受影响（新对象非洗点）");
+  console.log("X4 守卫行为断言（提取函数体隔离求值，TS 签名剥注）：");
+  const fnTextExpo = extract(st, "touchUpdatedAt");
+  ok(!!fnTextExpo, "X4-0 store.ts 守卫函数体可提取（提取失败=格式漂移，锚需同步；内层 if 须单行无花括号——与 web 两份同约束）");
+  if (fnTextExpo) {
+    // expo 守卫带 TS 注解（strict 模式必需），剥离后与 web 两份同法隔离求值
+    const jsText = fnTextExpo.replace(/function touchUpdatedAt\([\s\S]*?\)\s*:\s*boolean \{/, "function touchUpdatedAt(sess, ts, force) {");
+    // eslint-disable-next-line no-new-func
+    const fn = new Function(`return (${jsText});`)() as (sess: { updated_at?: number } | null, ts: unknown, force?: boolean) => boolean;
+    let s: { updated_at?: number } | null;
+    s = null;
+    ok(fn(s, 1700000001000) === false, "X4-1 null 会话安全返回 false");
+    s = { updated_at: 1700000000000 };
+    ok(fn(s, undefined) === false && s.updated_at === 1700000000000, "X4-2 缺载不伪造不推进");
+    ok(fn(s, 0) === false && fn(s, NaN) === false && fn(s, "abc") === false && s.updated_at === 1700000000000, "X4-2b 非数 ts 不推进");
+    ok(fn(s, 1700000000000) === false && s.updated_at === 1700000000000, "X4-3 同值不洗（空闲跳序根因形态——DEV-40 补齐的律②）");
+    ok(fn(s, 1699999999000) === false && s.updated_at === 1700000000000, "X4-4 回拨不洗（乱序旧转录 ts 不回退排序面——修前实勘红形态）");
+    ok(fn(s, 1700000002000) === true && s.updated_at === 1700000002000, "X4-5 真新值推进");
+    ok(fn(s, 1700000001000, true) === true && s.updated_at === 1700000001000, "X4-6 force 真态变必推进（即便回拨——三律③与 web 同签）");
+    const s2 = { updated_at: 1700000000000 };
+    ok(fn(s2, "1700000005000") === true && s2.updated_at === 1700000005000, "X4-7 数字字符串 ts 归一推进");
   }
 }
 

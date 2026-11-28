@@ -256,6 +256,23 @@ export function connStateTextWithDown(state: Snapshot["connState"], lastDownAt: 
   if (base !== "已断开") return base;
   return lastDownAt > 0 && now - lastDownAt < HALFCONN_GRACE_MS ? "重连中" : base;
 }
+/**
+ * DL-P1-7（DEV-40·R4 立即件）：updated_at 端上单点守卫——expo 面与 web-console
+ * （js/session-domain.js / js/bridge-core.js 双 IIFE）同口径三律，三端同答案：
+ * ①ts 缺载/非数不伪造不推进（#271 口径：不拿接收时刻冒充活动时刻）
+ * ②同值/回拨不洗（空闲卡跳序根因形态——relay 侧同值守卫为上游防线，此为端上末道）
+ * ③force=真态变（WAITING/ERROR/DONE 等状态翻转）必推进。
+ * 本域洗点=SESSION_UPDATED 载荷消费一处；新写手禁止绕口裸赋值
+ * （relay/scripts/test-updated-at-guard.ts X 组源码锚+行为断言锁死）。返回是否推进。
+ */
+export function touchUpdatedAt(sess: { updated_at?: number } | null | undefined, ts: unknown, force?: boolean): boolean {
+  if (!sess) return false;
+  const t = Number(ts) || 0;
+  if (!t) return false;
+  if (!force && (Number(sess.updated_at) || 0) >= t) return false;
+  sess.updated_at = t;
+  return true;
+}
 /** failNote 首句（≤ 首个句号/分号前，呈现层截断口径） */
 export function failNoteBriefOf(note: string | null): string | null {
   if (!note) return null;
@@ -2701,9 +2718,10 @@ class RelayStore {
         // 输出物回放重建）不是真实活动，信 envelope ts 会把重启时刻当活动时刻（全表
         // 不置灰根因）。#271 收紧：缺载回落**既有值**而非 msg.ts——定位补水/扫描校正等
         // 部分帧缺 updated_at 时，接收时刻被伪造为活动时刻（置灰失效同根）；本批起
-        // relay 侧全部 SESSION_UPDATED 载荷恒带该字段，缺载只剩旧 relay 窗，保旧值零洗
-        const pu = (msg.payload as { updated_at?: number }).updated_at;
-        if (typeof pu === "number" && pu > 0) s.updated_at = pu;
+        // relay 侧全部 SESSION_UPDATED 载荷恒带该字段，缺载只剩旧 relay 窗，保旧值零洗。
+        // DEV-40 补律②（R4 立即件）：同值/回拨不洗——乱序旧转录 ts / 重放帧不得回拨
+        // 排序面（空闲卡跳序根因形态，对齐 web touchUpdatedAt 三律，守卫口收编）
+        touchUpdatedAt(s, (msg.payload as { updated_at?: number }).updated_at);
         break;
       }
       case "SESSION_HEARTBEAT": {

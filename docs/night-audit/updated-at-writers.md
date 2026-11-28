@@ -7,14 +7,16 @@
 ## 守卫契约（端上面，已落地）
 
 `touchUpdatedAt(sess, ts, force)` —— web-console 双 IIFE（js/session-domain.js +
-js/bridge-core.js）各自持份（IIFE 互不 import，同口径复制）。语义三律：
+js/bridge-core.js）各自持份（IIFE 互不 import，同口径复制）；expo（src/store.ts）
+模块级导出同签同语义（DEV-40·R4 立即件收编，三端同答案）。语义三律：
 
 1. **缺载/非数不推进**（#271 口径：不伪造接收时刻）；
 2. **同值/回拨不洗**（空闲跳序根因形态——只有更新的真值才推进）；
 3. **force=真态变必推进**（WAITING/ERROR/DONE 等状态翻转）。
 
 **任何新写手禁止绕口裸赋值 `x.updated_at =`** —— `relay/scripts/test-updated-at-guard.ts`
-源码锚（裸赋值计数=1/文件，只许守卫体内）+行为断言（34 项）锁死；新洗点接线须同步补锚。
+源码锚（裸赋值计数=1/文件，只许守卫体内）+行为断言（74 项，含 X 组 expo 面）锁死；
+新洗点接线须同步补锚。
 
 ## 写手清单（全量盘点，2026-11-28 树核证）
 
@@ -55,6 +57,17 @@ js/bridge-core.js）各自持份（IIFE 互不 import，同口径复制）。语
 | 桥副本 SESSION_MERGE 合并洗 | bridge-core.js | 载荷时刻优先/信封兜底/同值回拨不洗 |
 | **桥副本心跳信封 ts 洗**（第五写手，本批新拔） | bridge-core.js | SESSION_HEARTBEAT 帧不推进 updated_at（三现同法——PM 常驻保活每拍信封 ts=桥副本排序面反复跳序） |
 | 建卡初始化（SESSION_CREATED/桥新建） | 两文件 | 非洗点（新对象），保持直写 |
+
+### expo 面（src/store.ts——DEV-40·R4 立即件收编，2026-11-28）
+
+| 写手 | 位置 | 收编方式 |
+|---|---|---|
+| SESSION_UPDATED 载荷洗 | store.ts | `touchUpdatedAt(s, payload.updated_at)`（律①缺载不推进自 #157/#271 已在；**律②同值/回拨不洗本批补齐**——修前任何正数直赋值，乱序旧转录 ts 可回拨排序面=R1 第五现候补现场，arch-review §四 R-5） |
+| 心跳/日志/状态翻转 | store.ts | 非洗点零写：心跳只读 elapsed_ms、SESSION_LOG 只刷 last_tool_use_at（#291 专用键）、WAITING/ERROR/DONE 翻转不本地造时刻（relay 真相源 force 推进后经载荷下行） |
+| 建卡初始化（SESSION_CREATED/SNAPSHOT 装配） | store.ts | 非洗点（新对象），保持直写 |
+
+回归面：`test-updated-at-guard.ts` X 组（源码锚 X1-X3 + 行为断言 X4——提取函数体剥
+TS 注隔离求值，与 web 两份同法）。
 
 ## 回归与装机观察点
 
