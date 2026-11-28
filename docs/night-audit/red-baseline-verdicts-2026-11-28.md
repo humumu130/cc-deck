@@ -73,14 +73,14 @@
 
 | 键 | 判定 | 依据 |
 |---|---|---|
-| test:bridge | **本机时敏假红**（矩阵键；CI 七周绿实证——45e2 用例 10-10 `d561ea85` #35 起在矩阵内，tag 通道持续绿） | 1200s 预算复跑 231s 即 EXIT:1 于 45e2「given_up+DONE+unknown→self-heal direct enter」（计数锚 race 形态，enters45() 计数未增）；本机跑批与全量 sweep 并发叠 CPU/定时器竞争。**处置：留矩阵（CI 是门），不入台账**；风险注：若 CI 偶发红，按 45e2 计数锚竞态优先排查 |
+| test:bridge | **迁移断链（本批引入，当场修复）**——修正 record：初判「本机时敏红」错误。真根因=R7 迁移把 test-bridge.ts 移入 tests/ 而共享桩 `fake-injector.mjs` 留在 scripts/，`new URL("./fake-injector.mjs")` 同目录相对解析断链（本机长跑 45e2 红=模块先载路径后迁的竞态形态；CI PR #168 首跑 34s 红=bolt 断链）。**修法：fake-injector.mjs 随迁 tests/（9 处消费面 test-bridge/test-xmsg-e2e/test-clidead/test-tauritrust 全部同目录相对引用）**。修后全量复跑 **PASS 304.5s EXIT:0**；矩阵 65/65 本机全绿 |
 | test:retired-live | 时限性待复判（心跳轮询长跑件） | 300s 限时杀，长跑复判见 §戊 |
 | test:approve-card | tmux E2E 需本机 tmux 会话环境（环境性）+ expo 豁免锚（锚类） | `FAIL: tmux E2E[allow]` |
 | test:sessions / test:ws 等需真 CLI 键 | 设计态排除（CI 无 CLI/凭据必挂）——test:ws 本次同时带行为红（seq≤1）已归丙族 | relay.yml 矩阵注释；ci.json quarantine 登记 |
 
 ## 戊、长跑复判（1200s 预算）
 
-- **test:bridge**：231s EXIT:1 于 45e2 计数锚（见丁-1 行）——非时限假象（首跑 300s 杀是并发竞争下的另一形态），定本机时敏红，CI 门未破。
+- **test:bridge**：初判时敏红被 PR #168 CI 首跑（34s 快败于 busy injection direct with enter）证伪——真根因 fake-injector.mjs 迁移断链（见丁-1 修正 record），随迁修复后全量复跑 **PASS 304.5s**。教训：矩阵键本机红必须穷尽迁移面归因再下「时敏」结论。
 - **test:retired-live**：（复判在途，回执补记）
 
 ## 己、处置台账落点
