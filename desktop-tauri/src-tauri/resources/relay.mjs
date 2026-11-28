@@ -60169,6 +60169,10 @@ provider=${opts.provider ?? "default"}` : void 0,
       this.emitChainAudit("transition-illegal", detail, sid);
     }
     s.state.status = next;
+    try {
+      shadowWriteSession(s.state);
+    } catch {
+    }
     if (next === "DONE" || next === "ERROR") s.state.turn_started_at = void 0;
   }
   /** [W-SMIMPL ①] seatGate 事实注入（W-SMDESIGN 候选 1）：在册性/外部性/Leader 三轴
