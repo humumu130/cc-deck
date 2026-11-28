@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "test:cloud": "tsx scripts/test-cloud.ts"
+    "test:cloud": "tsx scripts/test-cloud.ts",
+    "test:alert": "tsx scripts/test-alert.ts"
   },
   "dependencies": {
     "tsx": "latest",

@@ -71,7 +71,8 @@
     "test:cloud-hbthrottle",
     "test:data-guard",
     "test:swapguard",
-    "test:dev39"
+    "test:dev39",
+    "test:wakeup"
   ],
   "quarantine": {
     "test:268-cloud-watchdog": "锚/预期漂移｜锚漂移：cloudSetConn 体改形锚落空中止（15/1）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",

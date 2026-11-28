@@ -17,15 +17,27 @@ DOMAIN="${1:-}"; case "$DOMAIN" in relay|expo) ;; *) DOMAIN="" ;; esac
 # flaky 豁免清单（基线固化期两跑不一致者进此；保持空=全部稳定）
 FLAKY="${FLAKY:-}"
 
+# GNU timeout 兜底（DEV-49）：macOS 无 timeout/gtimeout——2026-10-20 基线即因此全体
+# exit=127「command not found」，录进的全是噪声（详见 DEV-49 回执）。有则 600s 防挂件，
+# 无则裸跑退化（仅失去超时保护，不阻断执行面）。
+TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
+texec() {
+  if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" 600 "$@"; else "$@"; fi
+}
+
 run_domain() {
   local dir="$1" prefix="$2" runner="$3" glob="$4"
   for f in $glob; do
+    [ -e "$f" ] || continue   # glob 零命中时不把字面量当件跑
     local name="$(basename "$f" .ts)"
     local out="$BASE/${prefix}-${name}.txt"
     local marker=""
     if echo "$FLAKY" | grep -q "\b${name}\b"; then marker="[flaky-skip] "; fi
     echo "  ${marker}run ${prefix}/${name} …" >&2
-    ( cd "$dir" && timeout 600 $runner "scripts/$(basename "$f")" ) > /tmp/parity-run.txt 2>&1
+    # 执行路径跟随 glob 实际位置（DEV-38 迁址后 relay=tests/、expo 仍在 scripts/），
+    # 不再硬编码 scripts/——枚举面与执行面同源，杜绝迁址类三面漂移
+    local rel="${f#"$dir"/}"
+    ( cd "$dir" && texec $runner "$rel" ) > /tmp/parity-run.txt 2>&1
     local rc=$?
     { echo "# exit=$rc $(date +%s)"; cat /tmp/parity-run.txt; } > "$out"
   done
@@ -46,9 +58,17 @@ for f in $BASE/*.txt; do
   prefix="${name%%-*}"; tname="${name#*-}"
   [ -n "$DOMAIN" ] && [ "$prefix" != "$DOMAIN" ] && continue
   dir="$prefix"; [ "$prefix" = "expo" ] && dir="expo-app"
-  ( cd "$dir" && timeout 600 ./node_modules/.bin/tsx "scripts/${tname}.ts" ) > /tmp/parity-new.txt 2>&1
-  rc=$?
   TOTAL=$((TOTAL+1))
+  # 件位置按实际存在面解析（DEV-38 迁址后 relay=tests/、expo 仍在 scripts/）；
+  # 基线名只存 <域>-<件名>，两面皆无=孤儿基线，点名计破坏——不再静默 ENOENT 断路
+  sub=""
+  for c in tests scripts; do [ -f "${dir}/${c}/${tname}.ts" ] && sub="$c" && break; done
+  if [ -z "$sub" ]; then
+    echo "  ❌ ${name}：${dir}/tests|scripts/ 均无 ${tname}.ts（孤儿基线）"
+    FAIL_CHANGES=$((FAIL_CHANGES+1)); continue
+  fi
+  ( cd "$dir" && texec ./node_modules/.bin/tsx "${sub}/${tname}.ts" ) > /tmp/parity-new.txt 2>&1
+  rc=$?
   base_pass=$(grep -cE '(PASS|✓|ok )' "$f" || true)
   base_fail=$(grep -cE '(FAIL|✗)' "$f" || true)
   new_pass=$(grep -cE '(PASS|✓|ok )' /tmp/parity-new.txt || true)

@@ -395,6 +395,11 @@ export interface SessionState {
   elapsed_hint?: number;
   turn_started_at?: number;
   last_tool_use_at?: number; // #291 帧分类判活：0=从未有工具活动（接单未开工）；正数=最近工具帧 ts；undefined=老 relay 未下发（降级干活）
+  // DEV-50（W-DISPATCHFIX 验收③端上消费）：relay displayLivenessOf 三值真活性——仅
+  // WORKING/WAITING 会话随 SNAPSHOT/SESSION_HEARTBEAT 下发。端上映射（词表 §七）：
+  // alive=零覆核 / between-turns=S2 灰呼吸（仅 WORKING 卡降档）/ dead=S6 灰实点不
+  // 呼吸+卡面置灰。旧 relay 不带 = undefined 零渲染（不发明第四态）
+  liveness?: "alive" | "between-turns" | "dead";
   usage?: TokenUsage;
   context_usage?: number; // 当前上下文水位 tokens（最后一条 assistant 的 usage；水位条数据源）
   context_limit?: number; // 上下文窗口上限（relay 按模型下发；缺省兜底 200k）

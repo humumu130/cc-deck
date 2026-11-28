@@ -111,10 +111,14 @@
 
 PC 端两种装法，**选一种即可**（也可以都用：桌面端检测到插件已在运行会自动让位，互不冲突）。
 
-### 装法 A · Claude Code 插件（终端流）
+### 装法 A · Claude Code 插件（终端流，从源码构建）
+
+插件的可执行产物（relay bundle、hooks、网页控制台等）**不入 git**（单源构建，见下方「从源码重建插件」说明）——`claude plugin marketplace add humumu130/cc-deck` 直接装的插件缺产物起不来，需先构建再装：
 
 ```bash
-claude plugin marketplace add humumu130/cc-deck
+git clone https://github.com/humumu130/cc-deck.git && cd cc-deck
+cd relay && npm ci && node scripts/build-plugin.mjs && cd ..
+claude plugin marketplace add "$(pwd)/cc-plugins"
 claude plugin install cc-deck@cc-deck-plugins
 ```
 
@@ -275,9 +279,17 @@ cd desktop-tauri && npx tauri build              # Tauri
 cd relay && node scripts/build-plugin.mjs
 ```
 
+> **插件产物不入 git（单源构建）**：`cc-plugins/plugins/cc-deck/` 内的 bundle（`scripts/relay.mjs`）、
+> `web-console/`、`mobile/`、`docs/system-design/`、原生闭包（`scripts/node_modules/`）等七族
+> 副本是 `relay/scripts/build-plugin.mjs` 的纯构建产物，已在 `.gitignore` 出库（git 历史保留可
+> 追溯）。新 clone 后插件目录只含源件（CLI 脚本/命令/守卫/清单）——本地装插件或出包前先跑
+> 上面的重建命令；CI 出包链（desktop/android workflow）会当场重建，无需手工干预。改
+> `relay/`、`web-console/`、`mobile/` 源码后同样重跑该命令刷新插件面，部署走
+> `scripts/deploy-web.sh`。
+
 </details>
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台，`index-005.html` 为现役壳；旧壳 `index.html` 已冻结退役留仓一个版本周期）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（文档与图纸归档）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台，`index-005.html` 为现役壳；旧壳 `index.html` 已冻结退役留仓一个版本周期）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件——源件在库，bundle 等产物由 `relay/scripts/build-plugin.mjs` 构建生成、不入 git）、`docs/`（文档与图纸归档）。
 
 CI：[relay](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml) · [android](https://github.com/humumu130/cc-deck/actions/workflows/android.yml) · [desktop](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)。版本号与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 

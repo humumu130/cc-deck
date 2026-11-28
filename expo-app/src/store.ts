@@ -12,6 +12,7 @@ import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 import nacl from "tweetnacl";
 import { fgSupported, notifyAlert, startForegroundService, stopForegroundService } from "./notify";
+import { parseBridgeAlert } from "./bridge-alert";
 import { httpBaseOf } from "./slash";
 import { artPoolItemsOf, artPoolListUrl, artPoolUrl, poolNameOk, type ArtPoolItem } from "./artpool";
 
@@ -1684,6 +1685,16 @@ class RelayStore {
         }
         return;
       }
+      // P0-3（DEV-43）桥直推告警：明文帧（桥侧 /alert 注入），unseal 之前识别——
+      // relay 死亡时恰是本帧唯一出场时机（E2E 密文通道随 relay 消失）。只展示不执行
+      if (frame.type === "bridge_alert") {
+        const a = parseBridgeAlert(frame);
+        if (a) {
+          console.log(`[cloud] bridge_alert level=${a.level} title=${a.title}`);
+          notifyAlert(a.title, a.body);
+        }
+        return;
+      }
       if (!frame.data) return;
       // 明文 pair_nack（无 n 字段 = 未密封）：relay 明确不认本机身份——未配对/被踢/
       // relay 侧配对信息丢失（判定同 pairViaBridge 的 nack 处理）。进未配对终态并停
@@ -2714,6 +2725,9 @@ class RelayStore {
         if (msg.payload.dispatch_tier !== undefined) s.dispatch_tier = msg.payload.dispatch_tier;
         // #27 引擎标记（codex 徽标；引擎创建后不变，防御性合并）
         if (msg.payload.engine !== undefined) s.engine = msg.payload.engine;
+        // DEV-50：活性键仅 WORKING/WAITING 有义（relay displayLivenessOf 同口径）——
+        // 翻终态清陈标（增量帧不带此键，merge 不自清），防下轮翻活起手窗误显停摆
+        if (s.status !== "WORKING" && s.status !== "WAITING") s.liveness = undefined;
         // #157 最后活跃时间优先采信载荷显式值：relay 重启后的水合帧（任务清单/用量/
         // 输出物回放重建）不是真实活动，信 envelope ts 会把重启时刻当活动时刻（全表
         // 不置灰根因）。#271 收紧：缺载回落**既有值**而非 msg.ts——定位补水/扫描校正等
@@ -2728,6 +2742,13 @@ class RelayStore {
         const s = conn.sessions.get(sid);
         if (!s) break;
         s.elapsed_hint = msg.payload.elapsed_ms;
+        // DEV-50：心跳捎带真活性入账（relay displayLivenessOf 每 5s 现算——「心跳在
+        // 跳」不是活证据，liveness 才是）。三值白名单防畸形帧；#91 对象替换仅值变时做
+        //（心跳 5s/拍，全量替换会把整列卡每拍重渲；elapsed_hint 就地突变既有口径不破）
+        const lv = msg.payload.liveness;
+        if ((lv === "alive" || lv === "between-turns" || lv === "dead") && lv !== s.liveness) {
+          conn.sessions.set(sid, { ...s, liveness: lv });
+        }
         break;
       }
       case "SESSION_WAITING": {

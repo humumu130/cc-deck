@@ -6,6 +6,7 @@ import { loadConfig } from "./config.js";
 import { CloudRouter } from "./router.js";
 import { TenantService, type TenantStore } from "./tenant.js";
 import { FileStore } from "./store-file.js";
+import { parseAlertPayload, buildAlertFrame, createAlertLimiter } from "./alert.js";
 
 // 网页端静态文件目录（仓库 web-console/，部署布局 /opt/cc-cloud-bridge/web-console/）
 const webDir = (name: string) => fileURLToPath(new URL(`../web-console/${name}`, import.meta.url));
@@ -64,6 +65,8 @@ export function startCloudServer(port: number, token: string, extraPorts: number
   const socks = new Map<string, WebSocket>();
   const wanConns = new Map<string, { ws: WebSocket; to: string }>();
   let nextId = 0;
+  // P0-3/T1（DEV-43）：/alert 限流桶——独立于 ws 帧通道（突发 5、10s 回 1）
+  const alertLimiter = createAlertLimiter(5, 10_000);
 
   const sendRaw = (connId: string, frame: string): void => {
     const ws = socks.get(connId);
@@ -126,7 +129,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     : null;
   if (tenant) router.setTenant(tenant);
 
-  const onRequest = (req: IncomingMessage, res: ServerResponse) => {
+  const onRequest = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "GET" && url.pathname === "/health") {
       // #29（B-P3）：只回计数不回 dev 列表（与 CF 形态 RouterDO /health 对齐）——
@@ -134,6 +137,43 @@ export function startCloudServer(port: number, token: string, extraPorts: number
       res.writeHead(200, { "content-type": "application/json", ...SEC_HEADERS }).end(
         JSON.stringify({ ok: true, devices: router.devs().length }),
       );
+      return;
+    }
+    // P0-3/T1（DEV-43）桥直推告警：POST /alert {to,title,body,level?}——token 鉴权
+    //（Bearer 或 ?token=，与 upgrade 同 token）；定向投递（to=目标 dev，必填）；
+    // 校验/帧构造/限流语义与 CF 形态共享（src/alert.ts 单源）。delivered=false 即
+    // 目标离线（调用方自行落账，不作重试承诺——告警语义是尽力触达+可见回执）
+    if (req.method === "POST" && url.pathname === "/alert") {
+      const ip = req.socket.remoteAddress ?? "?";
+      const bearer = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+      const tok = bearer || (url.searchParams.get("token") ?? "");
+      if (tok !== token) { res.writeHead(401).end("unauthorized"); return; }
+      if (!alertLimiter.ok(ip)) { res.writeHead(429).end("rate limited"); return; }
+      const cl = Number(req.headers["content-length"] ?? "0");
+      if (cl > 8192) { res.writeHead(413).end("too large"); return; }
+      const body = await new Promise<string>((resolve) => {
+        let acc = "";
+        req.on("data", (c: Buffer) => { acc += c; if (acc.length > 8192) { req.destroy(); resolve(acc); } });
+        req.on("end", () => resolve(acc));
+        req.on("error", () => resolve(acc));
+      });
+      let parsed: ReturnType<typeof parseAlertPayload> = null;
+      try { parsed = parseAlertPayload(JSON.parse(body || "null") as unknown); } catch { parsed = null; }
+      if (!parsed) { res.writeHead(400).end("bad request"); return; }
+      const conn = router.connOfDev(parsed.to);
+      const ws = conn ? socks.get(conn) : undefined;
+      if (!conn || !ws || ws.readyState !== WebSocket.OPEN) {
+        console.log(`[cloud-bridge] alert dev=${parsed.to} offline (from ${ip})`);
+        res.writeHead(404, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "target offline" }));
+        return;
+      }
+      try {
+        ws.send(buildAlertFrame(parsed));
+        console.log(`[cloud-bridge] alert dev=${parsed.to} delivered (from ${ip})`);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, delivered: true }));
+      } catch {
+        res.writeHead(502, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "send failed" }));
+      }
       return;
     }
     // 网页端托管（公司电脑浏览器）：页面与 nacl 静态文件，不含任何密钥——

@@ -1,6 +1,7 @@
 // [DEV-40·T4] 状态词汇表截图探针：六态卡面 + 检查器状态胶囊（l02 收敛对照）。
 // 复用 probe-awaituser-shot 骨架：Chrome headless + CDP + __ccDeck005Frames.emit 注入。
 // 断言走 computed style（dot 底色/胶囊类）——数字证据随截图落盘。
+// 结论：见 docs/night-audit/ui-ledger.md DEV-40 节（l02/P2-7/P2-3 销项）＋ docs/design/status-vocabulary.md；六态截图原片在 DEV-40 单回执。
 // 直跑：cd relay && node probes/probe-statusvocab-shot.mjs
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
