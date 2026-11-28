@@ -4,6 +4,12 @@
 // 本件断言：同文本告警持续超阈（CCR_PATROL_ESCALATE_MS）→ ESCALATED 报告行（独立
 // 于面板通道的落盘观察点）+ 同 onset 只升一次 + 文本变=新 onset + resolve 清账 +
 // 显式 0=关。osascript 发射面不直测（darwin GUI 会话外不可断言，报告行是可测锚）。
+//
+// 【时敏余量注记（DEV-36 P3 备案→DEV-61 收口）】A1「窗内不升」断言走真实睡眠：首睡
+// 400ms vs 窗 2000ms，对最恶劣 CI 超睡档仅 ~19% 相对余量（超睡幅度逼近窗宽即 A1 假红）。
+// 加窗后 CI 迄未复现（2026-11-28 核 relay.yml 全量失败史：patrol-escalate 红仅剩加窗前
+// run 46087000346 一例＝注脚所载原案）；若日后复现，转注入时钟方案（fake timers 控睡/
+// 窗推进），不再加窗——窗再抬会反向吃掉 B 场景「须超窗」侧的可测性预算。
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";

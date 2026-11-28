@@ -906,7 +906,8 @@
                 const VROW_K = { WORKING: ["运行中", " run"], WAITING: ["待处理", " wait"], ERROR: ["错误", " err"], DONE: ["完成", ""] };
                 // W-UIV3 C1-C6 聚合两行制 vrow v3：标题行（b 两行 line-clamp+ellipsis+title 全量）+
                 // 元信息行（s 独占一行，团队卡不再与标题同行）；k=右侧固定 72px 徽章列（cc-badge
-                // pill：运行中绿实底/待填橙/其余幽灵——B2 每屏实底仅运行中态）。
+                // pill：运行中黄软底（S1——B2 每屏实底语义仅此态，DEV-40 审查B P1-1 绿→黄
+                // 已归位）/待填待处理橙（is-warn）/错误降饱和红（is-alert）/其余幽灵灰）。
                 // opts：{idTitle:标题本是裸 UUID（前 8 位等宽+title 全量）, absTs:元信息行的绝对时间
                 // hover, titleHint:行 title 后缀动作提示, subExtra:.s 内追加的原始 HTML（验收单进度条）}
                 const vrow = (attrs, title, sub, kText, kCls, opts) => {
@@ -968,7 +969,8 @@
                 }
                 function acceptsRows() {
                   // W-UIV3 C6/C8：验收单行——日期全格式（正式单据语境）+ 回填迷你进度条；k 徽章
-                  // （已提交 neutral 幽灵/待填 warn 橙）
+                  // （已提交 neutral 幽灵/待填 warn 橙——DEV-61 归轴外登记：验收单回填生命周期非
+                  // 会话运行态六轴，橙=「等你交卷」行动指向，词表 §四 豁免清单在案〔B P3-B5〕）
                   return bridge.accepts.map((a) => {
                     const judged = Number(a.judged) || 0, total = Number(a.total) || 0;
                     const pct = total > 0 ? Math.round((judged / total) * 100) : 0;

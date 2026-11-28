@@ -59,6 +59,7 @@ relay `SessionStatus` ＋ 两处用户定版判活派生（#291 待命 / #160 �
 **豁免登记（审查 B P1/P2 订正，色相恒等律的显式边界——改色需设计变更单）**：
 - **dispatch-pending（已派单·等待处理）**：语义=S2 standby 的 chip 形（机器侧等待=接单未开工，非 S3 等你）。视觉=W-DISPVIS C2 定版黄描边（定版面不动），违纪律①色相条款属**登记在案的既有定版豁免**；后续若统一为 S2 灰系走设计变更单。
 - **项目卡聚合点轴（pc3-dot）**：非会话态词形——注意力优先级轴（A2 点语言三态：需行动红〔含 WAITING/ERROR 聚合〕/有进行中蓝/组态灰〔挂起归档与未立项各有灰空心变体〕）。聚合点不携带状态词面；同卡状态词面走 vrow 徽章（`.cc-badge`，本批已归位 S1 黄）。蓝档=「有进行中」的注意力中档指示，非 WORKING 态渲染。
+- **验收单「待填」徽章（web 项目域 acceptsRows，DEV-61 收口）**：非会话运行态——验收单**回填生命周期**的「等你交卷」位（文档域行动指向，非 S3 会话轴）。视觉=`.cc-badge.is-warn` 橙（base.css 该类注释「待填/待处理橙」即本位与 vrow WAITING 腿共用一类），与纪律②「waiting 橙=唯一常驻行动色」同族借用；已提交态=is-neutral 幽灵灰。出处 B P3-B5／DEV-40 审查 P3③（「豁免清单外」→本条登记收案）——后续若统一改幽灵灰走设计变更单。
 
 ## 五、本批（DEV-40）收敛落点与销项
 
@@ -76,6 +77,8 @@ relay `SessionStatus` ＋ 两处用户定版判活派生（#291 待命 / #160 �
 | 设置域首屏占位会话卡（审查 A P2-1） | `settings-domain.js` 占位 tagClass working=`info` **蓝**（B2 接管前冷启动首帧可见） | chipClass 拆字段走 st-* 族；tagClass 只司 CTA 判定（与 B2 :1321 同映射） |
 | expo SetupScreen 连接指示末档（审查 A/B P2 交叉） | 连不上走 c.waiting（waiting 分相后=橙），同语义 ListScreen 本批已按 #357 归红 | 改 c.error（#357 用户定版：连不上=红） |
 | ⑂/agdot 呼吸光圈（审查 B P2） | `--status-working-glow` 双主题**绿**（W-V8 残留；本体 var(--working) 黄=同灯两相） | 双主题黄化 rgba(255,210,77,.5)/rgba(255,176,32,.3)——词表 §一「借 S1 黄呼吸」落地 |
+
+**计数口径注（DEV-40 审查 P3④→DEV-61 补注，审查 B 返修后定稿）**：上表「八处位 15 声明」的计数惯例——**位**=括列的消费位点簇（8 处：md del／ImportPicker failT／NewSessionModal／SetupScreen／RenameModal／detail-styles diffDel／DetailScreen KC img／DetailScreen ripple），**声明**=位上的 token 引用处（×N 标多位点）。按 `324f477a` 实 diff 复核：**所列八位合计 16 声明**（DetailScreen 的 KC img 图色映射有两处定义 :909/:2618，原计数并作一声）；括列外另见 **SettingsPage×4**（android_ripple delArm/srvDelArmT/pairErrT/ruleDelArmT——同 diff 同类改指未入清单，全量口径 9 位 20 声明）。按 diff 改动行计（+侧含 c.working 字样）=17 行，其中 1 行为 SetupScreen 连接指示（waiting→**error** 腿，表内另列）——amber 腿实 16 行，审查所数「~17-20 行」即此机械口径。多口径并行时以位点清单为准，引用数字随口径注明。
 
 ## 六、守卫与后续
 
