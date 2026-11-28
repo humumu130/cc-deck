@@ -208,7 +208,9 @@
     "test:cloud-hbthrottle": "tsx tests/test-cloud-hbthrottle.ts",
     "test:data-guard": "tsx tests/test-data-guard.ts",
     "test:swapguard": "node tests/test-swapguard.mjs",
-    "test:dev39": "tsx tests/test-dev39.ts"
+    "test:dev39": "tsx tests/test-dev39.ts",
+    "check:ci-layers": "node scripts/check-ci-layers.mjs",
+    "sweep:watch": "node scripts/sweep-watch.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
