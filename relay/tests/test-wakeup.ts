@@ -108,6 +108,58 @@ console.log("V 组 服务 tick（外发桩记账）");
   rmSync(dir, { recursive: true, force: true });
 }
 
+console.log("R 组 tick/arm 竞争回归（DEV-51 P2-1：状态先落盘再外发）");
+{
+  // R1：arm 落在 fire push-await 窗内 → 规则存活且下一拍可达 fired
+  const dir = mkdtempSync(join(tmpdir(), "wakeup-race1-"));
+  let tick = 2_000_000;
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((res) => { release = res; });
+  const svc = new WakeupService({
+    dataDir: dir,
+    push: async () => { await gate; }, // 可控 Promise 撑开竞争窗
+    facts: () => FACTS,
+    now: () => tick,
+    report: () => {},
+  });
+  svc.arm({ predicate: { kind: "session_status", status: "ERROR" }, title: "规则A", body: "b", createdBy: "t" });
+  const t1 = svc.tick(); // 同步段跑完即悬在 push await——窗开
+  await Promise.resolve(); // 微任务让出，确保挂点已入窗
+  // 窗内 HTTP 同步路径 arm（load→改→save，与 wakeup-api.ts 同款交错）
+  const b = svc.arm({ predicate: { kind: "notification_pending", minCount: 7 }, title: "规则B", body: "b", createdBy: "t" });
+  release!();
+  await t1;
+  ok(loadWakeupRules(dir).some((x) => x.id === b.id && x.state === "armed"), "R1 arm 落在 push-await 窗内 → 规则 B 存活（不被 tick 陈旧快照整表抹掉）");
+  tick += 1;
+  const r1b = await svc.tick();
+  ok(r1b.fired === 1 && loadWakeupRules(dir).every((x) => x.id !== b.id || x.state === "fired"), "R1b 存活的规则 B 下一拍可达 fired（事实成立正常触发）");
+  rmSync(dir, { recursive: true, force: true });
+}
+{
+  // R2：cancel 落在 push-await 窗内 → 不复活回 armed
+  const dir = mkdtempSync(join(tmpdir(), "wakeup-race2-"));
+  let tick = 2_000_000;
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((res) => { release = res; });
+  const svc = new WakeupService({
+    dataDir: dir,
+    push: async () => { await gate; },
+    facts: () => FACTS,
+    now: () => tick,
+    report: () => {},
+  });
+  // 规则A 本拍 fire（撑开 push 窗）；规则X 本拍 wait（陈旧快照里是 armed——复活面）
+  svc.arm({ predicate: { kind: "session_status", status: "ERROR" }, title: "规则A", body: "b", createdBy: "t" });
+  const x = svc.arm({ predicate: { kind: "session_status", status: "WAITING" }, title: "规则X", body: "b", createdBy: "t", expiresInMs: 10_000_000 });
+  const t = svc.tick();
+  await Promise.resolve();
+  const cancelled = svc.cancel(x.id); // 窗内 HTTP 同步路径 cancel
+  release!();
+  await t;
+  ok(cancelled && loadWakeupRules(dir).find((r) => r.id === x.id)?.state === "expired", "R2 cancel 落在窗内 → 终态 expired 不复活（tick 收尾不回写 armed）");
+  rmSync(dir, { recursive: true, force: true });
+}
+
 console.log("P 组 cloud-push 单元");
 ok(bridgeAlertEndpoint("wss://cc.humumu.online/cloud") === "https://cc.humumu.online/alert", "P1 wss→https /alert 端点推导");
 ok(bridgeAlertEndpoint("ws://10.0.0.2:8790/cloud") === "http://10.0.0.2:8790/alert", "P2 ws→http 端点推导");
