@@ -1005,7 +1005,13 @@ const SessionCard = memo(function SessionCard({
   const bgLive = bgCount > 0 && s.status !== "WORKING";
   // #291 帧分类判活：WORKING 过真判定——待命（接单未开工/挂起）灰呼吸点，不占在跑计数
   const standby = s.status === "WORKING" && !isRealWorking(s);
-  const dotColor = standby ? c.faint : bgLive ? c.working : color;
+  // DEV-50：relay 真活性三值消费（词表 §七映射——仅 WORKING/WAITING 有义，缺席=旧
+  // relay 零渲染）。between-turns=WORKING 卡降 S2 灰呼吸；dead=停摆 S6：灰实点不
+  // 呼吸+卡面置灰（「灯亮着但进程已死」假态照妖镜，与 web myCardMarkup 同口径）
+  const live = s.status === "WORKING" || s.status === "WAITING" ? s.liveness : undefined;
+  const stalled = live === "dead";
+  const betweenTurns = live === "between-turns" && s.status === "WORKING";
+  const dotColor = stalled ? c.faint : standby || betweenTurns ? c.faint : bgLive ? c.working : color;
   const deletable = (s.status === "DONE" || s.status === "ERROR") && !bgLive; // #100 后台在跑禁删（删会话会杀后台任务）
   // 空闲超时置灰：isIdleSession 单一口径（#140 起与「折叠空闲」共用，防漂移）——
   // DONE/ERROR 且静默超阈值（#121 可配置，负数 = 永不）才蒙层，刚完成的保持鲜亮；
@@ -1039,17 +1045,17 @@ const SessionCard = memo(function SessionCard({
       onLongPress={() => onCardMenu(s)}
       compact={compact}
       minimal={minimal}
-      dim={dim || isIdleCard || dormant}
+      dim={dim || isIdleCard || dormant || stalled}
     >
       {minimal ? (
         // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
         // 其余全部隐藏；行间分隔由 swipeWrapM 的极淡 hairline 承担（平铺行，不再堆卡间距）；
-        // 点击/左滑交互与其他档一致
+        // 点击/左滑交互与其他档一致。DEV-50：停摆（dead）静态灰点不呼吸（S6 形）
         <View style={styles.rowM}>
-          {standby || s.status === "WORKING" || bgLive ? (
+          {!stalled && (standby || s.status === "WORKING" || bgLive) ? (
             <BlinkDot color={dotColor} />
           ) : (
-            <View style={[styles.dot, { backgroundColor: color }]} />
+            <View style={[styles.dot, { backgroundColor: dotColor }]} />
           )}
           <Text style={[styles.titleM, idle && styles.titleIdle]} numberOfLines={1}>
             {s.title || "未命名会话"}
@@ -1077,7 +1083,7 @@ const SessionCard = memo(function SessionCard({
                  语义徽章/状态灯/身份头像三分离）；词表外引擎回落源色（不丢信息） */
               srcColor={ENGINE_ACCENT[effEngine ?? "claude"] ?? (srcBadge ? srcBadge.color : null)}
               dotColor={dotColor}
-              breathe={standby || s.status === "WORKING" || bgLive}
+              breathe={!stalled && (standby || s.status === "WORKING" || bgLive)}
               size={compact ? 26 : 34}
             />
             <View style={styles.srowMain}>
@@ -1109,6 +1115,11 @@ const SessionCard = memo(function SessionCard({
                      词冠是第二重表意=纯冗余；摘要回 srowSum 原生档（faint→dim 归位），「待开工」
                      仅存 a11y（读屏用户仍可得状态语义）；无摘要兜底「已接单未开工」保留（行非空） */
                   <Text style={styles.srowSum} numberOfLines={1} accessibilityLabel={"待开工，" + (s.action_summary || "已接单未开工")}>{s.action_summary || "已接单未开工"}</Text>
+                ) : s.status === "WORKING" && stalled ? (
+                  /* DEV-50：停摆卡不走秒（LiveStat 走秒=活回合假态——dead 的反面照妖镜）；
+                     摘要回 srowSum 原生档+停摆 a11y（读屏可得状态语义），词面不立 tag
+                    （词表 §七②：停摆不立独立词形，S6 蒙层+灰实点表意） */
+                  <Text style={styles.srowSum} numberOfLines={1} accessibilityLabel={"停摆，" + (s.action_summary || "进程已死")}>{s.action_summary || "进程已死"}</Text>
                 ) : s.status === "WORKING" ? (
                   <LiveStat s={s} />
                 ) : s.status === "WAITING" && s.waiting_request ? (

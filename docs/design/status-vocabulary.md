@@ -82,3 +82,15 @@ relay `SessionStatus` ＋ 两处用户定版判活派生（#291 待命 / #160 �
 - 机器锚：web 胶囊族/亮档值变更随 `test:fc`＋`test:005-blankset`（B1② 双写计数）；expo 侧色值无既有锚，状态色改动走 `npx tsc --noEmit`＋截图对照（验收标准要求 web/expo 各一屏同状态对照）。
 - 新状态面检查单：①映射进六态了吗 ②色相查 §三 表了吗 ③胶囊走 `.tag.st-*` 了吗 ④chip 层没偷状态色吧 ⑤同屏 tint ≤1 吗。
 - 手表端（wear-app）后续接入按 §三 expo 列同口径；legacy 壳已冻结不适用。
+
+## 七、liveness 三值映射注记（DEV-50 · W-DISPATCHFIX 验收③端上消费，2026-11-28）
+
+relay 真活性 `liveness`（`displayLivenessOf`：pid kill-0 / SDK 流活 / 帧龄复合判定；仅 `WORKING/WAITING` 会话随 SNAPSHOT 与 SESSION_HEARTBEAT 每 5s 下发，5min 显示窗）是六态轴上的**真值覆核层，不是第七态**——端上不得据它发明新态/新词形/新色相，只按下列映射覆核当前态的呈现：
+
+| liveness 值 | relay 判定语义 | 呈现映射（不增删态） |
+|---|---|---|
+| `alive` | 进程在 / 流活 / 帧 ≤5min | **零覆核**——按 status 原六态渲染（S1 黄呼吸 / S3 橙环原样） |
+| `between-turns` | 无 pid 探测面（外部 SDK / 已回收 agent）且帧 ≤30min——进程大概率在、回合间隙 | WORKING 卡降 **S2 standby** 形（`.working-standby` 灰呼吸——机器在而无产出，与 #291 待命同形同色相）；WAITING 卡维持 **S3**（「等你」行动语义优先，间隙不掩行动色） |
+| `dead` | 声明在干活但进程死+5min 无帧＝停摆 | **S6 closed** 形：灯灰实点**不呼吸**（呼吸=「进程活着」形编码，1014 形定版——死不呼吸）+ 卡面轻置灰蒙层（`.stalled`，S6 手段）。waiting×dead 的「等你拍板」chip 保留（§四 行动指向层不受活性蒙层影响——诉求仍在，处理需先救活） |
+
+纪律重申：①两档覆核全部落在既有灰系家族（S2/S6 复用 `--st-closed`/`faint` 色相），**不引入新色相**；②「停摆」不立独立态名/常驻 tag——呈现即 S6 蒙层+灰实点，语义走 status-dot title 悬停与本注记；③消费面收口在卡面灯（web `myCardItem`/expo `SessionCard`）——词面层（胶囊/chip/文案）不据 liveness 改写；④端上渲染必须带 status 门（仅 working/waiting 显示活性覆核，对齐 relay 侧 displayLivenessOf——「WORKING/WAITING 之外的态不显示」），且翻终态清陈标防下轮翻活误显。
