@@ -117,5 +117,89 @@ console.log("B8 合并块行为断言（剥键+守卫真码直跑，DEV-30 ④�
   }
 }
 
+console.log("R relay 面单点守卫（DEV-31 清件③——session-manager touchIfChanged 收编）：");
+{
+  const sm = rf("relay", "src", "session-manager.ts");
+  const cl = rf("relay", "src", "lifecycle", "context-link.ts");
+  ok(sm.includes("private touchIfChanged(state: SessionState, at?: number, force = false): boolean"), "R0-1 session-manager 定义单点 touchIfChanged（与端上 touchUpdatedAt 同语义三律）");
+  ok(sm.includes("DL-P1-7 relay 面（DEV-31 清件③）"), "R0-2 单点带 saga 溯源注释（契约可读=docs/night-audit/updated-at-writers.md）");
+  // 裸赋值计数：session-manager 只许守卫体内 1 处；context-link（setExternalUsage 搬运体）0 处。
+  // 注意 history.ts 的回放 reducer（s.updated_at = e.ts / 载荷覆盖）不在本锚范围——它是
+  // 读面收敛器非写手，事件序单调无「同值重报洗」形态。
+  ok(bareWrites(sm) === 1, `R1-1 session-manager 裸赋值仅守卫体内 1 处（实得 ${bareWrites(sm)}）`);
+  ok(bareWrites(cl) === 0, `R1-2 lifecycle/context-link 零裸赋值（实得 ${bareWrites(cl)}）`);
+  // 洗点接线锚：代表性写手各至少一次过口（分 force/非 force 两类语义）。
+  const touchCalls = (sm.match(/this\.touchIfChanged\(/g) || []).length + (cl.match(/mgr\.touchIfChanged\(/g) || []).length;
+  ok(touchCalls === 30, `R2-1 写手收编计数恰 30（session-manager 29 处直写全过口+context-link 1 处；松锚可漏放回退如 28＋1，复审 P3-2 收紧；实得 ${touchCalls}）`);
+  ok(sm.includes("this.touchIfChanged(s.state, at, true); // DEV-31 清件③：过单点；force=at 是权威时刻"), "R2-2 setExternalStatus 过口（force=boot 采纳转录真实时刻可回拨校正，#271 面）");
+  ok(sm.includes("this.touchIfChanged(s.state, at); // DEV-31 清件③：过单点（1123 二现门后，非 force"), "R2-3 setTodos/setExternalSubagents 过口（非 force——乱序旧转录 ts 不回拨）");
+  ok(sm.includes("this.touchIfChanged(s.state, at ?? now, true); // DEV-31 清件③"), "R2-4 emitUpdated 枢纽过口（force=水合/回放真实活动时刻，#157 语义原样）");
+  ok(sm.includes("this.touchIfChanged(managed.state, at, true); // DEV-31 清件③：过单点（WAITING 真态变，force）"), "R2-5 SDK 面 onWaiting（tool-wait）过口（真态变 force）");
+  ok(cl.includes("mgr.touchIfChanged(s.state, at); // DEV-31 清件③"), "R2-6 setExternalUsage（context-link 搬运体）过口（非 force）");
+  // 心跳载荷锚（DEV-22 审查 :13129 实锤 + leader 提升注记）：载荷带既有 updated_at（#157
+  // 帧完整性——防缺载兜底消费面回落信封 ts），但心跳本身永不推进它（三端消费面均不据它洗）。
+  const hbAt = sm.indexOf('"SESSION_HEARTBEAT"');
+  const hbSeg = sm.slice(hbAt, hbAt + 700);
+  ok(hbSeg.includes("updated_at: s.state.updated_at"), "R3-1 心跳载荷带既有 updated_at（DEV-31 补键）");
+  ok(!/\.updated_at\s*=(?![=>])/.test(hbSeg), "R3-2 心跳块内零 updated_at 直写（带既有值≠推进——三现口径不回退）");
+}
+
+console.log("R4 relay 行为断言（真实例：空闲 60s 不变/回拨不洗/force 校正）：");
+{
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const prevData = process.env.CCR_DATA_DIR;
+  const prevPlugin = process.env.CC_DECK_PLUGIN;
+  const dd = mkdtempSync(join(tmpdir(), "ccr-uag-relay-"));
+  process.env.CCR_DATA_DIR = dd;
+  delete process.env.CC_DECK_PLUGIN;
+  delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+  process.env.CCR_NO_TITLE_GEN = "1";
+  process.env.CCR_CLOUD_URL = "";
+  try {
+    const { EventBus } = await import("../src/event-bus.js");
+    const { SessionManager } = await import("../src/session-manager.js");
+    const { loadConfig } = await import("../src/config.js");
+    const mgr = new SessionManager(new EventBus(), loadConfig());
+    const id = "ext-uag-probe";
+    const st = mgr.ensureExternal(id, "/virtual/uag", "守卫行为探针");
+    // 先对齐（建卡 summary=prompt 派生值，首轮调用本身是真变化）再取基线。
+    mgr.setExternalStatus(id, "WORKING", "接入中");
+    const before = st.updated_at;
+    // R4-1 空闲 60s 等价：12 轮同值 status/summary 重报（外部引擎周期回放帧形态，5s×12）
+    // ——同值不洗（首现/二现根因形态），全程 updated_at 纹丝不动。
+    for (let i = 0; i < 12; i++) mgr.setExternalStatus(id, "WORKING", "接入中");
+    ok(st.updated_at === before, `R4-1 同值重报 ×12（60s 等价）updated_at 不变（前 ${before} 后 ${st.updated_at}）`);
+    // R4-2 同值 todos 重报（清单零变化）——1123 二现门：不洗不发帧。
+    mgr.setTodos(id, [{ content: "t0", status: "pending", active_form: "" }], before + 5000);
+    const before2 = st.updated_at;
+    mgr.setTodos(id, [{ content: "t0", status: "pending", active_form: "" }], before2 + 5000);
+    ok(st.updated_at === before2, `R4-2 同值 todos 重报不洗（前 ${before2} 后 ${st.updated_at}）`);
+    // R4-2b 内容真变+旧 at：收敛到权威旧时刻（emitUpdated force 的 #157 水合校正语义——
+    // 回拨到真相是校正不是洗；与收编前行为逐字等价，回归锚防语义漂移）。
+    mgr.setTodos(id, [{ content: "t1", status: "pending", active_form: "" }], before2 - 1000);
+    ok(st.updated_at === before2 - 1000, `R4-2b 内容变+旧 at 收敛到权威时刻（实得 ${st.updated_at}，期 ${before2 - 1000}）`);
+    // R4-3 真态变+旧 at（status 翻转+权威旧时刻）——force 必推进（#271 boot 采纳/收殓
+    // 校正语义保留：回拨到真相是校正不是洗）。
+    mgr.setExternalStatus(id, "DONE", "已完成", undefined, before - 2000);
+    ok(st.updated_at === before - 2000, `R4-3 真态变 force 推进到权威旧时刻（实得 ${st.updated_at}，期 ${before - 2000}）`);
+    // R4-4 坏 ts 不伪造：显式 NaN/0 at 不推进（律①——不拿接收时刻冒充活动时刻）。
+    const before4 = st.updated_at;
+    mgr.setTodos(id, [{ content: "t2", status: "pending", active_form: "" }], NaN);
+    mgr.setTodos(id, [{ content: "t3", status: "pending", active_form: "" }], 0);
+    ok(st.updated_at === before4, `R4-4 非数/非正 at 不推进不伪造（前 ${before4} 后 ${st.updated_at}）`);
+    // R4-5 律②隔离面（复审 P3-1）：setExternalUsage 是唯一「非 force 且无 emitUpdated
+    // force 跟进」的 at 写手（context-link 搬运体，直发 SESSION_UPDATED）——usage 内容
+    // 真变 + 旧 at（转录扫描乱序形态）仍拒回拨。删掉律②此处即回拨即红（R4-2 被同值
+    // 守卫早退、R4-2b/3 被 force 主导，均隔离不出律②）。
+    mgr.setExternalUsage(id, { input_tokens: 120, output_tokens: 30, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, undefined, undefined, before4 - 5000);
+    ok(st.usage?.input_tokens === 120 && st.updated_at === before4, `R4-5 setExternalUsage 内容变+旧 at 不回拨（律②唯一无 force 跟进路径；usage 已写 ${st.usage?.input_tokens}、时刻保持 ${st.updated_at}）`);
+  } finally {
+    if (prevData === undefined) delete process.env.CCR_DATA_DIR; else process.env.CCR_DATA_DIR = prevData;
+    if (prevPlugin === undefined) delete process.env.CC_DECK_PLUGIN; else process.env.CC_DECK_PLUGIN = prevPlugin;
+    rmSync(dd, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

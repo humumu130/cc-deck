@@ -23,7 +23,7 @@
 //              Please use /login command to sign in to your account」）
 //   qwen-code  三层判定（W-ENGREST-FIX 1109 对版 0.27.1）：settings 选型位
 //              security.auth.selectedType → env 组合（上游 getAuthTypeFromEnv 逐字：
-//              anthropic/openai/gemini/QWEN_OAUTH）→ 凭据文件候选尾路（[W-ENGINEFIX
+//              anthropic/openai/gemini/vertex-ai/QWEN_OAUTH）→ 凭据文件候选尾路（[W-ENGINEFIX
 //              刀B] 1124 收紧：单 env 键退役——组合制下单键不选型，假 ready 直通
 //              spawn 即 CLI 裸炸「No auth type is selected」）
 //   trae       config 文件判定（W-ENGREST-FIX 1109 对版）：CCR_TRAE_CONFIG ||
@@ -97,9 +97,10 @@ function codexConfigAuthPresent(homeDir: string): boolean {
  * settings 读取位是 security.auth.selectedType（顶层 authType 非读取位；validateNon-
  * InteractiveAuth 实测「No auth type is selected」即此）；env 面按上游 getAuthTypeFromEnv
  * 组合制（单键不选型）：anthropic=API_KEY+BASE_URL+MODEL、openai=API_KEY+BASE_URL+
- * (OPENAI_MODEL|QWEN_MODEL)、gemini=API_KEY+MODEL、QWEN_OAUTH 单键即选。尾路仅保留
- * 凭据文件候选（[W-ENGINEFIX 刀B] 1124 收紧：单 env 键不构成选型——假 ready 直通
- * spawn 后 CLI 裸炸「No auth type is selected」；见函数尾注）。 */
+ * (OPENAI_MODEL|QWEN_MODEL)、gemini=API_KEY+MODEL、vertex-ai=GOOGLE_API_KEY+GOOGLE_MODEL
+ * 或 GOOGLE_CLOUD_PROJECT+GOOGLE_MODEL（DEV-31 清件②补齐）、QWEN_OAUTH 单键即选。
+ * 尾路仅保留凭据文件候选（[W-ENGINEFIX 刀B] 1124 收紧：单 env 键不构成选型——假
+ * ready 直通 spawn 后 CLI 裸炸「No auth type is selected」；见函数尾注）。 */
 function qwenAuthCandidatePresent(homeDir: string): boolean {
   try {
     const s = JSON.parse(readFileSync(join(homeDir, ".qwen", "settings.json"), "utf-8")) as { security?: { auth?: { selectedType?: unknown } } };
@@ -113,6 +114,12 @@ function qwenAuthCandidatePresent(homeDir: string): boolean {
   if (v("ANTHROPIC_API_KEY") && v("ANTHROPIC_BASE_URL") && v("ANTHROPIC_MODEL")) return true;
   if (v("OPENAI_API_KEY") && v("OPENAI_BASE_URL") && (v("OPENAI_MODEL") || v("QWEN_MODEL"))) return true;
   if (v("GEMINI_API_KEY") && v("GEMINI_MODEL")) return true;
+  // DEV-31 清件②（smoke:engines S2 漂移源②③归零）：vertex-ai 两路组合补齐——上游
+  // getAuthTypeFromEnv 的 vertex-ai 面此前零覆盖，已配 vertex 的用户被误判 needs_auth
+  // 锁出目录。API Key 路=GOOGLE_API_KEY+GOOGLE_MODEL；ADC 项目路=GOOGLE_CLOUD_PROJECT
+  // +GOOGLE_MODEL（应用默认凭据无 key，项目号即选型）。
+  if (v("GOOGLE_API_KEY") && v("GOOGLE_MODEL")) return true;
+  if (v("GOOGLE_CLOUD_PROJECT") && v("GOOGLE_MODEL")) return true;
   // [W-ENGINEFIX 刀B]（1124 用户实锤「No auth type is selected」裸炸）：宽松尾路收紧——
   // 单 env 键（QWEN/ANTHROPIC/OPENAI/GEMINI_API_KEY 等）不再判 ready：上游组合制选型
   // 下单键不是选型（ANTHROPIC_API_KEY 是全局常配 env，恰是假 ready 中标源——探针判
