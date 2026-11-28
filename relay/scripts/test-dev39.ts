@@ -14,8 +14,15 @@ function assert(cond: boolean, name: string) {
   else { fail++; console.error(`  ✗ ${name}`); }
 }
 
-const GRAY_KEYS = ["CCR_STORAGE_READ_MODE", "CCR_SESSION_WRITE_MODE", "CCR_SESSION_IMPORT", "CCR_BOOT_FROM", "CCR_EVENTS_ARCHIVE", "CCR_RELAY_ENV_FILE", "CCR_BUILD_NODE_VERSION", "CCR_BUILD_NODE_ABI", "CCR_BUILD_PLATFORM", "CCR_DATA_DIR", "CCR_ORG_DIR"] as const;
-const clearGrayEnv = (): void => { for (const k of GRAY_KEYS) delete process.env[k]; };
+const GRAY_KEYS = ["CCR_STORAGE_READ_MODE", "CCR_SESSION_WRITE_MODE", "CCR_SESSION_IMPORT", "CCR_BOOT_FROM", "CCR_EVENTS_ARCHIVE", "CCR_BUILD_NODE_VERSION", "CCR_BUILD_NODE_ABI", "CCR_BUILD_PLATFORM", "CCR_DATA_DIR", "CCR_ORG_DIR"] as const;
+// 隔离要点：CCR_RELAY_ENV_FILE 不走 delete——delete 后 boot-env 回落缺省
+// ~/.cc-deck/relay-env.json，生产灰度文件真实存在时会渗进测试（DEV-39 收口期实测
+// 踩中）。恒钉到不存在的沙盒位=「文件缺席」语义的可控实现。
+const NO_ENV_FILE = join(tmpdir(), "dev39-no-relay-env.json");
+const clearGrayEnv = (): void => {
+  for (const k of GRAY_KEYS) delete process.env[k];
+  process.env.CCR_RELAY_ENV_FILE = NO_ENV_FILE;
+};
 
 async function main(): Promise<void> {
   clearGrayEnv();
@@ -221,6 +228,18 @@ async function main(): Promise<void> {
     // E5：坏行防御回归锚（loadEvents 对归档/活文件同样适用）
     const hist = rd("../src/history.ts");
     assert(hist.includes("R-9 审计归档位"), "E5 history.ts 归档位设计注记在位");
+  }
+
+  console.log("F. 终态直写根修锚（收口阻断项：transition 单点直写）");
+  {
+    const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf8");
+    const tStart = sm.indexOf("private transition(sid: string");
+    const tEnd = sm.indexOf("private transitionNotifications", tStart);
+    assert(tStart !== -1 && tEnd !== -1, "F1 transition 函数定位在档");
+    const body = sm.slice(tStart, tEnd);
+    assert(body.includes("shadowWriteSession(s.state)"), "F1 transition 内直写收口在位（终态 DONE 不再漏库——import=off 后唯一写路径）");
+    // emitUpdated 帧面挂点保留（内容更新路径不回归）
+    assert(sm.includes("try { shadowWriteSession(s.state); } catch"), "F1 emitUpdated 帧面直写挂点保留（双路幂等）");
   }
 
   console.log(`\n${fail === 0 ? "✅" : "❌"} DEV-39 批测：${pass} 过 / ${fail} 败`);

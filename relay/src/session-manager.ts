@@ -1371,6 +1371,14 @@ export class SessionManager {
       this.emitChainAudit("transition-illegal", detail, sid);
     }
     s.state.status = next;
+    // DEV-39 收口阻断根修（生产对账哨实证）：transition 是状态机唯一翻转点，但此前
+    // 只改内存——终态路径（finishExternal/worker done/stream-idle）transition 后不再
+    // 发 UPDATED 帧，直写挂点（emitUpdated 尾）收不到终态 → import=off 后 DONE 永不
+    // 落库（此前被导入器投影掩盖；boot 对账 2026-11-28 实锤 db=WORKING/events=DONE
+    // 停滞对）。修=翻转即直写（W-SMIMPL③「直写收口」注释的真实兑现——挂点从帧面
+    // 移到状态机单点，全部翻转路径覆盖，含 WAITING/自愈翻活）。幂等 REPLACE+频率
+    // 低（状态翻转非帧级），失败自吞（shadowWriteSession 内建降级语义）。
+    try { shadowWriteSession(s.state); } catch { /* 直写自身已吞错降级，双保险 */ }
     // #291 turn 生命周期补清算：终态（DONE/ERROR）时清 turn_started_at——
     // 「WORKING ⟔ 活跃 turn」判活的主判据半边。不清的残留面：终态卡字段陈挂 +
     // 后续无 turn 翻活路径（重启接管/自愈等 setExternalStatus 不带 turnStartedAt）
