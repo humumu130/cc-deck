@@ -838,38 +838,43 @@ if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
     enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
     cloudPush: cloudPushLeg,
   }).start();
-  // T1 条件唤醒基建（DEV-43）：规则表 data/wakeup-rules.json + 谓词器最小集（会话
-  // 状态/板卡状态/通知账积压），事实成立才外发（同 cloudPushLeg 通道）、expires
-  // 兜底必触达。周期 CCR_WAKEUP_CHECK_MS（缺省 30s，0=关）。规则创建口=POST
-  // /api/wakeup（ws-server，LAN token 同 /api/notify 族）。云桥禁用时外发腿为空
-  // 操作（规则照评照记账——触达面降级但不静默）。
-  if (process.env.CCR_WAKEUP !== "0") {
-    const wakeupSvc = new WakeupService({
-      dataDir: cfg.dataDir,
-      push: async (title, body, level) => {
-        if (!cfg.cloudUrl) return;
-        await pushCloudAlertAll({ cloudUrl: cfg.cloudUrl, cloudToken: cfg.cloudToken, dataDir: cfg.dataDir }, title, body, level);
-      },
-      facts: () => ({
-        sessions: mgr.snapshot().map((s) => ({ sessionId: s.session_id, status: s.status, external: !!s.external })),
-        boardEntries: (listBoards() ?? []).flatMap((b) => (b.entries ?? []).map((e) => ({ text: String(e.text ?? ""), status: String(e.status ?? "") }))),
-        notificationPending: mgr.notificationsList().filter((n) => !n.resolved_at).length,
-      }),
-      report: (line) => {
-        try {
-          appendFileSync(join(cfg.dataDir, "wakeup-report.md"), `[${new Date().toLocaleString("zh-CN", { hour12: false })}] ${line}\n`);
-        } catch { /* 报告尽力而为 */ }
-      },
-    });
-    wakeupSvc.start();
-    setWakeupService(wakeupSvc); // ws-server /api/wakeup 消费（HTTP 创建/列表/取消）
-  }
   // W-PRBACKFLOW：PR 评论回流（Trigger→Subscription 直达交付 worker，DS 末跳）——独立
   // 5min 档（不占 patrol 周期位），档位挂 patrol 族（autoTierOf 单点：off=零研判/
   // observe=干跑记账/auto=投递，见 pr-comment-trigger.ts）；与 patrol 同实例化闸
   //（巡查关=回流关——同族联动，CCR_PR_COMMENT=0 应急停）。周期消费面在
   // SessionManager.runPrCommentCycleOnce（notifyConfirm/noteSubFanout/PM 回落在手边）。
   if (process.env.CCR_PR_COMMENT !== "0") mgr.startPrCommentWatch();
+}
+// T1 条件唤醒基建（DEV-43）：规则表 data/wakeup-rules.json + 谓词器最小集（会话
+// 状态/板卡状态/通知账积压），事实成立才外发（云桥直推通道）、expires 兜底必触达。
+// DEV-54 装配解耦：本块在 patrol 闸外（wakeup 对 PatrolModule 零运行时依赖——
+// CCR_PATROL=0 应急停/巡查键关只停巡查族，不再连带哑掉 wakeup 使已 armed 规则
+// 静默死）；CCR_WAKEUP=0 是唯一杀开关。周期 CCR_WAKEUP_CHECK_MS（缺省 30s，
+// 0=关）。规则创建口=POST /api/wakeup（ws-server，LAN token 同 /api/notify 族）。
+// 云桥禁用时外发腿为空操作（规则照评照记账——触达面降级但不静默）。
+if (process.env.CCR_WAKEUP !== "0") {
+  const wakeupSvc = new WakeupService({
+    dataDir: cfg.dataDir,
+    push: async (title, body, level) => {
+      if (!cfg.cloudUrl) return;
+      await pushCloudAlertAll({ cloudUrl: cfg.cloudUrl, cloudToken: cfg.cloudToken, dataDir: cfg.dataDir }, title, body, level);
+    },
+    facts: () => ({
+      sessions: mgr.snapshot().map((s) => ({ sessionId: s.session_id, status: s.status, external: !!s.external })),
+      boardEntries: (listBoards() ?? []).flatMap((b) => (b.entries ?? []).map((e) => ({ text: String(e.text ?? ""), status: String(e.status ?? "") }))),
+      notificationPending: mgr.notificationsList().filter((n) => !n.resolved_at).length,
+    }),
+    report: (line) => {
+      try {
+        appendFileSync(join(cfg.dataDir, "wakeup-report.md"), `[${new Date().toLocaleString("zh-CN", { hour12: false })}] ${line}\n`);
+      } catch { /* 报告尽力而为 */ }
+    },
+  });
+  wakeupSvc.start();
+  setWakeupService(wakeupSvc); // ws-server /api/wakeup 消费（HTTP 创建/列表/取消）
+  console.log(`[wakeup] 条件唤醒已装配（周期 ${Number(process.env.CCR_WAKEUP_CHECK_MS) || 30_000}ms，/api/wakeup 可用）`);
+} else {
+  console.log("[wakeup] CCR_WAKEUP=0——条件唤醒禁用（/api/wakeup 回 503）");
 }
 // W-WATCHAGENT 巡查员喂料（与 patrol 同开关域：巡查关=喂料关——无报告即无料，联动
 // 语义一致；独立应急停 CCR_WATCH_FEED=0）。零在册巡查员=哑然审计（上岗后首轮全量补投）。
