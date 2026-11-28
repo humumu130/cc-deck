@@ -47,7 +47,9 @@ export async function pushBridgeAlert(opts: PushBridgeAlertOptions): Promise<Bri
   try {
     const res = await doFetch(ep, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${opts.token}` },
+      // UA 自报：undici/python 缺省 UA 会被 CF Bot Fight Mode 拦（error 1010，
+      // 2026-11-28 实弹演练实锤——手机推送 403 静默失败的根源）
+      headers: { "content-type": "application/json", authorization: `Bearer ${opts.token}`, "user-agent": "cc-deck-relay/1.0 (cloud-push)" },
       body: JSON.stringify({ to: opts.to, title: opts.title, body: opts.body, level: opts.level ?? "warn" }),
       signal: ac.signal,
     });

@@ -39,7 +39,8 @@ else
 fi
 
 echo "P1 云桥推送腿（本地桩桥 + 断档路径）："
-# 桩桥：收 POST /alert → 断言头/载荷 → 回 {ok:true,delivered:true}
+# 桩桥：收 POST /alert → 断言头/载荷 → 回 {ok:true,delivered:true}；
+# to 以 ph-off 开头 → 404 target offline（P2 必达重试场景的手机离线形态）
 cat > "$SB/stub-bridge.py" <<'PYEOF'
 import json, http.server, sys
 class H(http.server.BaseHTTPRequestHandler):
@@ -49,6 +50,11 @@ class H(http.server.BaseHTTPRequestHandler):
         auth = self.headers.get("authorization") or ""
         rec = {"path": self.path, "auth": auth, "body": body}
         with open(sys.argv[2], "a") as f: f.write(json.dumps(rec) + "\n")
+        if str(body.get("to", "")).startswith("ph-off"):
+            out = json.dumps({"ok": False, "error": "target offline"}).encode()
+            self.send_response(404); self.send_header("content-type","application/json")
+            self.send_header("content-length", str(len(out))); self.end_headers(); self.wfile.write(out)
+            return
         out = json.dumps({"ok": True, "delivered": True}).encode()
         self.send_response(200); self.send_header("content-type","application/json")
         self.send_header("content-length", str(len(out))); self.end_headers(); self.wfile.write(out)
@@ -104,6 +110,31 @@ env -i PATH=/usr/bin:/bin HOME="$SB/home" \
 sleep 0.3
 if [ -s "$RECEIVED2" ]; then bad "R1-1 双拍确认被破（首拍即推送）"; else ok "R1-1 首拍只记账不推送（桩零请求）"; fi
 grep -qE "连续失败 [0-9]+ 拍" "$SB/report3.md" && ok "R1-2 报告记连续失败拍数" || bad "R1-2 报告缺连续失败行"
+kill $STUB_PID 2>/dev/null || true
+
+echo "P2 必达重试（告警拍全败 → 后续拍重试 → 投达闭合 → 不再重推）："
+RECEIVED3="$SB/received3.ndjson"
+python3 "$SB/stub-bridge.py" 18733 "$RECEIVED3" >/dev/null 2>&1 &
+STUB_PID=$!
+sleep 0.5
+mkdir -p "$SB/data-p2"
+run_p2() { env -i PATH=/usr/bin:/bin HOME="$SB/home" \
+  PATROL_DATA_DIR="$SB/data-p2" PATROL_REPORT="$SB/report4.md" \
+  PATROL_RELAY_URL="http://127.0.0.1:9/" PATROL_CONFIRM_ROUNDS=1 \
+  PATROL_BRIDGE_URL="http://127.0.0.1:18733/alert" \
+  PATROL_PUSH_TO="$1" PATROL_NOTIFY="true" \
+  bash $PS >/dev/null 2>&1; }
+run_p2 "ph-offline0001"   # 拍1：告警即推（CONFIRM_ROUNDS=1）→ 404 全败
+run_p2 "ph-offline0001"   # 拍2：重试 → 仍 404
+run_p2 "ph-offline0001,ph-online0001"  # 拍3：重试 → online 投达 → 闭合
+run_p2 "ph-offline0001,ph-online0001"  # 拍4：已闭合 → 不再推
+sleep 0.3
+N_REQ=$(grep -c '"to": "ph-offline0001"' "$RECEIVED3" 2>/dev/null || echo 0)
+N_ONLINE=$(grep -c '"to": "ph-online0001"' "$RECEIVED3" 2>/dev/null || echo 0)
+[ "$N_ONLINE" -eq 1 ] && ok "P2-1 离线拍全败后第三拍投达在线目标（恰 1 次）" || bad "P2-1 在线目标请求 ${N_ONLINE} 次（期望 1）"
+[ "$N_REQ" -eq 3 ] && ok "P2-2 离线目标每拍重试（拍1+拍2+拍3=3 次）" || bad "P2-2 离线目标请求 ${N_REQ} 次（期望 3）"
+grep -q "push-retry \[relay\] 重试投达——必达位闭合" "$SB/report4.md" && ok "P2-3 报告记重试投达行" || bad "P2-3 报告缺重试投达行"
+grep -q "RECOVERED" "$SB/report4.md" && bad "P2-4 误写恢复行" || ok "P2-4 断档期间无恢复行"
 kill $STUB_PID 2>/dev/null || true
 
 echo ""

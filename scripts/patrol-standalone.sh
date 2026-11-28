@@ -58,12 +58,13 @@ PYEOF
 }
 
 # 手机推送（尽力而为，绝不阻巡检主流程）。回执落报告行：push:ok / push:offline /
-# push:fail(原因)——delivered 真值可对账（演练验收证据位）。
+# push:fail(原因)——delivered 真值可对账（演练验收证据位）。任一目标 delivered
+# 即回 0（「必达」语义=到达任一在线手机；全失败回 1 供上层重试位记账）。
 push_phone() { # $1=title $2=body $3=level(缺省 critical)
   [ "${PATROL_PUSH:-1}" = "0" ] && return 0
   local DEVS; DEVS="$(phone_devs)"
   [ -z "$DEVS" ] && { line "push:skip（无已配对手机）"; return 0; }
-  local TITLE="$1" BODY="$2" LEVEL="${3:-critical}" RC=0
+  local TITLE="$1" BODY="$2" LEVEL="${3:-critical}" ANY_OK=0
   local OLDIFS="$IFS"; IFS=','
   for DEV in $DEVS; do
     [ -z "$DEV" ] && continue
@@ -71,8 +72,11 @@ push_phone() { # $1=title $2=body $3=level(缺省 critical)
     RESP=$(python3 - "$BRIDGE_ALERT_URL" "$BRIDGE_TOKEN_RESOLVED" "$DEV" "$TITLE" "$BODY" "$LEVEL" <<'PYEOF' 2>/dev/null
 import json, sys, urllib.request
 url, token, dev, title, body, level = sys.argv[1:7]
+# UA 必须自报：python-urllib 缺省 UA 被 CF Bot Fight Mode 拦（error 1010，实弹演练
+# 2026-11-28 实锤）——自报产品 UA 过 Browser Integrity Check
 req = urllib.request.Request(url, data=json.dumps({"to": dev, "title": title, "body": body, "level": level}).encode(),
-                             headers={"content-type": "application/json", "authorization": "Bearer " + token}, method="POST")
+                             headers={"content-type": "application/json", "authorization": "Bearer " + token,
+                                      "user-agent": "cc-deck-sentinel/1.0 (patrol-standalone)"}, method="POST")
 try:
     with urllib.request.urlopen(req, timeout=8) as r:
         d = json.loads(r.read() or b"{}")
@@ -85,11 +89,12 @@ except urllib.error.HTTPError as e:
 except Exception as e:
     print("fail:" + str(e)[:120])
 PYEOF
-) || RC=1
+) || true
     line "push[$DEV]:${RESP:-fail:no-response}"
+    [ "${RESP%%:*}" = "ok" ] && ANY_OK=1
   done
   IFS="$OLDIFS"
-  return $RC
+  return $((1-ANY_OK))
 }
 
 # 独立告警通道：不经 relay。PATROL_NOTIFY 可整体替换（测试钩子），缺省 osascript
@@ -108,11 +113,13 @@ line() { echo "[$NOW] $*" >> "$REPORT"; }
 mkdir -p "$(dirname "$REPORT")" "$(dirname "$STATE_FILE")" 2>/dev/null || true
 
 # ---------- 状态账（episode 去重：同类告警一次episode只叫一次，恢复写行） ----------
+# relay_push_ok：断档推送「必达」位——告警拍推送全部失败（手机离线）时保持 0，
+# 后续每拍重试直到任一目标 delivered；成功即置 1（同 episode 不再重推防刷屏）。
 read_state() { python3 -c "
 import json
 try: d=json.load(open('$STATE_FILE'))
 except Exception: d={}
-print(json.dumps({k: (d.get(k) or 0) for k in ('relay_down','relay_first_down','relay_alerted','disk_alerted','hook_alerted')}))
+print(json.dumps({k: (d.get(k) or 0) for k in ('relay_down','relay_first_down','relay_alerted','relay_push_ok','disk_alerted','hook_alerted')}))
 " 2>/dev/null || echo '{}'; }
 write_state() { printf '%s' "$1" > "$STATE_FILE" 2>/dev/null || true; }
 STATE=$(read_state)
@@ -122,6 +129,7 @@ RELAY=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$RELAY_URL" 2>/dev/
 RELAY_DOWN=$(printf '%s' "$STATE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('relay_down',0))" 2>/dev/null || echo 0)
 RELAY_ALERTED=$(printf '%s' "$STATE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('relay_alerted',0))" 2>/dev/null || echo 0)
 RELAY_FIRST_DOWN=$(printf '%s' "$STATE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('relay_first_down',0))" 2>/dev/null || echo 0)
+RELAY_PUSH_OK=$(printf '%s' "$STATE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('relay_push_ok',0))" 2>/dev/null || echo 0)
 if [ "$RELAY" != "200" ]; then
   RELAY_DOWN=$((RELAY_DOWN + 1))
   [ "$RELAY_DOWN" -eq 1 ] && RELAY_FIRST_DOWN=$STAMP
@@ -129,16 +137,27 @@ if [ "$RELAY" != "200" ]; then
     RELAY_ALERTED=1
     SPAN_MIN=$(( (STAMP - RELAY_FIRST_DOWN) / 60 ))
     notify "⚠️ cc-deck relay 无响应" "已连续 ${RELAY_DOWN} 拍（首拍起约 ${SPAN_MIN}min）HTTP=${RELAY:-无}——注入/派单/通知链全停，需人工恢复（P0 级）"
-    push_phone "⚠️ cc-deck relay 无响应" "已连续 ${RELAY_DOWN} 拍（首拍起约 ${SPAN_MIN}min）HTTP=${RELAY:-无}——注入/派单/通知链全停，需人工恢复（P0 级）" critical
+    if push_phone "⚠️ cc-deck relay 无响应" "已连续 ${RELAY_DOWN} 拍（首拍起约 ${SPAN_MIN}min）HTTP=${RELAY:-无}——注入/派单/通知链全停，需人工恢复（P0 级）" critical; then
+      RELAY_PUSH_OK=1
+    fi
     line "ALERT [relay] 连续 ${RELAY_DOWN} 拍无响应（HTTP=${RELAY:-无}，首拍 $(date -r "$RELAY_FIRST_DOWN" '+%m-%d %H:%M' 2>/dev/null)）——已本机通知+手机推送"
+  elif [ "$RELAY_ALERTED" -eq 1 ] && [ "$RELAY_PUSH_OK" -ne 1 ]; then
+    # 必达重试：告警已发但推送全败（手机当时离线）——每拍重试直到任一目标 delivered
+    #（本机通知不重弹；成功即置位，同 episode 不再推防刷屏）
+    if push_phone "⚠️ cc-deck relay 无响应（重试）" "已连续 ${RELAY_DOWN} 拍 HTTP=${RELAY:-无}——前次推送未达，重试中（P0 级）" critical; then
+      RELAY_PUSH_OK=1
+      line "push-retry [relay] 重试投达——必达位闭合"
+    else
+      line "relay:$RELAY（连续失败 ${RELAY_DOWN} 拍，推送仍未达——下拍续试）"
+    fi
   else
     line "relay:$RELAY（连续失败 ${RELAY_DOWN} 拍）"
   fi
 else
   if [ "$RELAY_ALERTED" -eq 1 ] || [ "$RELAY_DOWN" -ge "$CONFIRM_ROUNDS" ]; then
-    line "RECOVERED [relay] 恢复 200（前述停机窗已结束）"
+    line "RECOVERED [relay] 恢复 200（前述停机窗已结束，push_ok=${RELAY_PUSH_OK}）"
   fi
-  RELAY_DOWN=0; RELAY_ALERTED=0; RELAY_FIRST_DOWN=0
+  RELAY_DOWN=0; RELAY_ALERTED=0; RELAY_FIRST_DOWN=0; RELAY_PUSH_OK=0
 fi
 
 # ---------- ② hook 上报腿（relay 活着才判：relay 死时 hook 必然失败，①已覆盖） ----------
@@ -210,7 +229,7 @@ print(' | '.join(alerts) if alerts else 'OK')
 line "任务表: $BOARD_PATROL"
 
 # ---------- 状态落盘 + 心跳可见位（⑦）+ 报告裁剪 ----------
-write_state "{\"relay_down\":$RELAY_DOWN,\"relay_first_down\":$RELAY_FIRST_DOWN,\"relay_alerted\":$RELAY_ALERTED,\"disk_alerted\":$DISK_ALERTED,\"hook_alerted\":$HOOK_ALERTED,\"ts\":$STAMP}"
+write_state "{\"relay_down\":$RELAY_DOWN,\"relay_first_down\":$RELAY_FIRST_DOWN,\"relay_alerted\":$RELAY_ALERTED,\"relay_push_ok\":$RELAY_PUSH_OK,\"disk_alerted\":$DISK_ALERTED,\"hook_alerted\":$HOOK_ALERTED,\"ts\":$STAMP}"
 # 心跳每拍必写（relay 死时恰是它最该活的时刻）：relay 内置巡检轻探针读 ts 判
 # sentinel-stale（缺省 100min 阈），「哨也静默死」从不可见变可观测
 printf '{"ts":%s,"relay":"%s","disk":"%s","interval_ms":%s,"pid":%s}\n' \
