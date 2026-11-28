@@ -66,10 +66,12 @@
 | 通知/值守 | test:notify-overhaul、test:r1c-notify、test:x0、test:pm-duty-product、test:pmresume | reconcile 快路径漏 syncCounts；badge 类 ×5 缺；N11④/N14 悬账补记断链；no-leader 值守接管 ×4；worker done 即唤醒链断；逃生阀=0 不拉 |
 | 会话/活流 | test:watchdog、test:alive、test:ui-followup、test:ws | A2 消息进活流断；孤儿卡收养在册缺 + **mtime 偏差 -1,795,838,237,587ms（单位/纪元混算形态）**；U1 空闲不跳根修 v3（updated_at 四现族）；resume 补发混入 seq≤1 帧 |
 | 命令/权限 | test:m12-commands、test:m13-delta、test:m13-web-delta、test:permission-compat、test:wildonboard | C9 段链状态机 ×6；轻立项建组 fixture 建不成（m13/permission-compat 前置连坐 ×6）；在岗=最近活跃 external 空 |
-| 跨端注入/云 | test:xmsg-e2e、test:005-cloud | dispatch-remote 注入 rejected:no-duty-target（×6）；route miss 后 8s 窗 resume 补发未到（×2） |
+| 跨端注入/云 | test:xmsg-e2e、test:005-cloud | dispatch-remote 注入 rejected:no-duty-target（×8，XMSG E2E: 8 FAILURES）；route miss 后 8s 窗 resume 补发未到（×2）。⚠ xmsg-e2e 返修补记：交付 SHA `e02d7b74` 上该键曾因 peer 桩未随迁以 ERR_MODULE_NOT_FOUND×3 假破（审查 P1-1 实锤），peer 随迁后复跑签名/exit 与本表逐字回归（EXIT:1、8 FAILURES、首败 A outbox 终态 rejected:no-duty-target） |
 | 引擎收编 | test:codex-adoption、test:engine-rollouts | rollout 增量扫描收编 Codex/Trae 会话断 |
 
 ## 丁、环境性/时限性（隔离台账，不进矩阵）
+
+> **教训补录（P1-1 返修，2026-11-28）**：迁移面归因不分矩阵内外——**quarantine 键同样须穷尽迁移面归因**。test:xmsg-e2e 在交付 SHA 上因 `xmsg-e2e-peer.ts`（无 test-/probe- 前缀，迁移 glob 漏网）未随迁，三 peer 全 ERR_MODULE_NOT_FOUND 崩在「A devfile 未出现」，其丙族真签名（no-duty-target×8）被断链掩盖——CI 不跑 quarantine 键，断链静默，DEV-41 接手会先撞断链误判缺陷面。与丁-1 bridge 同族同因（fake-injector 同型第二处）；**规则固化：迁测试目录必须带走其同目录相对引用的全部桩件（test-*/probe-* 前缀 glob 之外还有按名 spawn/import 的伴生件）**。
 
 | 键 | 判定 | 依据 |
 |---|---|---|

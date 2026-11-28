@@ -21,7 +21,7 @@
 #   ⑤ 报告 tail-400 保留（v1 的 200 行太短，onset 回溯需要更长窗）
 #
 # 部署（leader 清单项）：本文件安装为 ~/.cc-deck/bin/patrol.sh（替换 v1），launchd
-# 标签/周期不变。测试通路：全路径 env 可覆盖（PATROL_*），见 relay/scripts/test-hookfail.ts D 组。
+# 标签/周期不变。测试通路：全路径 env 可覆盖（PATROL_*），见 relay/tests/test-hookfail.ts D 组。
 
 REPORT="${PATROL_REPORT:-$HOME/.cc-deck/patrol-report.md}"
 DATA_DIR="${PATROL_DATA_DIR:-$HOME/.cc-deck/data}"

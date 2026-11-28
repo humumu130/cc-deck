@@ -74,7 +74,7 @@
   ],
   "quarantine": {
     "test:ws": "缺陷候选｜缺陷候选：resume 补发混入 seq≤1 帧（另属需真 CLI 设计态排除）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:xmsg-e2e": "缺陷候选｜缺陷候选：dispatch-remote 注入 rejected:no-duty-target×6｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
+    "test:xmsg-e2e": "缺陷候选：dispatch-remote 注入 rejected:no-duty-target×8（XMSG E2E: 8 FAILURES；返修补记：peer 桩随迁后签名回归与本行一致）",
     "test:005-cloud": "缺陷候选｜缺陷候选：route miss 后 8s 窗 resume 补发未到×2｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:ui-followup": "缺陷候选｜缺陷候选：U1 空闲不跳根修 v3（updated_at 四现族）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:watchdog": "缺陷候选｜缺陷候选：A2 消息进活流断｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",

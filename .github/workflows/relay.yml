@@ -98,7 +98,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # relay 的 scripts/test-cloud.ts 进程内 import ../cloud-bridge 源码，
+      # relay 的 tests/test-cloud.ts 进程内 import ../cloud-bridge 源码，
       # tsc/tsx 都会从 cloud-bridge 向上解析 ws —— 必须同装其依赖
       - name: Install cloud-bridge dependencies
         run: npm ci
