@@ -1132,7 +1132,8 @@ export function startServer(
     }
     // T1 条件唤醒（DEV-43）：POST /api/wakeup——规则表 CRUD 口（arm/list/cancel），
     // token 同 /api/notify 族（LAN 面）。谓词语义与 expires 兜底见 src/wakeup.ts；
-    // 服务未装配（CCR_WAKEUP=0 / 云桥禁用装配序外）回 503 不静默。
+    // 服务未装配（唯一成因 CCR_WAKEUP=0——装配已解耦 patrol 闸，DEV-54；云桥禁用
+    // 只空挂外发腿不阻装配）回 503 不静默。
     if (url.pathname === "/api/wakeup") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end("unauthorized"); return; }
       if (req.method !== "POST") { res.writeHead(405).end("method not allowed"); return; }

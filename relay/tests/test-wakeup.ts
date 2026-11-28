@@ -5,12 +5,14 @@
 //   V 组  服务 tick：fire 外发一次 / 不满足零外发 / expires 兜底触达 / checks 计数
 //   P 组  cloud-push 单元：端点推导 / fetch 桩断言（头/载荷/超时）/ 配对手机解析
 //   H 组  HTTP 载荷校验（armWakeupFromHttp 词表闸）
+//   M 组  装配面（DEV-54：wakeup 闸在顶层解耦 patrol——防意外耦合回潮）
 //   X 组  手机端帧解析（expo-app/src/bridge-alert 纯函数——relay 侧代跑，node 直测面惯例）
 //   A 组  桥侧共享单源（cloud-bridge/src/alert：parseAlertPayload/buildAlertFrame/limiter）
 // 直跑：env -u CCR_ORG_DIR npx tsx tests/test-wakeup.ts
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   evaluateWakeup, loadWakeupRules, saveWakeupRules, newWakeupRule, WakeupService,
   type WakeupFacts, type WakeupRule,
@@ -209,6 +211,14 @@ console.log("H 组 HTTP 载荷校验");
   ok(!armWakeupFromHttp({ title: "t", body: "b", predicate: { kind: "cron" } }).ok, "H4 未知谓词 kind 拒");
   ok(!armWakeupFromHttp({ title: "t", body: "b", predicate: { kind: "notification_pending", minCount: 0 } }).ok, "H5 minCount 下界拒");
   ok(!armWakeupFromHttp({ title: "", body: "b", predicate: { kind: "session_status", status: "DONE" } }).ok, "H6 空 title 拒");
+}
+
+console.log("M 组 装配面（DEV-54 解耦锚）");
+{
+  const idxSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "index.ts"), "utf-8");
+  // 列 0 命中 = 装配闸在顶层；若被挪回 patrol 闸内会带缩进、锚即红——防「应急停
+  // 巡查连带哑掉 wakeup（已 armed 规则静默死）」的意外耦合回潮。
+  ok(/^if \(process\.env\.CCR_WAKEUP !== "0"\) \{$/m.test(idxSrc), "M1 wakeup 装配闸在顶层（已解耦 patrol 闸）");
 }
 
 console.log("X 组 手机端帧解析（expo bridge-alert 纯函数）");
