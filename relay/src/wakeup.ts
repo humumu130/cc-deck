@@ -195,7 +195,13 @@ export class WakeupService {
     return true;
   }
 
-  /** 单轮评估（幂等可直调——测试/演练用）。串行锁防重入（周期拍与手动 tick 撞车）。 */
+  /** 单轮评估（幂等可直调——测试/演练用）。串行锁防重入（周期拍与手动 tick 撞车）。
+   *
+   * P2-1（DEV-51）：状态变更先落盘再外发。评估段零 await（整段同步执行），
+   * 终态+checks 一次落盘后才进外发段——push 的 await 窗口内 arm()/cancel()（HTTP
+   * 同步路径 load→改→save）读到与写回的都是已含本拍终态的新表，不存在被 tick
+   * 陈旧快照整表覆盖的窗口（逐分支「落盘→push」也不行：多规则连发时后一分支
+   * 的 save 仍会抹掉前一 push 窗内 arm 的新规则——所以外发整体后置）。 */
   async tick(): Promise<{ fired: number; expired: number }> {
     if (this.running) return { fired: 0, expired: 0 };
     this.running = true;
@@ -206,6 +212,7 @@ export class WakeupService {
       const rules = loadWakeupRules(this.opts.dataDir);
       let dirty = false;
       let facts: WakeupFacts | null = null;
+      const outbound: Array<{ title: string; body: string; level?: string }> = [];
       for (const rule of rules) {
         if (rule.state !== "armed") continue;
         if (facts === null) facts = this.opts.facts();
@@ -218,7 +225,7 @@ export class WakeupService {
           rule.firedReason = "predicate";
           fired++;
           this.opts.report?.(`FIRED [${rule.id}] ${rule.title}`);
-          try { await this.opts.push(rule.title, rule.body, rule.level); } catch { /* 外发尽力而为 */ }
+          outbound.push({ title: rule.title, body: rule.body, level: rule.level });
         } else if (out.action === "expire") {
           rule.state = "expired";
           rule.firedAt = now;
@@ -226,12 +233,17 @@ export class WakeupService {
           expired++;
           // 兜底触达：过期≠静默死——到期仍发一条（低级别），等的人知道等完了
           this.opts.report?.(`EXPIRED [${rule.id}] ${rule.title}（事实未成立，兜底触达）`);
-          try {
-            await this.opts.push(`⏰ 唤醒规则过期：${rule.title}`.slice(0, 120), `等待窗已结束，事实未成立——${rule.body}`.slice(0, 500), "info");
-          } catch { /* 外发尽力而为 */ }
+          outbound.push({
+            title: `⏰ 唤醒规则过期：${rule.title}`.slice(0, 120),
+            body: `等待窗已结束，事实未成立——${rule.body}`.slice(0, 500),
+            level: "info",
+          });
         }
       }
       if (dirty) saveWakeupRules(this.opts.dataDir, rules);
+      for (const m of outbound) {
+        try { await this.opts.push(m.title, m.body, m.level); } catch { /* 外发尽力而为 */ }
+      }
     } finally {
       this.running = false;
     }
