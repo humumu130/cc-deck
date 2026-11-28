@@ -84,7 +84,10 @@ const modelFn = fnBody("teamDrawerModelOf");
 const sortFn = fnBody("teamDrawerRosterSort");
 ok(lanesConst !== "" && legacyConst !== "" && modelFn !== "" && sortFn !== "", "teamDrawerModelOf pure functions extracted for direct run");
 const keepRoleSrcT = jsConst("SLIM_KEEP_ROLE"); // §T 自取（§A 的 keepRoleSrc 声明在后，前置引用 TDZ 崩）
-const drawerFx = new Function(`${keepRoleSrcT}\n${lanesConst}\n${legacyConst}\n${modelFn}\n${sortFn}\nreturn { teamDrawerModelOf, teamDrawerRosterSort };`)() as {
+// #291 审查 B-P1-2 桩：running 计数改读全局 S.sessions+isRealWorking（行灯同口径；
+// rs 未同步保守按干活）——中性桩空 sessions 表=恒保守路径（与直跑入参 sess 无关的
+// 只读面），isRealWorking 桩恒真（保守路径下不会被调用）
+const drawerFx = new Function(`const S = { sessions: new Map() };\nfunction isRealWorking() { return true; }\n${keepRoleSrcT}\n${lanesConst}\n${legacyConst}\n${modelFn}\n${sortFn}\nreturn { teamDrawerModelOf, teamDrawerRosterSort };`)() as {
   teamDrawerModelOf: (t: unknown, b: unknown, m: Map<string, unknown>) => Record<string, unknown>;
   teamDrawerRosterSort: (a: Record<string, unknown>, b: Record<string, unknown>) => number;
 };
@@ -138,17 +141,17 @@ console.log("-- §B css anchors");
 const entryCss = cssBlock(".team-entry");
 /* #193 顺手清债：team-entry 卡断言删除——.team-entry 选择器随 #103 团队域两段式重排退役（css/js 双源不存在） */
 const drawerCss = cssBlock(".team-drawer");
-ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 296px") && css.includes(".team-drawer.open {") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 20px; }"), "team-drawer is an overlay fourth column (W-TEAMSNC ④ 296px + .open transition), re-anchors when inspector collapses"); // W-TEAMSNC ④：248→296 + class 动效（.open 是独立规则，断言走全量 css 非 drawerCss 单块）
+ok(drawerCss.includes("position: absolute") && drawerCss.includes("width: 296px") && css.includes(".team-drawer.open {") && css.includes(".desktop-screen.inspector-collapsed .team-drawer { right: 0; }") /* 1104 用户①：贴死右缘 0 缝（原 20px 让位=全高缝） */, "team-drawer is an overlay fourth column (W-TEAMSNC ④ 296px + .open transition), re-anchors when inspector collapses"); // W-TEAMSNC ④：248→296 + class 动效（.open 是独立规则，断言走全量 css 非 drawerCss 单块）
 ok((() => { const td = readFileSync(join(root, "web-console", "js", "team-domain.js"), "utf-8"); return td.includes("/^(pm|leader|产品经理|项目经理|领队)$/i") && td.includes("x.r.pm - y.r.pm || x.r.active - y.r.active"); })(), "#264+PM 补充: sortRoster PM 恒首档（SLIM_KEEP_ROLE 五词表）先于活跃四档 WORKING>WAITING>排队>idle，同级 updated_at 降序");
 ok(css.includes("aspect-ratio: auto; min-height: 150px;") && css.includes("justify-self: stretch") && css.includes("max-width: none"), "#264 grid: member-card 等高行对齐（退役 aspect-ratio/380 封顶，stretch 拉满轨道+min-height 下限；窄容器 auto-fill 天然单列）");
-ok(css.includes(".avatar.m-ava .ava-crab") && css.includes(".ava-crown") && css.includes(".ava-qatag"), "#264 avatar: 角色蟹/金冠叠角/QA 角标样式在位（expo W-CRABINTEGRATE 同规格移植）");
+ok(css.includes(".avatar.m-ava .ava-brand") && css.includes(".ava-crown") && css.includes(".ava-qatag"), "#264 avatar: 品牌头像包装/金冠叠角/QA 角标样式在位（#277 ⑥ 起 .ava-crab→.ava-brand——avaBrandHtmlOf 单口，蟹 img 26px contain/品牌 svg 18px）");
 ok(cssBlock(".member-card[data-team-member-session]").includes("cursor: pointer") && css.includes('.member-card[data-team-member-session]::after { content: "↗ 直开"'), "team-domain member card hover reveals direct-open affordance");
-ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && cssBlock(".team-chip .tc-dot").includes("animation: slimPulseKf"), "inspector member chips + unread pulse styles exist (W-TEAMCHIP2 ②未读角标迁 chip tc-unread，dock 入口卡角标退役)"); /* W-ENGLM2 跟锚：未读数字角标 tc-unread→小圆点 tc-dot（数字位=活跃数 tc-run），预存红顺手修 */
+ok(cssBlock(".member-chips").includes("flex-wrap") && cssBlock(".member-chip .mc-ava").includes("border-radius: 50%") && css.includes(".team-chip.has-unread"), "inspector member chips + unread emphasis styles exist"); /* 件K2（1029 用户 22:0x）跟锚：tc-dot 黄橙呼吸灯退役（与 tc-run 工作灯语义重复不可解读）——未读注意力=has-unread 描边+title 文案；slimPulseKf keyframes 全仓退役 */
 
 // ---- §C 列表渲染链 ----
 console.log("-- §C render chain");
 ok(sessionSrc.includes("tailTs(inc) >= tailTs(cur)") && sessionSrc.includes("next.set(k, inc.slice())") && !sessionSrc.includes("S.timelines = new Map(Object.entries(p.logs"), "#274: onSnapshot timelines 按会话新者胜 upsert（切源=纯视图过滤，本地缓冲优先——陈旧快照不能拉回消息流；快照未提及 sid 本地保留；缺口=快照尾新自动取快照份）");
-ok(sessionSrc.includes("const slimRoster = slimRosterOf(S.projects);") && sessionSrc.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x))") && sessionSrc.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
+ok(sessionSrc.includes("const slimRoster = slimRosterOf(S.projects);") && sessionSrc.includes(".filter((x) => (pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x) && slimVisible(x) && !remoteHiddenHas(x.session_id))") && sessionSrc.includes("const slimVisible = (x) => !slimIsHidden(x, slimRoster, S.selected);"), "renderMyList pipes sessions through slim filter");
 ok(sessionSrc.includes("const pinnedKeep = (x) => x.pinned === true;") && sessionSrc.includes(".filter((x) => isLeaderSession(x) || !((pinnedKeep(x) || filterDef.test(x)) && sessionSearchTest(x)))"), "1015 pinned keep: pinned cards exempt from status filter (always rendered, pinned-first top); filterHidden ledger shares the same predicate so observer amnesty stays exact"); /* W-TS63FIX 顺手修锚：预存红——W-LEADERHIDE 批给 filterHidden 加 isLeaderSession 前缀后锚未跟（pinned 豁免语义未丢，stash 实证与 TS63 改动无关） */
 ok(sessionSrc.includes("S._slimHiddenIds = slimHiddenIds.length ? new Set(slimHiddenIds) : null;"), "hidden sids recorded for observer amnesty (same FB17 discipline)");
 ok(sessionSrc.includes("const gidForFrame = S.drawerGid;") && sessionSrc.includes("if (S.drawerGid && S.drawerGid === gidForFrame) el.classList.add(\"open\");"), "W-TS63FIX P3-1: rAF open guard—same-frame close cannot ghost-open cleared drawer");
@@ -156,8 +159,8 @@ ok((() => { const b = fnBody("renderSlimDrawer"); return b.includes("scrollTop")
 ok((() => { const b = fnBody("slimToggleDrawer"); return b.includes("renderHeader()") && b.includes("[data-team-chip=\"") && b.includes("chipAgain"); })(), "W-TS63FIX P3-2: toggle re-renders header (head-chip aria sync) + restores focus to same-gid chip");
 ok((() => { const b = fnBody("slimRosterOf"); return b.includes("archived"); })(), "W-TS63FIX P2-1: slimRosterOf filters archived teams (chip/dock/drawer/fold four-face gate alignment)");
 ok((() => { const b = fnBody("teamDrawerMarkup"); return b.includes("d-stale") && b.includes("离线·陈旧"); })(), "W-TS63FIX P3-3: drawer-head stale badge when offline (S.status!=online)");
-ok(!stripComments(sessionSrc).includes("teams-dock") && !css.includes(".session-group.teams-dock") && !stripComments(sessionSrc).includes("slimTeamEntryMarkup") && !css.includes(".team-entry") && sessionSrc.includes('class="tc-dot"') && css.includes(".team-chip .tc-run {") && css.includes(".team-chip .tc-dot {"), "W-TEAMCHIP2 ②: teams-dock retired whole-chain (user 1025 verdict, C-稿 dock retirement lands) — no dock markup/entry css/B11 toggle; unread aggregation re-anchored on chip tc-dot dot（W-ENGLM2 语义：数字位=tc-run 活跃数）");
-ok(sessionSrc.includes("tpl.innerHTML = pinnedMarkup + activeMarkup + idleMarkup;") && sessionSrc.includes("mountUpper(tpl.content);") && sessionSrc.includes('upper.className = "list-upper";'), "list assembly: single upper pane (W-TEAMCHIP2 ② dock retired, #103 two-pane ends)");
+ok(!stripComments(sessionSrc).includes("teams-dock") && !css.includes(".session-group.teams-dock") && !stripComments(sessionSrc).includes("slimTeamEntryMarkup") && !css.includes(".team-entry") && sessionSrc.includes('has-unread') && css.includes(".team-chip.has-unread {") && css.includes(".team-chip .tc-run {") && !stripComments(css).includes("slimPulseKf"), "W-TEAMCHIP2 ②: teams-dock retired whole-chain (user 1025 verdict, C-稿 dock retirement lands) — no dock markup/entry css/B11 toggle; unread emphasis re-anchored on chip has-unread 描边（件K2 1029 起；数字位=tc-run 活跃数，呼吸灯/slimPulseKf 全仓退役）");
+ok(sessionSrc.includes("tpl.innerHTML = awaitMarkup + pinnedMarkup + activeMarkup + idleMarkup + retiredMarkup;") /* W-AWAITUSER 起等拍板池恒最顶+retired 段随拼 */ && sessionSrc.includes("mountUpper(tpl.content);") && sessionSrc.includes('upper.className = "list-upper";'), "list assembly: single upper pane (W-TEAMCHIP2 ② dock retired, #103 two-pane ends)");
 ok(sessionSrc.includes("const TEAM_CHIP_ICON =") && sessionSrc.includes('class="tc-ico"') && sessionSrc.includes("function syncDrawerMutex()") && stripComments(sessionSrc).includes('ev.target.closest(".inspector-expand")'), "W-TEAMCHIP2 ①③: chip icon = two-person inline svg (tc-ico, accent-colored); drawer×inspector mutex in docked form with reverse handle (slimTeamEntryMarkup card assertions retired with the dock)");
 
 // ---- §D MutationObserver 放行 + 选中联动 ----
@@ -177,7 +180,7 @@ ok(snapFn.includes("S.slimUnread = new Map();") && snapFn.includes('localStorage
 
 // ---- §F 直开路径 ----
 console.log("-- §F direct-open path");
-ok(sessionSrc.includes("window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected })"), "slim UI api exposed cross-domain (W-TEAMSNC ① +selectedSid：建团表单 PM 带队档取当前选中会话)");
+ok(sessionSrc.includes("window.__ccDeck005SlimUi = Object.freeze({ open: slimOpenSession, markSeen: slimMarkSeen, toggleDrawer: slimToggleDrawer, selectedSid: () => S.selected, has: (sid) => S.sessions.has(String(sid || \"\")) }"), "slim UI api exposed cross-domain (W-TEAMSNC ① +selectedSid：建团表单 PM 带队档取当前选中会话；R2-P1 起 +has——bridge selectSessionCard else 分支 SlimUi 直选判据)");
 const openFn = fnBody("slimOpenSession");
 ok(openFn.includes("inputDrafts.set(S.selected, UI.input.value)") && openFn.includes("renderMyList(); // 直聊中的 worker 会话临时出列") && openFn.includes("b2Toast(\"成员会话不在当前来源\")"), "direct-open reuses selection chain: drafts, temporary listing, missing-session toast");
 const memberAnchor = `data-team-member-session="' + escape(member.session_id)`;

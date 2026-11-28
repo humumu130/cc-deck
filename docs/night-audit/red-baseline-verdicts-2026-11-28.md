@@ -53,6 +53,18 @@
 | test:gatefix | G1① receiptPath ~ 字面量归一 / G4 零误报 | 回执路径归一行为演进 vs 冻结期望 |
 | test:halfconn | `downTextOfSid` 未定义（expo 源 eval 桩缺名） | expo-app 侧同 258 类；件在 expo-app/scripts/ |
 
+> **乙族处置结果（DEV-42，2026-11-28）**：17 键全数修绿（含 approve-card 的 expo 豁免锚——
+> approval-timeout 批后 stale 置灰机制整体退役，锚升级为「审批卡永不过期」总锚）。逐键锚随源
+> 刷新（桩缺名类 cbs/halfconn/268 补中性桩；计数/文案/形状类按新形态重锚；version-sentinel
+> P2-3b 从绝对版本对改相对锻造防再漂）。**duty-boundary 定性：合法演进**——W-DUTYBACKOFF 刀3
+> 的 duty-reviewed.json orgDir 侧持久化引入 node:fs/node:path/org.js 三 import，spec 三面隔离
+> （零 SQLite 表/零 EventType/零 EventBus 出口）原样保持，纯度锁从「整文件零 import」收细为
+> 「import 白名单＋评估函数区零 fs 触点」。迁移去向：15 键晋 matrix（自包含锚测试）；2 键入
+> watch（version-sentinel=macOS 面键 CI Linux 不可跑；approve-card=③段 tmux E2E 环境性未验）。
+> 顺带收编矩阵外裸奔 5 键（cardtags/awaituser/animfast/visualfix/session-slim——leader 勘定转入，
+> 全数修绿后 npm 注册入 matrix；session-slim 崩溃定性=桩缺名非进程缺陷，未单开修复单）。
+> 分支 `agent/deck-fixer-2/dev-42`，回执见 DEV-42 单。
+
 ## 丙、行为断言红·缺陷候选（处置=定性修复单 DEV-41）
 
 行为级断言（假工厂/沙盒真跑）红——**非锚、非环境**，需逐族定性（真缺陷 or 有意变更未跟测）。

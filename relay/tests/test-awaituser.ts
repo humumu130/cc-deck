@@ -456,8 +456,8 @@ function staticLockTests(): void {
   // notify 排序：userPending 键在 active 键之前（扩同一排序器）+ observe3 锚不破
   assert(notifySrc.includes("Number(b.userPending === true) - Number(a.userPending === true) || Number(b.active) - Number(a.active)"),
     "F⑦ notify 排序器扩展：userPending 位在 active 位之前（同一比较器链，非第二排序器）");
-  assert(notifySrc.includes('group("需你行动", "r", actionRows, "")'),
-    "F⑧ observe3 锚保留：需你行动组首位（三分组结构不动）");
+  assert(notifySrc.includes('group("需你行动", "r", rowsOf(aggregate(actionRows))'),
+    "F⑧ observe3 锚保留：需你行动组首位（三分组结构不动；W-NOTIFYPOLISH 起行集经 aggregate+rowsOf、增 rail 计数参）");
   assert(notifySrc.includes('"#au:" + rows.filter((r) => r.userPending).map((r) => r.key).join(",")'),
     "F⑨ 渲染签名含 userPending 指纹（顶格变化必重渲——跳帧短路防）");
   assert(notifySrc.includes("awaitu-chip"), "F⑩ 待拍板行 chip 在册");

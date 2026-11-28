@@ -96,8 +96,11 @@ const win = {
 };
 const b2ToastStub = (msg: string, _ms?: number, action?: { label: string }) => { toasts.push({ msg, action }); };
 const uuidStub = () => "cmd-halfconn-test";
-const harness = new Function("window", "b2Toast", "uuid", "setInterval", "clearInterval", "Date",
-  seg + "\nreturn { sendCmd, halfconnRetrySend };")(win, b2ToastStub, uuidStub, setInterval, clearInterval, Date);
+// offlineui 刀3 桩：sendCmd 未受理兜底文案按源健康分流（downTextOfSid）——中性桩空串
+//（无健康面=回落既有兜底文案，与本场景「源失配态」语义一致，同 258 修法）
+const downTextOfSidStub = (_sid: string) => "";
+const harness = new Function("window", "b2Toast", "uuid", "setInterval", "clearInterval", "Date", "downTextOfSid",
+  seg + "\nreturn { sendCmd, halfconnRetrySend };")(win, b2ToastStub, uuidStub, setInterval, clearInterval, Date, downTextOfSidStub);
 const t0 = Date.now();
 const id = harness.sendCmd("COMMAND_MESSAGE", { session_id: "s-halfconn-1", text: "hi" } as Record<string, unknown>);
 const acceptedAt = Date.now();

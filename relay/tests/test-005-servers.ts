@@ -72,8 +72,11 @@ ok(html.includes("function deleteCloudServer(id) {"), "A2 deleteCloudServer 入�
 {
   const body = blockFrom("function deleteCloudServerUI(entry) {");
   ok(body.includes('cloudCtx.status === "online" || cloudCtx.status === "connecting"'), "A3 live 判定=当前源且在线/连接中");
-  ok(body.includes("confirm(") && body.includes("删除将断开连接"), "A3 活跃源删除二次确认（明示断连影响）");
-  ok(!body.replace(/if \(live[^\n]*\n/, "").includes("confirm("), "A3 离线死条目无确认卡（直接删——用户主路径）");
+  // 1028 Nova 壳 ACL 雷后：原生 confirm() 改页内双钮确认条（sdel-confirm-bar——壳/浏览器同路径）
+  ok(body.includes('bar.id = "sdel-confirm-bar"') && body.includes("删除将断开连接"), "A3 活跃源删除页内二次确认条（明示断连影响；1028 起原生 confirm 退役）");
+  const iBar = body.lastIndexOf("sdel-confirm-bar");
+  const iDirect = body.indexOf('if (deleteCloudServer(entry.id)) showToast');
+  ok(iBar > 0 && iDirect > iBar, "A3 离线死条目无确认卡（直接删——用户主路径：确认条引用全在 live 分支内，直删口在其后）");
 }
 
 // A4 拉活链防复活：cloudPersistPaired「绝不删条目」纪律未破（删除走独立 remove 函数）
@@ -157,8 +160,10 @@ console.log("-- C. UI 列表化与三锚委托 --");
 // C3 移动端 lane 同步列表化
 {
   const body = blockFrom("function cloudMobileLaneInner() {");
-  ok(body.includes("sdelServerRows(true)"), "C3 移动 lane 桌面同构列表");
-  ok(html.includes("源列表 · "), "C3 lane 头「源列表 · N」（CONNV3 改名跟——云桥从唯一固定项降级为条目之一）");
+  // 批E 五段序：lane 内容上收 mobileSourceLaneRows 单口（本机+acct+LAN 待连+配对码源），sdelServerRows(true) 随迁
+  const rowsBody = blockFrom("function mobileSourceLaneRows()");
+  ok(body.includes("mobileSourceLaneRows()") && rowsBody.includes("sdelServerRows(true)"), "C3 移动 lane 桌面同构列表（批E 起经 mobileSourceLaneRows 单口）");
+  ok(body.includes('<span>源列表</span>'), "C3 lane 头「源列表」（批E 头计数退役——LAN 待连非「源」防误导）");
   ok(body.includes("data-cloud-pair-input"), "C3 移动配对表单锚保留");
 }
 
@@ -197,7 +202,7 @@ console.log("-- C. UI 列表化与三锚委托 --");
 // C7 非 cloudMode（桌面壳/浏览器 LAN 形态）连接面板同列条目——用户主场景是桌面壳，
 // else 分支不列条目=改了白改；刷新借道防删后旧列表滞留
 {
-  const i = html.indexOf('liveSetHtml(remoteLive, sourceListRows'); // CONNV4 批A 锚跟改：cloudSettingsRows 退役→sourceListRows 单口（注入点定位——非函数定义处）
+  const i = html.lastIndexOf('liveSetHtml(remoteLive, sourceListRows'); // CONNV4 批A 锚跟改：cloudSettingsRows 退役→sourceListRows 单口；批A 同时在云形态分支加了同款注入（首现=云侧），非 cloudMode else 分支取末现
   ok(i > 0, "C7 非 cloudMode 连接面板嵌入 sourceListRows（桌面壳/LAN 形态同列条目——CONNV4 批A 单口）");
   const iElse = html.lastIndexOf("else {", i);
   ok(iElse > 0 && html.slice(iElse, i).includes("v8-relaystat"), "C7 嵌入位于 initSettingsLiveData else 分支（本机 relay 行之后·W-V8R 批6 行形态改 v8-relaystat）");
@@ -212,26 +217,14 @@ console.log("-- C. UI 列表化与三锚委托 --");
 
 console.log("-- D. 结构闸 --");
 
-// D1 改动主 script 块整体编译（node --check，真语法闸——parity C12 同口径但锚本域）。
-// 块定位用成对正向扫描：块内注释含「<script>」字面量（如「域各在独立 <script> 块」）会骗过
-// lastIndexOf 反向定位，正向成对推进天然跳过（指针每次跳到块尾之后）
+// D1 整档语法闸（node --check，真语法闸——parity C12 同口径但锚本域）。
+// CONNV4 批A 外置后本档=独立 JS 文件（settings-domain.js），不再内嵌 <script> 块——
+// 原「成对 script 标签扫描定位」随之退役，语法闸直接吃整档。
 {
   const iSdel = html.indexOf("W-SDEL 服务器条目管理");
-  ok(iSdel > 0, "D1 sdel 段在 HTML 内");
-  let iOpen = -1;
-  let iClose = -1;
-  let p = 0;
-  while (p < html.length) {
-    const a = html.indexOf("<script>", p);
-    if (a < 0) break;
-    const b = html.indexOf("</script>", a);
-    if (b < 0) break;
-    if (a < iSdel && iSdel < b) { iOpen = a; iClose = b; break; }
-    p = b + 1;
-  }
-  ok(iOpen > 0 && iClose > iSdel, "D1 sdel 段所在 script 块边界可寻（成对扫描——CONNV4 批A 外置后=settings-domain 函数段）");
-  if (iOpen > 0 && iClose > iSdel) {
-    const js = html.slice(iOpen + "<script>".length, iClose);
+  ok(iSdel > 0, "D1 sdel 段在档内");
+  {
+    const js = html; // 整档即扫描对象（独立 JS 文件形态）
     const tmp = join(root, "relay", "data", "test-sdel-check.mjs");
     let compiled = false;
     let errNote = "";
@@ -247,7 +240,7 @@ console.log("-- D. 结构闸 --");
       errNote = e instanceof Error ? e.message.split("\n")[0] : String(e);
       try { const { rmSync } = await import("node:fs"); rmSync(tmp, { force: true }); } catch {}
     }
-    ok(compiled, "D1 主 script 块 node --check 编译通过" + (compiled ? "" : "（" + errNote + "）"));
+    ok(compiled, "D1 settings-domain.js 整档 node --check 编译通过" + (compiled ? "" : "（" + errNote + "）"));
   }
 }
 

@@ -172,8 +172,8 @@ const ok = (c: unknown, n: string) => { if (c) { pass++; console.log("  ok - " +
     }
     // R1b 源码锚：挂点在 managed onLog 体内（真挂点）+create-cwd 死代码已撤
     const smSrc = readFileSync(join(process.cwd(), "src", "session-manager.ts"), "utf-8");
-    const onLogBody = smSrc.slice(smSrc.indexOf("managed.logs.splice(0, managed.logs.length - 1500)"), smSrc.indexOf("managed.logs.splice(0, managed.logs.length - 1500)") + 1200);
-    ok(onLogBody.includes("maybeConsumeDutyReceipt"), "R1b managed onLog 体内挂 maybeConsumeDutyReceipt（源码锚）");
+    const onLogBody = smSrc.slice(smSrc.indexOf("managed.logs.splice(0, managed.logs.length - 1500)"), smSrc.indexOf("managed.logs.splice(0, managed.logs.length - 1500)") + 1600); // W-ENGSEC 批三起挂点距窗头 1239 字符——窗扩至 1600
+    ok(onLogBody.includes("maybeConsumeDutyReceipt(managed.state.session_id"), "R1b managed onLog 体内挂 maybeConsumeDutyReceipt（源码锚；R3 起入参 dutyManagedText full 优先——托管 PM 长输出尾行协议行不再截丢）");
     const fb = smSrc.slice(smSrc.indexOf("if (fallbackNote)"), smSrc.indexOf("if (fallbackNote)") + 900);
     ok(!fb.includes("this.maybeConsumeDutyReceipt("), "R1c create-cwd fallbackNote 死挂点已撤（system 行永不含协议行——调用语句零在场）");
   }

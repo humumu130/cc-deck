@@ -28,9 +28,19 @@ const setPrev = (o) => writeFileSync(join(DIR, "version-sentinel.json"), JSON.st
 // P2-3：稳定版 0.7.0 跟 test.96 后 → upgrade（旧码 [0,7,0]<[0,7,0,96] 前缀序误标 revert）
 setPrev({ version: "0.7.0-test.96-nova", fingerprint: "aaaa1111", plist_mtime: 100 });
 assert(run().includes("upgrade"), "P2-3 稳定版跟 test 版后判 upgrade（第 4 位缺省 0）");
-// P2-3b：真回退（prev 高于当前真版本——App 现为 test.98，prev 造 99）仍判 revert
-setPrev({ version: "0.7.0-test.99-nova", fingerprint: "aaaa1111", plist_mtime: 100 });
-assert(run().includes("revert"), "P2-3b 真回退（test.99 → 当前 test.98）仍判 revert");
+// P2-3b：真回退（prev 高于当前真版本）仍判 revert。锚从绝对版本对（test.99→test.98——
+// 0.7.1 发版后恒误判 upgrade）改为**相对锻造**：先建基线读当前真版本，再造 +1 档 prev。
+{
+  rmSync(join(DIR, "version-sentinel.json"), { force: true });
+  run(); // 首跑建基线（读当前 App 真版本）
+  const cur = JSON.parse(readFileSync(join(DIR, "version-sentinel.json"), "utf8"));
+  const bump = (v) => String(v).includes("-test.")
+    ? String(v).replace(/-test\.(\d+)/, (_, n) => `-test.${Number(n) + 1}`)
+    : String(v).replace(/(\d+)(?!\d)/, (d) => String(Number(d) + 1)); // 稳定通道：末位数字 +1
+  const prevV = bump(cur.version);
+  setPrev({ version: prevV, fingerprint: cur.fingerprint, plist_mtime: 100 });
+  assert(run().includes("revert"), `P2-3b 真回退（${prevV} → 当前 ${cur.version}）仍判 revert`);
+}
 
 // P2-1：mtime-only（版本同+指纹同）→ 静默记账分支
 rmSync(join(DIR, "version-sentinel.json"));

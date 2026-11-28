@@ -74,26 +74,29 @@
     "test:data-guard",
     "test:swapguard",
     "test:dev39",
-    "test:wakeup"
+    "test:wakeup",
+    "test:268-cloud-watchdog",
+    "test:282-targeted-render",
+    "test:005-servers",
+    "test:005-engauth-web",
+    "test:005-route-fix",
+    "test:dutybackoff",
+    "test:xmsg",
+    "test:boardlife",
+    "test:m-graceful",
+    "test:bootts",
+    "test:cbs",
+    "test:duty-boundary",
+    "test:role-templates",
+    "test:gatefix",
+    "test:halfconn",
+    "test:cardtags",
+    "test:awaituser",
+    "test:animfast",
+    "test:visualfix",
+    "test:session-slim"
   ],
   "quarantine": {
-    "test:268-cloud-watchdog": "锚/预期漂移｜锚漂移：cloudSetConn 体改形锚落空中止（15/1）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:282-targeted-render": "锚/预期漂移｜锚漂移：S5b' 旧整树回落路径形态变（51/1）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:005-servers": "锚/预期漂移｜锚漂移：index/settings-domain 形状锚×5（W-V8R/CONNV4 改形，63/5）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:005-engauth-web": "锚/预期漂移｜锚漂移：引擎登录面形状锚×6（21/6）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:005-route-fix": "锚/预期漂移｜锚漂移：W-ROUTEFIX 后快照/路由全套锚失效（0/11）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:dutybackoff": "锚/预期漂移｜锚漂移：onLog 结构改形源码锚（36/1）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:xmsg": "锚/预期漂移｜锚漂移：v7 迁移注册表锚（64/65）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:boardlife": "锚/预期漂移｜锚漂移：planlane 批 converge 复核态保护锚移位｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:m-graceful": "锚/预期漂移｜锚漂移：SIGTERM 活单诊断锚改形｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:bootts": "锚/预期漂移｜锚漂移：web 帧消费面形状锚×2（21/2）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:cbs": "锚/预期漂移｜锚漂移+桩缺名：U1a 文案锚 + teamAnchorBrowseable 桩缺崩溃（同 258 类）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:duty-boundary": "锚/预期漂移｜纪律锚：leader-duty.ts 纯函数零 import 被破（合法演进与否刷新批定性）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:role-templates": "锚/预期漂移｜预期过时：模板库演进 vs 冻结清单×4｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:version-sentinel": "锚/预期漂移｜预期过时：版本序判定漂移（test.99→test.98 判 revert）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:gatefix": "锚/预期漂移｜预期过时：receiptPath ~ 归一演进 vs 冻结期望×2｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:halfconn": "锚/预期漂移｜桩缺名：expo 源 downTextOfSid 缺桩崩溃（expo-app/scripts 件）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:approve-card": "环境性｜环境性：tmux E2E 需本机 tmux 会话（expo 豁免锚归刷新批）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:retired-live": "时限性·长周期设计态｜依赖 30min 巡检周期的真 relay 观测件（1200s 预算仍心跳等待；矩阵本不含）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md §戊"
   },
   "watch": {
@@ -126,6 +129,8 @@
     "test:wildonboard": "DEV-41 迁出（#174，2026-11-28 回填）｜族：命令/权限｜处置：有意变更未跟测——在岗=最近活跃 external 随新语义｜出处同上",
     "test:codex-adoption": "DEV-41 迁出（#174，2026-11-28 回填）｜族：引擎收编｜处置：有意变更未跟测——#275S 沙盒闸（fixture 挪非沙盒路径，Codex 收编随新语义）｜出处同上",
     "test:engine-rollouts": "DEV-41 迁出（#174，2026-11-28 回填）｜族：引擎收编｜处置：有意变更未跟测——#275S 沙盒闸（fixture 挪非沙盒路径，Trae rollout 收编随新语义）｜出处同上",
-    "test:005-blankset": "DEV-41 迁出（#174，2026-11-28 回填）｜族：CSS 兜底｜处置：真缺陷②已修——base.css color-mix 静态兜底全量 @supports 化（W-BLANKSET B1 换轨锁新形态）｜出处同上"
+    "test:005-blankset": "DEV-41 迁出（#174，2026-11-28 回填）｜族：CSS 兜底｜处置：真缺陷②已修——base.css color-mix 静态兜底全量 @supports 化（W-BLANKSET B1 换轨锁新形态）｜出处同上",
+    "test:version-sentinel": "DEV-42 迁出（锚刷新批，2026-11-28）｜乙类锚刷新：P2-3b 真回退锚从绝对版本对改相对锻造（版本序判定漂移修复）｜注：macOS 面键（version-sentinel.sh 依赖 PlistBuddy+/Applications App），CI Linux 不可跑——本地 sweep 盯守，晋矩阵需平台分线后",
+    "test:approve-card": "DEV-42 迁出（锚刷新批，2026-11-28）｜乙类锚刷新：expo 豁免锚随 approval-timeout 批升级为「审批卡永不过期」总锚（1029 铁令①——stale 置灰机制退役）｜注：③段 tmux E2E 环境性（无 tmux 自动 skip；CI ubuntu 有 tmux 会真跑未验）——本地 sweep 盯守"
   }
 }

@@ -10,12 +10,17 @@
 // ③创建弹窗显式选 local 也锁 LAN 通道（Leader 追加：云视角下「选本机却落远程」）。
 //
 // 直跑：env -u CCR_ORG_DIR node --import tsx/esm tests/test-005-route-fix.ts
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const html = readFileSync(join(root, "web-console", "index-005.html"), "utf-8");
+const webDir = join(root, "web-console");
+// W-SPLIT-S4a/b：JS+CSS 已外置——锚面=index-005 + js/ 全件 + base/tokens 并集
+//（test-005-engauth-web.ts 同口径；本件 A6/D 组锚跨 html/css 落点，并集才齐）
+const html = readFileSync(join(webDir, "index-005.html"), "utf-8")
+  + readdirSync(join(webDir, "js")).map((f) => readFileSync(join(webDir, "js", f), "utf-8")).join("\n")
+  + readFileSync(join(webDir, "css", "base.css"), "utf-8") + readFileSync(join(webDir, "css", "tokens.css"), "utf-8");
 
 let pass = 0;
 let fail = 0;
@@ -66,7 +71,7 @@ console.log("== T10：聚合多源发送路由 + 创建目标源显式锁通道 
   const createdSeg = created > 0 ? html.slice(created, created + 900) : "";
   ok(createdSeg.includes("relay_channel: evSource") && createdSeg.includes("? \"cloud\" : \"lan\""), "A4 实时帧建卡（SESSION_CREATED）打 relay_channel");
   const merge = blockFrom("else if (SESSION_MERGE_TYPES.has(frame.type)) {");
-  ok(merge.includes("Object.assign(session, frame.payload, { session_id: frame.session_id, updated_at:") && !merge.includes("relay_channel:"), "A5 merge 分支不覆写 relay_channel（Object.assign 仅写 session_id/updated_at——帧 payload 无该字段时卡上标记保留）");
+  ok(merge.includes("Object.assign(session, rest, { session_id: frame.session_id })") && !merge.includes("relay_channel:"), "A5 merge 分支不覆写 relay_channel（DEV-30 ④/DL-P1-7 起 assign 前剥 updated_at 走守卫口、写集=rest+session_id——帧 payload 无该字段时卡上标记保留）");
   const toast = html.indexOf(".toast {");
   const toastSeg = toast > 0 ? html.slice(toast, toast + 700) : "";
   ok(toastSeg.includes("word-break: break-all"), "A6 toast 长文本强制折行（36 位 UUID 完整可读——「残缺 id」目视假象消除）");

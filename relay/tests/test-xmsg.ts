@@ -117,8 +117,8 @@ console.log("peer 公钥缓存（disc/来帧双源）：");
 st.peers.put("rl-ffff", "pk-ffff");
 assert(openXmsgStores(dir, now).peers.get("rl-ffff") === "pk-ffff", "peers 落盘往返");
 
-console.log("device_trust（schema v7 四态生命周期）：");
-assert(migrations.some((m) => m.version === 7 && m.name.includes("device-trust")), "v7 迁移在册");
+console.log("device_trust（schema 四态生命周期）：");
+assert(migrations.some((m) => m.version === 9 && m.name.includes("device-trust")), "v9 迁移在册（原 v7——收割合并时 v7/v8 被 relfix-s S3/dispatch-run-ref 占用改 v9）");
 const port = trustStore(dir);
 assert(port !== null, "trustStore 可用（sqlite 驱动在场）");
 assert(getDeviceTrust(port, devA) === null, "首见前无记录");

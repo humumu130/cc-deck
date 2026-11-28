@@ -7,17 +7,26 @@
 //
 // 用法：
 //   node relay/scripts/check-ci-layers.mjs                 # 结构校验（三层注册/互斥/矩阵形态）
-//   node relay/scripts/check-ci-layers.mjs --base origin/dev   # ＋迁出规则：基线 quarantine 与
-//                                                           # 当前差集里的每个迁出键，必须
-//                                                           # ①入 watch ②晋 matrix ③连 npm 注册
-//                                                           # 一并退役（三居其一，否则 exit 1）
+//   node relay/scripts/check-ci-layers.mjs --base origin/dev   # ＋迁出规则（双向）：
+//                                                           # ①quarantine 出层键必须 a)入 watch
+//                                                           # b)晋 matrix c)连 npm 注册一并退役
+//                                                           # （三居其一，否则 exit 1）
+//                                                           # ②watch 出层键必须 a)晋 matrix
+//                                                           # b)回 quarantine c)连 npm 注册一并
+//                                                           # 退役（三居其一，否则 exit 1——
+//                                                           # watch→void 对称闸，DEV-42 补：
+//                                                           # 原闸只守 quarantine 方向，watch
+//                                                           # 层可被静默清空）
 //   --emit-matrix  附带把 matrix JSON 写入 $GITHUB_OUTPUT 的 scripts= 行（CI matrix-guard 用）
 //
 // 「迁出=入 watch」语义边界（与 ci.json $comment 同口径）：
 //   - 晋 matrix 是更强的盯守，视同满足；
 //   - 连 package.json 注册一并删除＝整键退役（无测试可红），放行但在闸日志点名可见；
 //   - 其余任何形态（留在原地消失/只删台账行/npm 注册还在却三层皆无）一律 exit 1。
-// 基线取 merge-base(HEAD, --base)，PR 分支上即「分支点 vs HEAD」的净差异。
+// 「watch→void 对称」语义边界：watch 键被摘除＝「矩阵外必须有人盯」的第二段失守——
+// 只有晋 matrix（更强盯守）/回 quarantine（重返定罪台账，红绿有账）/整键退役三条合法路。
+// 基线取 merge-base(HEAD, --base)，PR 分支上即「分支点 vs HEAD」的净差异；--base 不可
+// 解析时干净红面退出（不裸栈崩——本地裸用口径，DEV-42 P3）。
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -86,7 +95,15 @@ function ciJsonAt(rev) {
 }
 
 function exitRule(ci, pkgScripts, baseRef) {
-  const mb = git(["merge-base", "HEAD", `${baseRef}^{commit}`]);
+  let mb;
+  try {
+    mb = git(["merge-base", "HEAD", `${baseRef}^{commit}`]);
+  } catch (e) {
+    // P3（DEV-42）：--base 坏 ref/不可解析——干净红面（fail-closed 方向不变，不裸栈崩；relay.yml 有 cat-file 前置防御，此为本地裸用口径）
+    const why = e instanceof Error ? (e.message || "").split("\n")[0] : String(e);
+    err(`迁出规则：--base ${baseRef} 不可解析（merge-base 失败：${why}）`);
+    return { exits: 0, violations: 1, watchExits: 0, watchViolations: 0 };
+  }
   let baseCi;
   try {
     baseCi = ciJsonAt(mb);
@@ -94,7 +111,7 @@ function exitRule(ci, pkgScripts, baseRef) {
     // 基线无 ci.json（史前提交，git show 退出非零）或 JSON 坏（SyntaxError）——无基线可比对时规则空转，但必须点名说明
     const missing = e && typeof e.status === "number" && e.status !== 0;
     note(`迁出规则：基线 ${mb.slice(0, 8)} 无可解析 ci.json（${missing ? "文件不存在" : "解析失败"}），差集空转`);
-    return { exits: 0, violations: 0 };
+    return { exits: 0, violations: 0, watchExits: 0, watchViolations: 0 };
   }
   const baseQ = baseCi.quarantine && typeof baseCi.quarantine === "object" ? Object.keys(baseCi.quarantine) : [];
   const headQ = ci.quarantine && typeof ci.quarantine === "object" ? Object.keys(ci.quarantine) : [];
@@ -108,7 +125,24 @@ function exitRule(ci, pkgScripts, baseRef) {
     violations += 1;
     err(`迁出规则违背：${k} 已离开 quarantine，但既未入 watch、未晋 matrix、npm 注册仍在（「迁出=入 watch」机械闸，DEV-53）`);
   }
-  return { exits: exits.length, violations };
+
+  // ---------- watch→void 对称闸（DEV-42，DEV-53 审查 P2 补）：键离开 watch 须三居其一 ----------
+  // 原闸只守 quarantine 出层方向——watch 层可被静默清空（空 {} 过结构闸），「矩阵外必有人
+  // 盯」的第二段保障此前只靠 reviewed diff 可见性。对称规则：摘除 watch 键的三条合法路 =
+  // 晋 matrix（更强盯守）/回 quarantine（重返定罪台账）/连 npm 注册退役（无测试可红）。
+  const baseW = baseCi.watch && typeof baseCi.watch === "object" ? Object.keys(baseCi.watch) : [];
+  const headW = ci.watch && typeof ci.watch === "object" ? Object.keys(ci.watch) : [];
+  const watchExits = baseW.filter((k) => !headW.includes(k));
+
+  let watchViolations = 0;
+  for (const k of watchExits) {
+    if ((ci.matrix || []).includes(k)) { note(`watch 迁出→晋矩阵（更强盯守，放行）: ${k}`); continue; } // ①晋 matrix
+    if ((ci.quarantine || {})[k]) { note(`watch 迁出→回 quarantine（重返定罪台账，红绿有账，放行）: ${k}`); continue; } // ②回 quarantine
+    if (!pkgScripts.has(k)) { note(`watch 迁出→整键退役（npm 注册一并删，放行但点名可见）: ${k}`); continue; } // ③退役
+    watchViolations += 1;
+    err(`watch 迁出规则违背：${k} 已离开 watch，但既未晋 matrix、未回 quarantine、npm 注册仍在（watch→void 对称闸，DEV-42）`);
+  }
+  return { exits: exits.length, violations, watchExits: watchExits.length, watchViolations };
 }
 
 // ---------- main ----------
@@ -160,5 +194,5 @@ const qn = Object.keys(ci.quarantine || {}).length;
 const wn = Object.keys(ci.watch || {}).length;
 console.log(
   `OK: 矩阵 ${ci.matrix.length} 键 / quarantine ${qn} 键 / watch ${wn} 键，三层全注册两两互斥` +
-    (exitInfo ? `；迁出规则：基线差集 ${exitInfo.exits} 键全数合规（入 watch/晋矩阵/退役）` : ""),
+    (exitInfo ? `；迁出规则（双向）：quarantine 差集 ${exitInfo.exits} 键、watch 差集 ${exitInfo.watchExits} 键全数合规（三居其一）` : ""),
 );

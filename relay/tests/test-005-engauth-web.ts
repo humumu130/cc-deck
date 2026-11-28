@@ -59,9 +59,10 @@ console.log("== #102 批 A web：needs_auth 状态点 + 指引链 ==");
 
 // ---- C. 设置·模型服务区（provLive：黄点 tag 未登录+hint 文案） ----
 {
-  const i = html.indexOf("provLive.innerHTML = catalog.map((e) => {");
-  ok(i > 0, "C1 provider 区渲染体在场（provLive catalog map）");
-  const seg = html.slice(i, i + 2200);
+  const i = html.indexOf("liveSetHtml(provLive, catalog.map((e) => {"); // W-SETTINGS3 批2：provLive.innerHTML 直写改 liveSetHtml（失焦防写）
+  ok(i > 0, "C1 provider 区渲染体在场（provLive catalog map——liveSetHtml 口）");
+  const j = html.indexOf(".join(\"\")", i);
+  const seg = html.slice(i, j > 0 ? j : i + 6000); // 整个 map 体（批2 行式化后模板在尾部，固定窗会漏）
   ok(seg.includes('e.state === "needs_auth"'), "C2 设置区 needs_auth 分支在场");
   ok(seg.includes("tag authn") && seg.includes("未登录"), "C3 未登录 tag（authn 黄色系）");
   ok(seg.includes("eng-auth-dot"), "C4 行内黄点（eng-auth-dot）");
@@ -88,7 +89,7 @@ console.log("== #102 批 A web：needs_auth 状态点 + 指引链 ==");
   const submit = blockFrom("function submitCreate() {");
   ok(submit.includes('entry.state === "needs_auth"') && submit.includes("引擎未登录"), "F1 submitCreate 本地拦截 toast 带指引（W-ENGLOGIN 后文案=拉起登录引导——锚跟改，基线陈旧已证实）");
   ok(submit.includes("ack.needs_auth") && submit.includes("未创建会话"), "F2 ACK fail-fast 拒绝分支显示可操作指引（relay 侧拦截回执）");
-  ok(html.includes("b2Toast(msg, ms)"), "F3 b2Toast 支持时长参数（指引类 toast 6s 长显——默认 2.4s 读不完命令）");
+  ok(html.includes("b2Toast(msg, ms, action)"), "F3 b2Toast 支持时长参数（指引类 toast 6s 长显——默认 2.4s 读不完命令；halfconn 起增可选 action 第三参，既有 (msg,ms) 调用零改动）");
 }
 
 // ---- G. 手机侧目录（mobile settings Agent 引擎区同态） ----
