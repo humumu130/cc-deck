@@ -13,8 +13,14 @@ const OUT = `/tmp/dev40-shots/${TAG}`;
 mkdirSync(OUT, { recursive: true });
 globalThis.__p = spawn(CHROME, ["--headless=new", "--disable-gpu", `--remote-debugging-port=${PORT}`, "--user-data-dir=/tmp/dev40-cdp-" + Date.now(), `--window-size=1440,940`, "file://" + decodeURIComponent(new URL("../../web-console/index-005.html", import.meta.url).pathname)], { stdio: "ignore" });
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
-await wait(2200);
-const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
+// 端口就绪轮询（至多 ~15s）：夜间机群高载时 Chrome 开调试口可超固定 2.2s 窗
+// （实勘 ECONNREFUSED 两连——改轮询后自愈），固定睡=竞态赌运
+let list;
+for (let i = 0; i < 30; i++) {
+  await wait(500);
+  try { list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json(); break; } catch { /* 端口未就绪，续轮 */ }
+}
+if (!list) { globalThis.__p.kill("SIGKILL"); console.error(`Chrome 调试口 ${PORT} 15s 未就绪`); process.exit(1); }
 const tab = list.find(t => t.type === "page");
 const ws = new WebSocket(tab.webSocketDebuggerUrl, { maxPayload: 64 * 1024 * 1024 });
 await new Promise(r => ws.once("open", r));
