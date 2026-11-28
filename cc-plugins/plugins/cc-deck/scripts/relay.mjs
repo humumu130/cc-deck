@@ -5605,6 +5605,10 @@ function viaReadMode(domain, io2) {
   let port;
   try {
     port = ensureStore(dirs);
+    if (lastDegradation !== null) {
+      lastDegradation = null;
+      console.log("[read-mode] sqlite \u5DF2\u6062\u590D\uFF08\u964D\u7EA7\u53F0\u8D26\u6E05\u8D26\u2014\u2014ensureStore \u6210\u529F\uFF0C/health \u4E0E patrol \u9762\u56DE\u6B63\u5E38\uFF09");
+    }
   } catch (err) {
     warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `\u914D\u7F6E\u6863\u4F4D ${mode}\uFF0C\u8BFB\u57DF ${domain}\uFF0Csqlite \u5EFA\u5E93/\u8FC1\u79FB\u5931\u8D25`);
     return io2.json();
@@ -14845,8 +14849,13 @@ function compactEventsFile(path6, minBytes, opts) {
       if (dropped.length) {
         mkdirSync3(opts.archiveDir, { recursive: true });
         archiveFile = join6(opts.archiveDir, `events-arch-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
-        appendFileSync(archiveFile, dropped.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
-        archived = dropped.length;
+        try {
+          appendFileSync(archiveFile, dropped.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+          archived = dropped.length;
+        } catch (archErr) {
+          console.warn(`[events] \u26A0\uFE0F  \u5BA1\u8BA1\u5F52\u6863\u5931\u8D25\uFF0C\u672C\u8F6E\u538B\u7F29\u4E2D\u6B62\uFF08\u6D3B\u6587\u4EF6\u539F\u6837\uFF0C\u4E0B\u8F6E\u91CD\u8BD5\uFF09\u2014\u2014${archErr instanceof Error ? archErr.message : String(archErr)}`);
+          return null;
+        }
       }
     }
     rewriteFile(path6, kept2);
@@ -14854,6 +14863,39 @@ function compactEventsFile(path6, minBytes, opts) {
   } catch {
     return null;
   }
+}
+function rewriteFileArchiving(path6, kept2, archiveDir) {
+  const keptSeq = new Set(kept2.map((e) => e.seq));
+  mkdirSync3(archiveDir, { recursive: true });
+  const archFile = join6(archiveDir, `events-arch-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+  const rl2 = readline.createInterface({ input: createReadStream(path6, { encoding: "utf-8" }), crlfDelay: Infinity });
+  let buf = [];
+  const flush = () => {
+    if (buf.length) {
+      appendFileSync(archFile, buf.join("\n") + "\n", "utf-8");
+      buf = [];
+    }
+  };
+  rl2.on("line", (line) => {
+    const t = line.trim();
+    if (!t) return;
+    try {
+      const env = JSON.parse(t);
+      if (typeof env.seq === "number" && !keptSeq.has(env.seq)) {
+        buf.push(t);
+        if (buf.length >= 1e3) flush();
+      }
+    } catch {
+    }
+  });
+  rl2.on("close", () => {
+    try {
+      flush();
+      rewriteFile(path6, kept2);
+    } catch (err) {
+      console.warn(`[events] \u26A0\uFE0F  boot \u5F52\u6863/\u91CD\u5199\u5931\u8D25\uFF08\u6D3B\u6587\u4EF6\u539F\u6837\u4FDD\u7559\uFF0C\u4E0B\u8F6E\u91CD\u8BD5\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
 }
 function appendLine(path6, env) {
   mkdirSync3(dirname(path6), { recursive: true });
@@ -61150,6 +61192,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         updated_at: s.state.updated_at
       });
     }
+    if (changed || summaryChanged) this.flushSessionRow(s);
   }
   // #363 上下文压缩状态：PreCompact 置位（压缩期转录静默，端上据此区分"卡死"与
   // "压缩中"）；8 分钟兜底自动清——清位事件丢失时不永久卡标志
@@ -61888,6 +61931,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.waiting_request = void 0;
     s.state.waiting_started_at = void 0;
     this.touchIfChanged(s.state, at, true);
+    this.flushSessionRow(s);
     if (dutyEnabled() && s.state.external) {
       if (id2 === this.dutyTargetId()) {
         this.workerDonePending = 0;
@@ -62496,6 +62540,7 @@ provider=${opts.provider ?? "default"}` : void 0,
             managed.state.done_reason = "\u5F85\u547D\uFF08\u7B49\u5F85\u54A8\u8BE2\uFF09";
             managed.state.action_summary = "Leader \xB7 \u5F85\u547D";
             managed.state.turn_started_at = void 0;
+            this.flushSessionRow(managed);
           }
         }
         managed.unacked = managed.unacked.filter((m) => m.hold !== "init");
@@ -62727,6 +62772,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (ok2) {
           this.transition(managed.state.session_id, "DONE", "turn-end");
           managed.state.done_reason = reason;
+          this.flushSessionRow(managed);
           if (managed.rateLimitStreak || managed.rateLimitBackoffUntil) {
             managed.rateLimitStreak = void 0;
             managed.rateLimitBackoffUntil = void 0;
@@ -62745,6 +62791,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         } else {
           this.transition(managed.state.session_id, "ERROR", "turn-end");
           managed.state.last_error = reason;
+          this.flushSessionRow(managed);
           if (classifyDispatchFailure(reason) === "model_overload") {
             const streak = managed.rateLimitStreak = (managed.rateLimitStreak ?? 0) + 1;
             const delay = backoffDelayMs(streak);
@@ -62801,6 +62848,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
           this.transition(managed.state.session_id, "DONE", "stream-close");
           managed.state.done_reason = reason;
+          this.flushSessionRow(managed);
           this.bus.emit(managed.state.session_id, "SESSION_DONE", {
             terminal_reason: reason,
             duration_ms: Date.now() - managed.state.started_at,
@@ -63354,6 +63402,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           s.state.last_error = void 0;
           s.state.waiting_request = void 0;
           s.state.waiting_started_at = void 0;
+          this.flushSessionRow(s);
           saved++;
         }
         if (!was) this.emitUpdated(s, true);
@@ -70441,6 +70490,18 @@ ${out}`;
     } catch {
     }
   }
+  /** DEV-39 审查返修（P1-1a/P2-1e）：终态/外部状态收口点的补写直写——transition 单点
+   *  写在字段补写前落库会定格不完整快照（done_reason/duration_ms/last_error 恒空，
+   *  BOOT_FROM=db 重启 adopt 整包替换抹掉回放本有值）；setExternalStatus 直赋不走
+   *  transition/emitUpdated。各收口点字段补完后过本口刷末笔（带全量字段，REPLACE
+   *  幂等末笔赢）。 */
+  flushSessionRow(s) {
+    if (!s) return;
+    try {
+      shadowWriteSession(s.state);
+    } catch {
+    }
+  }
   heartbeat() {
     const now = Date.now();
     this.tickWatchdog(now);
@@ -76259,19 +76320,21 @@ var SNAPSHOT_SCHEMA_VERSION = 1;
 init_read_mode();
 init_sqlite();
 init_session_write();
+import { basename as basename7 } from "node:path";
 function storageStatus() {
   const readMode = currentReadMode();
   const degraded = lastSqliteDegradation();
   const driver = readMode === "json" ? "json-mode" : loadSqliteDriver().ok ? "ok" : "failed";
+  const envApplied = appliedRelayEnvFile();
   return {
     readMode,
-    effectiveReadMode: degraded === null && driver === "ok" ? readMode === "json" ? "json" : "sqlite" : "json",
+    effectiveReadMode: degraded === null && driver !== "failed" ? readMode : "json",
     driver,
-    degraded,
+    degraded: degraded === null ? null : { ...degraded, reason: degraded.reason.length > 160 ? `${degraded.reason.slice(0, 160)}\u2026` : degraded.reason },
     writeMode: sessionWriteMode(),
     sessionImport: process.env.CCR_SESSION_IMPORT === "off" ? "off" : "on",
     bootFrom: bootFromMode(),
-    envFile: appliedRelayEnvFile()
+    envFile: { file: envApplied.file ? basename7(envApplied.file) : "", keys: envApplied.keys }
   };
 }
 
@@ -80752,9 +80815,12 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var boot = await bootReplayFile(persistPath);
 bootMark("replay-events");
 var kept = boot.kept;
-if (boot.compacted) rewriteFile(persistPath, kept);
-var eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
 var eventsArchiveDir = process.env.CCR_EVENTS_ARCHIVE === "on" ? join76(cfg.dataDir, "events-archive") : void 0;
+if (boot.compacted) {
+  if (eventsArchiveDir) rewriteFileArchiving(persistPath, kept, eventsArchiveDir);
+  else rewriteFile(persistPath, kept);
+}
+var eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
 var compactEventsTick = () => {
   const r = compactEventsFile(persistPath, eventsCompactBytes, eventsArchiveDir ? { archiveDir: eventsArchiveDir } : void 0);
   if (r) console.log(`[events] \u8FD0\u884C\u671F\u538B\u7F29\uFF1A${(r.before / 1048576).toFixed(1)}MB \u2192 ${(r.after / 1048576).toFixed(1)}MB${r.archived ? `\uFF08\u5BA1\u8BA1\u5F52\u6863 ${r.archived} \u4E8B\u4EF6 \u2192 ${r.archiveFile}\uFF09` : ""}`);
