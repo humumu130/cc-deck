@@ -119,6 +119,7 @@
     "test:version-sentinel": "锚/预期漂移｜预期过时：版本序判定漂移（test.99→test.98 判 revert）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:gatefix": "锚/预期漂移｜预期过时：receiptPath ~ 归一演进 vs 冻结期望×2｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:halfconn": "锚/预期漂移｜桩缺名：expo 源 downTextOfSid 缺桩崩溃（expo-app/scripts 件）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
-    "test:approve-card": "环境性｜环境性：tmux E2E 需本机 tmux 会话（expo 豁免锚归刷新批）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md"
+    "test:approve-card": "环境性｜环境性：tmux E2E 需本机 tmux 会话（expo 豁免锚归刷新批）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
+    "test:retired-live": "时限性·长周期设计态｜依赖 30min 巡检周期的真 relay 观测件（1200s 预算仍心跳等待；矩阵本不含）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md §戊"
   }
 }
