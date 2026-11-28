@@ -139,8 +139,8 @@ const SB2 = mkdtempSync(join(tmpdir(), "m-graceful-cli-"));
 const orgD = join(SB2, "org"), binD = join(SB2, "bin");
 mkdirSync(orgD, { recursive: true }); mkdirSync(binD, { recursive: true });
 const logPath = join(SB2, "launchctl-calls.log");
-// mock launchctl：追加时间戳记录
-writeFileSync(join(binD, "launchctl"), `#!/bin/zsh\nnode -e "process.stdout.write(String(Date.now()))" >> ${logPath}\necho " $*" >> ${logPath}\nexit 0\n`, { mode: 0o755 });
+// mock launchctl：追加时间戳记录（shebang 用 /bin/sh——桩 body 纯 POSIX，ubuntu CI 无 /bin/zsh 会 ENOENT）
+writeFileSync(join(binD, "launchctl"), `#!/bin/sh\nnode -e "process.stdout.write(String(Date.now()))" >> ${logPath}\necho " $*" >> ${logPath}\nexit 0\n`, { mode: 0o755 });
 chmodSync(join(binD, "launchctl"), 0o755);
 const cliNew = join(SB2, "new.mjs"), cliTgt = join(SB2, "tgt.mjs");
 writeFileSync(cliNew, "console.log('cli-new');\n", "utf-8");
