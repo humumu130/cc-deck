@@ -43,14 +43,17 @@ console.log(`watch sweep：${keys.length}/${watchKeys.length} 键，逐键超时
 
 function runKey(key) {
   return new Promise((resolve) => {
-    const child = spawn("npm", ["run", "--silent", key], { cwd: RELAY_DIR, env: process.env });
+    // detached+进程组击杀：超时杀 npm 外壳会留 tsx 孙进程成孤儿（继续占端口/改沙盒，
+    // 顺序执行的下一键被互扰）——负 pid 一锅端整组。
+    const child = spawn("npm", ["run", "--silent", key], { cwd: RELAY_DIR, env: process.env, detached: true });
     let out = "";
     const t0 = Date.now();
-    const timer = setTimeout(() => {
-      try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
-      timedOut = true;
-    }, TIMEOUT_SEC * 1000);
     let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { process.kill(-child.pid, "SIGKILL"); } catch { /* 组已退出 */ }
+      try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
+    }, TIMEOUT_SEC * 1000);
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { out += d; });
     child.on("error", (e) => { clearTimeout(timer); resolve({ key, code: -1, ms: Date.now() - t0, out: String(e), timedOut: false }); });
