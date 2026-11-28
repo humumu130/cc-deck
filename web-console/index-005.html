@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="css/base.css">
 </head>
 <body data-card-density="standard" data-source-mode="single">
-  <script>window.__ccDeck005Version = "0.7.1-test.37";; /* console-guardrails ④：新壳 CONSOLE_VERSION 唯一定义位（build-plugin.mjs 回写此处；此前 005 无常量定义=关于页 fallback 链+CI/构建器回写静默不命中三重漂移源） */</script>
+  <script>window.__ccDeck005Version = "0.7.1-test.38";; /* console-guardrails ④：新壳 CONSOLE_VERSION 唯一定义位（build-plugin.mjs 回写此处；此前 005 无常量定义=关于页 fallback 链+CI/构建器回写静默不命中三重漂移源） */</script>
   <script>/* animfast 刀2（#194 耗电根治）：后台窗口动画全停——visibilitychange 挂摘 html.app-hidden（base.css 尾部 paused !important 一切 animation，回前台无缝续播）；置诸 js 域脚本之前=加载即生效不漏窗。__appHiddenSync 供探针直调（headless 下 document.hidden 恒 false，行为验证走显式调用） */
     (function () {
       const sync = function () { document.documentElement.classList.toggle("app-hidden", document.hidden); };
