@@ -6,7 +6,8 @@
 # 六面一源版图（调研 ~/.cc-deck/artifacts/w-wcssot.md §0.1，本脚本管 ②③④⑤ 四面）：
 #   源  web-console/  唯一编辑点（人写 feature 批）
 #   ⑤ cc-plugins/plugins/cc-deck/web-console/  插件分发链副本——S1 单口刷新，
-#      纯构建产物禁手工编辑（双写口是三次同族漂移的根因）
+#      纯构建产物禁手工编辑（双写口是三次同族漂移的根因）；R2①（DEV-44）后副本
+#      已出 git（.gitignore），S1 构建产物不再产生 tracked diff
 #   ② /Applications/CC Deck Nova.app/Contents/Resources/web-console/  桌面壳网页 UI
 #   ③ ~/.cc-deck/relay-service/  relay 部署位（launchd 已退役/CCR_WEB_ROOT 形态，
 #      按拍板保留在同步清单）
@@ -164,7 +165,8 @@ face_ver_check() { # $1=面名 $2=面 index.html
 RSYNC_EX=(--exclude 'preview/' --exclude 'site/' --exclude '.wrangler/' --exclude '.DS_Store')
 
 # ---------- 前置闸：git 干净 + 版本落点一致 ----------
-# 起点不干净，跑完后「哪些 diff 属于本次刷新」就说不清（S1 会改 cc-plugins 产物）
+# 起点不干净，跑完后「哪些 diff 属于本次刷新」就说不清（S1 刷新 cc-plugins 产物；
+# R2① 后产物不入 git，本闸实际盯的是 tracked 源面的未提交改动）
 if [ "$FORCE" != "1" ] && [ -n "$(git status --porcelain)" ]; then
   echo "❌ git 工作区有未提交改动——先收口再同步（应急可用 --force）："
   git status --short | head -8
@@ -328,4 +330,4 @@ fi
 echo ""
 echo "✅ deploy-web 完成：版本 $VER 已刷至 $( [ "$SKIP_APP" = 1 ] && echo '副本+relay-service' || echo '副本+Nova+relay-service' )$( [ "$SKIP_CF" = 1 ] || echo '+CF' ) 面，逐面锚全绿"
 echo "⚠️  文件同步≠进程换新：面②须重启 CC Deck Nova 进程；面③须重启对应 relay 进程，运行面才换新"
-echo "出包前另跑 check-bundle-sync.sh（发版闸：bundle 重建对比+冒烟+版本闸，与本脚本互补不互代）"
+echo "出包前另跑 check-bundle-sync.sh（发布期自检，R2① 后口径=先 build 刷新再 check：bundle 重建对比+冒烟+版本闸，与本脚本互补不互代）"

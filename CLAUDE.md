@@ -25,7 +25,7 @@
 - **装机反馈批的分支口径（2026-10-10 用户问询后补）**：用户试用一次反馈多条小问题 = 每条入任务单分诊，按主题/冲突面拆给 worker——**一个 worker 一条 `fix/<批次slug>` 分支**，批内逐条提交，最后 squash 一笔回 dev（提交 body 列逐条清单）。事项边界 = 分支边界：不同 worker/不同主题各算各的一笔，不混不拆。单条紧急 bug 同样走分支，只是分支生命周期更短。
 - **提交粒度：dev 上一事项一笔（2026-10-10 用户拍板）**：dev 历史 = 一笔一事项（一笔 bug 修复 / 一笔功能）。分支 squash 回来的天然一笔；确需直推 dev 的小修，过程中可多次本地提交，但 **push 前必须 fixup/amend 收口成一笔**（修复+测试+关联 follow-up 合并；打包、版本 bump 另成独立 chore 笔）。已 push 的提交不可再收口（下方不重写历史纪律），所以**先收口再 push** 是铁律。
 - **main = 门面快照分支（2026-10-03 起）**：仓库 default branch，访客与外部 PR 看到的是它；**不在其上开发**；发正式版打 tag 后快进同步 `git push origin v<X.Y.Z>:main`（推广期改了 README 想立刻上门面也可随时手动快进 `git push origin origin/dev:main`）。
-- **并行开发强制 worktree 磁盘隔离（2026-09-27 增补，用户令）**：分支只隔离提交历史，`~/dev/cc-deck` 磁盘文件全体会话共享一份——多会话并行时，后开工方必须 `git worktree add` 独立目录做开发编辑，只拉分支不挪目录等于没隔离。构建读磁盘不认分支，混合工作区里打出的 bundle 必然扫进别人的未提交代码（2026-09-27 relay 坏包打挂生产的事故根源）；此期间禁止构建/热部署，部署前必跑 `scripts/check-bundle-sync.sh`。
+- **并行开发强制 worktree 磁盘隔离（2026-09-27 增补，用户令）**：分支只隔离提交历史，`~/dev/cc-deck` 磁盘文件全体会话共享一份——多会话并行时，后开工方必须 `git worktree add` 独立目录做开发编辑，只拉分支不挪目录等于没隔离。构建读磁盘不认分支，混合工作区里打出的 bundle 必然扫进别人的未提交代码（2026-09-27 relay 坏包打挂生产的事故根源）；此期间禁止构建/热部署，部署前必跑 `scripts/check-bundle-sync.sh`（R2① 后为发布期自检口径——先 build 刷新再 check）。
 - **不重写已推送历史**：dev 单主干 + tag 三段式发版依赖历史稳定，已 push 的提交禁止 rebase/reset 改写（分支未 push 前 fixup/squash 随意）。
 - **多会话工作区纪律**：动工前 `git status` 认领本次要改的文件；提交前 `git diff` 核查每处改动归属本任务，混入其他任务未提交改动时用 `git add -p` 拆分提交，严禁一笔试多件事。
 
@@ -46,7 +46,7 @@
 
 ### 版本单一事实源（2026-10-10 A1 收敛，审查 P1-1）
 
-仓库根 `VERSION` = 唯一版本正源：bump 只改它 + `node scripts/version.mjs --write`（七落点含 plugin.json/marketplace.json）。`relay/scripts/build-plugin.mjs` 同读 VERSION 回写各清单（显式传版本参数仅应急），不再是第二事实源。发版/出包前双闸拦截漂移：pre-commit 钩子（`git config core.hooksPath scripts/hooks`，**新机器/新 clone 需执行一次**）+ `scripts/check-bundle-sync.sh`（bundle 两两一致 + 同参重建对比 + 版本闸）。
+仓库根 `VERSION` = 唯一版本正源：bump 只改它 + `node scripts/version.mjs --write`（七落点含 plugin.json/marketplace.json）。`relay/scripts/build-plugin.mjs` 同读 VERSION 回写各清单（显式传版本参数仅应急），不再是第二事实源。发版/出包前双闸拦截漂移：pre-commit 钩子（`git config core.hooksPath scripts/hooks`，**新机器/新 clone 需执行一次**）+ `scripts/check-bundle-sync.sh`（R2①/DEV-44 后语义=**发布期自检**：产物副本已出 git，先 build 刷新再 check；bundle 两两一致 + 同参重建对比 + 版本闸）。
 
 ### 更新说明军规（cc-deck 特化落点）
 
@@ -70,7 +70,7 @@
 
 ## 环境备忘
 
-- **web 面同步只走 `scripts/deploy-web.sh` / `relay/scripts/build-plugin.mjs`**（#237 单源基建，2026-10-24）：`web-console/`（仓根）是唯一编辑点；`cc-plugins/plugins/cc-deck/web-console/` 是**纯构建产物，禁止手工 cp/编辑**（build-plugin 单口刷新，手工改=下次 build 冲掉白改）。四面落点：cc-plugins 副本（插件分发）/Nova App Resources/relay-service/CF 线上。**wrangler 远端操作一律走 `scripts/wrangler-remote.sh`**（直连优先/FlClash 代理回落双路——「大写 HTTPS_PROXY 不通、必须小写」旧结论已过时：4.154.0 大小写都认（2026-10-30 假代理抓 CONNECT 实测），fetch failed 真根因=直连被墙与 FlClash 7890 时死**双间歇**，单设 proxy env 在代理死窗口必败）；**wrangler kv 子命令必须带 `--remote`**（4.x 默认 local=miniflare，`kv key list` 静默返回 `[]`——1029「KV 0 键误诊」事故根因）；wrangler 固定 bin=`~/.npm/_npx/32026684e21afda6/node_modules/.bin/wrangler`（npx 缓存免网络）。文件同步 ≠ 进程换新：Nova/relay 面改后须重启对应进程。
+- **web 面同步只走 `scripts/deploy-web.sh` / `relay/scripts/build-plugin.mjs`**（#237 单源基建，2026-10-24；R2①/DEV-44 增补：cc-plugins 七族产物副本已出 git——.gitignore+rm --cached，历史可追溯，**新 clone 先跑 build-plugin 再装插件/出包**）：`web-console/`（仓根）是唯一编辑点；`cc-plugins/plugins/cc-deck/web-console/` 是**纯构建产物，禁止手工 cp/编辑**（build-plugin 单口刷新，手工改=下次 build 冲掉白改）。四面落点：cc-plugins 副本（插件分发）/Nova App Resources/relay-service/CF 线上。**wrangler 远端操作一律走 `scripts/wrangler-remote.sh`**（直连优先/FlClash 代理回落双路——「大写 HTTPS_PROXY 不通、必须小写」旧结论已过时：4.154.0 大小写都认（2026-10-30 假代理抓 CONNECT 实测），fetch failed 真根因=直连被墙与 FlClash 7890 时死**双间歇**，单设 proxy env 在代理死窗口必败）；**wrangler kv 子命令必须带 `--remote`**（4.x 默认 local=miniflare，`kv key list` 静默返回 `[]`——1029「KV 0 键误诊」事故根因）；wrangler 固定 bin=`~/.npm/_npx/32026684e21afda6/node_modules/.bin/wrangler`（npx 缓存免网络）。文件同步 ≠ 进程换新：Nova/relay 面改后须重启对应进程。
 - 直连 github.com 超时，git 走仓库本地配置的 `http.https://github.com/.proxy`（Clash 127.0.0.1:7890）；gh CLI 需手动 export 同款代理。
 - 手机无线 adb：配对已完成，连接端口会漂移，先 `adb mdns services` 发现再连；adb 在 `~/Library/Android/sdk/platform-tools/`。
 - relay 数据目录 `~/.cc-deck/data/`（events.ndjson 事件流、cli-pids.json、embedded-relay.log）。

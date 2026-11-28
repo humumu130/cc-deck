@@ -42,10 +42,24 @@ docs-internal/
 .cc-deck/
 .tmp-043/
 
-# better-sqlite3 外置闭包（#142）：bundle 同目录 node_modules 是发布形态的一部分，
-# 插件市场 add 本地目录 / 桌面 tauri 打包都从这里取——必须随仓库走
-!cc-plugins/plugins/cc-deck/scripts/node_modules/
+# better-sqlite3 外置闭包（#142）：桌面 resources 侧闭包仍是发布形态的一部分
+# （tauri 打包从这里取），随仓库走；插件侧闭包随 R2① 出 git（见下块）
 !desktop-tauri/src-tauri/resources/node_modules/
+
+# DEV-44 / arch R2①（2026-11-28）：cc-plugins 插件产物副本出 git——七族纯构建产物
+# 不再入库（git 历史保留可追溯；消灭拼盘/漂移事故类＋diff 噪音）。产物唯一合法写口
+# = relay/scripts/build-plugin.mjs，消费面（desktop.yml/android.yml 出包 job、
+# scripts/deploy-web.sh、scripts/release-test.sh）一律「先构建后引用」；本地开发/
+# 插件安装：clone 后先跑 build-plugin 再 add 插件目录（见 README 构建节）。
+# 源件仍在库内跟踪：bin/（inject.cs 除外）、commands/、hooks/、scripts/guard-* 与
+# deliver-* 、.claude-plugin/plugin.json（版本落点，version.mjs 七落点之一）、README。
+cc-plugins/plugins/cc-deck/scripts/relay.mjs
+cc-plugins/plugins/cc-deck/scripts/hook.mjs
+cc-plugins/plugins/cc-deck/scripts/node_modules/
+cc-plugins/plugins/cc-deck/web-console/
+cc-plugins/plugins/cc-deck/mobile/
+cc-plugins/plugins/cc-deck/docs/system-design/
+cc-plugins/plugins/cc-deck/bin/inject.cs
 
 # worker worktree 副本（嵌套仓库，勿入库）
 .artifacts-persist-cdx/
