@@ -26,13 +26,29 @@ RPT="$(bash $DW prefetch report 2>&1)"
 echo "$RPT" | grep -q "^total: " && ok "P1-1 report 出 total 行（$(echo "$RPT" | tail -1)）" || bad "P1-1 report 无 total"
 # 定向 clean 证据：在本用户真实 T 根（泄漏目录的规范层级——TMPDIR 可能嵌套更深，取其 T 根）
 # 造一个撞 glob 的假目录（仅此目录属本测试），clean 后应消失
+# T 根甄别（备案池 P3-3，2026-11-28）：CLEAN_GLOBS 只认 /private/var/folders/*/*/T/ 层级，
+# 沙盒假 TMPDIR（Multica 11/2 实锤）不撞 glob → P1-2/P1-3 假红。非规范时 Darwin 强指
+# getconf DARWIN_USER_TEMP_DIR（真机 T 根）；仍不撞 glob 则 SKIP 该两项（非 FAIL——
+# glob 层级在真机必在，缺的只是本环境的可达性）
 TROOT="$(printf '%s' "${TMPDIR:-/private/tmp/}" | sed 's#\(/T/\).*#\1#')"
-FAKE="${TROOT}cbc-update-prefetch-dev22-selftest"
-mkdir -p "$FAKE" && echo probe > "$FAKE/f"
-FAKE_HIT="$(bash $DW prefetch report 2>/dev/null | grep -c "$FAKE")"
-[ "$FAKE_HIT" -ge 1 ] && ok "P1-2 假目录被 glob 命中（可见即可清）" || bad "P1-2 glob 未命中假目录（$FAKE）"
-bash $DW prefetch >/dev/null 2>&1
-[ ! -e "$FAKE" ] && ok "P1-3 clean 路径真删（泄漏目录形态对证）" || { bad "P1-3 clean 未删假目录"; rm -rf "$FAKE"; }
+case "$TROOT" in
+  /private/var/folders/*/*/T/|/var/folders/*/*/T/) ;;
+  *) if [ "$(uname -s)" = "Darwin" ]; then
+       GT="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)"
+       [ -n "$GT" ] && TROOT="${GT%/}/"
+     fi ;;
+esac
+case "$TROOT" in
+  /private/var/folders/*/*/T/|/var/folders/*/*/T/)
+    FAKE="${TROOT}cbc-update-prefetch-dev22-selftest"
+    mkdir -p "$FAKE" && echo probe > "$FAKE/f"
+    FAKE_HIT="$(bash $DW prefetch report 2>/dev/null | grep -c "$FAKE")"
+    [ "$FAKE_HIT" -ge 1 ] && ok "P1-2 假目录被 glob 命中（可见即可清）" || bad "P1-2 glob 未命中假目录（$FAKE）"
+    bash $DW prefetch >/dev/null 2>&1
+    [ ! -e "$FAKE" ] && ok "P1-3 clean 路径真删（泄漏目录形态对证）" || { bad "P1-3 clean 未删假目录"; rm -rf "$FAKE"; }
+    ;;
+  *) echo "  skip P1-2/P1-3（TMPDIR 非规范且无 getconf 源：$TROOT——备案池 P3-3）" ;;
+esac
 
 echo "W1 WARN 消费账（hermetic 副本）："
 SBX="$(mktemp -d)"
