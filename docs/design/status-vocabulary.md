@@ -78,7 +78,7 @@ relay `SessionStatus` ＋ 两处用户定版判活派生（#291 待命 / #160 �
 | expo SetupScreen 连接指示末档（审查 A/B P2 交叉） | 连不上走 c.waiting（waiting 分相后=橙），同语义 ListScreen 本批已按 #357 归红 | 改 c.error（#357 用户定版：连不上=红） |
 | ⑂/agdot 呼吸光圈（审查 B P2） | `--status-working-glow` 双主题**绿**（W-V8 残留；本体 var(--working) 黄=同灯两相） | 双主题黄化 rgba(255,210,77,.5)/rgba(255,176,32,.3)——词表 §一「借 S1 黄呼吸」落地 |
 
-**计数口径注（DEV-40 审查 P3④→DEV-61 补注）**：上表「八处位 15 声明」的计数惯例——**位**=括列的消费位点簇（8 处：md del／ImportPicker failT／NewSessionModal／SetupScreen／RenameModal／detail-styles diffDel／DetailScreen KC img／DetailScreen ripple），**声明**=位上的 token 引用处（×N 标多位点）。按 `324f477a` 实 diff 复核：waiting→working 改指实为 **16 声明**（DetailScreen 的 KC img 图色映射有两处定义 :909/:2618，原计数并作一声）；按 diff 改动行计（+侧）=17 行——审查所数「~17-20 行」即此口径。多口径并行时以位点清单为准，引用数字随口径注明。
+**计数口径注（DEV-40 审查 P3④→DEV-61 补注，审查 B 返修后定稿）**：上表「八处位 15 声明」的计数惯例——**位**=括列的消费位点簇（8 处：md del／ImportPicker failT／NewSessionModal／SetupScreen／RenameModal／detail-styles diffDel／DetailScreen KC img／DetailScreen ripple），**声明**=位上的 token 引用处（×N 标多位点）。按 `324f477a` 实 diff 复核：**所列八位合计 16 声明**（DetailScreen 的 KC img 图色映射有两处定义 :909/:2618，原计数并作一声）；括列外另见 **SettingsPage×4**（android_ripple delArm/srvDelArmT/pairErrT/ruleDelArmT——同 diff 同类改指未入清单，全量口径 9 位 20 声明）。按 diff 改动行计（+侧含 c.working 字样）=17 行，其中 1 行为 SetupScreen 连接指示（waiting→**error** 腿，表内另列）——amber 腿实 16 行，审查所数「~17-20 行」即此机械口径。多口径并行时以位点清单为准，引用数字随口径注明。
 
 ## 六、守卫与后续
 
