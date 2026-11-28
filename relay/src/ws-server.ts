@@ -32,6 +32,7 @@ import { LanPeersHub } from "./lan-peers.js"; // CONNV4 批D：LAN 邻居发现+
 import { listModels } from "./models.js";
 // #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
 import { listBoards, listGroups, listPendingConfirms, loadBoard } from "./projects.js";
+import { getWakeupService, armWakeupFromHttp } from "./wakeup-api.js"; // T1 条件唤醒（DEV-43）：/api/wakeup 规则表 CRUD 口
 import { appendDispatch, readDispatchLog } from "./org.js"; // W-CMDIMPL T1-STAGE：阶段事件入台账
 import { projectBoard } from "./board-projection.js"; // W-BOARDV2：看板读时投影（/api/board-projection 数据源）
 import { subFanTarget } from "./subfanout.js"; // W-SUBFANOUT：订阅直通判定单点（架构升级期一①）
@@ -1127,6 +1128,44 @@ export function startServer(
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr, cfg);
+      return;
+    }
+    // T1 条件唤醒（DEV-43）：POST /api/wakeup——规则表 CRUD 口（arm/list/cancel），
+    // token 同 /api/notify 族（LAN 面）。谓词语义与 expires 兜底见 src/wakeup.ts；
+    // 服务未装配（CCR_WAKEUP=0 / 云桥禁用装配序外）回 503 不静默。
+    if (url.pathname === "/api/wakeup") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end("unauthorized"); return; }
+      if (req.method !== "POST") { res.writeHead(405).end("method not allowed"); return; }
+      const svc = getWakeupService();
+      if (!svc) { res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "wakeup service not running" })); return; }
+      let body = "";
+      req.on("data", (c: Buffer) => { body += c; if (body.length > 65536) req.destroy(); });
+      req.on("end", () => {
+        try {
+          const p = JSON.parse(body || "{}") as Record<string, unknown>;
+          const action = typeof p.action === "string" ? p.action : "";
+          if (action === "list") {
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, rules: svc.list() }));
+            return;
+          }
+          if (action === "cancel") {
+            const id = typeof p.id === "string" ? p.id : "";
+            const ok = !!id && svc.cancel(id);
+            res.writeHead(ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify({ ok }));
+            return;
+          }
+          if (action === "arm") {
+            const r = armWakeupFromHttp(p);
+            if (!r.ok) { res.writeHead(422, { "content-type": "application/json" }).end(JSON.stringify(r)); return; }
+            const rule = svc.arm(r.rule!);
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, rule }));
+            return;
+          }
+          res.writeHead(400).end('{"ok":false,"error":"action 必须是 arm|list|cancel"}');
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
       return;
     }
     // [W-LINKQUALITY]（1104 用户实锤×N）链路分段遥测：POST /api/telemetry/link=端侧

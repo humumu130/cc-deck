@@ -75,6 +75,35 @@ const escalatedCount = () => (reportText().match(/ESCALATED \[/g) ?? []).length;
   delete process.env.CCR_PATROL_ESCALATE_MS;
 }
 
+// ---------- 场景 D：DEV-43 云桥直推腿（P0-3/DL-P1-5 第三腿） ----------
+// cloudPush 在场（index.ts 装配 pushCloudAlertAll）：升级时随 ESCALATED 同刻外发
+// 一次（同 onset 不刷屏）；CCR_PATROL_ESCALATE_PUSH=0 应急停腿缺席零破坏。
+{
+  const pushed: Array<{ title: string; body: string }> = [];
+  const p2 = new PatrolModule(mgr, {
+    dataDir: join(ROOT, "datadir"), reportPath: report, enabled: () => true,
+    cloudPush: (title, body) => { pushed.push({ title, body }); },
+  });
+  const push2 = (key: string, text: string) => ((p2 as unknown as { push(k: string, t: string): void }).push(key, text));
+  process.env.CCR_PATROL_ESCALATE_MS = "800";
+  delete process.env.CCR_PATROL_ESCALATE_PUSH;
+  push2("hook-stale", "relay 在线但 hook 持续失败 30min");
+  await sleep(1000);
+  push2("hook-stale", "relay 在线但 hook 持续失败 30min");
+  assert(pushed.length === 1 && pushed[0].title.includes("hook-stale") && pushed[0].body.includes("未恢复"), "D1 升级同刻云桥外发一次（title 带 key、body 带持续语义）");
+  await sleep(150);
+  push2("hook-stale", "relay 在线但 hook 持续失败 30min");
+  assert(pushed.length === 1, "D2 同 onset 只推一次（不刷屏）");
+  // 应急停
+  process.env.CCR_PATROL_ESCALATE_PUSH = "0";
+  push2("disk", "磁盘余量 3.1GB（红线 5GB）");
+  await sleep(1000);
+  push2("disk", "磁盘余量 3.1GB（红线 5GB）");
+  assert(pushed.length === 1, "D3 CCR_PATROL_ESCALATE_PUSH=0 腿停（升级报告行照落、零外发）");
+  delete process.env.CCR_PATROL_ESCALATE_PUSH;
+  delete process.env.CCR_PATROL_ESCALATE_MS;
+}
+
 rmSync(ROOT, { recursive: true, force: true });
 console.log(`\n== test-patrol-escalate 汇总：${pass} ok / ${fail} FAIL ==`);
 if (fail > 0) process.exit(1);

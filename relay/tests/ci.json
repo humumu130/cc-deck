@@ -71,7 +71,8 @@
     "test:cloud-hbthrottle",
     "test:data-guard",
     "test:swapguard",
-    "test:dev39"
+    "test:dev39",
+    "test:wakeup"
   ],
   "quarantine": {
     "test:ws": "缺陷候选｜缺陷候选：resume 补发混入 seq≤1 帧（另属需真 CLI 设计态排除）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",

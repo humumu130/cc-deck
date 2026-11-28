@@ -5,6 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { CloudRouter } from "../../cloud-bridge/src/router.ts";
 import { TenantService, type TenantDb, type TenantStore } from "../../cloud-bridge/src/tenant.ts";
+import { parseAlertPayload, buildAlertFrame, createAlertLimiter } from "../../cloud-bridge/src/alert.ts";
 import { handleAuth, verifyAccountToken } from "./auth.ts"; // W-ACCOUNT 件一：账号层（注册/登录/acct 验证）
 
 interface Env {
@@ -169,6 +170,27 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
       // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
       const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
       return stub.fetch(new Request("https://router/health"));
+    }
+    // P0-3/T1（DEV-43）桥直推告警：POST /alert——relay/壳全死时的独立触达腿
+    //（哨兵/wakeup 外发 → 桥 → 手机明文帧）。Bearer 桥 token（CLOUD_TOKEN 或
+    // PUBLIC_TOKEN——本机哨兵缺省持公开 token）；定向投递/限流/校验在 DO 内
+    //（与 Node 形态共享 cloud-bridge/src/alert.ts 单源语义）
+    if (url.pathname === "/alert") {
+      if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const auth = req.headers.get("authorization") ?? "";
+      const tok = auth.replace(/^Bearer\s+/i, "") || (url.searchParams.get("token") ?? "");
+      // #28 审查补同款前置：!env.CLOUD_TOKEN 时模板串会拼出假口令放行
+      if (!env.CLOUD_TOKEN || (tok !== env.CLOUD_TOKEN && !(env.PUBLIC_TOKEN && tok === env.PUBLIC_TOKEN))) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const cl = Number(req.headers.get("content-length") ?? "0");
+      if (cl > 8192) return new Response("too large", { status: 413 });
+      const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
+      return stub.fetch(new Request("https://router/alert", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-alert-ip": req.headers.get("CF-Connecting-IP") ?? "?" },
+        body: await req.text(),
+      }));
     }
     // 安装包分发（/dl/<file>）：文件放 KV（ECS 镜像对 CF 境外出口 403），
     // 全程不出 Cloudflare——公司只需能开本域即可下载。文件名白名单防滥用
@@ -438,6 +460,8 @@ export class RouterDO extends DurableObject {
   private static RATE_PER_SEC = 30;
   private static RATE_BURST = 60;
   private buckets = new Map<string, { tokens: number; last: number }>();
+  // P0-3/T1（DEV-43）：/alert 独立限流桶（突发 5、10s 回 1——真事故 handful 条够）
+  private alertLimiter = createAlertLimiter(5, 10_000);
 
   // connId 用随机 id（tag[1]），dev 存 tag[0]：
   // 同 dev 重连时新旧 connId 不同，CloudRouter 的顶替守卫才不会误判
@@ -534,6 +558,24 @@ export class RouterDO extends DurableObject {
       // 只回计数不回 dev 列表：公共桥 /health 无鉴权，dev id 虽是公钥派生非机密，
       // 也没必要向任意访客暴露在线设备元数据
       return Response.json({ ok: true, bridge: "cloudflare", devices: this.router.devs().length });
+    }
+    // P0-3/T1（DEV-43）桥直推告警（外层 worker 已过 token 鉴权；限流在此补——
+    // 休眠复活后 alertBuckets 清零可接受，公共桥限流是防滥用兜底非精确配额）
+    if (url.pathname === "/alert") {
+      const ip = req.headers.get("x-alert-ip") ?? "?";
+      if (!this.alertLimiter.ok(ip)) return new Response("rate limited", { status: 429 });
+      let parsed: ReturnType<typeof parseAlertPayload> = null;
+      try { parsed = parseAlertPayload(JSON.parse(await req.text() || "null") as unknown); } catch { parsed = null; }
+      if (!parsed) return new Response("bad request", { status: 400 });
+      this.rehydrate();
+      const conn = this.router.connOfDev(parsed.to);
+      if (!conn) {
+        console.log(`[cloud-bridge] alert dev=${parsed.to} offline (from ${ip})`);
+        return Response.json({ ok: false, error: "target offline" }, { status: 404 });
+      }
+      this.deliver(conn, buildAlertFrame(parsed));
+      console.log(`[cloud-bridge] alert dev=${parsed.to} delivered (from ${ip})`);
+      return Response.json({ ok: true, delivered: true });
     }
     if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll" && url.pathname !== "/wan") return new Response("not found", { status: 404 });
     // #373 /wan 手表明文透传：to=目标 relay dev 必填（该连接的固定投递目标）。

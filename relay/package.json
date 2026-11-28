@@ -204,6 +204,7 @@
     "test:lan-boot": "tsx tests/test-lan-boot.ts",
     "test:engwarm": "tsx tests/test-engwarm.ts",
     "test:patrol-escalate": "tsx tests/test-patrol-escalate.ts",
+    "test:wakeup": "tsx tests/test-wakeup.ts",
     "test:cloud-hbthrottle": "tsx tests/test-cloud-hbthrottle.ts",
     "test:data-guard": "tsx tests/test-data-guard.ts",
     "test:swapguard": "node tests/test-swapguard.mjs",

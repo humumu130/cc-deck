@@ -19,6 +19,11 @@ import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
 import { PatrolModule } from "./patrol.js";
+import { WakeupService } from "./wakeup.js"; // T1 条件唤醒基建（DEV-43）
+import { setWakeupService } from "./wakeup-api.js"; // T1：/api/wakeup 消费登记
+import { pushCloudAlertAll } from "./cloud-push.js"; // P0-3/DL-P1-5：云桥直推外发单口
+import { listBoards } from "./projects.js"; // T1 facts：板卡状态谓词数据源
+import { appendFileSync } from "node:fs";
 // W-WATCHAGENT（1104 用户令）巡查员 Agent 化：喂料模块（巡查域事实定时摘要→在编巡查员
 // 会话）+ patrol overrides 启动预载（确认卡拍板过的阈值重启后持续生效——预载在前，
 // PatrolModule.start 在后，周期阈值同吃到）
@@ -813,11 +818,52 @@ if (process.env.CCR_PATROL !== "0" && readPluginConfig().patrol) {
   // W-WATCHAGENT：预载先于 start——用户拍板过的 patrol overrides 注入 env，PatrolModule
   // start() 读周期（CCR_PATROL_LIGHT_MS/FULL_MS 缓存值）时同吃到（✓ 后重启生效的载体）
   preloadPatrolOverrides(cfg.dataDir);
+  // P0-3/T1（DEV-43）：云桥直推外发腿——patrol 升级（DL-P1-5）与 wakeup 谓词触发
+  //（T1）共用同一条手机推送通道（pushCloudAlertAll → 桥 POST /alert）。云桥禁用
+  //（cloudUrls 空）时腿缺席（升级回落本机通知+报告，与旧形态一致）。
+  const cloudPushLeg = cfg.cloudUrl
+    ? (title: string, body: string) => {
+        void pushCloudAlertAll({ cloudUrl: cfg.cloudUrl, cloudToken: cfg.cloudToken, dataDir: cfg.dataDir }, title, body, "critical")
+          .then((r) => {
+            if (r.results.some((x) => !x.ok)) {
+              console.log(`[cloud-push] 外发未全达（${r.targets.length} 目标）：${r.results.map((x) => `${x.status}${x.delivered ? "/dlv" : ""}${x.error ? ":" + x.error : ""}`).join(" ")}`);
+            }
+          })
+          .catch(() => { /* 外发尽力而为 */ });
+      }
+    : undefined;
   new PatrolModule(mgr, {
     dataDir: cfg.dataDir,
     reportPath: join(cfg.dataDir, "patrol-report.md"),
     enabled: () => process.env.CCR_PATROL !== "0" && readPluginConfig().patrol,
+    cloudPush: cloudPushLeg,
   }).start();
+  // T1 条件唤醒基建（DEV-43）：规则表 data/wakeup-rules.json + 谓词器最小集（会话
+  // 状态/板卡状态/通知账积压），事实成立才外发（同 cloudPushLeg 通道）、expires
+  // 兜底必触达。周期 CCR_WAKEUP_CHECK_MS（缺省 30s，0=关）。规则创建口=POST
+  // /api/wakeup（ws-server，LAN token 同 /api/notify 族）。云桥禁用时外发腿为空
+  // 操作（规则照评照记账——触达面降级但不静默）。
+  if (process.env.CCR_WAKEUP !== "0") {
+    const wakeupSvc = new WakeupService({
+      dataDir: cfg.dataDir,
+      push: async (title, body, level) => {
+        if (!cfg.cloudUrl) return;
+        await pushCloudAlertAll({ cloudUrl: cfg.cloudUrl, cloudToken: cfg.cloudToken, dataDir: cfg.dataDir }, title, body, level);
+      },
+      facts: () => ({
+        sessions: mgr.snapshot().map((s) => ({ sessionId: s.session_id, status: s.status, external: !!s.external })),
+        boardEntries: (listBoards() ?? []).flatMap((b) => (b.entries ?? []).map((e) => ({ text: String(e.text ?? ""), status: String(e.status ?? "") }))),
+        notificationPending: mgr.notificationsList().filter((n) => !n.resolved_at).length,
+      }),
+      report: (line) => {
+        try {
+          appendFileSync(join(cfg.dataDir, "wakeup-report.md"), `[${new Date().toLocaleString("zh-CN", { hour12: false })}] ${line}\n`);
+        } catch { /* 报告尽力而为 */ }
+      },
+    });
+    wakeupSvc.start();
+    setWakeupService(wakeupSvc); // ws-server /api/wakeup 消费（HTTP 创建/列表/取消）
+  }
   // W-PRBACKFLOW：PR 评论回流（Trigger→Subscription 直达交付 worker，DS 末跳）——独立
   // 5min 档（不占 patrol 周期位），档位挂 patrol 族（autoTierOf 单点：off=零研判/
   // observe=干跑记账/auto=投递，见 pr-comment-trigger.ts）；与 patrol 同实例化闸
