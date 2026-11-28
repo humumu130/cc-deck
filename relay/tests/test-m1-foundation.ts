@@ -26,7 +26,7 @@ import { createSqlitePort } from "../src/storage/sqlite.js";
 import { runMigrations } from "../src/storage/migrator.js";
 import { migrations } from "../src/storage/schema.js";
 import type { StoragePort } from "../src/storage/port.js";
-import { ensureStore, importAllForShadow, projectGroupsFromDb, dispatchEntriesFromDb, resetReadModeForTest, type ReadModeDirs } from "../src/storage/read-mode.js";
+import { ensureStore, importAllForShadow, projectGroupsFromDb, dispatchEntriesFromDb, resetReadModeForTest, flushShadowImportForTest, type ReadModeDirs } from "../src/storage/read-mode.js";
 import { importOrg } from "../src/storage/import-org.js";
 import { importSessionTask } from "../src/storage/import-session-task.js";
 import { importAcceptance } from "../src/storage/import-acceptance.js";
@@ -216,6 +216,9 @@ try {
   // ---------- 轴① 建库冷启动：零库 dataDir → ensureStore 聚合入口 → 18 表+六域+checkpoint ----------
   console.log("轴① 建库冷启动:");
   const port = ensureStore(dirsA);
+  // bootfast3：冷路径首建导入改后台 chunked（「返回 port 即已灌」旧同步语义退役）——
+  // 数据面断言前 flush 栅栏（源件注释钦定的测试适配口径）
+  await flushShadowImportForTest(dataDir);
   assert(port.isOpen && port.path === join(dataDir, "cc-deck.sqlite3"), `ensureStore 打开聚合库 ${port.path.split("/").pop()}`);
   assert(ensureStore(dirsA) === port, "ensureStore 单例缓存：同 dirs 二次调用返回同 port（不重开）");
   const tabs = tableNames(port);
@@ -268,7 +271,14 @@ try {
   importOrg(portC, orgDir); // 预置归因锚（否则续跑侧 session 归因与金值结构不等——实验场 setup）
   let sheetInserts = 0;
   const fault = new FaultPort(portC, (sql, params) => sql.startsWith("INSERT OR REPLACE INTO session") && params?.[0] === "s-3");
-  const boomMsg = throwOf(() => importSessionTask(fault, { eventsFile: eventsC, tasksDir: tasksDirC, acceptanceDir: accDirC }, { batchSize: 4 }));
+  // bootfast3：importSessionTask async 化（批间让出）——同步 try/catch 罩不住 promise
+  // 拒绝（unhandled rejection 直接杀进程），改 await + try/catch 捕拒绝面
+  let boomMsg = "";
+  try {
+    await importSessionTask(fault, { eventsFile: eventsC, tasksDir: tasksDirC, acceptanceDir: accDirC }, { batchSize: 4 });
+  } catch (err) {
+    boomMsg = err instanceof Error ? err.message : String(err);
+  }
   assert(boomMsg.includes("批处理失败已回滚"), `FaultPort 引爆：批 3 首行（s-3）抛错→importSessionTask 回滚上抛（${boomMsg.slice(0, 40)}…）`);
   // 断电原子性（轴⑤a）：批 3（行 9-12）整体不在=无半批态；批 1/2 已提交行在
   const q = <T>(sql: string, params?: unknown[]): T[] => portC.query<T>(sql, params);
@@ -281,6 +291,7 @@ try {
   portC.close();
   resetReadModeForTest();
   const portCr = ensureStore(dirsC);
+  await flushShadowImportForTest(dataDirC);
   assert(cn2(portCr, "SELECT COUNT(*) AS n FROM session") === 4, "重开 ensureStore 续跑：余下行 9-12 增量续入（4 会话齐）");
   const snapC = snapshotData(portCr);
   if (snapC !== gold) {
@@ -317,6 +328,7 @@ try {
   console.log("轴⑤b 域清重灌原子性:");
   resetReadModeForTest();
   const portA = ensureStore(dirsA);
+  await flushShadowImportForTest(dataDir);
   const aSheetFile = join(accDir, `${hex("a")}.json`);
   writeFileSync(aSheetFile, JSON.stringify({
     id: hex("a"), title: "验收单一", created_at: T + 100, cwd: "/fx/serious",
@@ -339,6 +351,7 @@ try {
   assert(cpAcceptAfter?.line_count === cpAcceptBefore?.line_count, "checkpoint 写入同被回滚（旧五元组原样）");
   resetReadModeForTest();
   const portAr = ensureStore(dirsA);
+  await flushShadowImportForTest(dataDir);
   assert(cn2(portAr, "SELECT COUNT(*) AS n FROM acceptance_item") === 4, "故障恢复重跑：失效域重灌采新源（验收单甲第三行入 item=4）");
   const it3 = portAr.query<{ task: string; item: string }>("SELECT task, item FROM acceptance_item WHERE sheet_id = ? AND item_index = 3", [hex("a")])[0];
   assert(it3?.task === "t3" && it3?.item === "项三改", "重灌内容精确（item_index=3=t3/项三改，数组序口径）");
@@ -352,6 +365,7 @@ try {
   const lossTsBefore4 = lossWithTs(portAr);
   resetReadModeForTest();
   const portR = ensureStore(dirsA);
+  await flushShadowImportForTest(dataDir);
   const fails = await importAllForShadow(portR, dirsA); // 幂等双调：聚合面再跑一轮（checkpoint 全命中=近零开销）
   assert(fails.length === 0, `聚合入口重跑零域失败（checkpoint 全命中，实际 ${JSON.stringify(fails)}）`);
   const dataAfter = snapshotData(portR);
@@ -392,6 +406,7 @@ try {
   assert(new Set(allLoss).size === allLoss.length, `全库 loss 零重复落账（${allLoss.length} 条唯一）`);
   const lossA = lossSet(portR, root);
   const portCr2 = ensureStore(dirsC); // 轴④ 的 reset 已清 C 项缓存——此处直接新开活连接，portR 不受扰
+  await flushShadowImportForTest(dataDirC);
   const stageB = lossSet(portCr2, root); // 轴③ 续跑库
   assert(JSON.stringify(stageB) === JSON.stringify(lossA), "跨库三路径 loss 元组集全等（首跑金值=断点续跑=断电重试+恢复，两库同 fixture）");
   assert(allLoss.length >= 6, `坏行面覆盖广度（${allLoss.length} 条：org/task/events/dispatch/notification/acceptance/artifact 各域坏行在案）`);

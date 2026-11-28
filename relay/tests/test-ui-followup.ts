@@ -30,7 +30,7 @@ for (const f of ["session-domain", "bridge-core", "settings-domain", "mobile", "
 
 console.log("件A 待命徽章 WORKING gate：");
 ok(ssd.includes('pmStandby: session.pm_standby === true && status !== "working"'), "A1 桌面 myCardItem：WORKING 干活态不显待命");
-ok(mj.includes('(s.pm_standby && s.status !== "WORKING") ? ["待命", "waiting"]'), "A2 移动 stTag：同 gate");
+ok(mj.includes('(s.pm_standby && s.status !== "WORKING") ? ["待命", "st-standby"]'), "A2 移动 stTag：同 gate（锚随 DEV-40 T4 胶囊类换 st-standby 刷新——gate 语义 s.status!=='WORKING' 不变）");
 
 console.log("件B 远程源会话卡删除兜底：");
 ok(ssd.includes("isRemoteProjection(s)") && ssd.includes('relay_channel === "cloud"'), "B1 远程投影判定（云通道/源名差异）");
@@ -106,7 +106,7 @@ console.log("件U 1123 test.28 五刀（图钉右簇/聚合源标/桥层打标/�
 {
   const smSrc = rf("relay", "src", "session-manager.ts");
   const idx005 = rf("web-console", "index-005.html");
-  ok(smSrc.includes('if (changed || summaryChanged) s.state.updated_at = at ?? Date.now();'), "U1 空闲不跳根修 v3（四现：WORKING 恒洗退役——revive-on-hydrate 同值重报不再刷 updated_at；活跃区排序用 turn_started_at 无消费者）"); ok(css.includes("#d-session .srow-pin { position: relative;"), "U7 图钉误触修（static→relative：共享 ::before 扩区在 static 下锚到 r1=铺满整行点击皆图钉；relative 保留流内恒占位，扩区回归钮自身——1123 四轮 P0）");
+  ok(smSrc.includes('if (changed || summaryChanged) this.touchIfChanged(s.state, at, true);'), "U1 空闲不跳根修 v3（四现：WORKING 恒洗退役——revive-on-hydrate 同值重报不再刷 updated_at；活跃区排序用 turn_started_at 无消费者。锚随 DEV-31 清件③刷新：updated_at 直赋过单点 touchIfChanged，changed||summaryChanged 门与 force=at 权威时刻语义不变）"); ok(css.includes("#d-session .srow-pin { position: relative;"), "U7 图钉误触修（static→relative：共享 ::before 扩区在 static 下锚到 r1=铺满整行点击皆图钉；relative 保留流内恒占位，扩区回归钮自身——1123 四轮 P0）");
   ok(ssd.includes('b2AggViewActive') && ssd.includes('(b2AggViewActive() || item.source !== b2SelfSourceName())'), "U2 聚合视角会话卡全显源标（self 抑制仅单源/主源视角——S.relayName 随末到快照翻转反噬根因）");
   ok(bc.includes('relay_source: snapSrcName') && bc.includes('const snapSrcName'), "U3 桥层会话打 per-session 源名（applySnapshot 按本快照 relay_name——项目页/team 域消费桥缓存有源可显）");
   ok(bc.includes('pageSrcNames.size > 1') && bc.includes('srcCapOf'), "U4 项目卡源胶囊（页级源>1 开门，卡内显自己会话所属源≤3+溢出计数）");

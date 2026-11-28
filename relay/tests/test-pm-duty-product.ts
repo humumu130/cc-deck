@@ -1,15 +1,19 @@
 // ---------- P71 值守产品化一期测试（019 §6 产品面接线） ----------
 // 覆盖：P0 配置面静态断言（五键/duty 缺省 true/CCR_CONFIG_FILE override）；
 //       P1 缺省开门（config 无键=值守照常，产品缺省开回归面）；
-//       P2 worker done 边唤醒主链（019 §3.1：交付收口→依赖解锁→立即喂活，杜绝
-//          「worker 干完、Leader 休眠、回单无人验收」空转窗）；
+//       P2 worker done 边唤醒主链（现行语义：交付收口→A 翻 submitted（boardlife）→
+//          回执直达注入 PM（W-DELIVERCB 收件箱直达）→值守让位 sleep user_active
+//          （W-DUTYBACKOFF 刀1）→收割解锁后活跃窗外兜底重算照常注入）；
 //       P2b failed 边即刻零值守（notifyDispatchClosed 回执注入承接防双挂备案）；
 //       P3/P4 三态之 blocked（gate 卡）/all_running（健康在跑不催）；
-//       P5 K=3 continuation 延迟喂活真跑+候选消化后循环终止（019 §3.4）；
+//       P5 无进展退避（W-DUTYBACKOFF 刀2：同 top 第 2 轮起 sleep no_progress_backoff
+//          5→15→30→60min 级数）+top 变化复位+候选消化循环终止（级数表数值与到期补发
+//          timer 真跑由 test-dutybackoff B/R2 组专锁）；
 //       P6 全局总闸 duty=false→disabled 审计零注入（019 §6.1「值守审计仍记录
 //          disabled」+kill-switch）；
-//       P7 WORKING 合并门（019 §3.3「PM WORKING 时合并 feed 上下文而不追加回合」
-//          最小落地：不换流打断在途回合，事件不丢——收口 turn_end 兜底重算）；
+//       P7 WORKING 合并门（019 §3.3「PM WORKING 时合并 feed 上下文而不追加回合」：
+//          不换流打断在途回合，事件不丢——收口 turn_end 兜底重算；worker done 边的
+//          回执直达换流面归 P2①）；
 //       P8 组级门控 duty_policy.enabled=false 该组零候选、清除回开（两级同开才生效
 //          之组级半边，019 §6.3「已有显式 false 的组不被迁移覆盖」）。
 // fixture 缝仿 test-m12-commands C12 段（mkdtemp+CCR_ORG_DIR/CCR_DATA_DIR 注入+
@@ -73,11 +77,14 @@ function mkFixture(dirs: string[]) {
   const DATA = mkdtempSync(join(tmpdir(), `ccr-p71-data-${++seq}-`));
   const ORG = mkdtempSync(join(tmpdir(), `ccr-p71-org-${seq}-`));
   const ANCHOR = mkdtempSync(join(tmpdir(), `ccr-p71-anchor-${seq}-`));
-  dirs.push(DATA, ORG, ANCHOR);
+  const ART = mkdtempSync(join(tmpdir(), `ccr-p71-art-${seq}-`));
+  dirs.push(DATA, ORG, ANCHOR, ART);
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
+  const prevArt = process.env.CCR_ARTIFACTS_DIR;
   process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_ORG_DIR = ORG;
+  process.env.CCR_ARTIFACTS_DIR = ART; // 回执根钉沙盒（W-CARDLIFE 回执路径=artifactsDir() 单源，绝不触生产 ~/.cc-deck/artifacts）
   setLightConfirmTrusted(true); // 轻立项信任直通：create 即 active（板可写，M13-2 探针同缝）
   const cfg: RelayConfig = {
     port: 8796, token: "t", tokenGenerated: false, defaultCwd: "",
@@ -95,10 +102,25 @@ function mkFixture(dirs: string[]) {
     const a = send(mgr, `p71c${seq}-${randomUUID().slice(0, 6)}`, "COMMAND_TASK_CREATE", { gid, text }, "web-1");
     return (a.data as { entity_id?: string }).entity_id ?? "";
   };
-  const dispatch = (prompt: string): { workerIdx: number; dispatchId: string } => {
+  const dispatch = (prompt: string, opts?: { receiptSlug?: string }): { workerIdx: number; dispatchId: string; receiptPath?: string } => {
     const workerIdx = created.length;
-    const a = send(mgr, `p71w${seq}-${randomUUID().slice(0, 6)}`, "COMMAND_DISPATCH", { gid, prompt }, "web-1");
-    return { workerIdx, dispatchId: (a.data as { dispatch_id?: string }).dispatch_id ?? "" };
+    // receiptSlug：任务书带约定回执路径（~/.cc-deck/artifacts/w-*.md）——dispatchWorker
+    // 从 prompt 提取→收口按路径核对（W-CARDLIFE-R3 资格位链：尾行合规才翻 submitted）
+    const full = opts?.receiptSlug ? `${prompt}（回执写 ~/.cc-deck/artifacts/${opts.receiptSlug}）` : prompt;
+    const a = send(mgr, `p71w${seq}-${randomUUID().slice(0, 6)}`, "COMMAND_DISPATCH", { gid, prompt: full }, "web-1");
+    return { workerIdx, dispatchId: (a.data as { dispatch_id?: string }).dispatch_id ?? "", ...(opts?.receiptSlug ? { receiptPath: join(ART, opts.receiptSlug) } : {}) };
+  };
+  // 回执文件落沙盒 ART（尾行军规行「结果：…｜改动文件：…」合规——receiptTailLineOk 行锚）
+  const artifact = (slug: string): string => {
+    const p = join(ART, slug);
+    writeFileSync(p, "# 回执\n过程略\n结果：交付完毕｜改动文件：src/a.ts\n", "utf-8");
+    return p;
+  };
+  // 无派单裸 worker（feedPM worker_done 边的零 closeout 形态——P7 WORKING 合并门用）
+  const spawnWorker = (prompt: string): number => {
+    const idx = created.length;
+    (mgr as unknown as { create(cwd: string, prompt: string): string }).create(ANCHOR, prompt);
+    return idx;
   };
   const ensureLeaderIdx = (): number => {
     const base = created.length;
@@ -107,13 +129,32 @@ function mkFixture(dirs: string[]) {
     created[created.length - 1]?.cb.onInit(`sdk-p71-${seq}-boot`, "test-model");
     return base;
   };
-  return { mgr, created, rounds, gid, card, dispatch, ensureLeaderIdx, cleanup: () => {
+  return { mgr, created, rounds, gid, card, dispatch, artifact, spawnWorker, data: DATA, ensureLeaderIdx, cleanup: () => {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevReadMode === undefined) delete process.env.CCR_STORAGE_READ_MODE; else process.env.CCR_STORAGE_READ_MODE = prevReadMode;
+    if (prevArt === undefined) delete process.env.CCR_ARTIFACTS_DIR; else process.env.CCR_ARTIFACTS_DIR = prevArt;
   } };
 }
 
-const prevEnv = ["CCR_PM_DUTY", "CCR_PM_DUTY_STALE_MS", "CCR_PM_DUTY_CONTINUATION_MS", "CCR_ACCEPTANCE_DIR", "CCR_CONFIG_FILE", "CCR_ORG_DIR", "CCR_NO_TITLE_GEN"] as const;
+// [W-DUTYBACKOFF] 刀1 让位后的确定性缝：把 events.ndjson 里该会话的真实 user_message
+// 帧回拨出活跃窗（缺省 10min）——等效时间快进，门逻辑照真跑（数据面/判定序零改动）。
+function coolUserMessages(dataDir: string, sid: string): void {
+  const p = join(dataDir, "events.ndjson");
+  const now = Date.now();
+  const lines = readFileSync(p, "utf-8").split("\n").filter((l) => l.trim());
+  const out = lines.map((l) => {
+    try {
+      const e = JSON.parse(l) as { type?: string; session_id?: string; ts?: number; payload?: { kind?: string } };
+      if (e.type === "SESSION_LOG" && e.session_id === sid && e.payload?.kind === "user_message" && typeof e.ts === "number") {
+        return JSON.stringify({ ...e, ts: now - 11 * 60_000 });
+      }
+    } catch { /* 坏行原样保留 */ }
+    return l;
+  });
+  writeFileSync(p, out.join("\n") + "\n", "utf-8");
+}
+
+const prevEnv = ["CCR_PM_DUTY", "CCR_PM_DUTY_STALE_MS", "CCR_PM_DUTY_CONTINUATION_MS", "CCR_ACCEPTANCE_DIR", "CCR_CONFIG_FILE", "CCR_ORG_DIR", "CCR_NO_TITLE_GEN", "CCR_ARTIFACTS_DIR"] as const;
 const saved: Record<string, string | undefined> = {};
 for (const k of prevEnv) saved[k] = process.env[k];
 
@@ -178,24 +219,40 @@ try {
       const bUp = upsertBoardEntry(f.gid, { text: "依赖解锁卡（B 等 A）", status: "backlog", depends_on: [idA] });
       const idB = bUp.ok ? bUp.entry.id : "";
       assert(idA !== "" && idB !== "", "P2⓪ 依赖对落卡（A 派单承接/B depends_on[A]）");
-      // 先派单承接 A（A=doing 非候选、B 依赖未解锁非候选）→boot 收口时 all_running
-      // sleep 清链+Leader 置 DONE（worker done 边过 WORKING 门的前提）
-      const w = f.dispatch("干 A 卡的单");
+      // 先派单承接 A（带任务书回执路径+回执文件先落——W-CARDLIFE-R3 资格位链：
+      // 尾行军规行合规才翻 submitted；A=doing 非候选、B 依赖未解锁非候选）
+      const w = f.dispatch("干 A 卡的单", { receiptSlug: "w-p71a.md" });
+      f.artifact("w-p71a.md");
       upsertBoardEntry(f.gid, { id: idA, text: "依赖前置卡（派单承接）", status: "claimed", dispatch_id: w.dispatchId });
       f.created[bootIdx]?.cb.onTurnEnd(true, "boot", 1);
       assert((f.rounds()[f.rounds().length - 1] ?? {}).reason === "blocked",
         "P2⓪b boot 收口：A 在跑 B 等依赖（blocked 判定序先于 all_running，leader-duty :169）→sleep 清链+Leader 归 DONE 态");
       const before = f.created.length;
       const roundsBefore = f.rounds().length;
-      // worker 交付：A 搬 done→B 依赖解锁→feedPM("worker_done") 立即注入（不等 Leader 回合）
-      f.created[w.workerIdx]?.cb.onTurnEnd(true, "干完了", 50);
-      const dutyPrompt = String(f.created[before]?.prompt ?? "");
-      assert(dutyPrompt.includes("[值守喂活]") && dutyPrompt.includes(idB.slice(0, 12)),
-        "P2① worker done 即唤醒：交付收口→A 搬 done→B 解锁成候选→值守注入（019 §3.1 事件驱动）");
+      // worker 交付：stats 非零（S1 零产出闸放行）→done 收口→A 翻 submitted→回执直达 PM
+      f.created[w.workerIdx]?.cb.onStats({ files_changed: 1, lines_added: 1, lines_deleted: 0 });
+      f.created[w.workerIdx]?.cb.onTurnEnd(true, "结果：A 卡交付完毕", 50);
+      const cbPrompt = String(f.created[before]?.prompt ?? "");
+      assert(cbPrompt.includes("[worker 已交付]") && cbPrompt.includes(w.dispatchId.slice(0, 8)),
+        "P2① worker done 即唤醒：回执直达注入 PM（W-DELIVERCB 收件箱直达——交付收口直达，不等值守巡检）");
+      const boardA = loadBoard(f.gid).entries.find((e) => e.id === idA);
+      assert(boardA?.status === "submitted" && boardA?.review_required === true,
+        `P2①' A 翻 submitted 审查中（boardlife 交付=完成候选；实 ${boardA?.status}/${JSON.stringify(boardA?.review_required)}——回执尾行合规资格位链在）`);
       const last = f.rounds()[f.rounds().length - 1] ?? {};
-      assert(f.rounds().length === roundsBefore + 1 && JSON.stringify(last.trigger) === JSON.stringify(["worker_done"]),
-        "P2② 审计 worker_done 行（一交付一检查，trigger=worker_done）");
-      f.created[before]?.cb.onInit("sdk-p2-duty", "test-model"); // 清值守流 init timer
+      assert(f.rounds().length === roundsBefore + 1 && JSON.stringify(last.trigger) === JSON.stringify(["worker_done"])
+        && last.result === "sleep" && last.reason === "user_active",
+        "P2② 值守让位审计：worker_done 边 sleep user_active（W-DUTYBACKOFF 刀1——回执回显=真实用户消息入活跃窗，值守不叠轰炸；到期补发 timer 承接）");
+      f.created[before]?.cb.onInit("sdk-p2-cb", "test-model"); // 交付回合 init（清值守流 init timer）
+      // 收割（submitted→done 过审）→B 依赖解锁；冷却活跃窗（fixture 时间快进缝——
+      // 回执回显出窗）→事件边兜底重算→B 候选照常注入（事件不丢）
+      send(f.mgr, "p2hv", "COMMAND_TASK_UPDATE", { gid: f.gid, entry_id: idA, status: "done" }, "web-1");
+      coolUserMessages(f.data, f.mgr.getLeaderSessionId() ?? "");
+      const base = f.created.length;
+      f.created[before]?.cb.onTurnEnd(true, "收割核验收口", 1);
+      const dutyPrompt = f.created.slice(base).map((r) => String(r.prompt ?? "")).find((p) => p.includes("[值守喂活]")) ?? "";
+      assert(dutyPrompt.includes(idB.slice(0, 12)),
+        "P2③ 活跃窗外兜底重算：B 解锁成候选照常注入（019 §3.1 事件驱动在——收割后同一次重算覆盖）");
+      f.created[f.created.length - 1]?.cb.onInit("sdk-p2-duty", "test-model"); // 清值守流 init timer
     } finally { f.cleanup(); }
   }
 
@@ -247,50 +304,53 @@ try {
     } finally { f.cleanup(); }
   }
 
-  // ---------- P5 K=3 continuation 延迟喂活真跑+候选消化后循环终止 ----------
-  console.log("P5 continuation 退避");
+  // ---------- P5 无进展退避（W-DUTYBACKOFF 刀2）+top 变化复位+循环终止 ----------
+  // 现行语义：同 top 候选连喂=队列无人消费——第 2 轮起 sleep no_progress_backoff
+  //（5→15→30→60min 级数表，分钟级真实退避）。级数表数值与到期补发 timer 真跑由
+  // test-dutybackoff B/R2 组专锁；此处锁产品链形态：首轮注入→同 top 退避（零注入+
+  // wake_once 续办在案）→top 变化复位→候选消化终静默（idle 归零不再排 timer）。
+  console.log("P5 无进展退避");
   {
     const f = mkFixture(dirs);
     try {
       const bootIdx = f.ensureLeaderIdx();
-      f.card("常驻候选卡（K=3 链燃料）");
-      // 连续三轮值守回合（每轮注入→新值守流收口=下一轮检查）
+      const idC1 = f.card("退避链燃料卡一");
       let leaderCb = f.created[bootIdx]?.cb;
-      for (let i = 1; i <= 2; i++) {
-        const base = f.created.length;
-        leaderCb?.onTurnEnd(true, `值守轮${i}`, 1);
-        const p = String(f.created[base]?.prompt ?? "");
-        assert(p.includes("[值守喂活]"), `P5① 第 ${i} 轮 feed 注入（chain=${i}）`);
-        f.created[base]?.cb.onInit(`sdk-p5-v${i}`, "test-model");
-        leaderCb = f.created[base]?.cb;
-      }
+      const base1 = f.created.length;
+      leaderCb?.onTurnEnd(true, "值守轮1", 1);
+      const p1 = String(f.created[base1]?.prompt ?? "");
+      assert(p1.includes("[值守喂活]") && p1.includes(idC1.slice(0, 12)),
+        "P5① 首轮 feed 注入（top 卡 id 入 prompt——chain 起 1）");
+      f.created[base1]?.cb.onInit("sdk-p5-v1", "test-model");
+      leaderCb = f.created[base1]?.cb;
+      const r1 = f.rounds()[f.rounds().length - 1] ?? {};
+      assert(r1.result === "continue", "P5①' 首轮审计 continue（注入成功记账）");
+      // 同 top 第 2 轮：无进展退避——零注入+wake_once 续办在案（级数 1=5min）
+      const lenAt2 = f.created.length;
+      leaderCb?.onTurnEnd(true, "值守轮2", 1);
+      const r2 = f.rounds()[f.rounds().length - 1] ?? {};
+      assert(f.created.length === lenAt2 && r2.result === "sleep" && r2.reason === "no_progress_backoff",
+        "P5② 同 top 第 2 轮：sleep no_progress_backoff 零注入（队列无人消费不空转——刀2）");
+      const cont = r2.continuation as { delay_ms?: number; once?: boolean } | undefined;
+      assert(cont?.delay_ms === 5 * 60_000 && cont?.once === true,
+        "P5③ continuation 在案（级数 1=5min/wake_once——R1 饱和环联动退避级数表）");
+      // top 变化复位：燃料卡一收割 done+新卡入列→新 top≠lastTop→streak/退避窗清零→照常注入
+      send(f.mgr, "p5c1", "COMMAND_TASK_UPDATE", { gid: f.gid, entry_id: idC1, status: "done" }, "web-1");
+      const idC2 = f.card("退避链燃料卡二");
       const base3 = f.created.length;
       leaderCb?.onTurnEnd(true, "值守轮3", 1);
-      let r = f.rounds();
-      const r3 = r[r.length - 1] ?? {};
-      assert(f.created.length === base3 && r3.result === "sleep" && r3.reason === "k_exhausted",
-        "P5② K=3 触顶：第 3 轮 sleep 零注入（防 token 忙等，019 §3.4）");
-      const cont = r3.continuation as { delay_ms?: number; once?: boolean } | undefined;
-      assert(cont?.delay_ms === 30 && cont?.once === true,
-        "P5③ continuation 在案（delay=30ms env 测试缝/wake_once）");
-      // 延迟喂活真跑：30ms 后 setTimeout 自动 feedPM——候选仍在→再次 sleep k_exhausted（新行）
-      const countAtR3 = f.rounds().length;
-      const deadline = Date.now() + 2000;
-      while (f.rounds().length < countAtR3 + 1 && Date.now() < deadline) await sleep(20);
-      r = f.rounds();
-      assert(r.length > countAtR3, "P5④ 延迟喂活真跑（审计新增行——setTimeout 自动 feedPM）");
-      const r4 = r[r.length - 1] ?? {};
-      assert(r4.result === "sleep" && r4.reason === "k_exhausted",
-        "P5⑤ continuation 触发的检查行（候选未消化→继续退避，非永久静默）");
-      // 候选消化→链归零→循环终止
-      const board = loadBoard(f.gid);
-      const fuel = board.entries.find((e) => e.status === "backlog");
-      send(f.mgr, "p5clr", "COMMAND_TASK_UPDATE", { gid: f.gid, entry_id: fuel?.id ?? "", status: "done" }, "web-1");
-      await sleep(80); // 消化在途 setTimeout 一发（sleep empty 归零后不再排新 timer）
-      const n1 = f.rounds().length;
-      await sleep(200);
-      const n2 = f.rounds().length;
-      assert(n1 === n2, `P5⑥ 候选消化后循环终止（80ms 定格 ${n1} 行，200ms 后仍 ${n2} 行——idle 归零不再排 timer）`);
+      const p3 = String(f.created[base3]?.prompt ?? "");
+      assert(p3.includes("[值守喂活]") && p3.includes(idC2.slice(0, 12)),
+        "P5④ top 变化复位退避：新 top 照常注入（streak/窗清零——刀2 复位条款）");
+      f.created[base3]?.cb.onInit("sdk-p5-v3", "test-model");
+      leaderCb = f.created[base3]?.cb;
+      // 候选消化→idle 归零→循环终止面（sleep empty 零注入，链清零不再排续办 timer）
+      send(f.mgr, "p5c2", "COMMAND_TASK_UPDATE", { gid: f.gid, entry_id: idC2, status: "done" }, "web-1");
+      const lenAt5 = f.created.length;
+      leaderCb?.onTurnEnd(true, "值守轮4", 1);
+      const r5 = f.rounds()[f.rounds().length - 1] ?? {};
+      assert(f.created.length === lenAt5 && r5.result === "sleep" && r5.reason === "empty",
+        "P5⑤ 候选消化后循环终止：sleep empty 零注入（chain idle 归零，无活可干即静默）");
     } finally { f.cleanup(); }
   }
 
@@ -315,22 +375,23 @@ try {
   }
 
   // ---------- P7 WORKING 合并门：Leader 在岗不追加回合，事件不丢 ----------
+  // 现行语义：worker done 边的「回执直达」走 resumeAgent 换流（W-DELIVERCB 交付回调
+  // 优先，P2① 已锁）；值守 patrol 对 WORKING 目标仍零注入零审计（feedPM WORKING 门
+  // 在 user_active 门之后的静默 return）——用无派单裸 worker 回合触发 worker_done 边
+  // （零 closeout 零回执注入，活跃窗不介入）锁 WORKING 门本体。
   console.log("P7 WORKING 合并门");
   {
     const f = mkFixture(dirs);
     try {
       const bootIdx = f.ensureLeaderIdx(); // Leader spawn 在途=WORKING（不收口）
-      const idA = f.card("P7 前置卡");
-      const bUp = upsertBoardEntry(f.gid, { text: "P7 解锁卡", status: "backlog", depends_on: [idA] });
-      const idB = bUp.ok ? bUp.entry.id : "";
-      const w = f.dispatch("P7 干 A");
-      upsertBoardEntry(f.gid, { id: idA, text: "P7 前置卡", status: "claimed", dispatch_id: w.dispatchId });
+      const idB = f.card("P7 待办卡（WORKING 期间积压）");
+      const wk = f.spawnWorker("P7 裸 worker（零派单对照）");
       const before = f.created.length;
       const roundsBefore = f.rounds().length;
-      f.created[w.workerIdx]?.cb.onTurnEnd(true, "干完了", 50); // worker done→Leader WORKING→合并门静默
+      f.created[wk]?.cb.onTurnEnd(true, "干完了", 1); // worker done（零派单）→feedPM→Leader WORKING→合并门静默
       assert(f.created.length === before && f.rounds().length === roundsBefore,
         "P7① Leader WORKING：worker done 零注入零审计（resumeAgent 不换流打断在途回合）");
-      // Leader 收口→turn_end 兜底重算→B 候选照收（合并语义=不丢事件）
+      // Leader 收口→turn_end 兜底重算→积压候选照收（合并语义=不丢事件）
       const base = f.created.length;
       f.created[bootIdx]?.cb.onTurnEnd(true, "boot 收口", 1);
       const prompt = String(f.created[base]?.prompt ?? "");
@@ -362,8 +423,10 @@ try {
       assert(prompt.includes("[值守喂活]") && prompt.includes(gbCardId.slice(0, 12)) && !prompt.includes(gaCardId.slice(0, 12)),
         "P8② 组级关：关组卡零候选、开组照常（两级同开才生效之组级半边，019 §6.1）");
       f.created[base]?.cb.onInit("sdk-p8-v1", "test-model");
-      // 清除策略→回缺省开→下轮候选含关组卡
+      // 清除策略→回缺省开→下轮候选含关组卡（top 变化复位无进展窗：P8② 注入后同 top
+      // 连喂会被 W-DUTYBACKOFF 刀2 退避拦——先把开组卡收割 done 换 top，复位后照常注入）
       setGroupDutyPolicy(gidA, undefined);
+      send(f.mgr, "p8clr", "COMMAND_TASK_UPDATE", { gid: f.gid, entry_id: gbCardId, status: "done" }, "web-1");
       const base2 = f.created.length;
       f.created[base]?.cb.onTurnEnd(true, "值守收口", 1);
       const prompt2 = String(f.created[base2]?.prompt ?? "");

@@ -25,17 +25,17 @@ const traeRoot = join(root, "trae-sessions");
 const qwenRoot = join(root, "qwen-sessions");
 const cbRoot = join(root, "codebuddy-sessions");
 const zcodeRoot = join(root, "zcode-sessions");
-const traeWork = join(root, "trae-work");
-const qwenWork = join(root, "qwen-work");
-const cbWork = join(root, "cb-work");
-const zcodeWork = join(root, "zcode-work");
+// #275S/[W-RETIRED 补充②]：session_meta cwd 经 isSandboxCwd 单点闸——mkdtemp(tmpdir)
+// 子路径被 sandbox-cwd 拒收不建卡。cwd 仅作字符串消费（session_meta 内容 + 注入
+// 进程表的匹配串，无 fs 依赖），用 /fx 假路径；fixture 根（rollout 落盘）仍在
+// mkdtemp 内不受闸影响（闸只看 cwd 字段）
+const traeWork = "/fx/trae-work";
+const qwenWork = "/fx/qwen-work";
+const cbWork = "/fx/cb-work";
+const zcodeWork = "/fx/zcode-work";
 mkdirSync(join(traeRoot, "2026", "10"), { recursive: true });
 mkdirSync(qwenRoot, { recursive: true });
 mkdirSync(cbRoot, { recursive: true });
-mkdirSync(traeWork, { recursive: true });
-mkdirSync(qwenWork, { recursive: true });
-mkdirSync(cbWork, { recursive: true });
-mkdirSync(zcodeWork, { recursive: true });
 // zcodeRoot 与 codex 根故意不建：验证缺目录跳过；真机 ~/.codex 也用沙盒空路径隔开
 
 process.env.CCR_DATA_DIR = dataDir;

@@ -83,7 +83,10 @@ ok(html.includes("backlog: \"待认领\"") && html.includes("claimed: \"进行�
   "board lane vocab/order consts present (D18 five-state, forward-compat by-value grouping)");
 ok(count(html, 'ents.filter((e) => e.status === st)') === 0,
   "old fixed-key lane filter fully replaced (unknown statuses no longer dropped)");
-ok(!blockOf('case "ORG_CONFIRM_UPDATED": {', 'case "BOARD_UPDATED"').includes("delta"),
+// 窗口收窄到 confirm case 本体（M13-2 语义不变：confirm 域无 delta）。原窗到
+// BOARD_UPDATED，W-EXPP2/W-RULES2 两 delta 域 case 插队其间（index.html 现形）——
+// 按域断窗，不把经验/铁律域的 delta 误记成 confirm 域违例
+ok(!blockOf('case "ORG_CONFIRM_UPDATED": {', 'case "EXPERIENCE_UPDATED"').includes("delta"),
   "ORG_CONFIRM_UPDATED untouched (M13-2: no delta in confirm domain)");
 ok(html.includes("ctx.legacyMode"), "legacyMode consumption untouched (sanity)");
 

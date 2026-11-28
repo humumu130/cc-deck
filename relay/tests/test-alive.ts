@@ -64,12 +64,15 @@ const TROOT = join(process.env.CCR_PROJECTS_ROOT!, "proj-a");
 mkdirSync(TROOT, { recursive: true });
 const NOW = Date.now();
 // 转录行按 scanOrphanActivity 判据塑形：≥1 user + ≥1 tool_use（perm-wait 形态，34 案口径）
+// #275S：cwd 只从 jsonl 内容读（readCwdFromTail，无 fs 校验），但 adoptOrphans/引擎收编
+// 共用 isSandboxCwd 单点闸——/tmp 族 fixture cwd 会被 sandbox-cwd 拒收不建卡，
+// 故用 /fx 假路径（非沙盒形态的业务路径样貌）
 const line = (cwd: string) =>
   JSON.stringify({ type: "user", cwd, message: { role: "user", content: "hi" } }) + "\n" +
   JSON.stringify({ type: "assistant", cwd, message: { role: "assistant", content: [{ type: "tool_use", name: "Bash", input: {} }] } }) + "\n";
 function mkTranscript(sid: string, at: number): string {
   const p = join(TROOT, `${sid}.jsonl`);
-  writeFileSync(p, line("/tmp/wd"));
+  writeFileSync(p, line("/fx/alive-wd"));
   utimesSync(p, new Date(at), new Date(at));
   return p;
 }
@@ -87,7 +90,7 @@ console.log("§A 孤儿时间戳面：");
   ok(st?.status === "DONE", "A1c 新卡 DONE（只读接入语义保持）");
   // A2 已注册重扫：不重复建、状态零触碰
   const before = JSON.stringify(getExt("ext-aaaabbbb-1111-2222-3333-000000000001"));
-  appendFileSync(join(TROOT, "aaaabbbb-1111-2222-3333-000000000001.jsonl"), line("/tmp/wd"));
+  appendFileSync(join(TROOT, "aaaabbbb-1111-2222-3333-000000000001.jsonl"), line("/fx/alive-wd"));
   adopt();
   ok(JSON.stringify(getExt("ext-aaaabbbb-1111-2222-3333-000000000001")) === before, "A2 已注册卡重扫零触碰（活性政体归轮询，收养面不越权——test-bridge 36 冲突教训）");
 }
@@ -95,7 +98,7 @@ console.log("§A 孤儿时间戳面：");
 {
   const sid = "bbbbeeee-1111-2222-3333-000000000002";
   mkTranscript(sid, NOW - 10 * 60_000);
-  mgr.ensureExternal(`ext-${sid}`, "/tmp/wd2", "hook 卡", sid, NOW - 60_000);
+  mgr.ensureExternal(`ext-${sid}`, "/fx/wd2", "hook 卡", sid, NOW - 60_000);
   const before = JSON.stringify(getExt(`ext-${sid}`));
   adopt();
   ok(JSON.stringify(getExt(`ext-${sid}`)) === before, "A3 hook 建档卡零触碰（事件流权威）");

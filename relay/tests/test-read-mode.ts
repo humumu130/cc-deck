@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSqlitePort } from "../src/storage/sqlite.js";
-import { resetReadModeForTest, resolveReadMode, currentReadMode, compareDomain, runShadowCompare, readShadowDiff } from "../src/storage/read-mode.js";
+import { resetReadModeForTest, resolveReadMode, currentReadMode, compareDomain, runShadowCompare, readShadowDiff, flushShadowImportForTest } from "../src/storage/read-mode.js";
 import { statThenRead } from "../src/storage/import-util.js";
 import { listGroups, findGroup, isLightConfirmTrusted, listConfirms, listLessons } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
@@ -107,6 +107,8 @@ try {
   // ---------- 2. sqlite 档：表投影金值+旧 JSON 零写 ----------
   console.log("段2 sqlite 档:");
   setMode("sqlite");
+  listGroups(orgDir); // 触发 ensureStore（冷路径导入后台化——bootfast3）
+  await flushShadowImportForTest(dataDir); // 导入收尾栅栏：过窗后 viaReadMode 走真表投影
   const sGroups = listGroups(orgDir);
   assert(sGroups.length === 2 && sGroups[0].id === "g-1" && sGroups[0].tier === "正经立项" && sGroups[0].status === "active", "sqlite 档组列表=表投影（导入后同值）");
   assert(JSON.stringify(sGroups[0].headcount) === JSON.stringify(g1.headcount) && (sGroups[0].role_defaults as Record<string, unknown> | undefined)?.coder !== undefined, "sqlite 档 headcount/role_defaults 从 JSON 列直还");
@@ -140,7 +142,9 @@ try {
   raw.open();
   raw.exec(`UPDATE "group" SET tier = '轻立项' WHERE id = 'g-1'`);
   raw.close();
-  const sh2 = listGroups(orgDir);
+  listGroups(orgDir); // 首读触发 ensureStore（bootfast3 冷路径后台导入——pending 窗内走 json 权威兜底）
+  await flushShadowImportForTest(dataDir); // 过窗栅栏
+  const sh2 = listGroups(orgDir); // 二读：pending 清→shadow 旁路对比同步跑（差异落账在本次）
   assert(JSON.stringify(sh2) === JSON.stringify(jGroups), "人为改库后 shadow 档返回值仍 JSON 侧（零行为改变）");
   const diffs = readShadowDiff(dataDir);
   const hit = diffs.find((r) => r.domain === "group" && r.key === "g-1" && r.category === "value-mismatch");
@@ -158,6 +162,7 @@ try {
   restore.exec(`UPDATE "group" SET tier = '正经立项' WHERE id = 'g-1'`);
   restore.close();
   listGroups(orgDir); // 触发 ensureStore+灌库
+  await flushShadowImportForTest(dataDir); // bootfast3：对账器直读库前导入收尾栅栏
   const port = createSqlitePort({ dataDir });
   port.open();
   const dirs = { dataDir, orgDir, tasksDir: join(dataDir, "tasks") };
@@ -240,7 +245,15 @@ try {
   setMode("shadow");
   utimesSync(join(orgDir, "projects.json"), new Date(Date.now() + 15), new Date(Date.now() + 15));
   resetReadModeForTest();
-  listGroups(orgDir); // 触发 org 重扫预判命中→下游联动作废→org+下游重灌（写者活跃主路径）
+  // bootfast3：重灌后台化+reset 吞排（死导入 finally 清 dirty）使「读后等窗」不确定——
+  // 直调 importAllForShadow 同步收尾重灌（org checkpoint 推进后，后续后台导入恒跳过
+  // org 域=不再洗掉紧接着的人为改库），时序回到确定态
+  {
+    const { ensureStore: es, importAllForShadow } = await import("../src/storage/read-mode.js");
+    const iport = es({ dataDir, orgDir, tasksDir: join(dataDir, "tasks") });
+    const fails = await importAllForShadow(iport, { dataDir, orgDir, tasksDir: join(dataDir, "tasks") });
+    assert(fails.length === 0, `重灌直调零域失败（实际 ${JSON.stringify(fails)}）`);
+  }
   const afterRescan = readShadowDiff(dataDir);
   assert(!afterRescan.some((r) => JSON.stringify(r.json_value ?? r.sqlite_value ?? "").includes("轻立项")), "重灌轮：段3人为差异（tier=轻立项改库）已随重灌消失——shadow-diff 整文件重写为最新一轮的直接证据（已知有损面差异 trust_light/parked_at 照常在报）");
   const flip2 = createSqlitePort({ dataDir });
@@ -248,12 +261,17 @@ try {
   flip2.exec(`UPDATE "group" SET status = 'archived' WHERE id = 'g-1'`);
   flip2.close();
   resetReadModeForTest();
-  listGroups(orgDir); // 新一轮 shadow：投影带 archived→差异落账
+  // bootfast3：读路径旁路对比受后台导入 pending 窗钳制（时序不确定）——对账面改直调
+  // runShadowCompare（段4 同款单口：compareDomain 全域+落盘），语义同为「源级对账
+  // 差异落账」，与读路径旁路共享 compareDomain 单点
+  const portRound2 = createSqlitePort({ dataDir });
+  portRound2.open();
+  runShadowCompare(portRound2, { dataDir, orgDir, tasksDir: join(dataDir, "tasks") }, ["group"]);
   const round2 = readShadowDiff(dataDir);
   setMode("json");
   resetReadModeForTest();
   listGroups(orgDir); // 回 json 档收尾（零副作用；SQLITE-FLIP 后收尾档显式钉 json，不依赖缺省）
-  assert(round2.some((r) => r.domain === "group" && r.key === "g-1" && r.category === "value-mismatch" && JSON.stringify(r.sqlite_value) === JSON.stringify({ tier: "正经立项", status: "archived" })), "shadow 二轮新差异落账（g-1 status 改库被抓，双侧值精确）");
+  assert(round2.some((r) => r.domain === "group" && r.key === "g-1" && r.category === "value-mismatch" && JSON.stringify(r.sqlite_value) === JSON.stringify({ tier: "正经立项", status: "archived" })), `shadow 二轮新差异落账（g-1 status 改库被抓，双侧值精确；实际 ${JSON.stringify(round2.filter((r) => r.domain === "group")).slice(0, 220)}）`);
 } finally {
   resetReadModeForTest();
   delete process.env.CCR_STORAGE_READ_MODE;

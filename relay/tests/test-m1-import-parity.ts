@@ -18,7 +18,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { type StoragePort } from "../src/storage/port.js";
-import { ensureStore, projectGroupsFromDb, dispatchEntriesFromDb, resetReadModeForTest, type ReadModeDirs } from "../src/storage/read-mode.js";
+import { ensureStore, projectGroupsFromDb, dispatchEntriesFromDb, resetReadModeForTest, flushShadowImportForTest, type ReadModeDirs } from "../src/storage/read-mode.js";
 import { listLessons, computeReadySet } from "../src/projects.js";
 import { readDispatchLog } from "../src/org.js";
 
@@ -280,6 +280,7 @@ try {
   // ---------- 1. 灌库+六域逐域等价 ----------
   console.log("段1 六域对账:");
   const port = ensureStore(dirs);
+  await flushShadowImportForTest(dirs.dataDir); // bootfast3：冷路径导入后台化——对账读库前收尾栅栏
   const rows = parityRows(port);
   assert(expectDiffKeys(rows, "group", "missing-in-sqlite", ["g-bad"]), "group 域：差异全集={g-bad}（status 词表外坏组拒入，g-1 逐组 tier/status/headcount 零差异）");
   assert(expectDiffKeys(rows, "task", "missing-in-sqlite", ["t6", "t8"]), "task 域：差异全集={t6,t8}（blocked 词表外+缺 subject 拒入），status 映射抽样 backlog/claimed/submitted 零差异");
@@ -328,6 +329,7 @@ try {
   // 段3 切档调过 resetReadModeForTest（会 close 缓存连接）——重新 ensureStore 取活连接
   // （fixture 未变，导入器 checkpoint 快进幂等，近零开销）。
   const port4 = ensureStore(dirs);
+  await flushShadowImportForTest(dirs.dataDir); // 同段1：切档重开后收尾栅栏（快进幂等近零开销）
   const r1 = sortRows(parityRows(port4));
   assert(r1.every((r, i) => i === 0 || `${r1[i - 1].domain} ${r1[i - 1].category} ${r1[i - 1].key}` <= `${r.domain} ${r.category} ${r.key}`), "报告排序键固定 domain→category→key（逐相邻对校验）");
   assert(["group", "task", "dispatch", "notification", "acceptance", "artifact"].every((d) => r1.some((r) => r.domain === d && r.category.startsWith("loss:"))), "坏行 loss 六域各有至少一例（差异与 loss 双轨落报告）");

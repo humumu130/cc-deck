@@ -101,6 +101,10 @@ try {
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
   process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
+  // W-RATELIMIT429 全局并发帽防噪（缺省 6）：C1-C11 假 factory spawn 的会话恒活，
+  // 到 C12 时帽满→值守段的 worker 派单被 queued 零 spawn（created 指针链全乱）——
+  // 帽是生产 429 治理参数与本套件锁的命令面语义无关，抬帽隔离
+  process.env.CCR_WORKER_CONCURRENCY_CAP = "64";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   try {
@@ -304,16 +308,25 @@ try {
     const rootId = (ack91.data as { dispatch_id?: string }).dispatch_id ?? "";
     created[base91]?.cb.onTurnEnd(false, "worker 撞墙失败", 100); // 回合终态→closeOpenDispatches failed
     const allRows = () => readNdjson<Record<string, unknown>>(join(ORG, "dispatch-log.ndjson")).filter((r) => r.id === rootId);
-    const seg1 = allRows();
+    // W-BOARDV2 选席扫描黑板行（event=dispatch-seat-scan/target=seat-scan，每单恰一行
+    // 前置于 dispatched 行）——段链状态机断言滤之（其在场另行锁定，见下）
+    const segRows = () => allRows().filter((r) => r.event !== "dispatch-seat-scan");
+    const seg1 = segRows();
+    assert(allRows().some((r) => r.event === "dispatch-seat-scan" && r.target === "seat-scan" && r.status === "dispatched"),
+      "C9②a 选席扫描黑板行在场（W-BOARDV2——落席决策随 dispatched 行前置落账）");
     const ack91r = send(mgr, "c91r", "COMMAND_DISPATCH", { gid, prompt: "重投再来", redispatch_of: rootId }, "web-1");
     const d91r = ack91r.data as { dispatch_id?: string } | undefined;
-    const seg2 = allRows();
+    const seg2 = segRows();
     assert(ack91r.ok === true && d91r?.dispatch_id === rootId,
       "C9① 重投 ACK dispatch_id≡原单 root id（同 id 追加行，读侧收敛末行赢）");
     assert(seg1.length === 3 && seg1.map((r) => r.status).join(",") === "dispatched,running,failed",
       "C9② 段 1 三行状态机 dispatched→running→failed（先落账再执行+回合收口）");
     assert(seg2.length === 5 && seg2.slice(3).map((r) => r.status).join(",") === "dispatched,running",
       "C9③ 重投追加段 2 两行（dispatched→running；导入侧行序终态切分出 #r2，运行时零段号）");
+    // S1 零产出闸（relfix-s/L-1026-1）回执契约 fixture：done 收口要过闸须有「结果：」行
+    //（receiptWithResultLine 扫最近一条 assistant_text——假流不产文本，onLog 补该行；
+    // 缺行 + files_changed=0 + 有在途交付单 = done 翻 failed + 回执注入流，连锁污染）
+    created[base91 + 1]?.cb.onLog("assistant_text", "结果：这回成了｜改动文件：a.ts");
     created[base91 + 1]?.cb.onTurnEnd(true, "结果：这回成了｜改动文件：a.ts", 100);
     const finalRow = readDispatchLog().find((e) => e.id === rootId); // 收敛视图=末行
     assert(finalRow?.status === "done" && String(finalRow.receipt ?? "").includes("这回成了"),
@@ -327,8 +340,17 @@ try {
     assert(frames91.length === 2 && frames91.map((f) => f.status).join(",") === "failed,done"
       && frames91.every((f) => f.worker_session_id !== ""),
       "C9⑤ events 面：DISPATCH_DONE 瞬态帧 failed+done 各一，dispatch_id/worker_session_id 同 id 可查");
-    assert(notif91.length === 1 && notif91[0]?.group === "activity" && notif91[0]?.severity === "done",
-      "C9⑥ 通知账面：stableKey=dispatch:id 一单一行（重投段链 failed→done 同 key 防重收敛末态，与台账收敛视图同哲学）");
+    // C9⑥（W-DELIVERCB 线一改写）：stableKey=dispatch:id 仍一单一行——重投段链
+    // failed→done 同键防重收敛末态不变；但 leader 派单的 done 末态被交付回调行覆盖为
+    // 「worker 已交付 · 待收割」（waiting/action 可操作——PM 收件箱直达语义，正文
+    // 覆盖注释明记「与 done 行同键 upsert 幂等」）；另锁 W-CARDLIFE-R3 回执闸告警行
+    //（无回执路径的 done 收口拦卡+催收——rgate-<id> 键含单 id 故入同滤窗）
+    const dispatchRows91 = notif91.filter((n) => (n.key ?? "").startsWith("dispatch:"));
+    assert(dispatchRows91.length === 1 && dispatchRows91[0]?.group === "action" && dispatchRows91[0]?.severity === "waiting"
+      && String((dispatchRows91[0] as { title?: string }).title ?? "").includes("待收割"),
+      "C9⑥ 通知账面：stableKey=dispatch:id 一单一行（重投段链 failed→done 同键收敛末态；leader 单 done 末态=交付回调「待收割」行动行——W-DELIVERCB 线一覆盖语义）");
+    assert(notif91.some((n) => (n.key ?? "").includes(`rgate-${rootId}`) && n.group === "attention"),
+      "C9⑥b 回执闸告警行在场（W-CARDLIFE-R3：无回执路径 done 收口——拦卡+90s 催收通知）");
     // C9⑦ 重投坏路径：原单不存在拒；在途单拒（防双跑）
     const ack92 = send(mgr, "c92", "COMMAND_DISPATCH", { gid, prompt: "x", redispatch_of: "d-nonexist" }, "web-1");
     assert(ack92.ok === false && String(ack92.error ?? "").includes("重投原单不存在"), "C9⑦ 坏路径：原单不存在拒收（error fixture）");
@@ -337,6 +359,7 @@ try {
     const ack93r = send(mgr, "c93r", "COMMAND_DISPATCH", { gid, prompt: "y", redispatch_of: runningId }, "web-1");
     assert(ack93r.ok === false && String(ack93r.error ?? "").includes("仍在途") && String(ack93r.error ?? "").includes("running"),
       "C9⑧ 坏路径：在途单重投拒收（防双跑同活，error fixture）");
+    created[created.length - 1]?.cb.onLog("assistant_text", "结果：收尾完成｜改动文件：无"); // S1 闸回执契约（见 C9④）
     created[created.length - 1]?.cb.onTurnEnd(true, "收尾", 50); // 清悬账（防污染 C9⑨ 断言）
     // C9⑨ 重启兜底出口：closeHungDispatchRows 把 running/dispatched 悬账全补 done——
     // 悬挂行零残留（会话终局 10 出口+spawn 失败 2 口+看门狗 2 口之外的最后闸）
@@ -374,6 +397,7 @@ try {
     const bDispatchId = (ackDep2.data as { dispatch_id?: string }).dispatch_id ?? "";
     // C10④⑤ 收口 lesson 自动回流：B 回合 done → 板 lessons 分区多一条结构化账（非内容性）
     const lessonsBefore = (loadBoard(gid).lessons ?? []).length;
+    created[created.length - 1]?.cb.onLog("assistant_text", "结果：B 已交付｜改动文件：b.ts"); // S1 闸回执契约（见 C9④）
     created[created.length - 1]?.cb.onTurnEnd(true, "B 干完了，改动 b.ts", 100);
     const lessonsAuto = loadBoard(gid).lessons ?? [];
     const auto1 = lessonsAuto[lessonsAuto.length - 1];
@@ -417,6 +441,7 @@ try {
       "C10⑩ gate:null 显式清除落盘（board upsert=唯一清除口——确认卡词表五 kind 无 gate，裁定备案）");
     const ackGate2 = send(mgr, "c10g2", "COMMAND_DISPATCH", { gid, prompt: "做E", entry_id: idE }, "web-1");
     assert(ackGate2.ok === true, "C10⑪ 清除后认领放行 spawn（gate 语义全链：设闸→拒→人清除→放行）");
+    created[created.length - 1]?.cb.onLog("assistant_text", "结果：收尾完成｜改动文件：无"); // S1 闸回执契约（见 C9④）
     created[created.length - 1]?.cb.onTurnEnd(true, "收尾", 50); // 清在办（防悬账污染）
 
     // ---------- C11 引擎编排（M12-5）：选择链三态/preflight 失败零 running/unsupported/台账引擎字段 ----------
@@ -427,9 +452,10 @@ try {
     const engId = (ackEng.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(ackEng.ok === true && created[baseC11]?.engine === "codex",
       "C11① 显式 engine=codex 派单成功（选择链：显式覆盖最优先，factory 收到 engine）");
-    const engRows = readNdjson<Record<string, unknown>>(join(ORG, "dispatch-log.ndjson")).filter((r) => r.id === engId);
+    const engRows = readNdjson<Record<string, unknown>>(join(ORG, "dispatch-log.ndjson")).filter((r) => r.id === engId && r.event !== "dispatch-seat-scan"); // W-BOARDV2 选席行不带引擎字段（见 C9②a）
     assert(engRows.length >= 2 && engRows.every((r) => r.engine === "codex" && r.provider === "p1" && r.model === "m1"),
       "C11② 台账行 engine/provider/model 落账（dispatched+running 同 id 共享，可审计）");
+    created[baseC11]?.cb.onLog("assistant_text", "结果：引擎单交付｜改动文件：无"); // S1 闸回执契约（见 C9④）
     created[baseC11]?.cb.onTurnEnd(true, "引擎单收口", 50);
     const engFinal = readDispatchLog().find((e) => e.id === engId);
     assert(engFinal?.engine === "codex" && engFinal?.provider === "p1",
@@ -443,6 +469,7 @@ try {
     const ackRole = send(mgr, "c11role", "COMMAND_DISPATCH", { gid: gid2, prompt: "角色默认单" }, "web-1");
     assert(g2r.ok && gid2 !== "" && ackRole.ok === true && created[baseC11b]?.engine === "codex",
       "C11④ 角色配置兜底：role_defaults.worker.engine=codex，无显式 engine 派单 resolved 到角色配置（选择链三态之二）");
+    created[baseC11b]?.cb.onLog("assistant_text", "结果：角色单交付｜改动文件：无"); // S1 闸回执契约（见 C9④）
     created[baseC11b]?.cb.onTurnEnd(true, "收口", 50);
     // C11⑤ preflight 失败零 running：trae CLI 指向不存在绝对路径（accessSync 确定性失败）
     const prevTrae = process.env.CCR_TRAE_PATH;
@@ -463,6 +490,7 @@ try {
     const ackDflt = send(mgr, "c11dflt", "COMMAND_DISPATCH", { gid, prompt: "缺省引擎单" }, "web-1");
     assert(ackDflt.ok === true && created[baseC11e]?.engine === undefined,
       "C11⑦ 缺省 Claude：无显式无角色配置 → engine 键缺省不写（台账旧行兼容，选择链三态之三）");
+    created[baseC11e]?.cb.onLog("assistant_text", "结果：缺省单交付｜改动文件：无"); // S1 闸回执契约（见 C9④）
     created[baseC11e]?.cb.onTurnEnd(true, "收口", 50);
 
     // ---------- C12 值守喂活闭环（M12-6）：回合结束喂活/全 running 放行/异常类各一
@@ -512,41 +540,51 @@ try {
       created[baseC1]?.cb.onInit("sdk-duty-1", "test-model"); // 值守流 init（清 init timer）
       leaderCb = created[baseC1]?.cb;
       // C12② 全 running 放行：清 todo 候选+派 worker 单（WORKING）→值守检查→sleep 不催
+      // 值守段 worker 派单走 dispatchWorker 直调 actor=web-1（非 leader）：leader 单的
+      // done/failed 收口会向 PM 注入交付回调/失败回执 prompt（resumeAgent 回显
+      // user_message 进 events.ndjson）→ 开 W-DUTYBACKOFF PM 对话活跃窗（缺省 10min，
+      // env 缝下限 1min）→ 后续值守检查全 sleep user_active，stale/dispatch 注入面在
+      // 本套件时标内不可测。值守场景与交付回调语义正交（回调正向用例在
+      // test-pm-duty-product），脱钩隔离
       send(mgr, "c12clr", "COMMAND_TASK_UPDATE", { gid: gidD, entry_id: dutyCardId, status: "done" }, "web-1");
       const baseW1 = created.length;
-      send(mgr, "c12w1", "COMMAND_DISPATCH", { gid: gidD, prompt: "值守期间在跑的单" }, "web-1");
+      const w1d = mgr.dispatchWorker({ anchor: anchor3, gid: gidD, prompt: "值守期间在跑的单", actor: "web-1" });
+      assert(w1d.ok === true, "C12② 前置：值守段 worker 单派成（非 leader actor——免交付回调活跃窗）");
       const baseC2 = created.length;
       leaderCb?.onTurnEnd(true, "值守收口", 1);
       const round2 = dutyRounds()[dutyRounds().length - 1] ?? {};
       assert(created.length === baseC2 && round2.result === "sleep" && round2.reason === "all_running",
         "C12② 全 running 放行：worker 健康在跑→sleep 零注入（值守防的是有活全员闲，干活中不催——019 §2.2 全 running 反例）");
-      // C12③ stale doing 类：worker1 交付收口（running→done 零 failed）+造悬挂 doing 卡
-      //（dispatch 已收口不在 open FIFO+超窗零阈值——019 §5.1 stale 判定确定性数据源）。
-      // P71：worker done 边即刻触发一次 worker_done 检查（此时无候选→sleep empty 放行；
-      // 断言在 C12④a 行数 5——交付唤醒面的正向用例在 test-pm-duty-product.ts）
-      created[baseW1]?.cb.onTurnEnd(true, "干完了", 50);
+      // C12③ stale doing 类：悬挂 doing 卡先落位（dispatch 已收口不在 open FIFO+超窗
+      // 零阈值=019 §5.1 stale 判定确定性数据源），worker1 交付（worker_done 边）即检
+      // 即注入——W-PMWAKE worker_done 候选与 stale_doing 同窗一次喂活（resume 换流→
+      // leaderCb 重对齐新流；旧行为「worker_done 边无候选 sleep empty」已被 W-PMWAKE
+      // 候选位取代——交付唤醒面的正向用例在 test-pm-duty-product.ts）
       upsertBoardEntry(gidD, { text: "悬挂 doing 卡（dispatch 已收口不在途）", status: "claimed", dispatch_id: "d-already-closed" });
       const baseC3 = created.length;
-      leaderCb?.onTurnEnd(true, "值守收口", 1);
-      assert(created.length === baseC3 + 1 && String(created[baseC3]?.prompt ?? "").includes("[值守喂活]"),
-        "C12③ stale doing 触发 feed：doing 卡挂已收口 dispatch（超窗）→悬挂行动位→值守注入");
+      created[baseW1]?.cb.onLog("assistant_text", "结果：干完了｜改动文件：无"); // S1 闸回执契约（见 C9④）——worker1 交付须真 done（stale 场景前置=running→done 零 failed）
+      created[baseW1]?.cb.onTurnEnd(true, "干完了", 50); // 非 leader 单：零回调注入流（见 C12② 前置注释）
+      assert(created.length === baseC3 + 1 && String(created[baseC3]?.prompt ?? "").includes("[值守喂活]") && String(created[baseC3]?.prompt ?? "").includes("stale_doing"),
+        "C12③ stale doing 触发 feed：worker_done 边即检（悬挂卡+交付候选同窗）→值守注入（候选含 stale_doing 位）");
       created[baseC3]?.cb.onInit("sdk-duty-2", "test-model");
       leaderCb = created[baseC3]?.cb;
       send(mgr, "c12clr2", "COMMAND_TASK_UPDATE", { gid: gidD, entry_id: loadBoard(gidD).entries.find((e) => e.dispatch_id === "d-already-closed")?.id ?? "", status: "done" }, "web-1");
-      // C12③b dispatch failed 类：worker2 撞墙→failed 台账行→既有回执面即时注入 Leader
-      //（notifyDispatchClosed M4 既有面，resumeAgent 换流——值守源码备案「双挂防重复
-      // 轰炸」的分工：回执=告知失败，值守=重算队列）→回执回合结束（Leader 回合终态）
-      //→feedPM 重算→dispatch 候选喂活
+      const baseIdle = created.length;
+      leaderCb?.onTurnEnd(true, "值守收口", 1); // 空候选 idle 检查：K 链复位（真实休眠重置——C12③b 的 dispatch 候选注入需要，连喂第 3 次即 k_exhausted）
+      assert(created.length === baseIdle && dutyRounds()[dutyRounds().length - 1]?.result === "sleep",
+        "C12③a 空候选 idle 放行（值守 chain 复位——悬挂卡已清零候选）");
+      // C12③b dispatch failed 类：worker2 撞墙→failed 台账行→值守目标回合终态
+      //（Leader turn_end 在岗证据）→feedPM 重算→dispatch 候选喂活。
+      //（原「失败回执注入 Leader 换流」是 leader 单专属面——本段 worker 单 actor=web-1，
+      // 见 C12② 前置注释；值守检查直接挂值守流回合终态边）
       const baseW2 = created.length;
-      const ackW2 = send(mgr, "c12w2", "COMMAND_DISPATCH", { gid: gidD, prompt: "会失败的单" }, "web-1");
-      const failedId = (ackW2.data as { dispatch_id?: string }).dispatch_id ?? "";
-      created[baseW2]?.cb.onTurnEnd(false, "worker 撞墙", 50);
-      const baseReceipt = created.length - 1; // 派单失败回执注入流（既有面产出，值守不断言它）
-      created[baseReceipt]?.cb.onInit("sdk-receipt", "test-model"); // 清 resumeAgent 45s init timer
+      const w2d = mgr.dispatchWorker({ anchor: anchor3, gid: gidD, prompt: "会失败的单", actor: "web-1" });
+      const failedId = w2d.ok ? (w2d as { dispatch_id: string }).dispatch_id : "";
+      created[baseW2]?.cb.onTurnEnd(false, "worker 撞墙", 50); // failed 台账行（非 leader 单→零回执注入流）
       const baseC3b = created.length;
-      created[baseReceipt]?.cb.onTurnEnd(true, "回执收口", 1); // 回执回合终态=在岗证据→值守检查
+      leaderCb?.onTurnEnd(true, "回执收口", 1); // 值守目标回合终态=在岗证据→值守检查
       assert(created.length === baseC3b + 1 && String(created[baseC3b]?.prompt ?? "").includes("[值守喂活]") && String(created[baseC3b]?.prompt ?? "").includes(failedId.slice(0, 12)),
-        "C12③b dispatch failed 触发 feed：失败台账行→回执回合结束→值守重算→注入值守活（候选含失败单 id——四类异常词表 receipt/dispatch/todo/stale_doing 的 dispatch 类）");
+        "C12③b dispatch failed 触发 feed：失败台账行→值守目标回合结束→值守重算→注入值守活（候选含失败单 id——四类异常词表 receipt/dispatch/todo/stale_doing 的 dispatch 类）");
       created[baseC3b]?.cb.onInit("sdk-duty-3", "test-model");
       leaderCb = created[baseC3b]?.cb;
       // C12④ audit 三零：每检查一行审计只落 duty-rounds；events/通知账零值守词
@@ -594,8 +632,11 @@ try {
       assert(r3seq.join(",") === "pm_unwakeable,pm_unwakeable,sleep" && lastR3b.reason === "k_exhausted",
         "C12⑥ K=3 防轰炸：连续 feed 三次→第 3 次 shouldSleep 零注入（pm_unwakeable 计入 chain，防对死 Leader 无限重试）");
       const cont3 = lastR3b.continuation as { delay_ms?: number; once?: boolean } | undefined;
-      assert(cont3?.delay_ms === 30 && cont3?.once === true && notifCount3 === 1,
-        "C12⑥b 退避 continuation 在案（delay_ms=30 env 测试缝/wake_once）+升级通知 stableKey 防重单行");
+      // W-DUTYBACKOFF 刀2 改写：k_exhausted continuation delay 取 max(env 缝 30ms,
+      // 无进展退避级数)——ORG3 两轮 pm_unwakeable（throw 路径不计 streak）streak=0
+      // →退避地板 table[0]=5min=300000ms；wake_once 防重与升级通知单行语义不变
+      assert(cont3?.delay_ms === 300_000 && cont3?.once === true && notifCount3 === 1,
+        "C12⑥b 退避 continuation 在案（delay_ms=无进展退避地板 5min——W-DUTYBACKOFF 刀2 max(env缝,级数) 口径/wake_once）+升级通知 stableKey 防重单行");
       // C12⑦ 逃生阀与缺省开（W-DUTY-CHAIN 反转后语义）：CCR_PM_DUTY=0 → 零触发零审计
       //（逃生阀，对齐 CCR_NO_AUTOREVIVE 范式）；未设（缺省）→ 回合终态照写轮（生产
       // relay 重启 env 丢失自愈——10-28/29 断链根修断言：env 缺席=重启后新进程态）。

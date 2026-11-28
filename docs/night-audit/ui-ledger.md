@@ -140,3 +140,13 @@ leader 终裁（verdict 收讫）：③ connNote 追认立案收、④ SESSION_M
 - **机器面**：`test:005-blankset` B1② 裸奔集与基线恒等（81 条同签名——本批新增 color-mix 全双写）；`test:fc`/`test:teampolish` 全绿。
 - **新发现（范围外）**：expo `theme.ts` waiting token 历史三迁（红→黄→橙）静默改色多处的「跨端 token 同名异色陷阱」已有先例注释（SettingsPage:748 P81-8EFIX）——词表落地后此类陷阱由 §三 矩阵显式约束，但 expo 侧无机器锚（状态色值无 grep 闸），建议后续批补「expo 状态色值锚」测试（对照 theme.ts 与 web tokens.css 同相断言）。
 
+
+## §10 DEV-41 P1-1 返修：color-mix 兜底机制正修 @supports 化（2026-11-28 夜）
+
+deck-reviewer 审查 P1-1（review-dev41-20261128）：「静态行在前＋color-mix 在后」双写对**含 var() 的 modern 声明**在旧 WebView2 上是运行时 no-op——未知函数经 var() 替换后到 computed-value 时才判无效（IACVT），整条 unset 且**级联仍胜前条**，静态兜底被击败不回退（§8/§9 的「旧内核丢声明回退前条」机制模型对含 var() 声明不成立；1016 实锤根因面）。leader 拍板 A 正修：
+
+- **形态军规换轨**：全量 color-mix 声明入 `@supports (color: color-mix(in srgb, red, blue))` 块（parse 期特性检测，旧内核整块跳过），块外留静态兜底——base.css 双写 177 条＋垃圾静态 9 条＋无属性名残片 1 条（多行 shadow 双写掉前缀的死码）全数收敛，计 **159 个 @supports 块 / 201 条 modern 声明**，DEV-30 既有行（head-sub/head-proj-pill 等 legacy deliberate 兜底原值保留）同模式一次收敛，不留两套写法。@keyframes 帧内不能嵌 @supports，用同名后定义胜（基座 var(--brand-soft)＋@supports modern 版）。
+- **兜底值按视觉语义另选**（非「第一操作数」启发式）：tint≤16%→transparent（浅晕归无）；≥40% 及 border 系→全浓度 token（身份/功能色在场）；双 token 混→主导操作数；静态色 mix→精确预计算 rgba；box-shadow 多层→保留静态层剔 mix 层（优于整条 none）；渐变→逐 stop 替换。审查点名件全数修正：`.fz-sash:hover` var 首参非法→`var(--brand, #EC9A73)`、tick 行 calc→transparent、`scrollbar-color` 三 token→`var(--faint) transparent`、`.hmenu-item:hover`/`.pc2-count.is-working`/`.fz-tree-file:hover` 重色兜底→transparent。
+- **内联面（settings-domain.js source-badge）**：style 属性不可用 @supports，等价军规=同属性静态紧邻在前（var-free color-mix parse 期即丢、前条回退成立）——补 `background:var(--identity-bg)` 前置。
+- **W-BLANKSET B1 同步换轨**：B1② 改锁「color-mix 全入 @supports＋块外同选择器同属性合法静态兜底」（合法性=括号平衡/var() 首参 --ident/无函数外裸 %），新增 B1③b（块内只装 modern）与 B1④（内联面前置静态）；B1① 规模锚 201≥180。
+- **自测实证**（headless Chrome）：①现代浏览器零视觉差——同一 DOM 旧双写版 vs 新 @supports 版 computed style 26 探针中 25 个逐字节全等，唯一差异=notifpanel 内高光 rgba(255,255,255,.08)→color-mix(text-strong 8%)（无属性名残片修复后 modern 意图恢复，约 8% 近白叠层不可感知）；②旧内核模拟（条件换未知函数→@supports 假→块跳过）——静态兜底真实生效 8/8 断言过（tag 边框 rgba(111,139,166,.18)、pc2-count bg transparent、create-pop 静态三层影、jump-flash 基座动画、DEV-30 浅色 head-sub=dim 等）。

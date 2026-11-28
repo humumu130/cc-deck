@@ -23,6 +23,7 @@ import { EventBus } from "../src/event-bus.js";
 import type { RelayConfig } from "../src/config.js";
 import { SessionManager } from "../src/session-manager.js";
 import { engineCapabilityState, evaluatePermission, type PolicyResult } from "../src/permission-policy.js";
+import type { SessionEngine } from "../src/types.js";
 import { appendPermissionAudit, auditStore, readPermissionAudit } from "../src/permission-audit.js";
 import { readDispatchLog } from "../src/org.js";
 import { setLightConfirmTrusted } from "../src/projects.js";
@@ -47,9 +48,15 @@ const CONSERV: Record<string, number> = { ask: 0, plan: 1, "edit-auto": 2, "full
 try {
   process.env.CCR_DATA_DIR = join(root, "data");
   process.env.CCR_ORG_DIR = join(root, "org");
+  // fixture 必须自建 org 目录（projects.json 原子写 tmp 落同目录，目录缺位=ENOENT
+  // 「轻立项组 fixture 建成」假红连坐全束——org.ts/projects.ts 均不代建 CCR_ORG_DIR 本体）
+  mkdirSync(join(root, "org"), { recursive: true });
   process.env.CCR_CLOUD_URL = "";
   process.env.CCR_NO_TITLE_GEN = "1";
   process.env.CCR_WATCHDOG_DISABLE = "1";
+  // 本套件假工厂 spawn 的会话恒活（ended=false 不断开）——S3 改写后放行面 spawn 5+，
+  // 缺省帽 6 会让 S5d pm 派单撞 worker-cap 排队（与本套件锁的权限语义无关）；抬帽隔离
+  process.env.CCR_WORKER_CONCURRENCY_CAP = "64";
   delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
   for (const k of ["CCR_TOKEN", "CCR_PORT", "CCR_STUB_MODE", "CCR_ENV"]) delete process.env[k];
   setLightConfirmTrusted(true);
@@ -200,14 +207,19 @@ try {
     assert(r1 && r1.actor === "web-d" && r1.reason === "unknown_role_mapping" && r1.environment === "sandbox" && r1.dir_scope === "sandbox" && r1.session_id === null, "类 1 审计可观测：actor/reason/environment/dir_scope 落值+session_id null（拒绝面无会话）");
     assert(readDispatchLog().length === logBefore1 && spawned.length === 0, "类 1 拒即无副作用：零台账+零 spawn");
 
-    // 类 2：above_role_tier_ceiling（越 tier——review_pm ceiling edit-auto < bypass full-auto）
+    // 类 2（W-REVIEWSEAT-R2 P1-6 + R3 P2-1 改写）：review_pm 入 PLAN_CEILING_ROLES——
+    // 派单面 requested=null 走 tier_default 物化（恒 plan 落地），旧 above_role_tier_ceiling
+    // 拒面对 review_pm 退役（评审席跨全档只读，ceiling 闸不再可触达）。改验放行形态
     const before2 = auditCount();
-    const d2 = mgr.dispatchWorker({ anchor, prompt: "矩阵：越 tier", gid, role: "review_pm", actor: "web-d" });
-    assert(forbiddenShape(d2, "above_role_tier_ceiling", "dispatchWorker") && auditCount() === before2 + 1, "类 2 above_role_tier_ceiling：forbidden ACK 形状+审计落一行");
+    const d2 = mgr.dispatchWorker({ anchor, prompt: "矩阵：review_pm plan 天花板", gid, role: "review_pm", actor: "web-d" });
+    const r2 = readPermissionAudit(auditPort())[0];
+    assert(d2.ok === true && typeof (d2 as { session_id?: string }).session_id === "string" && auditCount() === before2 + 1, "类 2 review_pm plan 天花板可达：派单 ok+审计落一行（W-REVIEWSEAT-R2 P1-6——旧 above_role_tier_ceiling 拒面退役）");
+    assert(r2.effective_mode === "plan" && r2.policy_source === "tier_default" && r2.reason === "ok" && r2.session_id === (d2 as { session_id: string }).session_id, "类 2 审计可观测：tier_default 物化恒 plan 落地+session_id=承接会话（只读主体不继承 bypass 物化）");
 
     // 类 3（#205 W-GATE 随批改写）：生产目录+勾选 → **放行**（勾选即授权——用户拍板
     // 语义，旧 forbidden 面退役）。审计行改验放行形态（skip_confirm_authorized 留痕）
     const before3 = auditCount();
+    const spawnBefore3 = spawned.length; // 类 2 已放行 spawn——本类锁「恰 +1」增量非全量计数
     const a3 = mgr.handleCommand(
       { command_id: "p817-c3", type: "COMMAND_CREATE", payload: { cwd: join(homedir(), ".cc-deck", "data"), prompt: "矩阵：生产目录 bypass", permissionMode: "bypassPermissions" }, ts: Date.now() },
       "web-d",
@@ -215,28 +227,36 @@ try {
     assert(a3.ok === true && typeof a3.session_id === "string" && auditCount() === before3 + 1, "类 3 勾选即授权：生产目录+勾选 → 放行+审计落一行（#205——旧 production_bypass_denied 拒面退役）");
     const r3 = readPermissionAudit(auditPort())[0];
     assert(r3.dir_scope === "production" && r3.environment === "sandbox" && r3.actor === "web-d" && r3.command_id === "p817-c3" && String(r3.reason ?? "").includes("skip_confirm_authorized"), "类 3 审计可观测：两维分立落值+reason=skip_confirm_authorized（放行留痕）");
-    assert(spawned.length === 1, "类 3 放行即 spawn（1 次——勾选放行与 spawn 对齐）");
+    assert(spawned.length === spawnBefore3 + 1, "类 3 放行即 spawn（恰 +1 次——勾选放行与 spawn 对齐）");
 
-    // 类 4：env_unknown_bypass_denied（非法环境——CCR_ENV=unknown 显式 fail-closed）
+    // 类 4（#205 用户拍板改写）：env unknown + bypass 显式勾选 → 放行——「跳过权限确认」
+    // 勾选=授权本身（session-commands skip_confirm_checked: pm==="bypassPermissions"），
+    // 环境闸即放，materialized=env_unknown_skip_confirm_authorized 进审计；旧
+    // env_unknown_bypass_denied 拒面仅剩「未勾选」路径（create 面勾选恒放行）
     const prevEnv = process.env.CCR_ENV;
     process.env.CCR_ENV = "unknown";
     const before4 = auditCount();
     const a4 = mgr.handleCommand(
-      { command_id: "p817-c4", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "矩阵：非法环境 bypass", permissionMode: "bypassPermissions" }, ts: Date.now() },
+      { command_id: "p817-c4", type: "COMMAND_CREATE", payload: { cwd: root, prompt: "矩阵：非法环境 bypass 勾选放行", permissionMode: "bypassPermissions" }, ts: Date.now() },
       "web-d",
     ) as CommandAckPayload;
-    assert(forbiddenShape(a4, "env_unknown_bypass_denied", "COMMAND_CREATE") && auditCount() === before4 + 1, "类 4 env_unknown_bypass_denied：forbidden ACK 形状+审计落一行（环境维 unknown）");
+    assert(a4.ok === true && typeof a4.session_id === "string" && auditCount() === before4 + 1, "类 4 env unknown+勾选 bypass → 放行+审计落一行（#205——勾选即授权，旧 env_unknown_bypass_denied 拒面退役）");
+    const r4 = readPermissionAudit(auditPort())[0];
+    assert(r4.environment === "unknown" && r4.dir_scope === "sandbox" && String(r4.reason ?? "").includes("env_unknown_skip_confirm_authorized") && r4.session_id === a4.session_id, "类 4 审计可观测：environment=unknown 落值+reason=env_unknown_skip_confirm_authorized（放行留痕）");
     if (prevEnv === undefined) delete process.env.CCR_ENV;
     else process.env.CCR_ENV = prevEnv;
 
-    // 形状统一性：四类 ACK 投影同构（ok:false + forbidden: 前缀 + 无 session_id 无 permission）
+    // 形状统一性（#205/#232/W-REVIEWSEAT-R2 改写后口径）：拒面（类 1 unknown_role_mapping
+    // ——词表闸残留唯一 forbidden ACK face）ok:false+forbidden: 前缀+无 session_id 无
+    // permission；放行三面（类 2 天花板/类 3 生产勾选/类 4 unknown 勾选）ok:true+session_id
+    // 在场——统一拒绝面与放行面各自同构（§6.1）
     const wide = (x: unknown) => x as { ok?: boolean; error?: string; session_id?: string; permission?: unknown };
     const shapes = [d1, d2, a3, a4].map((x) => {
       const w = wide(x);
       return { ok: w.ok, forbiddenPrefix: (w.error ?? "").startsWith("forbidden: "), hasSession: w.session_id !== undefined, hasPerm: w.permission !== undefined };
     });
-    assert(shapes.every((s) => s.ok === false && s.forbiddenPrefix && !s.hasSession && !s.hasPerm), "四类 ACK 形状统一：ok:false+forbidden: 前缀同构+拒绝面一律不带 session_id/permission（§6.1 统一拒绝面）");
-    assert(spawned.length === 0 && readPermissionAudit(auditPort()).every((r) => r.effective_mode !== null && r.effective_mode !== ""), "全程零 spawn+审计表无空 effective 行（无半状态行）");
+    assert(shapes[0].ok === false && shapes[0].forbiddenPrefix && !shapes[0].hasSession && !shapes[0].hasPerm && shapes.slice(1).every((s) => s.ok === true && s.hasSession), "四类 ACK 形状统一（改写后口径）：拒面 forbidden 同构+放行三面 ok:true+session_id 同构（§6.1）");
+    assert(readPermissionAudit(auditPort()).every((r) => r.effective_mode !== null && r.effective_mode !== ""), "审计表无空 effective 行（无半状态行——拒绝/放行都落全形行）");
   }
 
   // ---------- 束③ 失败路径无半状态（审计写失败尽力而为） ----------
@@ -272,19 +292,21 @@ try {
   // ---------- 束④ 重放/重试幂等（processedCommands 幂等键） ----------
   console.log("S5 重放/重试幂等");
   {
-    // a. forbidden 命令同 id 重发：重放首回执（duplicate 标记）+审计不重复灌行+无二次 spawn
+    // a. 失败命令同 id 重发：重放首回执（duplicate 标记）+审计不重复灌行+无二次 spawn
+    //    （#205 改写：生产/unknown 勾选 bypass 拒面退役——可重放拒面改用 COMMAND_CREATE
+    //    引擎词表闸（isSessionEngine 拒+审计落 forbidden 行，session-commands 头部））
     const dFailId = "p817-r1";
-    mgr.handleCommand(
-      { command_id: dFailId, type: "COMMAND_CREATE", payload: { cwd: join(homedir(), ".cc-deck", "data"), prompt: "幂等：生产目录拒首发", permissionMode: "bypassPermissions" }, ts: Date.now() },
+    const firstFail = mgr.handleCommand(
+      { command_id: dFailId, type: "COMMAND_CREATE", payload: { cwd: root, prompt: "幂等：未知引擎拒首发", engine: "gpt-9" as SessionEngine }, ts: Date.now() },
       "web-d",
-    );
+    ) as CommandAckPayload;
     const afterFirst = auditCount();
     const spawnBeforeReplay = spawned.length;
     const replay1 = mgr.handleCommand(
-      { command_id: dFailId, type: "COMMAND_CREATE", payload: { cwd: join(homedir(), ".cc-deck", "data"), prompt: "幂等：生产目录拒重发", permissionMode: "bypassPermissions" }, ts: Date.now() },
+      { command_id: dFailId, type: "COMMAND_CREATE", payload: { cwd: root, prompt: "幂等：未知引擎拒重发", engine: "gpt-9" as SessionEngine }, ts: Date.now() },
       "web-d",
     ) as CommandAckPayload & { duplicate?: boolean };
-    assert(replay1.duplicate === true && replay1.ok === false && (replay1.error ?? "").startsWith("forbidden: ") && replay1.session_id === undefined, "forbidden 重发：duplicate=true+首回执原样重放（防失败后同 id 重试假成功 #65）");
+    assert(firstFail.ok === false && (firstFail.error ?? "").includes("未知引擎") && replay1.duplicate === true && replay1.ok === false && replay1.error === firstFail.error && replay1.session_id === undefined, "未知引擎拒重发：duplicate=true+首回执原样重放（防失败后同 id 重试假成功 #65——#205 后残留拒面=引擎词表闸）");
     assert(auditCount() === afterFirst && readPermissionAudit(auditPort()).filter((r) => r.command_id === dFailId).length === 1, "forbidden 重发审计不重复灌行：行数不变+同 command_id 恰一行（幂等键）");
     assert(spawned.length === spawnBeforeReplay, "forbidden 重发零新增 spawn（重放不重执行）");
 

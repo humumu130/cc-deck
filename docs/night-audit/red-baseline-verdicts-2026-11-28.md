@@ -71,6 +71,21 @@
 
 ## 丁、环境性/时限性（隔离台账，不进矩阵）
 
+> **丙族处置结果（DEV-41，2026-11-28）**：8 族 29 键＋005-blankset 全数修绿（30/30 终
+> sweep 全 EXIT 0，tsc --noEmit 绿），已从 `relay/tests/ci.json` quarantine 迁出（余 18 键
+> =乙族锚刷新 DEV-42＋丁族环境隔离，未动）。定性总账：**真缺陷 2 件**——①云通道
+> SNAPSHOT 缺 4 个 #117 parity 字段（acct_bound/pm_duty/relay_devices/design_docs——
+> cloud-client.ts 补齐，后两者经 ws-server globalThis 挂口同源）；②005-blankset CSS
+> 兜底真欠账（base.css 补 81 条 color-mix 静态兜底＋8 条 box-shadow none 兜底）。其余
+> 27 键均为「**有意变更未跟测**」：bootfast3 导入后台化/async 化（存储族 flush 栅栏＋
+> await 化）、W-CARDLIFE-R2/R3 回执闸（板族补回执夹具）、W-PMSEAT 值守任命卡化
+> （x0/xmsg/wild-onboard 走 claim+approve 新流）、#275S 沙盒闸（alive/codex/rollouts
+> fixture 挪非沙盒路径）、W-BOARDV2 seat-scan 行（m12 段链计数滤黑板行）、appendOnly
+> checkpoint 增量续读（import-session-task 重构 E/F 段）、W-NOTIFYPOLISH 视觉改版
+> （notify-overhaul 锚随新形）、SQLITE-FLIP 缺省档渗入（005-cloud/ws 钉 json 沙盒五键）。
+> 分支 `agent/deck-fixer-2/dev-41`，回执见 DEV-41 单。
+
+
 > **教训补录（P1-1 返修，2026-11-28）**：迁移面归因不分矩阵内外——**quarantine 键同样须穷尽迁移面归因**。test:xmsg-e2e 在交付 SHA 上因 `xmsg-e2e-peer.ts`（无 test-/probe- 前缀，迁移 glob 漏网）未随迁，三 peer 全 ERR_MODULE_NOT_FOUND 崩在「A devfile 未出现」，其丙族真签名（no-duty-target×8）被断链掩盖——CI 不跑 quarantine 键，断链静默，DEV-41 接手会先撞断链误判缺陷面。与丁-1 bridge 同族同因（fake-injector 同型第二处）；**规则固化：迁测试目录必须带走其同目录相对引用的全部桩件（test-*/probe-* 前缀 glob 之外还有按名 spawn/import 的伴生件）**。
 
 | 键 | 判定 | 依据 |

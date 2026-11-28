@@ -605,6 +605,12 @@ export function startServer(
   // onlineDeviceIds=活连接设备集（SNAPSHOT.online 标注源；close 即离线）
   const connUa = new WeakMap<WebSocket, string>();
   const onlineDeviceIds = new Map<WebSocket, string>();
+  // DEV-41 #117 同源挂口：云通道 SNAPSHOT 与 LAN 同键（relay_devices/design_docs）——
+  // 两数据源本层私有（onlineDeviceIds 连接集/webRoot 探测），cloud-client 无从取；
+  // 沿 __ccAcctRelays 先例挂 globalThis 读口，云手机与 LAN console 同判（此前云通道
+  // 缺键=设置页客户端模块/设计文档页在云通道端恒空，字段集 parity 红）。
+  (globalThis as any).__ccRelayDevices = () => listDevices(cfg.dataDir, new Set([...onlineDeviceIds.values()]));
+  (globalThis as any).__ccDesignDocs = () => listDesignDocs(webRoot);
   // awaituser R1（A 审 P1-1）：全端在线判定口注回 mgr——emitUserNote 投递真值回报用
   //（零端在线 return false，decision-notify 不记 user_pushed_at 下轮重推）。与下方
   // hasClients 同源同表达式（wss OPEN 非 pairing ∨ 云手机 active；#316 口径）——两处

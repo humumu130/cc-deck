@@ -5,7 +5,7 @@
 // ④ hook 真链子进程（stub relay 回 context → stdout additionalContext；无 context/连不上 → 零输出 exit 0 静默降级）
 // 隔离：CCR_ORG_DIR/CCR_CONFIG_FILE/CCR_STORAGE_READ_MODE 三钉（test-rules-broadcast 同缝）
 // + hook 子进程用临时 HOME 防打生产 ~/.cc-deck/data，绝不触生产 relay。
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -89,15 +89,25 @@ section("\nS2 组清单与在岗 PM（dutyTargetId 口径）");
   // ★ 段边界（审查 A/B-P2 双路同报）：anchor=/x/bro 不得命中 /x/brother
   assert(!mgr.sessionStartBroadcast(`${anchor}brother`).includes("★"), "同前缀兄弟目录不误标 ★（段边界）");
   assert(mgr.sessionStartBroadcast(anchor).includes("★野测项目"), "cwd=anchor 本身命中 ★");
-  // no-leader 模式 + 活 external（本测试进程 pid 即活进程）→ 在岗
+  // no-leader 模式 + 经任命确认的会话 → 在岗（[W-PMSEAT]：席位只认确认位——claim/auto
+  // 提名出 pm-appoint 卡，用户 ✓ 才落位，不再回落「最近活跃 external」现算）。
+  // #275S：hook 事件 cwd 须非沙盒形态（DATA 落 mkdtemp(tmpdir) 会被 handleEvent 早退
+  // 纯 pass 零建档），fixture cwd 用 /fx 假路径（仅字符串消费，无 fs 校验）
+  const PM_WD = "/fx/wild-pm-wd";
   const cm = mgr.orgAction("collab-mode", { mode: "no-leader" }) as { ok: boolean };
   assert(cm.ok === true, "切 no-leader ok");
   const bridge = new Bridge(bus, mgr, { gateTools: new Set(), hasClients: () => false, dataDir: DATA });
-  const up = await bridge.handleEvent({ event: "UserPromptSubmit", session_id: "cli-pm", prompt: "野测 PM 上岗", cwd: DATA, cli_pid: process.pid, permission_mode: "default" } as never);
+  const up = await bridge.handleEvent({ event: "UserPromptSubmit", session_id: "cli-pm", prompt: "野测 PM 上岗", cwd: PM_WD, cli_pid: process.pid, permission_mode: "default" } as never);
   assert(up.decision === "pass", "PM 会话首事件放行");
+  const claim = mgr.orgAction("pm-claim", { cwd: PM_WD, pid: process.pid }) as { ok: boolean; error?: string; data?: { needsConfirm?: boolean; confirm?: { id?: string } } };
+  assert(claim.ok === true && claim.data?.needsConfirm === true && !!claim.data?.confirm?.id, `pm-claim 出任命确认卡（不直写 override 先斩后奏）${claim.ok ? "" : `（${claim.error}）`}`);
+  const pending = mgr.pmDutyStatus();
+  assert(pending.alive === false && pending.session_id === "", "未决期间席位空（任命确认前零值守——W-PMSEAT 口径）");
+  const dec = mgr.orgAction("confirm-decide", { confirm_id: claim.data!.confirm!.id, approve: true, by: "user" }) as { ok: boolean; error?: string };
+  assert(dec.ok === true, `任命卡 ✓ 落位 ok${dec.ok ? "" : `（${dec.error}）`}`);
   const pm = mgr.pmDutyStatus();
   assert(pm.mode === "no-leader", `pm.mode=no-leader（实得 ${pm.mode}）`);
-  assert(pm.alive === true && pm.session_id === "ext-cli-pm", `在岗=最近活跃 external（实得 ${pm.session_id}）`);
+  assert(pm.alive === true && pm.session_id === "ext-cli-pm", `在岗=经任命确认的会话（实得 ${pm.session_id}）`);
   assert(pm.hint === undefined, "在岗无 hint");
   const text2 = mgr.sessionStartBroadcast("/elsewhere");
   assert(text2.includes("在岗"), "广播报在岗");
@@ -111,7 +121,7 @@ section("\nS3 org status pm 块与 RULES.md 镜像");
   const st = mgr.orgAction("status", {}) as { ok: boolean; data?: { pm?: { alive: boolean; hint?: string; mode: string; session_id: string } } };
   assert(st.ok === true && !!st.data?.pm, "status 带 pm 块");
   assert(st.data!.pm!.alive === false, "无在岗 PM alive=false");
-  assert(st.data!.pm!.hint === "当前无在岗 PM，分诊暂缓或走接管流程", "死 PM 提示语单源（#261 同族口径）");
+  assert(st.data!.pm!.hint === "值守位空（no-leader 无确认任命）——外部会话活跃时自动提名出任命卡，或 org pm claim 主动认领（未决零喂活）", "空位提示语单源（W-PMSEAT：席位只认确认位，空位=待任命口径）");
 
   const mirror = rulesMirrorPath(ORG);
   assert(existsSync(mirror), "boot 即生成镜像（SessionManager 构造器自愈刷新）");
@@ -177,7 +187,12 @@ section("\nS5 hook.mjs 真链（stub relay / 无 context / 连不上）");
       const env: NodeJS.ProcessEnv = { ...process.env, HOME: fakeHome };
       delete env.CCR_RELAY_CHILD;
       void port;
-      const p = execFile("node", [HOOK], { env, timeout: 30_000 },
+      // argv[1] 传 realpath：bridge-hook.mjs 的直跑判定 isMain 比较 import.meta.url
+      //（模块解析走 realpath，macOS /tmp→/private/tmp、/var→/private/var 符链展开）
+      // 与 pathToFileURL(argv[1])（保留符号链形态）——tmpdir() fixture 路径过符号链
+      // 即恒 false，main 不跑静默 exit 0。传 realpath 同形对齐，脚本内容零改动
+      //（生产 hook 位于真实安装路径不受影响）
+      const p = execFile("node", [realpathSync(HOOK)], { env, timeout: 30_000 },
         (e, stdout) => resolve({ code: e ? ((e as { code?: number }).code ?? 1) : 0, out: String(stdout ?? "") }));
       p.stdin!.end(JSON.stringify(payload));
     });

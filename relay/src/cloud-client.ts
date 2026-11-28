@@ -673,6 +673,10 @@ export class CloudClient {
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         acct_relays: [...this.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk, online: true })), // W-ACCOUNT：phone 云通道同键（#117 教训——与 LAN 口同源；rk 供手机端点连免码配对）
+        acct_bound: !!this.mgr.cfg.accountToken, // DEV-41 #117 补齐：relay 已绑账号标记（LAN 口同源同式——console 云通道端无 localStorage 凭据时触发再水化）
+        relay_devices: ((globalThis as any).__ccRelayDevices?.() ?? []), // DEV-41 #117 补齐：连接设备台账（ws-server 挂口同源——云通道端设置页「客户端」模块数据源）
+        design_docs: ((globalThis as any).__ccDesignDocs?.() ?? []), // DEV-41 #117 补齐：设计文档清单（ws-server 挂口同源）
+        pm_duty: this.mgr.pmDutyStatus(), // DEV-41 #117 补齐：pm 值守面（org pm claim 接管后云手机即时感知——X0 件6）
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）

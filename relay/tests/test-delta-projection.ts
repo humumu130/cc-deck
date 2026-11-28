@@ -105,6 +105,8 @@ try {
   process.env.CCR_STORAGE_READ_MODE = "json"; // 显式钉档（SQLITE-FLIP 后缺省=sqlite，fixture 是 json 形态——缺省读空库；75-R 回归发现的漏网连带面）
   process.env.CCR_DATA_DIR = dataDir;
   process.env.CCR_ORG_DIR = join(root, "org"); // 组织域数据（groups/boards）注入临时目录
+  // fixture 自建 org 目录（projects.json 原子写 tmp 落同目录，缺位=ENOENT 建组假红连坐）
+  mkdirSync(join(root, "org"), { recursive: true });
   process.env.CCR_CLOUD_URL = "";
   process.env.CCR_NO_TITLE_GEN = "1";
   process.env.CCR_WATCHDOG_DISABLE = "1";
@@ -238,7 +240,18 @@ try {
   const idem1 = frames.at(-2)!.payload as BoardUpdatedPayload;
   const idem2 = frames.at(-1)!.payload as BoardUpdatedPayload;
   assert(frames.length === before + 2, "前置：同状态连续发射产出两帧");
-  assert(JSON.stringify(idem1) === JSON.stringify(idem2), "同状态重复发射：两帧序列化深等（帧级稳定）");
+  // W-BOARDV2 投影随帧后帧级稳定锁收窄：投影面 freshAges 每次调用现算 generated_at/
+  // age_ms（停留时长=「卡死/跑路」核心信号，board-projection.ts 注释明记故意设计）——
+  // 深等前剔除这两个易变字段，锁 delta/board 实体幂等不锁现算新鲜度
+  const stripFresh = (p: unknown) => {
+    const c = JSON.parse(JSON.stringify(p)) as { projection?: { generated_at?: number; cards?: { age_ms?: number }[] } } | null;
+    if (c?.projection) {
+      delete c.projection.generated_at;
+      for (const card of c.projection.cards ?? []) delete card.age_ms;
+    }
+    return JSON.stringify(c);
+  };
+  assert(stripFresh(idem1) === stripFresh(idem2), "同状态重复发射：两帧序列化深等（帧级稳定——投影现算新鲜度字段 generated_at/age_ms 除外）");
 
   // merge 链重放：全帧按序消费（首帧覆盖起底，后帧 delta merge）→ 与板文件现值深等
   let mergedEntries = new Map<string, BoardEntry>();
@@ -316,6 +329,7 @@ try {
   mkdirSync(wDir, { recursive: true });
   process.env.CCR_DATA_DIR = wDir;
   process.env.CCR_ORG_DIR = join(wDir, "org");
+  mkdirSync(join(wDir, "org"), { recursive: true }); // trust 面随 org 目录持久化——目录缺位写失败
   setLightConfirmTrusted(true); // trust 面随 org 目录持久化，换目录重开一次
   const bridge = startCloudServer(BRIDGE_PORT, "m132-token");
   void bridge;

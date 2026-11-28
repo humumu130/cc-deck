@@ -9,6 +9,7 @@ import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
 import { readSettingsFile } from "../src/settings.js";
+import { setLightConfirmTrusted } from "../src/projects.js";
 import type { Command, CommandAckPayload, Envelope } from "../src/types.js";
 
 function assert(cond: boolean, msg: string): void {
@@ -88,6 +89,16 @@ delete process.env.CCR_EMPLOYEE_CONFIG_DIR; // 防生产锁定 env 渗入（6b �
 process.env.CCR_CLOUD_URL = ""; // loadConfig 缺省会连公共云桥（快照外泄到公网桥）
 process.env.CCR_NO_TITLE_GEN = "1"; // 拉真 CLI 但不拉起名子进程：titlegen 会另落一份全局 transcript
 process.env.CCR_NO_BRIDGE_MIRROR = "1"; // 防御性：当前 in-process 无 onReady 镜像，防未来演进踩同坑
+// 机器本地灰度 env 文件防渗（boot-env 模块体在 ws-server import 时即应用
+// ~/.cc-deck/relay-env.json——静态 import 先于本段执行，应用已发生；边界二
+// 「进程显式 env > 文件」是唯一反制窗）。CI 无该文件零影响（幂等防御）；本机不钉
+// 则套件被拖进 db 档+后台 shadow 全量导入（实测 154s 事件循环碾压 → SESSION_DONE
+// 等待超时假红）。沙盒档五键全钉=json/events/off 形态
+process.env.CCR_STORAGE_READ_MODE = "json";
+process.env.CCR_SESSION_WRITE_MODE = "off";
+process.env.CCR_SESSION_IMPORT = "off";
+process.env.CCR_BOOT_FROM = "events";
+process.env.CCR_EVENTS_ARCHIVE = "off";
 // 孤儿扫描用空临时根，防止测试扫到真实 ~/.claude/projects
 process.env.CCR_PROJECTS_ROOT = fileURLToPath(new URL("../data/test-projects-ws/", import.meta.url));
 // #67 COMMAND_CREATE 探针 cwd 用 .tmp- 沙箱：历史用 process.cwd()（仓库根），
@@ -158,12 +169,29 @@ assert(
 const lastSeq = c1.events[c1.events.length - 1].seq;
 assert(lastSeq >= 3, `seq progressed (last=${lastSeq})`);
 
+// 3.5 板摘要 fixture：轻立项组一枚——空组织时 buildBoardsDigest 返 null、resume 不发
+//     BOARDS_DIGEST，组在场才锁得住该控制帧（trust 直通同 m12/m13 惯例，免决议卡）。
+//     组创建的 PROJECTS_UPDATED 是 seq:0 瞬态（不进缓冲）——放在 3 的 lastSeq 断言后，
+//     不污染其取窗
+setLightConfirmTrusted(true);
+const orgAck = mgr.handleCommand(
+  { command_id: randomUUID(), type: "COMMAND_ORG_ACTION", payload: { action: "create", name: "test-ws 板摘要组", anchor_dir: PROBE_CWD, tier: "轻立项" }, ts: Date.now() },
+  "web-d",
+) as { ok: boolean };
+assert(orgAck.ok === true, "org fixture: light-tier group created (BOARDS_DIGEST 前提)");
+
 // 4. 重连补发：第二个客户端带 last_seq=1 → 只收 seq>1，连续无丢失
+//    #265 增量续传对账 + boardfresh 治本（故意行为，ws-server resume 快路径）：补发
+//    事件后随附两张 seq:0 瞬态控制帧 SESSIONS_RECONCILE（在线会话全集对账）与
+//    BOARDS_DIGEST（板摘要，组存在才发）——不进缓冲、每次 resume 现算现发。seq 族
+//    断言滤控制帧（它们本就不占 seq 空间），另锁「resume 快路径必带控制帧」
+const CONTROL_FRAMES = new Set(["SESSIONS_RECONCILE", "BOARDS_DIGEST"]);
 const c2 = connect(`${base}?token=${cfg.token}&last_seq=1`);
 await c2.opened;
 await wait(500);
-assert(!c2.events.some((e) => e.seq <= 1), "replayed events all seq>1");
-const seqs = c2.events.map((e) => e.seq).sort((a, b) => a - b);
+const c2Data = () => c2.events.filter((e) => !CONTROL_FRAMES.has(e.type));
+assert(!c2Data().some((e) => e.seq <= 1), "replayed events all seq>1");
+const seqs = c2Data().map((e) => e.seq).sort((a, b) => a - b);
 assert(
   seqs.length > 0 && seqs.every((s, i) => i === 0 || s === seqs[i - 1] + 1),
   `replay contiguous from 2 to ${seqs[seqs.length - 1] ?? "?"}`,
@@ -171,6 +199,15 @@ assert(
 assert(
   c2.events.some((e) => e.type === "SESSION_DONE" && e.session_id === sessionId),
   "replay contains missed SESSION_DONE",
+);
+assert(
+  c2.events.some((e) => e.type === "SESSIONS_RECONCILE" && e.seq === 0) &&
+    Array.isArray((c2.events.find((e) => e.type === "SESSIONS_RECONCILE")?.payload as { session_ids?: string[] }).session_ids),
+  "resume fast path carries SESSIONS_RECONCILE control frame（#265 对账——seq:0 瞬态+session_ids 在场）",
+);
+assert(
+  c2.events.some((e) => e.type === "BOARDS_DIGEST" && e.seq === 0),
+  "resume fast path carries BOARDS_DIGEST control frame（boardfresh 治本——seq:0 瞬态）",
 );
 
 // 5. 幂等：同 command_id 重发 → ack duplicate
