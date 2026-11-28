@@ -168,6 +168,21 @@ section("\nS4 A-1/B-F1 删卡墓碑");
     const { bootReconcile } = await import("../src/storage/session-write.js");
     const rec = bootReconcile(port, new Map());
     ok(!rec.dbOnly.includes("ext-c5-del-0001"), "S4g【A-2 半】bootReconcile 剔除 deleted 行（dbOnly 不含墓碑行）");
+    // DEV-39 审查 P3②→DEV-61：迟到 flush 墓碑守卫——删卡后迟到的终态回凋（此前 REPLACE
+    // 恒写 deleted_at=null）不得抹墓碑复活（BOOT_FROM=db 下=删卡复活；守卫=SESSION_UPSERT
+    // 的 NOT EXISTS 单语句原子挡）。
+    const stLate = { ...st, status: "ERROR", last_error: "late-flush", updated_at: (st.updated_at ?? Date.now()) + 5000 };
+    shadowWriteSession(stLate as never);
+    const rowLate = port.query<{ deleted_at: number | null; status: string }>("SELECT deleted_at, status FROM session WHERE id = 'ext-c5-del-0001'")[0];
+    ok(rowLate?.deleted_at !== null && rowLate?.deleted_at !== undefined, `S4h【守卫主断言】迟到 flush 不抹墓碑（deleted_at=${rowLate?.deleted_at} 保留）`);
+    ok(rowLate?.status === "DONE", `S4i 守卫跳过整笔（迟到 ERROR 未落，status=${rowLate?.status}＝tombstoneSession 所写 DONE）`);
+    ok(!dbRowsToReplayed(port).has("ext-c5-del-0001"), "S4j 迟到 flush 后 boot-from-db 仍不收养（删卡不复活）");
+    // 活行不受守卫牵连：正常直写仍全列覆盖（deleted_at 仍可写 null——REPLACE 语义不变）
+    const stLive = { session_id: "ext-c5-live-0002", relay_session_id: "", cwd: "/tmp", status: "WORKING", title: "活行", action_summary: "", updated_at: Date.now(), started_at: Date.now(), stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, external: true };
+    shadowWriteSession(stLive as never);
+    shadowWriteSession({ ...stLive, status: "DONE" } as never);
+    const rowLive = port.query<{ deleted_at: number | null; status: string }>("SELECT deleted_at, status FROM session WHERE id = 'ext-c5-live-0002'")[0];
+    ok(rowLive?.status === "DONE" && (rowLive?.deleted_at === null || rowLive?.deleted_at === undefined), `S4k 活行 REPLACE 语义不变（末笔赢 status=${rowLive?.status}，deleted_at 空）`);
   }
 }
 

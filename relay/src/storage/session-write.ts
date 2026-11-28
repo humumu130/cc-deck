@@ -34,15 +34,21 @@ export function sessionWriteMode(): SessionWriteMode {
 }
 
 /** 与导入器 SESSION_INSERT 同构（import-session-task.ts:249 列序）——直写复用
- *  同语句=列序单源漂移面最小；REPLACE 全列覆盖，投影/直写互覆盖皆幂等。 */
+ *  同语句=列序单源漂移面最小；REPLACE 全列覆盖，投影/直写互覆盖皆幂等。
+ *  墓碑守卫（DEV-39 审查 P3②→DEV-61）：WHERE NOT EXISTS 挡「迟到 flush 抹墓碑」——
+ *  删卡后迟到的终态回凋（REPLACE 恒写 deleted_at=null）不再复活已删行（BOOT_FROM=db
+ *  下=删卡复活）。墓碑在=整笔跳过；导入器无此竞态（已见行走列级 UPDATE 不碰
+ *  deleted_at），守卫只属直写面。单语句原子，无「先查后写」窗口。 */
 const SESSION_UPSERT = `INSERT OR REPLACE INTO session
   (id, relay_session_id, group_id, member_id, external_sid, engine, provider, model, cwd, status, runtime_state_json, started_at, updated_at, deleted_at)
-  VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`;
+  SELECT ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?
+  WHERE NOT EXISTS (SELECT 1 FROM session WHERE id = ? AND deleted_at IS NOT NULL)`;
 
 function rowOf(s: SessionState, gidSafe: string | null): unknown[] {
   // 列序对齐 SESSION_UPSERT（=导入器 SESSION_INSERT）：id/relay_session_id/group_id
   // +[member_id/external_sid/engine/provider=SQL 字面 NULL]+model/cwd/status/
-  // runtime_state_json/started_at/updated_at/deleted_at——10 个占位
+  // runtime_state_json/started_at/updated_at/deleted_at——10 个占位；末位再绑一次
+  // id=墓碑守卫 NOT EXISTS 的参数（共 11）
   return [
     s.session_id,
     s.relay_session_id ?? null,
@@ -65,6 +71,7 @@ function rowOf(s: SessionState, gidSafe: string | null): unknown[] {
     s.started_at ?? s.updated_at ?? Date.now(),
     s.updated_at ?? Date.now(),
     null,
+    s.session_id,
   ];
 }
 
