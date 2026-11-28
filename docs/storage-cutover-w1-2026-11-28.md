@@ -14,7 +14,7 @@
 | boot 读源 | **db**（库行优先喂 adopt，回放兜底） | 同上 |
 | events.ndjson | 纯审计流（R5：审计≠实体） | 定格 |
 | 审计归档 | **on**（压缩丢弃段整段落 events-archive/） | 同上，首个压缩窗后出目录 |
-| 运行产物 | relay.mjs `a082c909…`（分支 `agent/deck-fixer-3/dev-39`） | 换装记录 §四 |
+| 运行产物 | relay.mjs `90dda0ca…`（分支 `agent/deck-fixer-3/dev-39`，演进见 §四/§八） | 换装记录 §四 |
 
 env 文件（灰度开关面，boot-env.ts 白名单五键；进程显式 env > 文件）：
 
@@ -63,7 +63,7 @@ boot 证据行（embedded-relay.log，每次重启可见）：
 
 ## 四、生产换装与回退通道
 
-- 换装：app Resources relay.mjs `5cb464e5…`→`31c7dcd5…`→（根修后）`a082c909…`，
+- 换装：app Resources relay.mjs `5cb464e5…`→`31c7dcd5…`→（根修后）`a082c909…`→（返修批）`8dc14866…`→（复核返修批）`90dda0ca…`，
   均备份在 `~/.cc-deck/data/relay.mjs.bak-pre-dev39-*`；SIGTERM 优雅停→Nova #66
   2s 内复活（全程 7 次重启零失败）。版本指纹四处一致 test.37（tauritrust 绿）。
 - 回退总闸（任意一步出问题）：
@@ -114,6 +114,19 @@ boot 证据行（embedded-relay.log，每次重启可见）：
 
 返修后生产验证：四键终态保持（db/off/db+归档 on）、envFile 只出 basename、
 boot-from-db 切源正常（库 36 行收养 10）、test-dev39 45→54 断言全绿。
+
+## 八、deck-reviewer 复核返修批（leader 派单追加，同日）
+
+复核结论「通过」（P0/P1 无，回执 `~/.cc-deck/artifacts/review-dev39-r.md`）带出的
+最后小批（P2×2＋P3①）：
+
+| 级 | 问题 | 处置 |
+|---|---|---|
+| P2-1 | rewriteFileArchiving 异步重写窗口可截掉 boot 期追加事件（close 回调重写与 adopt 广播的同步 appendLine 无顺序保证；boot 压缩触发=priorCount≠keptCount 非大小闸，长跑后几乎每次重启都成立） | 二遍扫改**全程同步**（与 compactEventsFile 同形）——函数返回即重写完毕，单线程事件循环内窗口由构造消除；test G1 零等待同步锚+重写后追加不丢锚+账目对平、G5 源锚锁无事件回调 |
+| P2-2 | 恢复分支只清 lastDegradation 不清 degradationNotified 闩——「降级→恢复→再降级」第二次降级被早退闩吞掉（/health 报健康+patrol 空文案），撞清单4「复发当场可见」口径 | 恢复时闩随台账复位；test H 节三段式负向锚（降级→恢复→再降级，断言第二次重新入账带错误码） |
+| P3① | §一运行产物 sha 未随返修重部署更新（a082c909→8dc14866） | 已更正，并随本批重部署推进到 `90dda0ca`（演进链：`5cb464e5`→`31c7dcd5`→`a082c909`→`8dc14866`→`90dda0ca`，§四同步） |
+
+P3②（REPLACE 墓碑守卫）leader 已记 DEV-36 P3 备案，不进本批。test-dev39 54→62。
 
 ---
 *deck-fixer-3 · 2026-11-28 · 分支 `agent/deck-fixer-3/dev-39`；灰度操作全程快照先行、

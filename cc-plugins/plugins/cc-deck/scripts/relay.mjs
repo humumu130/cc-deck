@@ -5607,6 +5607,7 @@ function viaReadMode(domain, io2) {
     port = ensureStore(dirs);
     if (lastDegradation !== null) {
       lastDegradation = null;
+      degradationNotified = false;
       console.log("[read-mode] sqlite \u5DF2\u6062\u590D\uFF08\u964D\u7EA7\u53F0\u8D26\u6E05\u8D26\u2014\u2014ensureStore \u6210\u529F\uFF0C/health \u4E0E patrol \u9762\u56DE\u6B63\u5E38\uFF09");
     }
   } catch (err) {
@@ -14865,37 +14866,32 @@ function compactEventsFile(path6, minBytes, opts) {
   }
 }
 function rewriteFileArchiving(path6, kept2, archiveDir) {
-  const keptSeq = new Set(kept2.map((e) => e.seq));
-  mkdirSync3(archiveDir, { recursive: true });
-  const archFile = join6(archiveDir, `events-arch-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
-  const rl2 = readline.createInterface({ input: createReadStream(path6, { encoding: "utf-8" }), crlfDelay: Infinity });
-  let buf = [];
-  const flush = () => {
-    if (buf.length) {
-      appendFileSync(archFile, buf.join("\n") + "\n", "utf-8");
-      buf = [];
-    }
-  };
-  rl2.on("line", (line) => {
-    const t = line.trim();
-    if (!t) return;
-    try {
-      const env = JSON.parse(t);
-      if (typeof env.seq === "number" && !keptSeq.has(env.seq)) {
-        buf.push(t);
-        if (buf.length >= 1e3) flush();
+  try {
+    const keptSeq = new Set(kept2.map((e) => e.seq));
+    const dropped = [];
+    for (const line of readFileSync5(path6, "utf-8").split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const env = JSON.parse(t);
+        if (typeof env.seq === "number" && !keptSeq.has(env.seq)) dropped.push(t);
+      } catch {
       }
-    } catch {
     }
-  });
-  rl2.on("close", () => {
-    try {
-      flush();
-      rewriteFile(path6, kept2);
-    } catch (err) {
-      console.warn(`[events] \u26A0\uFE0F  boot \u5F52\u6863/\u91CD\u5199\u5931\u8D25\uFF08\u6D3B\u6587\u4EF6\u539F\u6837\u4FDD\u7559\uFF0C\u4E0B\u8F6E\u91CD\u8BD5\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+    if (dropped.length) {
+      mkdirSync3(archiveDir, { recursive: true });
+      const archFile = join6(archiveDir, `events-arch-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+      try {
+        appendFileSync(archFile, dropped.join("\n") + "\n", "utf-8");
+      } catch (archErr) {
+        console.warn(`[events] \u26A0\uFE0F  boot \u5BA1\u8BA1\u5F52\u6863\u5931\u8D25\uFF0C\u672C\u8F6E\u91CD\u5199\u4E2D\u6B62\uFF08\u6D3B\u6587\u4EF6\u539F\u6837\uFF0C\u4E0B\u8F6E\u91CD\u8BD5\uFF09\u2014\u2014${archErr instanceof Error ? archErr.message : String(archErr)}`);
+        return;
+      }
     }
-  });
+    rewriteFile(path6, kept2);
+  } catch (err) {
+    console.warn(`[events] \u26A0\uFE0F  boot \u5F52\u6863/\u91CD\u5199\u5931\u8D25\uFF08\u6D3B\u6587\u4EF6\u539F\u6837\u4FDD\u7559\uFF0C\u4E0B\u8F6E\u91CD\u8BD5\uFF09\u2014\u2014${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 function appendLine(path6, env) {
   mkdirSync3(dirname(path6), { recursive: true });
