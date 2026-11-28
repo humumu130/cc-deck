@@ -23,7 +23,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # DEV-33：20→22 对齐 build-plugin.mjs 的 abi-gate 缺省档（#164 落地后首次
+          # tag 出包实锤 android 腿在闸上假红——test.36 tag run 46097998939）。#158
+          # 当时「android 链无 sqlite 闭包不受影响」的判断只覆盖运行时面，漏了出包步
+          # 本身要跑 build-plugin；与 relay.yml/desktop mac job 同源对齐 node 22。
+          node-version: 22
           cache: npm
           # W-RELAYFRESHCI：relay lock 入缓存键（下方重建步在 relay 目录 npm ci）
           cache-dependency-path: |

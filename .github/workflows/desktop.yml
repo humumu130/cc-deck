@@ -83,6 +83,13 @@ jobs:
         #   本步之后（build-plugin → native 件覆盖），反序则覆盖被闭包重汇集冲掉。
         working-directory: relay
         shell: bash
+        # DEV-33：显式声明本 job 期望 ABI=115（node 20）——#158 拍板 Windows job 持 20
+        # （用户 Windows 机系统 node 未核实前不盲切 22，win 包二进制按 runner 档现场
+        # 物化），#164 给 build-plugin.mjs 加缺省 127 的 abi-gate 后两决策交叉，本腿
+        # 首次 tag 出包（test.36 run 46097998924）在闸上假红。覆盖≠豁免：①档位断言
+        # 仍跑（115≠115 才放行），②dlopen 往返仍跑——只是把「期望档」说出口。
+        env:
+          CC_DECK_EXPECT_ABI: "115"
         run: |
           npm ci --no-audit --no-fund
           node scripts/build-plugin.mjs
