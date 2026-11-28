@@ -20139,6 +20139,8 @@ function qwenAuthCandidatePresent(homeDir) {
   if (v("ANTHROPIC_API_KEY") && v("ANTHROPIC_BASE_URL") && v("ANTHROPIC_MODEL")) return true;
   if (v("OPENAI_API_KEY") && v("OPENAI_BASE_URL") && (v("OPENAI_MODEL") || v("QWEN_MODEL"))) return true;
   if (v("GEMINI_API_KEY") && v("GEMINI_MODEL")) return true;
+  if (v("GOOGLE_API_KEY") && v("GOOGLE_MODEL")) return true;
+  if (v("GOOGLE_CLOUD_PROJECT") && v("GOOGLE_MODEL")) return true;
   return [join30(homeDir, ".qwen", "oauth_creds.json"), join30(homeDir, ".qwen", "google-accounts.json"), join30(homeDir, ".qwen", "aws_credentials.json")].some(fileExists);
 }
 function traeConfigAuthPresent(homeDir) {
@@ -52742,7 +52744,7 @@ var CodeBuddyAgentSession = class extends JsonProcessAgentSession {
     const model = (this.opts.model || "").trim();
     if (model && model !== "default" && model !== "codebuddy") {
       if (!CODEBUDDY_MODELS.includes(model) && !model.startsWith("custom:")) {
-        throw new Error(`codebuddy \u672A\u77E5\u6A21\u578B: ${model}\uFF08\u5185\u7F6E 20 \u4E2A\u6216 custom: \u524D\u7F00\u81EA\u5B9A\u4E49\uFF0C\u89C1 CODEBUDDY_MODELS\uFF09`);
+        throw new Error(`codebuddy \u672A\u77E5\u6A21\u578B: ${model}\uFF08\u5185\u7F6E 17 \u4E2A\u6216 custom: \u524D\u7F00\u81EA\u5B9A\u4E49\uFF0C\u89C1 CODEBUDDY_MODELS\uFF09`);
       }
       args.push("--model", model.startsWith("custom:") ? model.slice(7) : model);
     }
@@ -54932,7 +54934,7 @@ function setExternalUsage(mgr2, id2, usage, model, contextUsage, at) {
     s.state.context_usage = contextUsage;
     s.state.context_limit = contextLimitOfEffective(model ?? s.state.model);
   }
-  s.state.updated_at = at ?? Date.now();
+  mgr2.touchIfChanged(s.state, at);
   mgr2.bus.emit(id2, "SESSION_UPDATED", {
     status: s.state.status,
     action_summary: s.state.action_summary,
@@ -60760,7 +60762,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
       s.state.title = t;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state);
       this.bus.emit(sessionId, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
@@ -60780,7 +60782,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const t = title.trim();
     if (!t) return;
     s.state.title = t;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(sessionId, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61058,7 +61060,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     this.refreshPendingUserActions();
     if (status !== "WAITING") s.state.waiting_started_at = void 0;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
-    if (changed || summaryChanged) s.state.updated_at = at ?? Date.now();
+    if (changed || summaryChanged) this.touchIfChanged(s.state, at, true);
     if (changed || summaryChanged || status === "WORKING") {
       this.bus.emit(id2, "SESSION_UPDATED", {
         status,
@@ -61076,7 +61078,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s || s.state.compacting === on2) return;
     s.state.compacting = on2;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, void 0, true);
     if (on2) {
       const t = setTimeout(() => {
         if (s.state.compacting) this.setExternalCompacting(id2, false);
@@ -61251,7 +61253,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const list = hidden.size ? merged.filter((t) => !hidden.has(normKey(t.content))) : merged;
     if (JSON.stringify(s.state.todos ?? []) === JSON.stringify(list)) return;
     s.state.todos = list;
-    s.state.updated_at = at ?? Date.now();
+    this.touchIfChanged(s.state, at);
     this.emitUpdated(s, true, at);
   }
   // external 会话子 Agent 工作状态：仅 subagents 实际变化时下发 SESSION_UPDATED
@@ -61263,7 +61265,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const next = JSON.stringify(list);
     if (prev === next) return;
     s.state.subagents = list.length ? list : void 0;
-    s.state.updated_at = at ?? Date.now();
+    this.touchIfChanged(s.state, at);
     if (list.length) this.assemblyObserve(id2, { kinds: list.map((x) => x.kind).filter(Boolean) });
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
@@ -61282,8 +61284,9 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!s || !s.state.external) return;
     if (initialPrompt && !s.state.initial_prompt) s.state.initial_prompt = initialPrompt;
     if (s.state.title_locked) return;
+    if (s.state.title === title) return;
     s.state.title = title;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61298,7 +61301,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (!s) return;
     if (JSON.stringify(s.state.pending_inputs ?? null) === JSON.stringify(list.length ? list : null)) return;
     s.state.pending_inputs = list.length ? list : void 0;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61313,7 +61316,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const p02 = s.state.stats;
     if (p02 && p02.files_changed === stats.files_changed && p02.lines_added === stats.lines_added && p02.lines_deleted === stats.lines_deleted) return;
     s.state.stats = stats;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61382,7 +61385,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     }
     s.state.artifacts = list;
     if (silent) return;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61453,7 +61456,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       }
     }
     s.state.artifacts = list;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state);
     this.bus.emit(sessionId, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61654,7 +61657,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     for (const it2 of items) this.mergeArtifact(id2, it2, true);
     this.applyDeclaredDeliverables(id2);
     if (!s.state.artifacts) return;
-    s.state.updated_at = at ?? Date.now();
+    this.touchIfChanged(s.state, at);
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -61679,7 +61682,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.waiting_request = payload;
     s.state.waiting_started_at = at;
     this.refreshPendingUserActions();
-    s.state.updated_at = at;
+    this.touchIfChanged(s.state, at, true);
     this.bus.emit(id2, "SESSION_WAITING", payload);
   }
   // 外部会话记录 CLI 上报的最新权限模式——恢复会话（claude --resume）时镜像原始启动
@@ -61805,7 +61808,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.duration_ms = durationMs;
     s.state.waiting_request = void 0;
     s.state.waiting_started_at = void 0;
-    s.state.updated_at = at;
+    this.touchIfChanged(s.state, at, true);
     if (dutyEnabled() && s.state.external) {
       if (id2 === this.dutyTargetId()) {
         this.workerDonePending = 0;
@@ -61985,7 +61988,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     const s = this.sessions.get(id2);
     if (!s || !s.state.external) return;
     s.state.remote_mode = enabled2;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, void 0, true);
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -62464,7 +62467,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         this.transition(managed.state.session_id, "WAITING", "tool-wait");
         managed.state.waiting_request = p;
         managed.state.waiting_started_at = at;
-        managed.state.updated_at = at;
+        this.touchIfChanged(managed.state, at, true);
         this.syncWaitingNotification(managed);
         this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
       },
@@ -62481,7 +62484,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         } else {
           this.resolveWaitingNotification(managed.state.session_id, requestId);
         }
-        managed.state.updated_at = Date.now();
+        this.touchIfChanged(managed.state, void 0, true);
         this.bus.emit(managed.state.session_id, "SESSION_WAITING_RESOLVED", {
           request_id: requestId,
           decision,
@@ -62638,7 +62641,7 @@ provider=${opts.provider ?? "default"}` : void 0,
           delivered && !zeroOutputBlocked ? void 0 : "backlog",
           zeroOutputBlocked ? { failureReason: "zero_output" } : ok2 && reason === "interrupted" ? { receiptMissing: !receiptProbe.hasResultLine, interrupted: true } : ok2 && !receiptProbe.hasResultLine ? { receiptMissing: true } : void 0
         );
-        managed.state.updated_at = Date.now();
+        this.touchIfChanged(managed.state, void 0, true);
         managed.state.duration_ms = durationMs;
         managed.state.waiting_request = void 0;
         managed.state.waiting_started_at = void 0;
@@ -62983,7 +62986,7 @@ provider=${opts.provider ?? "default"}` : void 0,
         s.state.last_error = `\u6062\u590D\u5931\u8D25: \u4E0A\u6E38 ${waitS} \u79D2\u65E0\u54CD\u5E94\uFF08\u7591\u6302\u6B7B\uFF09\uFF0C\u5DF2\u4FDD\u7559\u73B0\u573A\u53EF\u91CD\u8BD5`;
         s.state.saved = true;
         s.state.action_summary = "\u6062\u590D\u5931\u8D25";
-        s.state.updated_at = Date.now();
+        this.touchIfChanged(s.state, void 0, true);
         this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
         this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
         this.noteResumeFailure(s, `resume init \u8D85\u65F6\uFF08${waitS}s\uFF09`);
@@ -63023,7 +63026,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u7B49\u5F85\u8F93\u5165";
       s.state.turn_started_at = void 0;
       s.state.last_error = void 0;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, void 0, true);
       s.lastProgressAt = Date.now();
       s.lastProgressKind = "";
       s.wd.phase = "idle";
@@ -63055,7 +63058,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.done_reason = void 0;
       s.state.action_summary = "\u6062\u590D\u5931\u8D25";
       s.state.saved = true;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, void 0, true);
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
       this.noteResumeFailure(s, reason);
@@ -63134,7 +63137,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.action_summary = "\u6062\u590D\u4E2D";
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, void 0, true);
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
     s.wd.phase = "idle";
@@ -63201,7 +63204,7 @@ provider=${opts.provider ?? "default"}` : void 0,
       s.state.done_reason = void 0;
       s.state.action_summary = "\u964D\u7EA7\u5931\u8D25";
       s.state.saved = true;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, void 0, true);
       this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
       this.noteResumeFailure(s, "fresh \u627F\u63A5 init \u8D85\u65F6");
       this.emitUpdated(s, true);
@@ -63234,7 +63237,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     s.state.action_summary = "\u964D\u7EA7\u627F\u63A5\u4E2D";
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, void 0, true);
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
     s.wd.phase = "idle";
@@ -63517,7 +63520,7 @@ provider=${opts.provider ?? "default"}` : void 0,
     if (s && !s.state.title_locked) {
       s.state.title = title;
       s.state.title_locked = true;
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, void 0, true);
       this.bus.emit(id2, "SESSION_UPDATED", {
         status: s.state.status,
         action_summary: s.state.action_summary,
@@ -69862,7 +69865,7 @@ ${out}`;
     s.state.waiting_request = void 0;
     s.state.waiting_started_at = void 0;
     s.state.last_error = void 0;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, void 0, true);
     s.unacked = [];
     s.resumePending = void 0;
     s.wd.phase = "idle";
@@ -69875,7 +69878,7 @@ ${out}`;
       if (s.state.org_parked !== gid) continue;
       s.state.org_parked = void 0;
       if (s.state.action_summary === "\u5DF2\u968F\u9879\u76EE\u7EC4\u6302\u8D77") s.state.action_summary = "";
-      s.state.updated_at = Date.now();
+      this.touchIfChanged(s.state, void 0, true);
       this.emitUpdated(s, true);
     }
   }
@@ -70268,7 +70271,7 @@ ${out}`;
     s.state.waiting_request = void 0;
     this.refreshPendingUserActions();
     s.state.waiting_started_at = void 0;
-    s.state.updated_at = Date.now();
+    this.touchIfChanged(s.state, void 0, true);
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
   // at：本帧对应的真实活动时刻（水合/回放路径传入，缺省当下——#157，语义同 setTodos）
@@ -70286,11 +70289,26 @@ ${out}`;
   ctxWatchdogOnTurnBoundary(s, newStatus) {
     ctxWatchdogOnTurnBoundary(this, s, newStatus);
   }
+  /** DL-P1-7 relay 面（DEV-31 清件③）：updated_at 单点守卫——与端上 touchUpdatedAt
+   *（web-console 双 IIFE，docs/night-audit/updated-at-writers.md 契约）同语义三律：
+   *  ① 非数/非正 ts 不推进（显式坏 at 不伪造接收时刻，#271 口径）；② 非 force 同值/
+   *  回拨不洗（空闲跳序 saga 根形态——只有更新的真值才推进）；③ force=真态变/权威
+   *  校正必推进（状态翻转、sweep 收殓传真实死亡时刻、boot 采纳传转录真实时刻等
+   *  「at 本身就是权威」的路径——回拨到真相是校正不是洗）。session-manager 一切写
+   *  updated_at 路径收编过本口（建卡初始化=新对象非洗点，保持直写）；裸赋值禁令由
+   *  test-updated-at-guard R 组源码锚锁死，新写手绕口即红。 */
+  touchIfChanged(state, at, force = false) {
+    const t = at ?? Date.now();
+    if (!Number.isFinite(t) || t <= 0) return false;
+    if (!force && (state.updated_at ?? 0) >= t) return false;
+    state.updated_at = t;
+    return true;
+  }
   emitUpdated(s, force, at) {
     const now = Date.now();
     if (!force && now - s.lastUpdateEmit < UPDATE_THROTTLE_MS) return;
     s.lastUpdateEmit = now;
-    s.state.updated_at = at ?? now;
+    this.touchIfChanged(s.state, at ?? now, true);
     this.bus.emit(s.state.session_id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -70352,7 +70370,8 @@ ${out}`;
         this.bus.emit(s.state.session_id, "SESSION_HEARTBEAT", {
           elapsed_ms: now - s.state.started_at,
           action_summary: s.state.action_summary,
-          liveness: this.displayLivenessOf(s)
+          liveness: this.displayLivenessOf(s),
+          updated_at: s.state.updated_at
         });
       }
     }
