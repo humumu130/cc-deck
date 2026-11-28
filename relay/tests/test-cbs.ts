@@ -109,11 +109,14 @@ console.log("§U 纯函数直跑：");
     }
     return "";
   }
-  const hint = new Function("window", `${fnBody("teamAnchorHint")} return teamAnchorHint;`)({ __ccDeck005PlatformFor: (s: string) => (s === "cloud" ? "win32" : "darwin") });
-  ok(hint("cloud").includes("远程 Windows 宿主机") && hint("cloud").includes("C:\\"), `U1a 远程 win32→盘符示例（实 ${hint("cloud").slice(0, 30)}…）`);
-  ok(hint("local").includes("/Users/") && !hint("local").includes("C:\\"), "U1b 本机 darwin→POSIX 示例");
-  const hintUnk = new Function("window", `${fnBody("teamAnchorHint")} return teamAnchorHint;`)({ __ccDeck005PlatformFor: () => null });
-  ok(hintUnk("cloud").includes("请按它的文件系统"), "U1c 快照未达→通用回落（不猜系统）");
+  // W-DENSD 批三⑤：平台示例长文案退役——hint=一行极短句（云/本机两态+browseable 短句），
+  // 平台探测依赖（__ccDeck005PlatformFor）整体消失；teamAnchorBrowseable 补中性桩（非 Tauri 壳=不可浏览）
+  const hint = new Function("window", "teamAnchorBrowseable", `${fnBody("teamAnchorHint")} return teamAnchorHint;`)({}, () => false);
+  ok(hint("cloud") === "那台电脑上的绝对路径", `U1a 云源锚=一行极短句（实 ${hint("cloud")}）`);
+  ok(hint("local") === "relay 宿主机上的绝对路径", "U1b 本机源锚=一行极短句（平台示例句 W-DENSD 退役）");
+  const hintB = new Function("window", "teamAnchorBrowseable", `${fnBody("teamAnchorHint")} return teamAnchorHint;`)({}, () => true);
+  ok(hintB("local") === "本机路径，可点浏览选择" && hintB("cloud") === "那台电脑上的绝对路径", "U1c browseable 短句仅本机态（云态恒不浏览）");
+  ok(!fnBody("teamAnchorHint").includes("PlatformFor"), "U1d 零平台猜测（平台探测依赖整体退役——不猜系统）");
 }
 
 console.log("§A 静态锚：");
@@ -122,11 +125,11 @@ console.log("§A 静态锚：");
   const settings = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8");
   ok(settings.includes("window.__ccDeck005PlatformFor = (source) =>"), "A1 platformFor 目标源快照读（SNAPSHOT.platform 全字段缓存）");
   ok(/wsOverride = window\.__ccDeck005WsFor \? window\.__ccDeck005WsFor\(srcSel\.value\) : null;/.test(team) && team.includes("远程源不在线，无法在远程创建"), "A2 create 按所选源路由（#277 wsOverride+离线守卫锁死）");
-  ok(team.includes("PM 会话需属于所选源：当前选中会话不在"), "A3 PM 按源在册闸+引导文案（拦单）");
+  ok(team.includes("不在\" + srcLabel + \"——本团未带 PM 行，可稍后在编制面板补任 PM"), "A3 PM 按源在册闸+引导文案（W-AGGBUG 起 out 降级为不带 PM 行——点名 sid 前 6 位+补任出口，不再整单硬拦）");
   // 审查 A-P1 修正版断言：专用谓词（不走展示候选列表）
   ok(/const pmInSource = \(which, sid\) => \{[\s\S]{0,900}verdict: "in"[\s\S]{0,400}verdict: "out"/.test(team), "A4 专用谓词 pmInSource（精确 sid+relay_source 对位）");
   ok(!/cands\.some\(\(x\) => x\.session_id === pmSid\)/.test(team), "A4b 展示候选列表不再充当在册判据（slice 截断/external 排除两错位根除——审查 A-P1）");
-  ok(/const online = window\.__ccDeck005WsFor \? window\.__ccDeck005WsFor\(srcSelEarly\.value\) : null;[\s\S]{0,300}v\.verdict === "out"/.test(team), "A4c 源离线先探 WsFor 短路（离线归因不混在册，审查 A-P2a）");
+  ok(/const online = window\.__ccDeck005WsFor \? window\.__ccDeck005WsFor\(srcSelEarly\.value\) : null;[\s\S]{0,600}v\.verdict === "out"/.test(team), "A4c 源离线先探 WsFor 短路（离线归因不混在册，审查 A-P2a；窗扩 600 容 W-AGGBUG 降级注释）");
   ok(team.includes('verdict: "unknown"') && team.includes("将以该源 relay 校验为准"), "A4d 名册未知降级放行+warning（与 relay 权威校验分层）");
   ok(/else if \(template === "pm-led" && !pmSid\) feedback/.test(team), "A5 未选源形态行为不变（降级原口径——本机源零变化）");
   ok(/PROJECTS_UPDATED[\s\S]{0,120}mergePartition\(state\.projects[\s\S]{0,200}render\(\)/.test(team), "A6 #283 聚合链：远程 PROJECTS_UPDATED→mergePartition→render（团队卡即时亮）");

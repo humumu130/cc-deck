@@ -57,8 +57,17 @@ function runOnce(round: number): void {
 
   // ---------- 静态面 3：leader-duty.ts 纯函数面（零 import，强于「不引 event-bus/storage」） ----------
   const dutySrc = readFileSync(join(SRC_DIR, "leader-duty.ts"), "utf8");
-  assert(!/^import\s/m.test(dutySrc) && !/require\(/.test(dutySrc),
-    "S6 leader-duty.ts 零 import/require（纯函数文件）");
+  // W-DUTYBACKOFF 刀3 定性（DEV-42）：duty-reviewed.json orgDir 侧持久化引入 node:fs/node:path/
+  // ./org.js 三 import——合法演进（spec 三面隔离=零 SQLite 表/零 EventType/零 EventBus 出口，
+  // 文件持久化与 duty-rounds.ndjson 同族；评估函数面保持纯）。锚刷新为「import 白名单＋
+  // fs 触点封闭在 read/markDutyReviewed 两持久化助手里」——纯度锁从整文件收细到评估区。
+  const dutyImports = [...dutySrc.matchAll(/^import\s+.*from\s+"([^"]+)"/gm)].map((m) => m[1] as string);
+  assert(dutyImports.length === 3 && dutyImports.every((s) => s === "node:fs" || s === "node:path" || s === "./org.js") && !/require\(/.test(dutySrc),
+    "S6 leader-duty.ts import 白名单（刀3 三依赖：node:fs/node:path/org.js——评估函数面零新依赖）");
+  const importTail = dutySrc.indexOf('from "./org.js";');
+  const evalZone = dutySrc.slice(importTail >= 0 ? importTail + 18 : 0, dutySrc.indexOf("export function readDutyReviewed"));
+  assert(evalZone.length > 0 && !/readFileSync|writeFileSync|orgDir\(\)/.test(evalZone),
+    "S6b 评估函数区零 fs/落盘触点（纯度锁随源收细——fs 只在 read/markDutyReviewed 持久化助手，import 头不计）");
   assert(!/event-bus/.test(dutySrc) && !/from "\.\/storage\//.test(dutySrc),
     "S7 leader-duty.ts 无 event-bus/storage 引用词");
 

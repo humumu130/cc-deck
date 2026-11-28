@@ -210,7 +210,12 @@
     "test:swapguard": "node tests/test-swapguard.mjs",
     "test:dev39": "tsx tests/test-dev39.ts",
     "check:ci-layers": "node scripts/check-ci-layers.mjs",
-    "sweep:watch": "node scripts/sweep-watch.mjs"
+    "sweep:watch": "node scripts/sweep-watch.mjs",
+    "test:cardtags": "env -u CCR_ORG_DIR node --import tsx/esm tests/test-cardtags.ts",
+    "test:awaituser": "env -u CCR_ORG_DIR node --import tsx/esm tests/test-awaituser.ts",
+    "test:animfast": "env -u CCR_ORG_DIR node --import tsx/esm tests/test-animfast.ts",
+    "test:visualfix": "tsx tests/test-visualfix.ts",
+    "test:session-slim": "tsx tests/test-session-slim.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

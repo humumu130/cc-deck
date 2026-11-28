@@ -61,7 +61,7 @@ const wrapperBlock = blockFrom("function connectCloudFor(ctx, manual)");
 const innerBlock = blockFrom("function connectCloudForInner(ctx, manual)");
 const pollStartBlock = blockFrom("function startPollTransport(ctx, base, token, dev, pair)");
 const pollLoopBlock = blockFrom("async function pollLoop(ctx)");
-const setConnBlock = blockFrom("function cloudSetConn(status, text, kind)");
+const setConnBlock = blockFrom("function cloudSetConn(status, text, kind, c)"); // CONNV4B 起第 4 可选参 ctx（锚随源刷新）
 const classifyBlock = blockFrom("function classifyCloudFail(t)");
 const reconnectBlock = blockFrom("function scheduleCloudReconnect(ctx, minDelayMs)");
 const chanWdBlock = blockFrom("function startChannelWatchdog(ctx)");
@@ -218,6 +218,10 @@ function buildHarness(ctx: Record<string, unknown>, wsMode: "hang" | "zombie" | 
     showToast: () => {}, loadCloudIdentity: () => {}, devId: () => "wb-mock", ckp: { publicKey: "pk" },
     serverBridgeToken: () => "tok", pendingPairOf: () => null,
     sendPairReq: () => {}, startPairWatchdog: () => {}, discoverRelay: () => {},
+    // W-ACCOUNT/W-LINKQUALITY 批新增自由引用（同 258 修法——中性桩，语义与场景一致）：
+    // acctQuery 无凭据空串、linkQ 记账 no-op、openCloudPairUI 配对 UI 不触发
+    acctQuery: () => "", linkQ: { onOpen() {}, onDrop() {}, attempts() { return 0; }, flush() {} },
+    openCloudPairUI: () => {},
     // onCloudText 拟真（#268 复发 A' 批起）：可解析 JSON 帧 = _lastFrameAt/lastPong 刷新
     //（虚拟钟时刻！）+ 通道看门狗退役——真 onCloudTextRaw 的三个关键副作用；密文帧业务面
     // 本测试不涉。注意：必须用 clock.now——裸 Date.now() 是真时钟，虚拟钟下会成「未来帧」
@@ -256,7 +260,7 @@ function buildHarness(ctx: Record<string, unknown>, wsMode: "hang" | "zombie" | 
   env.isCloudRetryable = link(blockFrom("function isCloudRetryable()"), [], { cloudCtx: ctx });
   env.cloudRetryBtn = link(blockFrom("function cloudRetryBtn()"), [], { isCloudRetryable: late("isCloudRetryable") });
   env.cloudDiagRowHtml = link(diagRowBlock, ["d", "mobile"], { escapeHtml: baseDeps.escapeHtml, cloudRetryBtn: late("cloudRetryBtn"), Date: DateMock });
-  env.cloudSetConn = link(setConnBlock, ["status", "text", "kind"], {
+  env.cloudSetConn = link(setConnBlock, ["status", "text", "kind", "c"], {
     cloudCtx: ctx, cloudDiagNote: late("cloudDiagNote"), classifyCloudFail: late("classifyCloudFail"),
     syncTeamBind: baseDeps.syncTeamBind, setConn: baseDeps.setConn, renderCloudUI: baseDeps.renderCloudUI,
     window: baseDeps.window,
@@ -549,18 +553,27 @@ async function tick(n = 8) { for (let i = 0; i < n; i++) await Promise.resolve()
   const ctx = mkCtx();
   const { h, env } = buildHarness(ctx, "natural");
   ctx.transport = "poll"; ctx.wsFails = 2; ctx.postFails = 1; ctx.retryAt = h.clock.now + 9000; ctx.status = "connecting";
+  ctx.diagLastError = { ts: h.clock.now - 1000, text: "轮询 GET 失败 HTTP 500" }; // CONNFIX：异常态完整诊断面（最后错误行数据源）
   const d = (env.cloudDiag as () => Record<string, unknown>)();
   const rowDesktop = (env.cloudDiagRowHtml as (d: unknown, m: boolean) => string)((env.cloudDiag as () => unknown)(), false);
   const rowMobile = (env.cloudDiagRowHtml as (d: unknown, m: boolean) => string)((env.cloudDiag as () => unknown)(), true);
   for (const [html, tag] of [[rowDesktop, "桌面"], [rowMobile, "移动"]] as [string, string][]) {
     ok(html.includes("HTTP 轮询"), "R1 " + tag + "面板显示当前通道=HTTP 轮询");
-    ok(html.includes("ws×2") && html.includes("上行×1"), "R1 " + tag + "面板显示失败计数");
-    ok(html.includes("重试") || html.includes("下次"), "R1 " + tag + "面板带行动出口（重试/倒计时）");
+    ok(html.includes("连接失败 2 次") && html.includes("上行失败 1 次"), "R1 " + tag + "面板显示失败计数（CONNFIX 锚随源：连接失败/上行失败 N 次）");
+    ok(html.includes("重试") || html.includes("秒后"), "R1 " + tag + "面板带行动出口（重试按钮/倒计时）");
     ok(!html.includes("undefined") && !html.includes("NaN"), "R1 " + tag + "面板无未定义字段泄漏");
-    ok(html.includes("最后错误") || html.includes("最近帧"), "R1 " + tag + "面板显示最后错误/最近帧行");
+    ok(html.includes("最后错误"), "R1 " + tag + "面板异常态显示最后错误行");
   }
   ok(rowDesktop.includes('data-cloud-diag') && rowDesktop.includes("settings-row"), "R1 桌面形挂 settings-row 容器");
   ok(rowMobile.includes('data-cloud-diag') && rowMobile.includes("mobile-task"), "R1 移动形挂 mobile-task 容器");
+  // CONNFIX 合法演进锁（用户拍板「收成一行+异常才展」）：正常态一行摘要——失败计数/看门狗细节不示人
+  {
+    const okc = mkCtx();
+    okc.transport = "poll"; okc.status = "online"; okc.statusText = "已连接（轮询）"; okc._lastFrameAt = h.clock.now - 2000;
+    const { env: env2 } = buildHarness(okc, "natural");
+    const okRow = (env2.cloudDiagRowHtml as (d: unknown, m: boolean) => string)((env2.cloudDiag as () => unknown)(), false);
+    ok(okRow.includes("云通道正常") && !okRow.includes("连接失败") && !okRow.includes("通道诊断"), "R1 CONNFIX 正常态一行摘要（绿点+最近帧，失败计数/标题全隐——异常才展）");
+  }
   void d; void ctx;
 }
 
@@ -590,7 +603,7 @@ ok(sd.includes("html += cloudDiagRowHtml(cloudDiag(), false);") && sd.includes("
 {
   const ctx = mkCtx();
   const { env } = buildHarness(ctx, "natural");
-  const rowsBlock = blockFrom("function cloudSettingsRows("); // #280-A：签名增 withName 缺省参
+  const rowsBlock = blockFrom("function cloudSelfRows("); // CONNV4 批A：cloudSettingsRows 退役，云身份域行组=cloudSelfRows（withName 缺省参）
   const laneBlock = blockFrom("function cloudMobileLaneInner()");
   const sharedDeps = {
     cloudUIOn: () => true, // 云链激活态（面板出现的前提）
@@ -598,7 +611,7 @@ ok(sd.includes("html += cloudDiagRowHtml(cloudDiag(), false);") && sd.includes("
     sdelServerRows: () => "", // 服务器行渲染不在本断言范围
     cloudPeerOf: env.cloudPeerOf, cloudCtx: ctx, cloudDiag: env.cloudDiag,
     cloudDiagRowHtml: env.cloudDiagRowHtml, escapeHtml: (s: string) => String(s),
-    relayNameRowHtml: () => "", viewSource: () => "local", cloudMode: false, withName: true, // #280-A：cloudSettingsRows 签名参
+    relayNameRowHtml: () => "", mobileSourceLaneRows: () => "", viewSource: () => "local", cloudMode: false, withName: true, // #280-A：cloudSettingsRows 签名参（批E 起移动 lane 增 mobileSourceLaneRows 段）
     ckp: { publicKey: "pk" }, devId: () => "wb-mock",
   };
   const rows = (link(rowsBlock, [], sharedDeps) as () => string)();

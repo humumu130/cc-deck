@@ -99,6 +99,8 @@ async function main() {
     [/animation:\s*stream-bounce\s+1\.1s/, "流式三点 1.1s 保留（仅流式输出期）"],
     [/animation:\s*kbd-pulse\s+1\.1s/, "按键捕获 chip 1.1s 保留（交互期）"],
     [/animation:\s*wx3p-skel\s+1\.4s/, "骨架屏 opacity 呼吸 1.4s 保留（加载期，opacity 帧已合规）"],
+    [/animation:\s*dock-spin\s+2\.8s/, "状态舱 running 旋转星 2.8s 保留（DEV-40 词表六态 glyph——transform 动画零重绘）"],
+    [/animation:\s*dock-breath\s+1\.8s/, "状态舱 waiting 呼吸 1.8s 保留（DEV-40 词表——opacity 帧合规）"],
   ] as [RegExp, string][]) {
     ok(pat.test(cssBare), label);
   }
@@ -108,7 +110,7 @@ async function main() {
   const reInf = /animation:\s*([\w-]+)\s+[\d.]+s[^;]*infinite/g;
   let mm: RegExpExecArray | null;
   while ((mm = reInf.exec(cssBare)) !== null) animRefs.add(mm[1]);
-  const expected = new Set(["wrefSpinKf", "conn-wait-blink", "st-glow-pulse", "st-standby-breathe", "dot-breathe", "ubWait", "stream-bounce", "wait-pulse", "kbd-pulse", "ndot-pulse", "wx3p-skel"]);
+  const expected = new Set(["wrefSpinKf", "conn-wait-blink", "st-glow-pulse", "st-standby-breathe", "dot-breathe", "ubWait", "stream-bounce", "wait-pulse", "kbd-pulse", "ndot-pulse", "wx3p-skel", "dock-spin", "dock-breath"]); // DEV-40 状态词汇表：session-state-dock 六态 glyph 两动画入册（spin=transform 零重绘/breath=opacity 帧——均合规）
   const unexpected = [...animRefs].filter(n => !expected.has(n));
   const missing = [...expected].filter(n => !animRefs.has(n));
   ok(unexpected.length === 0, `infinite 名单无未分类新增（意外：${unexpected.join(",") || "无"}）`);

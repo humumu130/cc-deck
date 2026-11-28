@@ -9,7 +9,8 @@
 //
 // 顺序执行（不并行）：watch 键含 lan 组播/tmux 会话/真 CLI 回合等本机资源面，并行互扰
 // 会让红绿不可信（DEV-48 巡检口径：网络类偶发红先排同机互扰再定罪）。
-// 输出：逐键 PASS/FAIL（FAIL 附尾部日志 40 行）＋汇总表；Ctrl-C 语义＝当前键中断、汇总仍打印。
+// 输出：逐键 PASS/FAIL（FAIL 附尾部日志 40 行）＋汇总表；Ctrl-C 语义＝当前键中断、汇总仍打印
+//（SIGINT handler 真实现——DEV-42 P3 补：原头注释超诺，默认行为是整跑被杀无汇总）。
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -49,30 +50,45 @@ function runKey(key) {
     let out = "";
     const t0 = Date.now();
     let timedOut = false;
+    let interrupted = false;
     const timer = setTimeout(() => {
       timedOut = true;
       try { process.kill(-child.pid, "SIGKILL"); } catch { /* 组已退出 */ }
       try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
     }, TIMEOUT_SEC * 1000);
+    // Ctrl-C（SIGINT）：击杀当前键进程组并按「中断」结算（汇总仍打印——与头注释承诺一致）。
+    // 第二次 Ctrl-C = 真退出（不再拦截，兜底死循环场景）。
+    const onInt = () => {
+      if (interrupted) { process.removeListener("SIGINT", onInt); return; }
+      interrupted = true;
+      clearTimeout(timer);
+      try { process.kill(-child.pid, "SIGKILL"); } catch { /* 组已退出 */ }
+      try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
+    };
+    if (!process.listenerCount("SIGINT")) process.on("SIGINT", onInt);
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { out += d; });
-    child.on("error", (e) => { clearTimeout(timer); resolve({ key, code: -1, ms: Date.now() - t0, out: String(e), timedOut: false }); });
+    child.on("error", (e) => { clearTimeout(timer); process.removeListener("SIGINT", onInt); resolve({ key, code: -1, ms: Date.now() - t0, out: String(e), timedOut: false, interrupted }); });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ key, code: code ?? -1, ms: Date.now() - t0, out, timedOut });
+      process.removeListener("SIGINT", onInt);
+      resolve({ key, code: code ?? -1, ms: Date.now() - t0, out, timedOut, interrupted });
     });
   });
 }
 
 const results = [];
+let interrupted = false;
 for (const key of keys) {
+  if (interrupted) { console.log(`▷ ${key} ... 跳过（Ctrl-C 中断）`); continue; } // 中断后不再起键，汇总仍打印
   process.stdout.write(`▶ ${key} ... `);
   const r = await runKey(key);
   results.push(r);
+  if (r.interrupted) interrupted = true;
   const secs = (r.ms / 1000).toFixed(1);
   if (r.code === 0) console.log(`PASS (${secs}s)`);
   else {
-    const why = r.timedOut ? `TIMEOUT >${TIMEOUT_SEC}s` : `exit=${r.code}`;
+    const why = r.interrupted ? "Ctrl-C 中断" : r.timedOut ? `TIMEOUT >${TIMEOUT_SEC}s` : `exit=${r.code}`;
     console.log(`FAIL (${why}, ${secs}s)`);
     const tail = r.out.trimEnd().split("\n").slice(-TAIL_LINES);
     if (tail.length) console.log(tail.map((l) => `    ${l}`).join("\n"));
@@ -80,9 +96,9 @@ for (const key of keys) {
 }
 
 const failed = results.filter((r) => r.code !== 0);
-console.log(`\n==== watch sweep 汇总：${results.length - failed.length}/${results.length} PASS，${failed.length} FAIL ====
+console.log(`\n==== watch sweep 汇总：${results.length - failed.length}/${results.length} PASS，${failed.length} FAIL${interrupted ? "（Ctrl-C 中断——未跑键已跳过）" : ""} ====
 `);
-if (failed.length) {
-  for (const f of failed) console.log(`  FAIL ${f.key} (${f.timedOut ? "timeout" : "exit=" + f.code})`);
+if (failed.length || interrupted) {
+  for (const f of failed) console.log(`  FAIL ${f.key} (${f.interrupted ? "interrupted" : f.timedOut ? "timeout" : "exit=" + f.code})`);
   process.exit(1);
 }

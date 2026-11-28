@@ -192,8 +192,8 @@ ok(ssd.includes("function paneSigWrite") && ssd.includes('"full:" + htmlSig(html
   "S5a 任务 pane 签名跳帧（local 分支签名吃全量 html——折叠开合/行文变化必重建）");
 ok(ssd.includes('host.setAttribute("data-af-body", "")') && ssd.includes('desired.push(["g:" + g.dir, artGroupNode(g, s.cwd, artOpenDirs.has(g.dir)).outerHTML])'),
   "S5b 输出物 keyed：[data-af-body] 稳定宿主 + 组级键 g:<dir>（在途下载 meta 定点写不再被帧重建孤儿化）");
-ok(ssd.includes('wrap.insertAdjacentHTML("beforeend"'),
-  "S5b' rk 缺席回落旧整树路径保留（零删）");
+ok(ssd.includes('wrap.className = "artifact-browser"') && ssd.includes("pane.appendChild(wrap)"),
+  "S5b' rk 缺席回落旧整树路径保留（零删；W-DENSD 批三⑤ 起形态=innerHTML 组装+appendChild——af-foot 说明段随批退役）");
 ok(ssd.includes("data-turn-elapsed") && !ssd.includes('html.replace("__ELAPSED__"') && ssd.includes("const elFresh = pane.querySelector(\"[data-turn-elapsed]\")"),
   "S5c 更多 pane：时长占位剔签名 + 定点写（写路径与跳帧路径同款 querySelector——占位字面量误伤面封死，审查 P2 收口）");
 

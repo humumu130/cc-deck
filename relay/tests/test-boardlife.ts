@@ -236,7 +236,8 @@ async function main() {
     assert(sm.includes('status: "done", review_required: true }'), "①交付边完成候选链接线锚在");
     assert(sm.includes('x.status === "backlog" || x.status === "submitted"'), "①接卡扩 submitted（需修重派打回）锚在");
     const pj = readFileSync(join(process.cwd(), "src", "projects.ts"), "utf8");
-    assert(pj.includes('entry.status === "submitted" || entry.status === "ready_to_install" || entry.status === "planned") continue'), "②converge 复核态保护锚在（planlane 批：planned 规划态同款保护）");
+    assert(pj.includes('if (entry.status === "ready_to_install" || entry.status === "planned") continue'), "②converge 复核态保护锚在（planlane 批：planned 规划态同款保护——W-CARDLIFE-R4 后与 submitted 分行）");
+    assert(pj.includes("continue; // submitted 不落入 backlog 强翻路径（复核态保护维持）"), "②converge submitted 专用口锚在（W-CARDLIFE-R4 兜底出口——无 PR 面+dispatch done 超 4h 才自动翻 done，出口后仍不落 backlog 强翻）");
     const patrolSrc = readFileSync(join(process.cwd(), "src", "patrol.ts"), "utf8");
     assert(patrolSrc.includes("board-submitted-stale") && patrolSrc.includes("CCR_BOARD_SUBMITTED_STALE_MS"), "④收割兜底铃锚在（review-b P1：submitted 滞留>24h 巡检提醒——PM 漏收不再永挂）");
     // R2-P1：slim 兜底——bridge selectSessionCard else 分支接 SlimUi.open（DOM 无卡但快照在→直选）

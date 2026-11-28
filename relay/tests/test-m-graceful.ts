@@ -139,8 +139,8 @@ const SB2 = mkdtempSync(join(tmpdir(), "m-graceful-cli-"));
 const orgD = join(SB2, "org"), binD = join(SB2, "bin");
 mkdirSync(orgD, { recursive: true }); mkdirSync(binD, { recursive: true });
 const logPath = join(SB2, "launchctl-calls.log");
-// mock launchctl：追加时间戳记录
-writeFileSync(join(binD, "launchctl"), `#!/bin/zsh\nnode -e "process.stdout.write(String(Date.now()))" >> ${logPath}\necho " $*" >> ${logPath}\nexit 0\n`, { mode: 0o755 });
+// mock launchctl：追加时间戳记录（shebang 用 /bin/sh——桩 body 纯 POSIX，ubuntu CI 无 /bin/zsh 会 ENOENT）
+writeFileSync(join(binD, "launchctl"), `#!/bin/sh\nnode -e "process.stdout.write(String(Date.now()))" >> ${logPath}\necho " $*" >> ${logPath}\nexit 0\n`, { mode: 0o755 });
 chmodSync(join(binD, "launchctl"), 0o755);
 const cliNew = join(SB2, "new.mjs"), cliTgt = join(SB2, "tgt.mjs");
 writeFileSync(cliNew, "console.log('cli-new');\n", "utf-8");
@@ -220,7 +220,10 @@ const kickCount = () => (existsSync(logPath) ? readFileSync(logPath, "utf-8").tr
 // 源码锚：relay SIGTERM 诊断（graceful 屏障的 relay 侧对称面）
 {
   const idx = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
-  ok(idx.includes("shutdownDiag") && idx.includes("reloadDispatchQueue 恢复排队"), "锚 relay SIGTERM 活单诊断在位");
+  // W-RELDEATH：告别行构造抽 graceful-exit.ts 纯函数（无条件打一行治静默死——纯函数面由 test:graceful-exit 锁）
+  ok(idx.includes("shutdownDiag") && idx.includes("gracefulExitLines"), "锚 relay SIGTERM 活单诊断在位（W-RELDEATH 起行构造走 graceful-exit.ts 纯函数）");
+  const ge = readFileSync(new URL("../src/graceful-exit.ts", import.meta.url), "utf-8");
+  ok(ge.includes("reloadDispatchQueue 恢复排队") && ge.includes("派单账不可读"), "锚告别行纯函数完备（活单明细行+账不可读降级位）");
   const rd = readFileSync(new URL("../../deploy/mac-relay-launchd/README.md", import.meta.url), "utf-8");
   ok(rd.includes("graceful-restart.sh") && rd.includes("不硬杀"), "锚 README 热部署口径已切优雅路径");
 }

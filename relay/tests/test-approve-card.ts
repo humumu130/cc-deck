@@ -190,7 +190,10 @@ process.stdin.once("data", (d) => {
   assert(passiveBlock.includes("可远程批准"), "web：passive 卡文案锚（可远程批准）");
   const ds = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../expo-app/src/screens/DetailScreen.tsx"), "utf-8");
   assert(ds.includes("wr.decidable !== false || !wr.questions?.length"), "expo：passive 权限卡渲染门放开锚");
-  assert(ds.includes("wr?.decidable !== false && isWaitStale"), "expo：stale 置灰对 passive 豁免锚");
+  // approval-timeout 批（1029 用户铁令①）后形态：stale 置灰机制整段退役——原「passive 豁免」
+  // 断言随之升级为「审批卡永不过期」总锚（passive/worker 卡一律可点，真失效由 relay superseded 收卡）
+  assert(!ds.includes("isWaitStale") && !ds.includes("WAITBOX_STALE_MS") && ds.includes("真失效（CLI 已越过）由 relay"),
+    "expo：审批卡永不过期锚（客户端零猜测性置灰——passive 豁免语义随机制退役被更强总锚取代）");
   const sm = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/session-manager.ts"), "utf-8");
   assert(sm.includes("skip-confirm 放行（dispatch 预授权，系统代填勾选）"), "relay：dispatch 面 gate-release 链审计锚");
   const br = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/bridge.ts"), "utf-8");

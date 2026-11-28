@@ -14,8 +14,9 @@ let pass = 0, fail = 0;
 const ok = (c: boolean, n: string) => { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✗ " + n); } };
 
 const sm = readFileSync(new URL("../src/session-manager.ts", import.meta.url), "utf-8");
-// G1 提取归一（静态锚：~ 拆解为 homedir join——不再存带 ~ 的字面量）
-ok(sm.includes('join(homedir(), ".cc-deck", "artifacts"'), "G1① receiptPath 归一为 homedir 绝对路径（~ 字面量废弃）");
+// G1 提取归一（静态锚：W-CARDLIFE-R2 起回执根改 artifactsDir() 单源——CCR_ARTIFACTS_DIR
+// 可覆盖，生产无 env 时与 homedir 逐字节同值；~ 字面量仍废弃）
+ok(sm.includes("join(artifactsDir(), receiptRel.split(\"/\").pop()"), "G1① receiptPath 归一为 artifactsDir() 单源绝对路径（~ 字面量废弃；R2 起可 env 覆盖）");
 ok(sm.includes("w-[a-z0-9-]+") && sm.includes("artifacts"), "G1② 提取正则保留（w-*.md 词形）");
 // G2 failed 也调度（静态锚）
 ok(sm.includes('if (status === "done" || status === "failed") this.scheduleReceiptCheck'), "G2 failed 收口也调度回执闸（首战未鸣根因——SMALLFIX 实锤收口 status=failed 被旧 done-only 静默跳过）");
@@ -42,12 +43,18 @@ try {
   anyMgr.scheduleReceiptCheck("gf-p3", "pg-test", "W-测试件无回执", join(DATA, "w-nonexistent.md"));
   await new Promise((r) => setTimeout(r, 700));
   ok(NOTES.some((t) => t.includes("gf-p3".slice(0, 8)) && t.includes("收口无回执")), "G3 无回执→黄框触发（300ms 缩短窗真实验证）");
-  // G4：有回执 → 零新增通知
-  writeFileSync(join(DATA, "w-exists.md"), "# 回执\n");
+  // G4：有回执（W-CARDLIFE-R3 P1-2 起还需尾行军规合规——纯存在性已不够）→ 零新增通知
+  writeFileSync(join(DATA, "w-exists.md"), "# 回执\n\n结果：通过｜改动文件：无（测试件）\n");
   const before = NOTES.length;
   anyMgr.scheduleReceiptCheck("gf-p4", "pg-test", "W-测试件有回执", join(DATA, "w-exists.md"));
   await new Promise((r) => setTimeout(r, 700));
-  ok(NOTES.length === before, "G4 有回执→零误报");
+  ok(NOTES.length === before, "G4 有回执（含尾行军规行）→零误报（R3 起存在性+尾行合规双核）");
+  // G4b：文件在场但尾行不合规 → 催修告警（R3 新增分支——空文件/半成品回执不再静默过闸）
+  writeFileSync(join(DATA, "w-half.md"), "# 半成品回执\n");
+  const beforeB = NOTES.length;
+  anyMgr.scheduleReceiptCheck("gf-p4b", "pg-test", "W-半成品回执件", join(DATA, "w-half.md"));
+  await new Promise((r) => setTimeout(r, 700));
+  ok(NOTES.length > beforeB && NOTES.some((t) => t.includes("尾行不合规")), "G4b 回执在但尾行缺军规行→催修告警（区别于无回执——指路明确）");
   // G5：pending 落盘 + boot 补跑（调度后立即「重启」=丢弃定时器，只留盘账）
   anyMgr.scheduleReceiptCheck("gf-p5", "pg-test", "W-重启窗件", join(DATA, "w-nonexistent.md"));
   ok(existsSync(join(DATA, "pending-receipt-checks.json")), "G5① pending 账落盘（重启窗可见）");
