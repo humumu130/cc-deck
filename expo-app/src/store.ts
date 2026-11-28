@@ -12,6 +12,7 @@ import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 import nacl from "tweetnacl";
 import { fgSupported, notifyAlert, startForegroundService, stopForegroundService } from "./notify";
+import { parseBridgeAlert } from "./bridge-alert";
 import { httpBaseOf } from "./slash";
 import { artPoolItemsOf, artPoolListUrl, artPoolUrl, poolNameOk, type ArtPoolItem } from "./artpool";
 
@@ -1681,6 +1682,16 @@ class RelayStore {
               }),
             );
           } catch {}
+        }
+        return;
+      }
+      // P0-3（DEV-43）桥直推告警：明文帧（桥侧 /alert 注入），unseal 之前识别——
+      // relay 死亡时恰是本帧唯一出场时机（E2E 密文通道随 relay 消失）。只展示不执行
+      if (frame.type === "bridge_alert") {
+        const a = parseBridgeAlert(frame);
+        if (a) {
+          console.log(`[cloud] bridge_alert level=${a.level} title=${a.title}`);
+          notifyAlert(a.title, a.body);
         }
         return;
       }

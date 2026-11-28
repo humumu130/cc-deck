@@ -52,6 +52,9 @@ export interface PatrolOptions {
   enabled: () => boolean;        // 配置开关（plugin-config 键 + env 聚合后注入）
   lightMs?: number;              // 默认 5min（CCR_PATROL_LIGHT_MS 覆盖，测试用短值）
   fullMs?: number;               // 默认 30min（CCR_PATROL_FULL_MS）
+  /** P0-3/DL-P1-5（DEV-43）：升级外发腿——云桥直推手机（独立于 relay UI 面板；
+   * index.ts 装配 pushCloudAlertAll。缺席=无此腿（测试/旧装配零破坏）。 */
+  cloudPush?: (title: string, body: string) => void;
 }
 
 const num = (v: string | undefined, d: number): number => {
@@ -206,6 +209,24 @@ export class PatrolModule {
         alerts.push({ key: "abi-mismatch", text: `构建烙印 node ${m.buildNode} ABI ${m.buildAbi} ${m.buildPlatform} vs 运行 node ${m.runtimeNode} ABI ${m.runtimeAbi} ${m.runtimePlatform}（错配面 ${m.mismatchKeys.join("/")}）——sqlite 恒降级事故形态，换构建档位 node 或重出包` });
       } else {
         alerts.push({ key: "abi-mismatch", text: "" });
+      }
+    } catch { /* 判定失败不阻巡检（保守巡） */ }
+    // P0-3（DEV-43）：独立哨兵（patrol-standalone launchd 位）心跳可见位——哨自己
+    // 静默死（plist 被卸/脚本连败）此前无人观测，「看门狗死了没人看门」。心跳文件
+    // 缺席≠错误（哨未装机语义，同 ABI unstamped 口径）；在位但超阈（CCR_SENTINEL_STALE_MS
+    // 覆盖，缺省 100min=3×默认拍距+缓冲）才告警——relay 活着恰是能看出「哨死了」的
+    // 唯一时刻，这条互补观测补齐双哨互看。
+    try {
+      const hbPath = join(this.opts.dataDir, "patrol-heartbeat.json");
+      if (existsSync(hbPath)) {
+        const hb = JSON.parse(readFileSync(hbPath, "utf-8")) as { ts?: unknown };
+        const staleMs = Math.max(Number(process.env.CCR_SENTINEL_STALE_MS) || 100 * 60_000, 60_000);
+        const age = Date.now() - Number(hb.ts);
+        if (Number.isFinite(age) && age > staleMs) {
+          alerts.push({ key: "sentinel-stale", text: `独立哨兵心跳超龄 ${Math.round(age / 60_000)}min（patrol-heartbeat.ts=${new Date(Number(hb.ts)).toISOString()}）——哨兵 launchd 位疑似静默死（plist 被卸/脚本连败），核对 launchctl 后重载 online.humumu.ccdeck.patrol` });
+        } else {
+          alerts.push({ key: "sentinel-stale", text: "" });
+        }
       }
     } catch { /* 判定失败不阻巡检（保守巡） */ }
     // P0-B（DEV-19 2026-11-26）：hook 上报腿健康——bridge hook 的 post 失败此前只进
@@ -973,7 +994,9 @@ export class PatrolModule {
 
   /** DL-P1-5：同文本告警持续超阈 → 独立通道升级（一次/onset）。macOS 本地通知由
    * execFile 异步发射（不阻塞巡检拍）；非 darwin/发射失败静默（报告 ESCALATED 行已
-   * 落盘保底——文件面也是 relay 之外的独立观察点）。 */
+   * 落盘保底——文件面也是 relay 之外的独立观察点）。DEV-43 补第三腿：云桥直推手机
+   *（CCR_PATROL_ESCALATE_PUSH=0 应急停）——本机通知只救「人在电脑前」，手机推送才
+   * 是「必达」语义（P0-3 验收口径：≤5 分钟、与面板无关）。 */
   private maybeEscalate(key: string, text: string): void {
     const raw = Number(process.env.CCR_PATROL_ESCALATE_MS);
     const windowMs = Number.isFinite(raw) && raw >= 0 ? raw : 2 * 3600_000;
@@ -994,6 +1017,12 @@ export class PatrolModule {
       try {
         execFile("osascript", ["-e", `display notification "${body.replace(/["\\]/g, "'")}" with title "cc-deck 巡检升级（独立通道）"`], () => { /* 发射结果不阻塞巡检 */ });
       } catch { /* 升级尽力而为（报告行已落盘） */ }
+    }
+    if (this.opts.cloudPush && process.env.CCR_PATROL_ESCALATE_PUSH !== "0") {
+      try {
+        void Promise.resolve(this.opts.cloudPush(`⚠️ cc-deck 巡检升级：${key}`, body))
+          .catch(() => { /* 外发尽力而为（报告行已落盘） */ });
+      } catch { /* 外发尽力而为 */ }
     }
   }
 
