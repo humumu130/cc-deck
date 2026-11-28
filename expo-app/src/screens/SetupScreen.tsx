@@ -468,8 +468,10 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     });
   };
   const todo = useMemo(() => todoSurface(snap.notifications), [snap.notifications]);
+  // #357 连接指示三态（用户定）：连接中·重连中=黄 / 连不上=红——与 ListScreen connColor 同口径
+  //（DEV-40 T4 审查 A-P2/B-P2：原 else 走 c.waiting，waiting 分相后橙=同语义两屏两色相）
   const connDotColor =
-    snap.connState === "connecting" || snap.connState === "reconnecting" ? c.working : c.waiting;
+    snap.connState === "connecting" || snap.connState === "reconnecting" ? c.working : c.error;
   let connMain = "";
   let connSub: string | null = null;
   let connRetryable = false;

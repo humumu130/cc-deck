@@ -101,7 +101,7 @@
       --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
       --status-done-glow: rgba(75,203,145,.35);
       --status-error-glow: rgba(236,116,114,.25);
-      --status-working-glow: rgba(53,220,151,.5);
+      --status-working-glow: rgba(255,210,77,.5); /* DEV-40 T4 审查B P2：⑂/agdot 呼吸光圈绿残留归位黄（本体 var(--working) 黄、光圈却绿=同灯两相；原 rgba(53,220,151,.5)=W-V8 绿系时代值） */
       --status-waiting-glow: rgba(229,137,91,.32); /* DEV-40 T4：等你光圈随 1014 五色灯归位橙相（原黄 rgba(255,197,61) 与 --st-blocked 空心环不同相） */
       --q-row-hov: rgba(148,163,190,.07);
       --q-row-sel: rgba(148,163,190,.14);
@@ -260,7 +260,7 @@
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
       --status-error-glow: rgba(200,76,81,.2);
-      --status-working-glow: rgba(22,141,96,.3);
+      --status-working-glow: rgba(255,176,32,.3); /* DEV-40 T4 审查B P2：浅色档同归黄相（原 rgba(22,141,96,.3)=绿残留同族） */
       --status-waiting-glow: rgba(192,91,51,.22); /* DEV-40 T4：浅色档同归橙相（原 --working 文字档黄 rgba(165,109,0)） */
       --q-row-hov: rgba(0,0,0,.045); /* 微信 hover 浅灰 */
       --q-row-sel: rgba(0,0,0,.08);

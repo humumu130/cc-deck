@@ -351,6 +351,19 @@ console.log("§A 静态锚（relay/web/expo 四面）：");
 
 }
 
+// ---- §A-DEV40R DEV-40 T4 审查返修锚（review-dev40-a/b：P1-1＋随批 P2 四项的防回归） ----
+{
+    const sd = readFileSync(join(root, "web-console", "js", "settings-domain.js"), "utf-8");
+    ok(sd.includes('chipClass: ({ working: "st-working", waiting: "st-waiting", error: "st-error", done: "st-done" })[status]') && sd.includes('tagClass: ({ working: "done", waiting: "action", error: "danger", done: "done" })[status]') && !sd.includes('tagClass: ({ working: "info"'), "DEV40R-1 首屏占位状态词形走 st-*（chipClass 渲染/tagClass 只司 CTA——审查A P2-1；working:info 蓝复活即红）");
+    const bc = readFileSync(join(root, "web-console", "js", "bridge-core.js"), "utf-8");
+    ok(bc.includes(': ["离线", ""]') && !bc.includes('["离线", " wait"]'), "DEV40R-2 项目长页离线徽章中性灰（S6——审查B P1-1；借 is-warn 橙复活即红）");
+    const baseCss = readFileSync(join(root, "web-console", "css", "base.css"), "utf-8");
+    ok(baseCss.includes(".cc-badge.is-run { background: rgba(255,210,77,.16); border-color: rgba(255,210,77,.42); color: var(--st-working); }") && !/\.cc-badge\.is-run \{[^}]*53,220,151/.test(baseCss), "DEV40R-3 is-run「运行中」徽章黄相（S1——审查B P1-1；绿实底复活即红）");
+    ok(baseCss.includes('html[data-theme="light"] .cc-badge.is-run { background: rgba(180,83,9,.14); border-color: rgba(180,83,9,.38); color: #b45309; }'), "DEV40R-4 is-run 亮档覆写在位（黄相化后需亮档——缺位即浅色主题裸奔）");
+    const tokCss = readFileSync(join(root, "web-console", "css", "tokens.css"), "utf-8");
+    ok(/--status-working-glow: rgba\(255,210,77,\.5\);/.test(tokCss) && /--status-working-glow: rgba\(255,176,32,\.3\);/.test(tokCss) && !/working-glow: rgba\(53,220,151/.test(tokCss) && !/working-glow: rgba\(22,141,96/.test(tokCss), "DEV40R-5 working-glow 双主题黄相（⑂/agdot 呼吸光圈绿残留——审查B P2；绿值复活即红）");
+}
+
 console.log(`\n§P-§A：${pass} ok / ${fail} FAIL`);
 if (fail > 0) { console.error(`FAIL：共 ${fail} 条未过`); process.exit(1); }
 console.log("\n全部通过：#291 帧分类判活（心跳≠工作·帧分类单判据 15min 窗+turn 生命周期状态机收口）");

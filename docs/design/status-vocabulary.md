@@ -54,7 +54,11 @@ relay `SessionStatus` ＋ 两处用户定版判活派生（#291 待命 / #160 �
 | 归属 | 团队 chip team-chip | 实底/accent | --team-accent 组色 | 编制归属 |
 | 身份 | 引擎徽章 engine-badge、CC Deck cc-badge | 品牌形 | 品牌色/蓝（身份轴非状态轴） | #227/P2-6 |
 
-规则：chip 层**不走六态色相**（状态归灯/胶囊层）——身份与状态两轴不许混色（expo theme.ts 注释同款口径）。例外：已派单·等待处理 dispatch-pending 用黄描边=「机器侧等待」语义，词表收录为 waiting 的 chip 形（同橙系待动作轴经 1014 灯表衍生，不新增色相）。
+规则：chip 层**不走六态色相**（状态归灯/胶囊层）——身份与状态两轴不许混色（expo theme.ts 注释同款口径）。
+
+**豁免登记（审查 B P1/P2 订正，色相恒等律的显式边界——改色需设计变更单）**：
+- **dispatch-pending（已派单·等待处理）**：语义=S2 standby 的 chip 形（机器侧等待=接单未开工，非 S3 等你）。视觉=W-DISPVIS C2 定版黄描边（定版面不动），违纪律①色相条款属**登记在案的既有定版豁免**；后续若统一为 S2 灰系走设计变更单。
+- **项目卡聚合点轴（pc3-dot）**：非会话态词形——注意力优先级轴（A2 点语言三态：需行动红〔含 WAITING/ERROR 聚合〕/有进行中蓝/组态灰〔挂起归档与未立项各有灰空心变体〕）。聚合点不携带状态词面；同卡状态词面走 vrow 徽章（`.cc-badge`，本批已归位 S1 黄）。蓝档=「有进行中」的注意力中档指示，非 WORKING 态渲染。
 
 ## 五、本批（DEV-40）收敛落点与销项
 
@@ -64,10 +68,14 @@ relay `SessionStatus` ＋ 两处用户定版判活派生（#291 待命 / #160 �
 | 会话卡 waiting 灯光圈 | `base.css:3286/3290` 光圈环走 `--working` **黄**＋`--status-waiting-glow` 黄 rgba；srow 头像角灯 halo waiting=黄/working=**绿**（W-V8 批2a「运行中绿系」残留族）——与 :713 空心橙环、lamp-dot.blocked「与 .status-dot 完全同源」注释相悖 | 光圈环/halo 归位 `--st-blocked` 橙（waiting）与 `--st-working` 黄（working）；`--status-waiting-glow` 双主题橙化——1014 五色灯语言贯通灯全层 |
 | 手机「运行中」徽标 | `mobile.js` STATUS_TAG WORKING→`.tag.info` **蓝** | 同上改 st-* 族 |
 | 桥副本状态词表 | `bridge-core.js` STATUS_TAG（info/action/danger/done，死图）＋ `.cc-badge.is-live` 第二黄 #fbbf24 字面量 | 死图对齐 st-*；is-live 收编 `--st-working` token（静态兜底行保留） |
-| expo waiting 色 | `theme.ts` waiting=#FFD24D **=working 同值**（1019 注释系对当时现状的描述，本批按纪律①收敛；working 黄值本身不动） | waiting→#E5895B/#C05B33（=blocked 同源）；借 waiting 当警示琥珀的三处（md del/ImportPicker failT/NewSessionModal inputErr）改指 working 黄保持原观 |
+| expo waiting 色 | `theme.ts` waiting=#FFD24D **=working 同值**（1019 注释系对当时现状的描述，本批按纪律①收敛；working 黄值本身不动） | waiting→#E5895B/#C05B33（=blocked 同源）；借 waiting 当警示琥珀的八处位 15 声明（md del/ImportPicker failT/NewSessionModal×2/SetupScreen×3/RenameModal×2/detail-styles diffDel·KC img·ripple×4）改指 working 黄保持原观 |
 | expo「需要确认」字色 | dangerFg **红**（违纪律④） | 改 c.blocked 橙 |
 | P2-3 徽标三风格 | DEV-30 已修（member-state 归一） | 本表 §三 收录为全局配方，复核在位 |
 | P2-7 chip 混用 | DEV-30 查证·维持，留 leader 定案 | §四 成文定案=销项（分层有意，词汇表即依据） |
+| 项目长页 vrow 徽章（审查 B P1-1） | `.cc-badge.is-run`「运行中」绿实底（C5 时代值）；离线成员徽章借 is-warn 橙 | is-run 色相绿→黄归位 S1（实底角色保留，亮档补覆写）；离线→is-neutral 灰（S6）——bridge-core `teamRows` |
+| 设置域首屏占位会话卡（审查 A P2-1） | `settings-domain.js` 占位 tagClass working=`info` **蓝**（B2 接管前冷启动首帧可见） | chipClass 拆字段走 st-* 族；tagClass 只司 CTA 判定（与 B2 :1321 同映射） |
+| expo SetupScreen 连接指示末档（审查 A/B P2 交叉） | 连不上走 c.waiting（waiting 分相后=橙），同语义 ListScreen 本批已按 #357 归红 | 改 c.error（#357 用户定版：连不上=红） |
+| ⑂/agdot 呼吸光圈（审查 B P2） | `--status-working-glow` 双主题**绿**（W-V8 残留；本体 var(--working) 黄=同灯两相） | 双主题黄化 rgba(255,210,77,.5)/rgba(255,176,32,.3)——词表 §一「借 S1 黄呼吸」落地 |
 
 ## 六、守卫与后续
 
