@@ -728,6 +728,18 @@
     .team-drawer .roster-row .lamp-dot.working::after, .team-drawer .roster-row .lamp-dot.standby::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
     .status-dot.working::after, .team-drawer .roster-row .lamp-dot.working::after { box-shadow: 0 0 8px 3px color-mix(in srgb, var(--st-working) 85%, transparent); animation: st-glow-pulse 3s ease-in-out infinite; }
     .status-dot.working-standby::after, .team-drawer .roster-row .lamp-dot.standby::after { box-shadow: 0 0 4px 2px color-mix(in srgb, var(--st-closed) 55%, transparent); animation: st-standby-breathe 3.6s ease-in-out infinite; }
+    /* DEV-50 liveness 停摆形（W-DISPATCHFIX 验收③端上消费；词表 §七映射=S6 closed）：
+       WORKING/WAITING×dead——灰实点+零动画（呼吸=「进程活着」形编码，1014 词表形
+       定版——死不呼吸）+卡面轻置灰蒙层（S6 手段=「无运行事实」）。between-turns 不
+       立新形：WORKING 卡复用 .working-standby 灰呼吸（S2 standby 家族），零新色相 */
+    .status-dot.liveness-dead { background: var(--st-closed); animation: none; }
+    #d-session .srow-ava .status-dot.liveness-dead { --dot-halo: var(--faint); }
+    .queue-card.stalled { opacity: .62; }
+    .queue-card.stalled:hover { opacity: .85; }
+    /* DEV-50：停摆卡活信号压制（呈现层收口——markup 表达式有 test:fc 源码锚锁，不动
+       JS 面）：走秒行=活回合假态（srow-sec 每 s 跳=「在跑」反证）、⑂呼吸点=后台在跑
+       声明（进程死子任务无从活）。计数/徽标本体保留（事实记录），只灭「在动」的形 */
+    .queue-card.stalled .srow-sec, .queue-card.stalled .srow-live-dot { display: none; }
     @keyframes st-standby-breathe { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
     @keyframes st-glow-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
     @keyframes st-shake-once { 20% { transform: translateX(1px); } 45% { transform: translateX(-1px); } 70% { transform: translateX(.5px); } } /* animfast 瞬时类保留（error 入场一次微抖非 infinite） */
