@@ -97,6 +97,24 @@ boot 证据行（embedded-relay.log，每次重启可见）：
 - 遗留观察项：backup-pre-cutover.mjs 快照清单不含 cc-deck.sqlite3（本批手工
   .backup 补位）——建议下批把库文件纳入清单（记 DEV-39 回执「新发现」）。
 
+## 七、审查返修批（两路子代理审查后追加，同日）
+
+审查（正方+反方，回执 `artifacts/review-dev39-{a,b}.md`）抓出的问题与处置：
+
+| 级 | 问题 | 处置 |
+|---|---|---|
+| P1 | test-dev39 C4 平台断言钉真实平台名，CI linux runner 上恒假（首跑 CI 红=实锤） | 改探针哨兵串；返修后 CI test:dev39 success（run 46108257991） |
+| P1 | transition 直写在终态字段补写前落库=不完整快照（done_reason/duration_ms/last_error 恒空；BOOT_FROM=db 重启 adopt 整包替换抹掉回放本有值） | flushSessionRow 收口点末笔全量落库（六终态路径；生产已重部署 `8dc14866`） |
+| P2 | setExternalStatus 直赋旁路→外部会话状态迁移不落库 | changed 门内补写 |
+| P2 | boot 压缩不归档（最大一刀销毁审计段） | rewriteFileArchiving 流式二遍扫归档版重写 |
+| P2 | /health 无鉴权暴露 envFile 绝对路径+原始错误串 | basename+reason 截断 160（完整串在进程日志） |
+| P2 | lastDegradation 永久 latch（可恢复成因恒假报） | viaReadMode ensureStore 成功清账+恢复行 |
+| P2 | 归档失败静默停摆 | 单独 try+warn，压缩中止保审计零损失 |
+| P3 | 写放大（翻转+帧面双写）/烙印同机不变量收窄/归档重复追加重试边角/test 锚偏弱 | 记账不阻塞（审查回执在案） |
+
+返修后生产验证：四键终态保持（db/off/db+归档 on）、envFile 只出 basename、
+boot-from-db 切源正常（库 36 行收养 10）、test-dev39 45→54 断言全绿。
+
 ---
 *deck-fixer-3 · 2026-11-28 · 分支 `agent/deck-fixer-3/dev-39`；灰度操作全程快照先行、
 每步可回滚；本台账与 relay/src/storage/session-write.ts:41-47 的自规划注释互为对照。*
