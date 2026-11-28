@@ -144,41 +144,39 @@ export function compactEventsFile(
 }
 
 /** DEV-39 返修（审查 P2：boot 压缩是最大一刀，不能豁免归档）：boot 重写面的归档版——
- *  kept 是流式重放产物（prior 不驻留），归档段用第二遍流式扫原文件按 keptSeq 滤出
- *  （boot 压缩只在 compacted=true 时走，多一遍顺序读的可接受代价）。语义与
- *  compactEventsFile 归档段一致：同日 append 合流、seq 原样、只追加不读回；归档/
- *  重写失败=活文件原样保留（下轮 boot 或 6h tick 重试，审计零损失）。 */
+ *  kept 是流式重放产物（prior 不驻留），归档段用第二遍扫原文件按 keptSeq 滤出。
+ *  **全程同步**（deck-reviewer P2-1 返修）：原版二遍扫走 readline 异步回调、重写落在
+ *  close 事件里——boot 中段 adopt 广播的同步 appendLine（index.ts）与异步重写之间无
+ *  顺序保证，追加行可被截断（boot 压缩触发=priorCount≠keptCount 非大小闸，长跑后几乎
+ *  每次重启都成立）。同步化后单线程事件循环内本函数返回即重写完毕，任何后续 append
+ *  只能落在重写后的活文件上——窗口由构造消除（与 compactEventsFile 同形；boot 本有
+ *  秒级同步工作先例）。归档失败=warn+重写中止（活文件原样，审计零损失，下轮重试）。 */
 export function rewriteFileArchiving(path: string, kept: Envelope[], archiveDir: string): void {
-  const keptSeq = new Set(kept.map((e) => e.seq));
-  mkdirSync(archiveDir, { recursive: true });
-  const archFile = join(archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
-  const rl = readline.createInterface({ input: createReadStream(path, { encoding: "utf-8" }), crlfDelay: Infinity });
-  let buf: string[] = [];
-  const flush = (): void => {
-    if (buf.length) {
-      appendFileSync(archFile, buf.join("\n") + "\n", "utf-8");
-      buf = [];
+  try {
+    const keptSeq = new Set(kept.map((e) => e.seq));
+    const dropped: string[] = [];
+    for (const line of readFileSync(path, "utf-8").split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const env = JSON.parse(t) as Envelope;
+        if (typeof env.seq === "number" && !keptSeq.has(env.seq)) dropped.push(t);
+      } catch { /* 损坏行跳过（loadEvents 同口径——不进归档不复活） */ }
     }
-  };
-  rl.on("line", (line: string) => {
-    const t = line.trim();
-    if (!t) return;
-    try {
-      const env = JSON.parse(t) as Envelope;
-      if (typeof env.seq === "number" && !keptSeq.has(env.seq)) {
-        buf.push(t);
-        if (buf.length >= 1000) flush();
+    if (dropped.length) {
+      mkdirSync(archiveDir, { recursive: true });
+      const archFile = join(archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+      try {
+        appendFileSync(archFile, dropped.join("\n") + "\n", "utf-8");
+      } catch (archErr) {
+        console.warn(`[events] ⚠️  boot 审计归档失败，本轮重写中止（活文件原样，下轮重试）——${archErr instanceof Error ? archErr.message : String(archErr)}`);
+        return;
       }
-    } catch { /* 损坏行跳过（loadEvents 同口径——不进归档不复活） */ }
-  });
-  rl.on("close", () => {
-    try {
-      flush();
-      rewriteFile(path, kept);
-    } catch (err) {
-      console.warn(`[events] ⚠️  boot 归档/重写失败（活文件原样保留，下轮重试）——${err instanceof Error ? err.message : String(err)}`);
     }
-  });
+    rewriteFile(path, kept);
+  } catch (err) {
+    console.warn(`[events] ⚠️  boot 归档/重写失败（活文件原样保留，下轮重试）——${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 export function appendLine(path: string, env: Envelope): void {

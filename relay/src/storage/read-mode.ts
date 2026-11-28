@@ -1011,8 +1011,12 @@ export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
     // ——lastDegradation 此前 latch 后永不消，恢复后 /health 恒假报 json 档、patrol
     // storage-degraded 告警永不闭。ensureStore 成功=恢复实证，清账+恢复行（驱动加载
     // 失败类是进程级恒久，不会走到这里——driverCache 成败皆缓存，天然只清可恢复类）。
+    // deck-reviewer P2-2 返修：告警闩同步清——只清台账不清闩时，「降级→恢复→再降级」
+    // 的第二次降级被 warnSqliteDegradedOnce 早退吞掉（横幅/台账/patrol 全静默），
+    // 恰撞清单4「复发必须当场可见」口径。恢复=一个降级周期结束，闩随台账一起复位。
     if (lastDegradation !== null) {
       lastDegradation = null;
+      degradationNotified = false;
       console.log("[read-mode] sqlite 已恢复（降级台账清账——ensureStore 成功，/health 与 patrol 面回正常）");
     }
   } catch (err) {

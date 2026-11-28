@@ -250,8 +250,10 @@ async function main(): Promise<void> {
 
   console.log("G. 返修面：boot 归档重写/降级清账/暴露面收敛");
   {
-    // G1 rewriteFileArchiving 行为：丢弃段入档、活文件=kept、seq 守恒
-    const { rewriteFileArchiving, loadEvents } = await import("../src/history.js");
+    // G1 rewriteFileArchiving 行为（deck-reviewer P2-1 返修后=全程同步）：函数返回即
+    // 重写完毕——下方所有断言零轮询零等待（这就是同步锚本体：异步窗口由构造消除，
+    // boot 中段的同步 appendLine 只能落在重写后的活文件上）；账目对平+追加不丢。
+    const { rewriteFileArchiving, loadEvents, appendLine } = await import("../src/history.js");
     const root = mkdtempSync(join(tmpdir(), "dev39-bootarch-"));
     try {
       const lines: string[] = [];
@@ -265,24 +267,18 @@ async function main(): Promise<void> {
       const before = loadEvents(live);
       // kept=后 30 会话（活跃序）——模拟 bootReplayFile 的 kept 形态
       const kept = before.filter((e) => Number(e.session_id.slice(2)) >= 10);
-      await new Promise<void>((resolve) => {
-        rewriteFileArchiving(live, kept, join(root, "events-archive"));
-        // close 回调异步落重写——轮询活文件变短即成
-        const t0 = Date.now();
-        const poll = (): void => {
-          try {
-            if (statSync(live).size < lines.join("\n").length || Date.now() - t0 > 5000) resolve();
-            else setTimeout(poll, 50);
-          } catch { resolve(); }
-        };
-        setTimeout(poll, 50);
-      });
-      const after = loadEvents(live);
+      rewriteFileArchiving(live, kept, join(root, "events-archive"));
+      const after = loadEvents(live); // 零等待直读——同步完成的账目对平锚
       const { readdirSync } = await import("node:fs");
       const arch = readdirSync(join(root, "events-archive")).flatMap((f) => loadEvents(join(root, "events-archive", f)));
-      assert(after.length === kept.length, `G1 活文件=kept（${after.length}=${kept.length}）`);
+      assert(after.length === kept.length, `G1 活文件=kept（${after.length}=${kept.length}，返回即重写完毕）`);
       assert(arch.length === before.length - kept.length, `G1 丢弃段整段入档（${arch.length}=${before.length - kept.length}）`);
       assert(arch.every((e) => !kept.some((k) => k.seq === e.seq)), "G1 归档段与 kept 无交集");
+      assert(after.length + arch.length === before.length, `G1 账目对平（${after.length}+${arch.length}=${before.length}）`);
+      // boot 窗口追加不丢锚：重写后同 tick 追加（adopt 广播的同步 appendLine 形态），
+      // 行必须在活文件——异步版此处活文件还是旧内容/追加行会被迟到重写截掉。
+      appendLine(live, { seq: 999999, session_id: "b-10", ts: Date.now(), type: "SESSION_LOG", payload: { text: "post-rewrite" } });
+      assert(loadEvents(live).some((e) => e.seq === 999999), "G1 重写后追加行不丢（boot 窗口账目对平）");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -296,6 +292,50 @@ async function main(): Promise<void> {
     // G4 boot 归档接线（源锚）
     const idx = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
     assert(idx.includes("rewriteFileArchiving(persistPath, kept, eventsArchiveDir)"), "G4 boot 压缩走归档版重写");
+    // G5 同步构造源锚：函数体内无 readline/事件回调（异步窗口复发面）
+    const hist = readFileSync(new URL("../src/history.ts", import.meta.url), "utf8");
+    const rfaStart = hist.indexOf("export function rewriteFileArchiving");
+    const rfaEnd = hist.indexOf("export function appendLine", rfaStart);
+    const rfaBody = hist.slice(rfaStart, rfaEnd);
+    assert(!rfaBody.includes("readline") && !rfaBody.includes(".on("), "G5 rewriteFileArchiving 全同步（无事件回调——窗口由构造消除）");
+    assert(rfaBody.includes("readFileSync"), "G5 二遍扫=同步读（与 compactEventsFile 同形）");
+  }
+
+  console.log("H. 降级→恢复→再降级 复发可见（deck-reviewer P2-2 负向锚——清单4口径）");
+  {
+    const { viaReadMode, resetReadModeForTest } = await import("../src/storage/read-mode.js");
+    const { resetSqliteDriverForTest } = await import("../src/storage/sqlite.js");
+    const { storageStatus } = await import("../src/storage/status.js");
+    const root = mkdtempSync(join(tmpdir(), "dev39-relapse-"));
+    try {
+      resetReadModeForTest();
+      const io = {
+        json: () => [] as unknown[],
+        sqlite: () => [] as unknown[],
+        dirs: { dataDir: join(root, "data"), orgDir: join(root, "org"), tasksDir: join(root, "tasks") },
+      };
+      const CODE = "ERR_DLOPEN_FAILED";
+      const fail = (msg: string): void => resetSqliteDriverForTest({ ok: false, ctor: null, error: msg, code: CODE });
+      // 第一次降级：台账入账（11-24 主场景——首降可见既有面）
+      fail("第一次降级（测试注入）");
+      viaReadMode("task", io);
+      assert(storageStatus().degraded !== null, "H1 第一次降级可见（台账入账）");
+      // 恢复：驱动 ok + ensureStore 成功（沙盒建库）→ 台账清账
+      resetSqliteDriverForTest();
+      viaReadMode("task", io);
+      assert(storageStatus().degraded === null, "H1 恢复清账（台账 null，/health 回健康）");
+      // 再降级：闩已随恢复复位——第二次必须重新入账（回归锚：闩不清时此处恒 null，
+      // /health 报健康+patrol 空文案=复发盲区，正是清单4要堵的形态）
+      fail("第二次降级（测试注入——复发）");
+      viaReadMode("task", io);
+      const d2 = storageStatus().degraded;
+      assert(d2 !== null && d2?.reason.includes("第二次"), "H1 复发当场可见（第二次降级重新入账）");
+      assert(d2?.code === CODE, "H1 复发事实带错误码（patrol 文案消费面）");
+    } finally {
+      resetSqliteDriverForTest();
+      resetReadModeForTest();
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 
   console.log(`\n${fail === 0 ? "✅" : "❌"} DEV-39 批测：${pass} 过 / ${fail} 败`);
