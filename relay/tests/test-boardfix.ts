@@ -5,6 +5,11 @@
 //   （8 卡实锤全被「updated_at>doneAt 不碾」误挡——收口后刷文本不改态的 upd 不该挡）
 //   刀3 周期自愈：converge 从 boot-only 挂 patrol runFull（30min 周期+boot 保留）
 // 沙盒：CCR_ORG_DIR 隔离（org-defects 批范式）+fake agent（test-org-defects 同款）。
+// W-CARDLIFE-R2/R3 回执闸适配（commit 5ff5d2da）：刀1 R1/R2 两单收口断言「卡翻
+// submitted 审查中」——资格位核对按派单 prompt 约定回执路径（~/.cc-deck/artifacts/
+// w-boardfix.md）读文件尾行军规行，缺文件=板不动（卡留 claimed）。故 ART 沙盒+
+// 派单前预置回执（test-boardlife 同款范式）；刀2 的 72h 台账强翻走 ledger 不经
+// 回执闸（无需回执）。
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -62,10 +67,14 @@ const makeFakeFactory = () =>
 async function main() {
   const ORG = mkdtempSync(join(tmpdir(), "ccr-org-boardfix-"));
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-boardfix-"));
+  // W-CARDLIFE-R2/R3 回执闸适配（test-boardlife 同款沙盒）：ART 隔离（缺省回落生产
+  // artifacts——资格位读回执会读穿生产）+派单前预置约定回执文件
+  const ART = mkdtempSync(join(tmpdir(), "ccr-art-boardfix-"));
   const prev = { ...process.env };
   process.env.CCR_STORAGE_READ_MODE = "json";
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_DATA_DIR = DATA;
+  process.env.CCR_ARTIFACTS_DIR = ART;
   process.env.CCR_NO_TITLE_GEN = "1";
   process.env.CCR_PM_DUTY = "0";
   delete process.env.CCR_CWD;
@@ -90,7 +99,14 @@ async function main() {
     // ============ 刀1：重派接卡 ============
     console.log("刀1 重派接卡（题名匹配 backlog 陈卡→同卡接续）:");
     const title1 = "boardfix 续单验证单（R1 首单）";
-    const d1 = mgr.orgAction("dispatch", { anchor, prompt: "R1 首单干完", gid, title: title1 }) as { ok: boolean; dispatch_id?: string; session_id?: string };
+    // W-CARDLIFE-R2 件③随批：交付资格位——收口翻 submitted 需回执尾行合规（「结果：…
+    // ｜改动文件：…」军规行）。slug 可预测→派单前预写约定回执（w-boardfix.md，
+    // R1/R2 两单同 slug 同回执——收口时均在场面合规）
+    try {
+      const art = process.env.CCR_ARTIFACTS_DIR;
+      if (art) writeFileSync(join(art, "w-boardfix.md"), "# W-BOARDFIX 回执（夹具预置）\n\n结果：续单链交付｜改动文件：无（测试回执）\n");
+    } catch { /* 预置失败由收口断言显形 */ }
+    const d1 = mgr.orgAction("dispatch", { anchor, prompt: "R1 首单干完（回执：~/.cc-deck/artifacts/w-boardfix.md）", gid, title: title1 }) as { ok: boolean; dispatch_id?: string; session_id?: string };
     assert(d1.ok === true, "R1 派发");
     await waitFor(() => readDispatchLog().some((e) => e.id === d1.dispatch_id && e.status === "done"));
     await waitFor(() => !((mgr as unknown as { openDispatches: Map<string, unknown[]> }).openDispatches.get((d1 as { session_id: string }).session_id)?.length));
@@ -101,8 +117,8 @@ async function main() {
     upsertBoardEntry(gid, { id: cardAfterDone!.id, text: cardAfterDone!.text, status: "backlog" });
     const staleCount = loadBoard(gid).entries.filter((e) => e.text === title1).length;
     assert(staleCount === 1, "陈卡回 backlog（形态 A 场景就位）");
-    // 重派同题（无 entry_id——leader-dispatch bash 形态）
-    const d2 = mgr.orgAction("dispatch", { anchor, prompt: "R2 续单再干", gid, title: title1 }) as { ok: boolean; dispatch_id?: string };
+    // 重派同题（无 entry_id——leader-dispatch bash 形态；回执同 slug——收口资格位核对在场）
+    const d2 = mgr.orgAction("dispatch", { anchor, prompt: "R2 续单再干（回执：~/.cc-deck/artifacts/w-boardfix.md）", gid, title: title1 }) as { ok: boolean; dispatch_id?: string };
     assert(d2.ok === true, "R2 重派派发");
     const d2Done = await waitFor(() => readDispatchLog().some((e) => e.id === d2.dispatch_id && e.status === "done"));
     assert(d2Done, "R2 收口落账（veteran 续单回合完成——超时即夹具回归）");

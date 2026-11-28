@@ -20,13 +20,15 @@ const dataDir = join(root, "data");
 const rolloutRoot = join(root, "codex-sessions");
 const projectsRoot = join(root, "claude-projects");
 const claudeRoot = join(root, "claude");
-const workDir = join(root, "work");
-const errorDir = join(root, "error-work");
+// #275S/[W-RETIRED 补充②]：session_meta cwd 经 isSandboxCwd 单点闸——mkdtemp(tmpdir)
+// 子路径命中 TMPDIR 前缀 + /T/ccr- 形态指纹被 sandbox-cwd 拒收不建卡。cwd 仅作
+// 字符串消费（session_meta 内容 + 注入进程表的匹配串，无任何 fs 依赖），用 /fx 假
+// 路径；fixture 根（rollout/转录落盘）仍在 mkdtemp 内不受闸影响（闸只看 cwd 字段）
+const workDir = "/fx/codex-work";
+const errorDir = "/fx/codex-error";
 mkdirSync(join(rolloutRoot, "2026", "10", "08"), { recursive: true });
 mkdirSync(projectsRoot, { recursive: true });
 mkdirSync(claudeRoot, { recursive: true });
-mkdirSync(workDir, { recursive: true });
-mkdirSync(errorDir, { recursive: true });
 
 process.env.CCR_DATA_DIR = dataDir;
 process.env.CCR_PROJECTS_ROOT = projectsRoot;
@@ -119,13 +121,13 @@ writeFileSync(claudeTranscript, "");
 await bridge.handleEvent({
   event: "UserPromptSubmit",
   session_id: claudeSessionId,
-  cwd: claudeRoot,
+  cwd: "/fx/claude-wd", // #275S：cwd 非沙盒形态才建档（claudeRoot 落 TMPDIR 会被早退）——转录仍指真实 fixture 文件
   prompt: "Claude 外部链路回归",
   transcript_path: claudeTranscript,
   cli_pid: process.pid,
 });
 const claudeState = mgr.snapshot().find((item) => item.relay_session_id === claudeSessionId);
-assert(claudeState?.external === true && claudeState.engine === undefined, "Claude 外部 hook 收编链保持不变");
+assert(claudeState?.external === true && claudeState.engine === "claude", "Claude 外部 hook 收编链保持不变（#286① 引擎空值归一：缺席即 claude，未误标他引擎）");
 
 bridge.close();
 assert(readFileSync(rolloutPath, "utf8").includes("turn.completed"), "测试只读验证 rollout 写入未触碰生产目录");

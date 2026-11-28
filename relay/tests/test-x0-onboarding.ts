@@ -10,8 +10,9 @@
 //        agent-teams-settings.json，绝不碰用户家）。
 //   件5 log-append：台账 manual done 行 + cwd 组锚归属（project-detail receipts
 //        即团队域活动 tab 数据源——归属行可见、无归属行不误挂）。
-//   件6 PM claim+自动迁移：leader 模式拒收 + no-leader claim 接管（dutyTargetId
-//        override 消费）+ 死 pid 自动清档回落（自动转活 PM）+ 全空置空。
+//   件6 PM claim 确认卡（[W-PMSEAT]）：leader 模式拒收 + no-leader claim 出
+//        pm-appoint 确认卡、用户 ✓ 后 override 落位 + 死 pid 自动清档（席位空
+//        不回落现算——候选提名走确认卡）+ 全空置空。
 //   件7 dispatch.md 预检节 R3 三问（静态锚）。
 // 隔离口径：CCR_ORG_DIR/CCR_STORAGE_READ_MODE=json/CCR_NO_TITLE_GEN 三钉
 //（test-dispatch 同缝）；全程不触生产 ~/.cc-deck 与用户家。
@@ -306,7 +307,7 @@ async function main() {
     }
 
     // ---------- 件6 PM claim + 自动迁移 ----------
-    section("\nX0-件6 PM claim + 自动迁移：");
+    section("\nX0-件6 PM claim 确认卡 + 死席清档（[W-PMSEAT] 席位空不回落现算）：");
     // p2-batch2：件6 场景级开 duty（本套件头部为防 duty 喂活介入回合收口全局关了
     // CCR_PM_DUTY——pmDutyStatus 现实现 envOn gate 会让值守面恒 null；本段测值守
     // 本体，段内显式开、段尾还原）
@@ -320,18 +321,30 @@ async function main() {
       const pmSid = "x0-pm-live";
       mgr.ensureExternal(pmSid, anchor, "值守 PM 会话");
       mgr.setExternalCliPid(pmSid, process.pid); // 本测试进程 pid=活
-      const c1 = mgr.orgAction("pm-claim", { cwd: anchor }) as { ok: boolean; data?: { pm_session_id: string }; error?: string };
-      assert(c1.ok === true && c1.data?.pm_session_id === pmSid, "no-leader 模式 claim → 值守位接管（活会话）");
+      // [W-PMSEAT] 入场边自动提名（ensureExternal/setExternalCliPid 挂点）：切 no-leader
+      // 且席位空时，最近活跃外部会话先收 pm-appoint 卡（一次一张纪律）——用户 ✗ 弃之
+      //（不认领），目标会话 claim 才可达（他人卡在决时 claim 拒收防双卡竞争）。
+      for (const ac of listPendingConfirms().filter((c) => c.kind === "pm-appoint" && c.status === "pending")) {
+        mgr.orgAction("confirm-decide", { confirm_id: ac.id, approve: false, by: "u" });
+      }
+      // [W-PMSEAT] claim 不再直写 override 先斩后奏——改出 pm-appoint 确认卡（未决期间
+      // 零值守喂活），用户 ✓（confirm-decide approve）后 applyConfirmEffects 才落
+      // org/duty.json override。
+      const c1 = mgr.orgAction("pm-claim", { cwd: anchor }) as { ok: boolean; data?: { needsConfirm: boolean; confirm?: { id: string }; pm_session_id: string }; error?: string };
+      assert(c1.ok === true && c1.data?.needsConfirm === true && !!c1.data?.confirm?.id, "no-leader 模式 claim → 出 pm-appoint 确认卡（[W-PMSEAT] 不先斩后奏）");
+      const dec = mgr.orgAction("confirm-decide", { confirm_id: c1.data?.confirm?.id ?? "", approve: true, by: "u" }) as { ok: boolean; error?: string };
+      assert(dec.ok === true, "用户 ✓ 任命卡（confirm-decide approve）→ override 落位");
       assert(mgr.pmDutyStatus().session_id === pmSid && mgr.pmDutyStatus().alive === true, "pmDutyStatus 体现接管（override 消费，SNAPSHOT pm_duty 同源）");
       assert(readPmOverride()?.session_id === pmSid, "duty.json override 在档");
-      // 死 pid（真拉子进程等退出）→ 自动清档 + 回落现算（自动转活 PM）
+      // 死 pid（真拉子进程等退出）→ 自动清档；[W-PMSEAT] 串台根治：清档后席位**空**
+      //（不再回落最近活跃现算——无用户任命确认的外部会话不承接喂活；候选提名走确认卡）
       const child = spawn("true");
       const deadPid = child.pid ?? 0;
       await new Promise<void>((res) => { if (child.exitCode !== null) res(); else child.on("exit", () => res()); });
       setPmOverride({ session_id: "x0-pm-dead", cli_pid: deadPid, cwd: anchor, claimed_at: Date.now() });
       const st2 = mgr.pmDutyStatus();
       assert(readPmOverride() === null, "死 pid override 自动清档（duty.json 删）");
-      assert(st2.session_id === pmSid && st2.alive === true, "自动迁移：回落现算 → 活 PM 承接（最近活跃+pid 探活）");
+      assert(st2.session_id === "" && st2.alive === false, "死 pid 清档 → 席位空（[W-PMSEAT] 不回落现算——候选提名走确认卡）");
       // 置空：无任何活 pid 会话 → 空值守位
       setPmOverride({ session_id: "x0-pm-dead2", cli_pid: deadPid, cwd: anchor, claimed_at: Date.now() });
       const bus2 = new EventBus({ persistPath: join(DATA, "events2.ndjson") });

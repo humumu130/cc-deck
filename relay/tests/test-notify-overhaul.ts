@@ -1,8 +1,9 @@
 // notify-overhaul（1101 用户令·三路审查合并单）断言：
 //   B1 动效 token：--dur-*/--ease-*/--dist-* 入 :root + prefers-reduced-motion 降级段
 //   A 组静态锚：计数单源（reconcile 分支不再跳 syncCounts——内容 bug 真根因）/时间
-//     单轨（notifyRelTime 三档+window 共享）/kind badge 六类/行栅格 L1L2L3/去卡片化
-//     行流（透明底+1px 分隔+左缘色条）/组头 sticky+组级清空/头 48 底 40/× hover 显
+//     单轨（notifyRelTime 三档+window 共享）/kind badge 中性单规则（W-NOTIFYPOLISH ④
+//     六色退役，DOM 类保留）/行栅格两列/去卡片化行流（透明底+1px 分隔）/组级清空/
+//     头 48 底 40（展开面板 toggle）/× hover 显
 //   B 组静态锚：遮罩纯色 dim+点外收起+ESC+Tab 锁/出入场 np-enter/np-exit 共享退场/
 //     stagger（>6 顶）/塌缩/pop/铃铛摆动/脉冲唯一位
 //   三端：mobile rowOf kind badge+时间单轨同源
@@ -38,7 +39,12 @@ async function main() {
   // ---------- A1 计数单源（内容 bug 真根因） ----------
   section("\nA1 计数单源：");
   {
-    assert(js.includes("syncCounts(actionRows.length);\n                      return;"), "reconcile 快路径 return 前调 syncCounts（旧版跳过=头部恒 0 与组头打脸的真根因）");
+    // DENSN 收口：reconcile 快路径不再裸 return——两分支共用尾部（seen 维护+syncCounts），
+    // 锚定「__ccDeck005Reconcile 块内、其 return 前」必调 syncCounts（语义等价旧快路径收口）。
+    const rki = js.indexOf("window.__ccDeck005Reconcile");
+    const ret = js.indexOf("return;", rki);
+    const sync = js.indexOf("syncCounts(actionRows.length);", rki);
+    assert(rki >= 0 && sync > rki && sync < ret, "reconcile 快路径 return 前调 syncCounts（旧版跳过=头部恒 0 与组头打脸的真根因；DENSN 两分支共用尾部）");
     const wi = js.indexOf("const waiting = bridge.waitingText()");
     const zc = js.indexOf("syncCounts(0)", wi);
     assert(wi >= 0 && zc > wi && zc < wi + 400, "waiting/降级分支计数归 0（头部与组头不打脸）");
@@ -62,16 +68,20 @@ async function main() {
   }
 
   // ---------- A3/A6 kind badge+行栅格 ----------
-  section("\nA3/A6 kind badge 六色+行栅格：");
+  // W-NOTIFYPOLISH ④A2+B4：六色徽章体系退役——kind 是低价值维度，色相预算收敛到
+  // 红组点/琥珀 chip/橙链三件；DOM 类 nbadge-<kind> 保留（JS 仍拼），CSS 归中性单规则。
+  section("\nA3/A6 kind badge 中性化+行栅格：");
   {
-    for (const k of ["waiting", "confirm", "dispatch", "acceptance", "system", "alarm"]) assert(css.includes(`.nbadge-${k} {`), `badge 类 nbadge-${k}`);
+    const nbadgeBlock = css.slice(css.indexOf(".nbadge {"), css.indexOf("}", css.indexOf(".nbadge {")));
+    assert(nbadgeBlock.includes(".nbadge"), "badge 中性单规则 .nbadge 在位（六色体系退役 W-NOTIFYPOLISH ④A2+B4）");
+    for (const k of ["waiting", "confirm", "dispatch", "acceptance", "system", "alarm"]) assert(!css.includes(`.nbadge-${k} {`), `badge 六色规则退役 nbadge-${k}`);
     assert(css.includes("height: 18px") && css.includes("border-radius: 4px"), "badge 规格（高 18/radius 4/11px 500）");
-    assert(css.includes("rgba(245, 158, 11, .14)") && css.includes("rgba(167, 139, 250, .14)"), "badge bg=14% alpha（待办橙/确认紫）");
-    assert(css.includes("html[data-theme=\"light\"] .nbadge-waiting"), "浅色 badge 亮色适配");
-    assert(js.includes("nbadge nbadge-") && js.includes("+ km.badge +"), "行渲染带 kind badge（模板拼接）");
+    assert(nbadgeBlock.includes("color: var(--dim)") && nbadgeBlock.includes("background: color-mix(in srgb, var(--text-strong) 6%, transparent)"), "badge 中性 dim+6% 底（14% alpha per-kind 着色随六色退役；dim 底降级声明对兼容）");
+    assert(!css.includes("rgba(245, 158, 11, .14)") && !css.includes("rgba(167, 139, 250, .14)") && !css.includes("html[data-theme=\"light\"] .nbadge-waiting"), "badge per-kind 着色/浅色适配随六色退役");
+    assert(js.includes("nbadge nbadge-") && js.includes("+ km.badge +"), "行渲染带 kind badge（模板拼接，DOM 类保留）");
     assert(css.includes("-webkit-line-clamp: 2"), "标题 clamp2");
     assert(js.includes('title="' + escapeAttr() + '"') || js.includes("<b title="), "标题 tooltip 全文");
-    assert(css.includes("grid-template-columns: 16px 1fr auto") && css.includes("gap: 10px"), "行栅格 16+gap10+尾列");
+    assert(css.includes("grid-template-columns: 1fr auto") && css.includes("gap: 10px"), "行栅格两列 1fr+尾列 gap10（W-NOTIFYPOLISH ④ ic 列退役，16px 腾给标题）");
     assert(js.includes('↗</button>') === false, "»/↗ 引导符退役");
   }
 
@@ -89,12 +99,18 @@ async function main() {
   // ---------- A7/A8 组头+头底栏 ----------
   section("\nA7/A8 组头 sticky+头底栏：");
   {
-    assert(css.includes("position: sticky") && css.includes("backdrop-filter: blur(8px)"), "组头 sticky+blur 8");
-    assert(css.includes("letter-spacing: .05em") && css.includes("font-size: 11px"), "组头 11px/600/.05em");
+    // P1-1 重落：组头 sticky 撤；W-NOTIFYPOLISH ⑤C3：backdrop-filter 退役（非 sticky
+    // 组头的 blur=视觉死代码+WKWebView 冻结先例族），实底 color-mix 分层承担组头底。
+    const ngrpBlock = css.slice(css.indexOf(".ngrp {"), css.indexOf("}", css.indexOf(".ngrp {")));
+    assert(ngrpBlock.includes(".ngrp") && !ngrpBlock.includes("position: sticky") && !ngrpBlock.includes("backdrop-filter:"), "组头 sticky+blur 双退役（P1-1 sticky 撤/⑤C3 blur 死代码）");
+    assert(ngrpBlock.includes("background: color-mix(in srgb, var(--surface1) 86%, transparent)"), "组头实底 color-mix 分层（blur 退役后承担组头底）");
+    assert(css.includes("font-weight: 600") && css.includes("letter-spacing: 0") && !css.includes("letter-spacing: .05em"), "组头 600/字距 0（W-NOTIFYPOLISH ⑦A8：CJK .05em→0，2px 错位根修）");
     assert(js.includes('data-notify-grp-clear'), "组级清空（hover 出现）");
     assert(html.includes('class="clr" type="button" data-notify-clear-soft') === false, "头部全局清空退役");
     assert(html.includes('class="np-head"') && css.includes("height: 48px"), "头部定高 48");
-    assert(html.includes('class="np-foot"') && html.includes("查看全部通知") && css.includes("height: 40px"), "底栏 40 查看全部");
+    // W-NOTIFYPOLISH ①B5 标签诚实化：旧「查看全部通知」名实不符（只是高度切换）→展开/收起面板
+    assert(html.includes('class="np-foot"') && html.includes("data-notify-expand") && html.includes("展开面板") && css.includes("height: 40px"), "底栏 40 展开面板 toggle（①B5 标签诚实化）");
+    assert(html.includes("查看全部通知") === false, "「查看全部通知」名实不符标签退役");
     assert(css.includes("mask-image: linear-gradient(180deg, transparent 0, #000 24px"), "滚动上下渐隐 mask 24px");
     assert(css.includes("::-webkit-scrollbar { width: 8px"), "主题滚动条宽 8");
   }
@@ -102,7 +118,7 @@ async function main() {
   // ---------- B2/B3 遮罩+出入场+ESC ----------
   section("\nB2/B3 遮罩点外收起+出入场+ESC：");
   {
-    assert(css.includes("rgba(0, 0, 0, .32)") && !css.includes("blur(6px) saturate"), "遮罩纯色 dim .32（1101 晚用户实锤 .48 太暗）、无全窗 blur（组头小面积 blur(8px) 保留）");
+    assert(css.includes("rgba(0, 0, 0, .32)") && !css.includes("blur(6px) saturate"), "遮罩纯色 dim .32（1101 晚用户实锤 .48 太暗）、无全窗 blur（P0 先例族，组头 blur 亦退役）");
     assert(js.includes("closePanel") && js.includes("keepVisual"), "三关闭路径共享退场（closePanel 单点）");
     assert(css.includes("@keyframes np-enter") && css.includes("@keyframes np-exit"), "出入场 keyframes（200ms out/130ms in）");
     assert(css.includes("transform-origin: 24px") && css.includes("calc(100% - 16px)"), "transform-origin 铃铛方向（左上）");
@@ -120,7 +136,7 @@ async function main() {
     assert(js.includes("playStagger") && js.includes("Math.min(i, 12)"), "stagger 编排（面板开后播放）");
     assert(css.includes("nrow-collapse 160ms"), "单卡塌缩 160ms ease-in");
     assert(css.includes("bell-swing 420ms") && js.includes("bell-swing"), "铃铛摆动 420ms 一次性");
-    assert(css.includes("ndot-pulse 2.4s") && !css.includes("#d-notify.on .ngrp .ndot.r.np-pulse { animation: none"), "组级红点脉冲唯一位（停用条款自反退役——P0 热修重落）");
+    assert(css.includes("ndot-pulse 3s") && !css.includes("#d-notify.on .ngrp .ndot.r.np-pulse { animation: none"), "组级红点脉冲唯一位（W-ANIMFAST 3s ::after 雷达位；停用条款自反退役——P0 热修重落）");
   }
 
   // ---------- 三端 ----------

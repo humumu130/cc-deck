@@ -34,6 +34,7 @@ import type { Command, Envelope, SnapshotPayload } from "../src/types.js";
 
 const root = mkdtempSync(join(tmpdir(), "cc-deck-b0-parity-"));
 const oldDataDir = process.env.CCR_DATA_DIR;
+const oldReadMode = process.env.CCR_STORAGE_READ_MODE;
 const oldCloudUrl = process.env.CCR_CLOUD_URL;
 const oldCloudToken = process.env.CCR_CLOUD_TOKEN;
 const oldPort = process.env.CCR_PORT;
@@ -155,6 +156,11 @@ try {
   process.env.CCR_CLOUD_URL = `ws://127.0.0.1:${BRIDGE_PORT}/cloud`;
   process.env.CCR_CLOUD_TOKEN = "m13-token";
   process.env.CCR_PORT = String(RELAY_PORT);
+  // DEV-41：wire 协议测试钉 json 档——本机灰度 env（~/.cc-deck/relay-env.json 开
+  // CCR_BOOT_FROM=db）会让 ensureStore 起后台影子导入（bootfast3），事件循环被
+  // 分块同步导入占住→phone hello 快照饿死超时/三出口 seq 漂移（CI 无该文件不受
+  // 影响，本机必须钉死才确定）。
+  process.env.CCR_STORAGE_READ_MODE = "json";
   delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 
   const bridge = startCloudServer(BRIDGE_PORT, "m13-token");
@@ -281,7 +287,10 @@ try {
   const wanK = keySet(wanP);
   const diff = (a: string[], b: string[]) => a.filter((k) => !b.includes(k)).concat(b.filter((k) => !a.includes(k)));
   assert(lanK.length === phoneK.length && lanK.every((k, i) => k === phoneK[i]), `LAN↔phone 字段集逐键全等（#117 锁）diff=[${diff(lanK, phoneK).join(",")}]`);
-  assert(wanK.every((k) => CORE.includes(k) || k === "logs_truncated"), `WAN ⊆ 核心+截断标记（手表 deliberate 极简集）实际=[${wanK.join(",")}]`);
+  // W-SRC2 #134 批②③：WAN 快照与 phone 密封面同键携带身份/相位四键（relay_source
+  // 经 sessions、relay_name/lan_hint/boot/review_seat 平键）——极简集口径随批放宽
+  const WAN_OK = [...CORE, "logs_truncated", "boot", "review_seat", "lan_hint", "relay_name"];
+  assert(wanK.every((k) => WAN_OK.includes(k)), `WAN ⊆ 核心+截断标记+身份/相位四键（手表极简集）实际=[${wanK.join(",")}]`);
 
   // ④ 值 parity：同 mgr 状态 → sessions/logs/models 三出口深等（快照间零事件，seq 也应同源）
   const lanSeq = lan1.frames.find((f) => f.type === "SNAPSHOT")!.seq;
@@ -305,8 +314,11 @@ try {
   const cl0 = (lanCat as { id: string; state: string; capabilities: { resume: boolean; approval: boolean } }[] | undefined)?.find((e) => e.id === "claude");
   assert(cl0?.state === "ready" && cl0.capabilities.resume === true && cl0.capabilities.approval === true, "#75 claude 条目真快照投影 ready+resume/approval 真（非空壳）");
 
-  // ⑤ 实体引用裁定断言：板不随快照；汇总引用不带全量正文；转录走预算装配
-  assert(!("boards" in lanP) && !("boards" in phoneP) && !("boards" in wanP), "三出口零 boards 键（板不随快照，按需 COMMAND_PROJECT_DETAIL）");
+  // ⑤ 实体引用裁定断言：板随快照走持久信道（夜审 B2-F1：BOARD_UPDATED 瞬态不进
+  // 缓冲，断连窗板变更全丢的根治——LAN/phone 双出口全量携带，WAN 极简集不带）；
+  // 汇总引用不带全量正文；转录走预算装配
+  assert(Array.isArray((lanP as unknown as Record<string, unknown>).boards) && Array.isArray((phoneP as unknown as Record<string, unknown>).boards), "boards 随 LAN/phone 快照（B2-F1 板持久信道——断连重连即追平）");
+  assert(!("boards" in wanP), "WAN 极简集零 boards 键（手表按需拉取）");
   const accRow = lanP.acceptances![0]!;
   assert(Object.keys(accRow).every((k) => ["created_at", "done", "id", "judged", "key", "submitted", "title", "total"].includes(k)), "acceptances 是汇总引用（无 rows 全量正文）");
   assert(!("logs" in (lanP.sessions[0] as object)), "SessionState 无内嵌转录（logs 走预算装配独立通道）");
@@ -326,7 +338,10 @@ try {
   const L0 = bus2.lastSeq();
   for (let i = 0; i < 3; i++) bus2.emit(sid, "SESSION_LOG", { kind: "system", text: `gap-${i}` });
   const replay3 = await lanCapture(L0, 3);
-  assert(replay3.frames.length === 3 && !replay3.snap, `LAN 缓冲内小缺口=增量补发（${replay3.frames.length} 帧，零快照）`);
+  // #265 增量续传对账：快路径补发 SESSIONS_RECONCILE（+板摘要 digest）控制帧随行
+  // （seq=0 合成帧，不占事件流序）——日志帧恰 3 条且零快照即增量语义成立
+  const replayLogs = replay3.frames.filter((f) => f.type === "SESSION_LOG");
+  assert(replayLogs.length === 3 && !replay3.snap && replay3.frames.every((f) => f.seq > L0 || f.type === "SESSIONS_RECONCILE" || f.type === "BOARDS_DIGEST"), `LAN 缓冲内小缺口=增量补发（${replay3.frames.length} 帧=3 日志+对账控制帧，零快照）`);
   for (let i = 0; i < 600; i++) bus2.emit(sid, "SESSION_LOG", { kind: "system", text: `flood-${i}` });
   const lanBig = await lanCapture(L0, 1);
   assert(!!lanBig.snap, "LAN 缺口超 200 帧=replay 超阈值退 SNAPSHOT 全量");
@@ -339,23 +354,29 @@ try {
   wanSend({ t: "hello", last_seq: 1 });
   assert(await waitFor(() => snapshotCount(wanInbox) > wanSnapBase), "WAN last_seq 落缓冲外=SNAPSHOT 全量恢复（与 resumePhone 同构）");
 
-  // ⑧ logs_truncated 条件键两态 + 预算装配语义（#408：日志不全量内联）
+  // ⑧ logs_truncated 条件键两态 + 预算装配语义（#408：日志不全量内联；W-INJECT④：
+  // 两端预算分道——LAN 宽窗 4MB/1200（重启/冷启动面板转录不被云安全窗替换出
+  // 「历史回滚数小时」），云通道维持 CF 桥安全默认 512KB/50）
   assert(!("logs_truncated" in lanP), "小态快照零截断=logs_truncated 条件键缺席（字段存在性=能力信号口径）");
   for (let i = 0; i < 60; i++) mgr2.pushExternalLog(sid, "system", `trunc-${i}`);
   const lanTrunc = await lanCapture(1, 1);
   const truncId = sid;
-  const truncLogs = lanTrunc.snap?.logs[truncId]?.length ?? 0;
-  const truncMark = lanTrunc.snap?.logs_truncated?.[truncId] ?? 0;
-  assert(truncLogs > 0 && truncLogs <= 50 && truncMark > 0, `预算装配实证：单会话帽 50（实 ${truncLogs}）+截断标记 ${truncMark}`);
+  const lanLogs = lanTrunc.snap?.logs[truncId] ?? [];
+  const lanMark = lanTrunc.snap?.logs_truncated?.[truncId] ?? 0;
+  // LAN 宽窗：62 条（种子 2+trunc 60）全量在、零截断
+  assert(lanLogs.length === 62 && lanMark === 0, `LAN 宽窗全量（实 ${lanLogs.length} 条+截断标记 ${lanMark}——帽 1200/W-INJECT④）`);
   const phoneSnapBase2 = snapshotCount(phoneInbox);
   phoneSend({ t: "hello", last_seq: 1 });
   assert(await waitFor(() => snapshotCount(phoneInbox) > phoneSnapBase2), "phone 再次快照（截断态）");
   const phoneTrunc = phoneInbox.filter((m) => m.type === "SNAPSHOT").at(-1)!.payload as SnapshotPayload;
-  assert(
-    JSON.stringify(lanTrunc.snap?.logs) === JSON.stringify(phoneTrunc.logs) &&
-      JSON.stringify(lanTrunc.snap?.logs_truncated) === JSON.stringify(phoneTrunc.logs_truncated),
-    "截断态 logs/logs_truncated LAN↔phone 深等（同一预算装配两端同步）",
-  );
+  const phoneLogs = phoneTrunc.logs[truncId] ?? [];
+  const phoneMark = phoneTrunc.logs_truncated?.[truncId] ?? 0;
+  // 云安全窗：帽 50 截尾+标记=缺数；截掉的恰是最旧 12 条（phone 尾段=LAN 尾段对齐）
+  assert(phoneLogs.length === 50 && phoneMark === lanLogs.length - 50, `phone 云安全窗帽 50（实 ${phoneLogs.length}+标记 ${phoneMark}——CF 桥 1MiB 单帧硬限口径）`);
+  // #70 两级保护：消息类条目（user_message/assistant_text）在 2×cap 窗内全保——
+  // phone 的 50 条≠机械尾切；断言子集关系+最新条恒在（截最旧不截最新语义）
+  const lanSet = new Set(lanLogs.map((l) => JSON.stringify(l)));
+  assert(phoneLogs.every((l) => lanSet.has(JSON.stringify(l))) && JSON.stringify(phoneLogs.at(-1)) === JSON.stringify(lanLogs.at(-1)), "phone 截后段 ⊆ LAN 全量且最新条两端一致（同一装配算法，仅帽参分道+消息类保护）");
 
   // 收尾
   phoneWs.close();
@@ -365,6 +386,8 @@ try {
   await bridge.close();
   rmSync(m13Dir, { recursive: true, force: true });
 } finally {
+  if (oldReadMode === undefined) delete process.env.CCR_STORAGE_READ_MODE;
+  else process.env.CCR_STORAGE_READ_MODE = oldReadMode;
   if (oldDataDir === undefined) delete process.env.CCR_DATA_DIR;
   else process.env.CCR_DATA_DIR = oldDataDir;
   if (oldCloudUrl === undefined) delete process.env.CCR_CLOUD_URL;

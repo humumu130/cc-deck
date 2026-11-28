@@ -168,10 +168,13 @@ async function main() {
   // ================= Part 2 manager 集成层 =================
   console.log("P2 manager 集成（fake factory）:");
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-mirror-"));
+  const ART = mkdtempSync(join(tmpdir(), "ccr-art-mirror-")); // W-CARDLIFE-R2：回执根沙盒（缺省回落生产 artifacts——资格位读回执会读穿生产）
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
+  const prevArt = process.env.CCR_ARTIFACTS_DIR;
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
+  process.env.CCR_ARTIFACTS_DIR = ART;
   try {
     const cfg: RelayConfig = {
       port: 8797, token: "t", tokenGenerated: false, defaultCwd: "",
@@ -304,14 +307,22 @@ async function main() {
       const gW = createGroup({ name: "taskref组", anchor_dir: anchorDir, tier: "轻立项" }, ORG);
       const gidW = gW.ok ? gW.group.id : "";
       assert(gW.ok && gW.group.status === "active", "前置：taskref 组 active");
+      // W-CARDLIFE-R2 件③随批（test-boardlife 同款）：交付资格位——收口翻 submitted 需
+      // 回执尾行合规。slug 可预测→派单前预写约定回执（ART 沙盒隔离，缺省会回落生产
+      // artifacts 读穿生产）；task_ref ④ 断言随语义升级：收口联动搬卡=submitted
+      //（交付=完成候选，done 出口在过审收割面）
+      const art = process.env.CCR_ARTIFACTS_DIR;
+      try { if (art) writeFileSync(join(art, "w-taskref.md"), "# W-TASKREF 回执（夹具预置）\n\n结果：task_ref 链路交付｜改动文件：无（测试回执）\n"); } catch { /* 预置失败由 ④ 断言显形 */ }
       const spawnBefore = spawned.length;
-      const dw = mgr.dispatchWorker({ anchor: anchorDir, prompt: "task_ref 测试任务书正文", gid: gidW, title: "task_ref 验证单" });
+      const dw = mgr.dispatchWorker({ anchor: anchorDir, prompt: "task_ref 测试任务书正文（回执：~/.cc-deck/artifacts/w-taskref.md）", gid: gidW, title: "task_ref 验证单" });
       assert(dw.ok, "前置：dispatchWorker ok");
       const wSid = dw.ok ? dw.session_id : "";
       await waitFor(() => !!(hack.sessions.get(wSid)?.state.relay_session_id));
       const wPrompt = spawned[spawnBefore]?.prompt ?? "";
-      const refMatch = /^\[task_ref:(t-[0-9a-f]{8})\] \[gid:(pg-[0-9a-f]{8})\] task_ref 验证单/.exec(wPrompt);
-      assert(!!refMatch, "task_ref ①：派单 prompt 头部注入 [task_ref:卡id] [gid:组id] 标题");
+      // C-MODE-B2 模块8：task_ref 头并入任务尾区（置 prompt 头=前缀 cache 恒 miss）——
+      // 「四处同键」不变，键锚从「头部行首」改「prompt 内在场」（不锚 ^，仍全串匹配）
+      const refMatch = /\[task_ref:(t-[0-9a-f]{8})\] \[gid:(pg-[0-9a-f]{8})\] task_ref 验证单/.exec(wPrompt);
+      assert(!!refMatch, "task_ref ①：派单 prompt 注入 [task_ref:卡id] [gid:组id] 标题（尾区在场）");
       assert(refMatch?.[2] === gidW, "task_ref ①：gid 段与实际组 id 一致");
       const wCard = loadBoardFile(gidW, ORG)?.entries.find((e) => e.dispatch_id === (dw.ok ? dw.dispatch_id : ""));
       assert(!!wCard && (!refMatch || wCard.id === refMatch[1]), "task_ref ②：板卡 id = prompt 头 task_ref（预生成同键落板）");
@@ -322,7 +333,10 @@ async function main() {
       wAgentRec?.cb.onTurnEnd(true, "success", 42);
       const closedRow = readDispatchLog(ORG).find((x) => x.id === (dw.ok ? dw.dispatch_id : "") && (x.status === "done" || x.status === "failed"));
       assert(!!closedRow && (!refMatch || (closedRow.receipt ?? "").startsWith(`[task_ref:${refMatch[1]}]`)), "task_ref ③：收口回执头部携带 [task_ref:卡id]（台账行）");
-      assert(loadBoardFile(gidW, ORG)?.entries.find((e) => e.id === wCard?.id)?.status === "done", "task_ref ④：收口联动搬卡 done（ref 链路闭环）");
+      // boardlife（W-CARDLIFE-R2）：交付=完成候选非完成——收口联动搬卡 submitted+
+      // review_required（ref 精确对卡链路闭环不变；done 出口移至过审收割面）
+      const wCardAfter = loadBoardFile(gidW, ORG)?.entries.find((e) => e.id === wCard?.id);
+      assert(wCardAfter?.status === "submitted" && wCardAfter?.review_required === true, `task_ref ④：收口联动搬卡 submitted 审查中（ref 链路闭环——实 ${wCardAfter?.status}/${JSON.stringify(wCardAfter?.review_required)}）`);
       rmSync(anchorDir, { recursive: true, force: true });
     }
 
@@ -330,9 +344,11 @@ async function main() {
   } finally {
     process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;
+    if (prevArt === undefined) delete process.env.CCR_ARTIFACTS_DIR; else process.env.CCR_ARTIFACTS_DIR = prevArt;
   }
 
   rmSync(ORG, { recursive: true, force: true });
+  rmSync(ART, { recursive: true, force: true });
   console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
 }

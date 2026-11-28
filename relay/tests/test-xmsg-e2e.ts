@@ -95,6 +95,14 @@ function bootPeer(name: string, port: number, invite: string, xmsg: boolean): Pe
     CCR_INJECT_CMD: fileURLToPath(new URL("./fake-injector.mjs", import.meta.url)),
     CCR_INJECT_LOG: injectLog,
     XMSG_E2E_DEVFILE: devfile,
+    // 机器本地灰度 env 文件防渗（boot-env 模块在子进程 boot 时应用
+    // ~/.cc-deck/relay-env.json——db 档+后台 shadow 全量导入碾压事件循环，实测
+    // ws 命令超时假红；CI 无该文件零影响）。沙盒档五键全钉=json/events/off 形态
+    CCR_STORAGE_READ_MODE: "json",
+    CCR_SESSION_WRITE_MODE: "off",
+    CCR_SESSION_IMPORT: "off",
+    CCR_BOOT_FROM: "events",
+    CCR_EVENTS_ARCHIVE: "off",
   };
   if (xmsg) env.CCR_XMSG = "1";
   const proc = spawn("npx", ["tsx", join(ROOT, "xmsg-e2e-peer.ts")], { env, cwd: HERE, stdio: ["ignore", "pipe", "pipe"] });
@@ -221,6 +229,17 @@ async function hook(peer: Peer, ev: Record<string, unknown>): Promise<void> {
 }
 await hook(B, { event: "UserPromptSubmit", prompt: "xmsg e2e 值班会话", cli_pid: B.pid });
 await hook(B, { event: "Stop" });
+await wait(400);
+
+// [W-PMSEAT] B 值守席任命：dutyTargetId 不再回落「最近活跃 external」（1104 串台根治
+// ——席位=经用户任命确认的会话唯一来源）。org pm claim 出 pm-appoint 确认卡 → 用户 ✓
+// 落 org/duty.json override，值守位自此可达（xmsg 回程口 dutyTarget 解析的前提）
+const claimAck = await wsCmd(B, "COMMAND_ORG_ACTION", { action: "pm-claim", cwd: SESSION_CWD, pid: B.pid });
+assert(claimAck.ok === true, `B pm-claim 受理（实测 ${JSON.stringify(claimAck).slice(0, 140)}）`);
+const claimConfirm = (claimAck.data as { confirm?: { id: string }; needsConfirm?: boolean } | undefined)?.confirm;
+assert(!!claimConfirm?.id, "B pm-claim 出值守任命确认卡（未决零喂活）");
+const appointAck = await wsCmd(B, "COMMAND_ORG_CONFIRM", { confirm_id: claimConfirm!.id, approve: true });
+assert(appointAck.ok === true, `值守任命卡 ✓ 决议（override 落位）实测=${JSON.stringify(appointAck).slice(0, 120)}`);
 await wait(400);
 
 console.log("== ① 密封注入+来源标注+xack injected ==");

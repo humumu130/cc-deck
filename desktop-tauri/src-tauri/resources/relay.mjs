@@ -14580,7 +14580,7 @@ function assertTestNotTouchingProd(what, resolved) {
   if (!productionDataPresent()) return;
   if (!insideProduction(resolved)) return;
   throw new Error(
-    `[test-data-guard] \u6D4B\u8BD5\u8FDB\u7A0B\u89E3\u6790${what}\u5230\u751F\u4EA7\u6570\u636E\u9762\uFF1A${resolved}\u2014\u20141122 \u751F\u4EA7\u5E93\u6C61\u67D3\u4E8B\u6545\u7684\u590D\u53D1\u901A\u9053\uFF0C\u62D2\u8DD1\u3002\u6D4B\u8BD5\u8BF7\u9489 CCR_DATA_DIR/CCR_ORG_DIR \u5230\u6C99\u76D2\uFF08mkdtemp \u6216 scripts/test-lib.ts \u7684 pinSandbox\uFF09\uFF1B\u786E\u9700\u8BFB\u751F\u4EA7\u6570\u636E\u7684\u8BCA\u65AD\u5DE5\u5177\u8BF7\u6539\u540D\u975E test-* \u524D\u7F00\u6216\u663E\u5F0F CCR_TEST_PROD_DATA_OK=1\u3002`
+    `[test-data-guard] \u6D4B\u8BD5\u8FDB\u7A0B\u89E3\u6790${what}\u5230\u751F\u4EA7\u6570\u636E\u9762\uFF1A${resolved}\u2014\u20141122 \u751F\u4EA7\u5E93\u6C61\u67D3\u4E8B\u6545\u7684\u590D\u53D1\u901A\u9053\uFF0C\u62D2\u8DD1\u3002\u6D4B\u8BD5\u8BF7\u9489 CCR_DATA_DIR/CCR_ORG_DIR \u5230\u6C99\u76D2\uFF08mkdtemp \u6216 tests/test-lib.ts \u7684 pinSandbox\uFF09\uFF1B\u786E\u9700\u8BFB\u751F\u4EA7\u6570\u636E\u7684\u8BCA\u65AD\u5DE5\u5177\u8BF7\u6539\u540D\u975E test-* \u524D\u7F00\u6216\u663E\u5F0F CCR_TEST_PROD_DATA_OK=1\u3002`
   );
 }
 
@@ -76771,6 +76771,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const wss = new import_websocket_server.default({ noServer: true, maxPayload: 1 << 20 });
   const connUa = /* @__PURE__ */ new WeakMap();
   const onlineDeviceIds = /* @__PURE__ */ new Map();
+  globalThis.__ccRelayDevices = () => listDevices(cfg2.dataDir, /* @__PURE__ */ new Set([...onlineDeviceIds.values()]));
+  globalThis.__ccDesignDocs = () => listDesignDocs(webRoot);
   mgr2.liveFrontends = () => [...wss.clients].some((c) => c.readyState === import_websocket.default.OPEN && !c.pairing) || !!opts.cloudHasPhones?.();
   let bridgeBootScanned = false;
   const bridge = new Bridge(bus2, mgr2, {
@@ -79916,6 +79918,14 @@ var CloudClient = class {
         wan_dev: this.identity.wanDev,
         acct_relays: [...this.acctRelays.values()].map((x) => ({ dev: x.dev, name: x.name || x.dev, rk: x.rk, online: true })),
         // W-ACCOUNT：phone 云通道同键（#117 教训——与 LAN 口同源；rk 供手机端点连免码配对）
+        acct_bound: !!this.mgr.cfg.accountToken,
+        // DEV-41 #117 补齐：relay 已绑账号标记（LAN 口同源同式——console 云通道端无 localStorage 凭据时触发再水化）
+        relay_devices: globalThis.__ccRelayDevices?.() ?? [],
+        // DEV-41 #117 补齐：连接设备台账（ws-server 挂口同源——云通道端设置页「客户端」模块数据源）
+        design_docs: globalThis.__ccDesignDocs?.() ?? [],
+        // DEV-41 #117 补齐：设计文档清单（ws-server 挂口同源）
+        pm_duty: this.mgr.pmDutyStatus(),
+        // DEV-41 #117 补齐：pm 值守面（org pm claim 接管后云手机即时感知——X0 件6）
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）

@@ -127,6 +127,9 @@ async function main() {
 
     // ---------- D. 阀与安全闸 ----------
     console.log("D 逃生阀与安全闸:");
+    // C 段 worker done 边现挂回执直达/值守注入新 PM 回合（W-DELIVERCB）——回合收口
+    // （DONE）后再布景，防逃生阀断言读到位 WORKING 中间态
+    await waitFor(() => s.state?.status === "DONE");
     s.state.pre_reboot_status = "WORKING"; s.agent = null;
     process.env.CCR_RESUME_ON_REBOOT = "0";
     assert(mgr.resumeLeaderAfterReboot() === 0 && s.state.status === "DONE", `逃生阀=0 不拉（紧急关停面；标保留=${s.state.pre_reboot_status === "WORKING"}）`);

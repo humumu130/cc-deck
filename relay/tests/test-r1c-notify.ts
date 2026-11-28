@@ -62,6 +62,12 @@ function send(mgr: SessionManager, command_id: string, type: string, payload: Re
   return mgr.handleCommand(cmd, by);
 }
 
+// bootfast2：孤儿对账迁出 ctor→boot 后台段（index.ts 同序）——模拟重启须显式走对账步，
+// 否则 pending 通知在「重启还原」后不与事实源对账（生产 boot 行为的两步还原）。
+function bootReconcile(m: SessionManager) {
+  (m as unknown as { reconcileOrphanConfirmsOnBoot(): void }).reconcileOrphanConfirmsOnBoot();
+}
+
 async function main() {
   const DATA = mkdtempSync(join(tmpdir(), "ccr-data-r1c-"));
   const CWD = mkdtempSync(join(tmpdir(), "ccr-cwd-r1c-"));
@@ -307,6 +313,7 @@ async function main() {
       "N10⑦ notifications.json 持久落账（离线端兜底）");
     const framesBeforeRestart10 = frames.length;
     const mgr10 = new SessionManager(bus, cfg); // 同 dataDir 模拟重启
+    bootReconcile(mgr10); // boot 后台段对账步（本段无孤儿→零变更零帧，N10⑨ 语义不变）
     assert(mgr10.notificationsList().filter((n) => n.kind === "org-confirm").length === beforeN10 + 6,
       "N10⑧ 重启还原：五入口通知全量在账");
     assert(frames.length === framesBeforeRestart10,
@@ -351,9 +358,13 @@ async function main() {
     (mgr as unknown as { closeHungDispatchRows(): void }).closeHungDispatchRows();
     const hungLog = readDispatchLog().filter((e) => e.id === "d-hung-fix1");
     const hungItem = findKind("dispatch", (n) => n.sourceContext.entityId === "d-hung-fix1")[0];
+    // P1-c（review-w-delivercb-b）：中断口径 done≠交付——台账收敛 done，通知走
+    // action/waiting 可操作「单中断（待重派）」，且不走 deliverCallback 直达（PM 不被
+    // 指向收割一张 backlog 卡）
     assert(hungLog.length === 1 && hungLog[0].status === "done" && !!hungItem
-      && hungItem.group === "activity" && hungItem.severity === "done" && hungItem.actionable === false,
-      "N11④ 重启悬账补记 → done 台账收敛 + activity 通知（台账/通知账对称）");
+      && hungItem.group === "action" && hungItem.severity === "waiting" && hungItem.actionable === true
+      && hungItem.title.includes("单中断（待重派）"),
+      "N11④ 重启悬账补记 → done 台账收敛 + 中断待重派 action 通知（P1-c：中断≠交付）");
 
     // ---------- N12 P2-1 superseded waiting 精确收口 ----------
     console.log("N12 superseded waiting 收口");
@@ -411,6 +422,7 @@ async function main() {
     assert(!!orphanBefore && orphanBefore.resolved_at === undefined,
       "N14① 前置：通知在账 pending、事实源已无此确认单（孤儿形态）");
     const mgr14 = new SessionManager(bus, cfg); // 同 dataDir 重启 → 启动对账
+    bootReconcile(mgr14);
     const orphanAfter = mgr14.notificationsList().find((n) => n.sourceContext.entityId === orphanId);
     assert(!!orphanAfter && (orphanAfter.resolved_at ?? 0) > 0 && orphanAfter.body.includes("孤儿对账"),
       "N14② 重启对账：孤儿确认单通知自动收口并在 body 记原因");
@@ -438,18 +450,22 @@ async function main() {
     // 四个 fail-closed 样本：确认单事实源读不出有效非空清单 → 闸门不对账
     writeFileSync(confirmsFile, "{broken-json", "utf-8");
     const mgr15a = new SessionManager(bus, cfg);
+    bootReconcile(mgr15a);
     assert(mgr15a.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15② 坏 JSON → 不对账，pending 保留（读失败不冒充空清单）");
     writeFileSync(confirmsFile, JSON.stringify({ confirms: [] }, null, 2) + "\n", "utf-8");
     const mgr15b = new SessionManager(bus, cfg);
+    bootReconcile(mgr15b);
     assert(mgr15b.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15③ confirms 空数组 → 不收口，pending 保留");
     writeFileSync(confirmsFile, JSON.stringify({ confirms: { id: "n15-not-array" } }, null, 2) + "\n", "utf-8");
     const mgr15c = new SessionManager(bus, cfg);
+    bootReconcile(mgr15c);
     assert(mgr15c.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15④ confirms 非数组 → 不对账，pending 保留");
     rmSync(confirmsFile);
     const mgr15d = new SessionManager(bus, cfg);
+    bootReconcile(mgr15d);
     assert(mgr15d.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15⑤ 文件不存在 → 不收口，pending 保留");
     // 第七档（R1FIX3 P2-7）：根值非对象——JSON.parse 成功但根为 null/数字/字符串。
@@ -457,14 +473,17 @@ async function main() {
     //（比「不对账保留」糟一个量级）；数组根由「非数组」档拦截，判序无新洞
     writeFileSync(confirmsFile, "null", "utf-8");
     const mgr15e = new SessionManager(bus, cfg);
+    bootReconcile(mgr15e);
     assert(mgr15e.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15⑥ 根值 null → 构造不炸且不对账，pending 保留（P2-7 根值非对象档）");
     writeFileSync(confirmsFile, "123", "utf-8");
     const mgr15f = new SessionManager(bus, cfg);
+    bootReconcile(mgr15f);
     assert(mgr15f.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15⑦ 根值数字 → 不对账，pending 保留（根值非对象档）");
     writeFileSync(confirmsFile, JSON.stringify("str"), "utf-8");
     const mgr15g = new SessionManager(bus, cfg);
+    bootReconcile(mgr15g);
     assert(mgr15g.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15⑧ 根值字符串 → 不对账，pending 保留（根值非对象档）");
     assert(frames.length === framesBefore15,
@@ -474,6 +493,7 @@ async function main() {
       { id: "n15-other-confirm", kind: "suggest-hold", title: "R1FIX2 对照单", reason: "对照", payload: {}, status: "pending", created_at: 1728100000000 },
     ] }, null, 2) + "\n", "utf-8");
     const mgr15h = new SessionManager(bus, cfg);
+    bootReconcile(mgr15h);
     const resolved15 = mgr15h.notificationsList().find((n) => n.sourceContext.entityId === n15Id);
     assert(!!resolved15 && (resolved15.resolved_at ?? 0) > 0 && resolved15.body.includes("孤儿对账"),
       "N15⑩ 非空可读 → 正常对账收口记因（positive control；N14 行为保持）");

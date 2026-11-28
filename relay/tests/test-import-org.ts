@@ -167,18 +167,46 @@ const lossWrap = listLoss(port, join(orgDir, "confirms.json"));
 assert(lossWrap.length === 4 && lossWrap.map((l) => l.reason).sort().join() === "bad-field,bad-field,dangling-ref,missing-attribution", `包裹形重扫 loss 对账不变 4 账（清旧落新同单同账，实测 ${lossWrap.length}）`);
 assert(port.query("PRAGMA foreign_key_check").length === 0, "包裹形重扫后仍零悬空 FK");
 
-// ---------- 5. 整文件坏 JSON：该源零导入+落账，其余源照常（范式要点 4） ----------
+// ---------- 5. 整文件坏 JSON：#292-cutover-P1（B-F3 坏账隔离）——曾成功导入的源坏 JSON
+// = 崩溃半写高危形态：跳过本域导入（保留库内旧快照）+source-corrupted 落账+不写
+// checkpoint（下轮重扫重试，修复即自愈）。首见坏文件（无 checkpoint）维持旧语义
+// （清域导入空表——可能真是空态初始化）。 ----------
 console.log("坏 JSON 保护:");
 const confirmsPath = join(orgDir, "confirms.json");
+const confirmsBeforeQuarantine = port.query<{ n: number }>("SELECT COUNT(*) AS n FROM org_confirm")[0]?.n ?? -1;
 writeFileSync(confirmsPath, "{ 这不是 JSON");
 utimesSync(confirmsPath, new Date(Date.now() + 20), new Date(Date.now() + 20));
 const r4 = importOrg(port, orgDir);
-assert(r4.skipped === false, "confirms.json 失效触发重扫");
-assert(r4.counts.orgConfirm === 0, "坏 JSON 源零导入（损坏数据零进库）");
-assert(r4.counts.group === 4 && r4.counts.member === 6 && r4.counts.project === 3, "其余源照常重灌（不阻断；member 六卡分立同 r3 基准）");
+assert(r4.skipped === false, "confirms.json 坏 JSON 触发源损坏隔离路径");
+assert(r4.counts.orgConfirm === confirmsBeforeQuarantine, `曾成功源坏 JSON→旧快照保留（orgConfirm=${r4.counts.orgConfirm} 不清空——坏态不合法化为空表）`);
+assert(r4.counts.group === 4 && r4.counts.member === 6 && r4.counts.project === 3, "其余源照常导入（隔离只跳过坏源域）");
 const badLoss = listLoss(port, confirmsPath);
-assert(badLoss.length === 1 && badLoss[0]?.reason === "bad-json" && badLoss[0]?.lineNo === 1, "坏 JSON 落账恰 1 条（line 1）");
-assert(port.query("PRAGMA foreign_key_check").length === 0, "坏源重扫后仍零悬空 FK");
+assert(badLoss.some((l) => l.reason === "source-corrupted" && l.lineNo === 0), "坏 JSON 落账 source-corrupted（line 0——隔离告警账）");
+// 隔离不落 checkpoint：同内容再跑仍重扫（非快进）——修复后自动自愈的机制前提
+const r4b = importOrg(port, orgDir);
+assert(r4b.skipped === false, "隔离不写 checkpoint（再跑重扫重试——不把坏态 freeze）");
+// 首见坏文件（无 checkpoint 历史）：维持旧语义——清域导入空表+bad-json 落账
+const freshPath = join(orgDir, "fresh-bad.json");
+writeFileSync(freshPath, "{ 也不是 JSON");
+// fresh 源不入三源清单，构造首见形态用独立小库验证（主库三源 checkpoint 都在册）
+{
+  const dataDirFirst = mkdtempSync(join(tmpdir(), "cc-import-org-firstbad-"));
+  const portFirst = createSqlitePort({ dataDir: dataDirFirst });
+  portFirst.open();
+  runMigrations(portFirst, migrations);
+  const orgDirFirst = mkdtempSync(join(tmpdir(), "cc-import-org-firstbad-org-"));
+  mkdirSync(join(orgDirFirst, "boards"), { recursive: true });
+  writeFileSync(join(orgDirFirst, "org.json"), JSON.stringify({ version: 1, leader_session_id: "s-l", created_at: 1 }));
+  writeFileSync(join(orgDirFirst, "projects.json"), JSON.stringify({ trust_light: false, groups: [] }));
+  writeFileSync(join(orgDirFirst, "confirms.json"), "{ 首见即坏");
+  const rf = importOrg(portFirst, orgDirFirst);
+  assert(rf.counts.orgConfirm === 0, "首见坏 JSON 源→清域导入空表（旧语义维持——可能真是空态初始化）");
+  assert(listLoss(portFirst, join(orgDirFirst, "confirms.json")).some((l) => l.reason === "bad-json" && l.lineNo === 1), "首见坏 JSON 落账 bad-json（line 1）");
+  portFirst.close();
+  rmSync(dataDirFirst, { recursive: true, force: true });
+  rmSync(orgDirFirst, { recursive: true, force: true });
+}
+assert(port.query("PRAGMA foreign_key_check").length === 0, "坏源隔离后仍零悬空 FK");
 
 port.close();
 rmSync(dataDir, { recursive: true, force: true });

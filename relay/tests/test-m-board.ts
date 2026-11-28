@@ -216,13 +216,16 @@ async function main() {
       // 双 claim 不可能经派单路径发生；守卫的真实捕获面=①relay 重启重放窗（会话
       // 重放回 idle 而台账活单仍在——重启期间在制单的实态）②跨写口认领（面板
       // task/COMMAND_DISPATCH 等异口挂 owner）③未来 async 重构回归。直接构造
-      // 「w1 idle + 台账活 running 行」态（app 层检查恒放行）→ 数据层必须拒。
+      // 「w1 idle + 台账活 running 行」态再定席直派（target_sid=w1）。W-ORG-DEFECTS
+      // 件4 后选席层有 busyPersist 过滤（持久账活单席第一选时就绕开→B 单会滑向
+      // 新会话，守卫永不触发）——定席直派正是守卫剩余的真实捕获面（强制指定席/
+      // 跨写口认领：绕过选席过滤的派单仍须被数据层兜住）。
       const activeId = "mboard-active-" + randomUUID().slice(0, 8);
       const { appendDispatch } = await import("../src/org.js");
       appendDispatch({ ts: Date.now(), id: activeId, tier: "正经立项", target: w1, status: "running", session_id: w1, project_anchor: anchor, actor: "leader" });
       const notesLenBefore = notes.length;
-      const dB = mgr.orgAction("dispatch", { anchor, prompt: "mboard 双活 B 单", gid }) as { ok: boolean; error?: string; dispatch_id?: string };
-      assert(dB.ok === false && (dB.error ?? "").includes("同席活单拒收"), "活单在制 + 会话 idle（重放窗态）→ 数据层拒收（app 层恒放行的态由数据层兜）");
+      const dB = mgr.orgAction("dispatch", { anchor, prompt: "mboard 双活 B 单", gid, target_sid: w1 }) as { ok: boolean; error?: string; dispatch_id?: string };
+      assert(dB.ok === false && (dB.error ?? "").includes("同席活单拒收"), "活单在制 + 会话 idle（定席直派=守卫捕获面）→ 数据层拒收（app 层绕开选席过滤的派单由数据层兜）");
       assert((dB.error ?? "").includes(activeId.slice(0, 8)), "拒收报错指向在制活单 id（可操作指引）");
       {
         const row = readDispatchLog().find((e) => e.id === (dB.dispatch_id ?? ""));

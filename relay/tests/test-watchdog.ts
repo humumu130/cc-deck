@@ -7,6 +7,7 @@
 // 到 10min/3min——心跳 5s 与慢窗口 5s 同频，不 hush 时心跳会抢先开窗（抖动源），
 // 手动 tick 前再 arm 回测试值，保证开窗者确定是本测试。
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,6 +96,25 @@ interface Rec {
 const created: Rec[] = [];
 let noPidFrom = Infinity; // 该序号起的 agent 不带 childPid（排除项场景用）
 let noInitFrom = Infinity; // 该序号起的 agent 永不 onInit（pre-init parked 场景用）
+// 假 agent 的 childPid 池：真实活进程（kill(pid,0) 探活为真）。停摆杜绝 R3 投递前
+// 活性门（agentStreamAlive→streamPidAlive kill(pid,0) 探测宿主流进程）落地后，旧
+// 假 pid（40000+n 无主）探活恒假 → COMMAND_MESSAGE 恒走 resumeAgent 重拉路径，
+// 「消息进活流（同 agent sendMessage）」面失真（A2 假红）。每个假 agent 配一个真活
+// 子进程（node 空转定时器，distinct pid 保 killTree 断言/台账的 pid 身份判别力——
+// 全员共享 process.pid 会让 killTree 按 pid 找流模拟找错对象、G「未被误杀」判等
+// 失真）；killTree 模拟时真杀（SIGKILL）对齐「进程死亡→流关闭」语义
+const livePids: number[] = [];
+const spawnLivePid = (): number => {
+  const c = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  livePids.push(c.pid!);
+  return c.pid!;
+};
+const reapLivePids = (): void => {
+  for (const pid of livePids) {
+    try { process.kill(pid, "SIGKILL"); } catch { /* 已死不计 */ }
+  }
+};
+process.on("exit", reapLivePids); // assert 失败 process.exit 也收割（不留空转子进程）
 mgr.setAgentFactory((_cwd, _model, cb, prompt, opts) => {
   const a = {
     id: randomUUID(),
@@ -114,7 +134,7 @@ mgr.setAgentFactory((_cwd, _model, cb, prompt, opts) => {
     stop: async () => {},
     setPermissionMode: async () => {},
   } as AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string }[] };
-  if (created.length < noPidFrom) (a as { childPid?: number }).childPid = 40000 + created.length;
+  if (created.length < noPidFrom) (a as { childPid?: number }).childPid = spawnLivePid();
   const rec: Rec = { prompt, resume: opts?.resume, cb, agent: a };
   created.push(rec);
   if (created.length > noInitFrom) return a; // pre-init 形态：init 永不到达（brand-new parked）
@@ -126,7 +146,8 @@ mgr.setAgentFactory((_cwd, _model, cb, prompt, opts) => {
 });
 
 // ---- 假进程树：快照吐罐头 CPU 值（cpuFeed 逐次 shift，空了重复末值 → 两轮同值=空闲；
-// 两值差 ≥500ms = 活跃）；killTree 记 pid 并模拟"进程死亡 → SDK 流关闭" ----
+// 两值差 ≥500ms = 活跃）；killTree 记 pid、真杀探活子进程（对齐 streamPidAlive 探活
+// 语义）并模拟"进程死亡 → SDK 流关闭" ----
 let cpuFeed: number[] = [100, 100];
 let cpuLast = 100;
 const killedPids: number[] = [];
@@ -142,6 +163,7 @@ mgr.setWatchdogProcs({
   },
   killTree: async (pid: number) => {
     killedPids.push(pid);
+    try { process.kill(pid, "SIGKILL"); } catch { /* 已死不计 */ }
     const rec = created.find((r) => r.agent.childPid === pid);
     if (rec && !rec.agent.ended) {
       rec.agent.ended = true;

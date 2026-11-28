@@ -30,6 +30,14 @@
 // （identity=sha12(orgDir@role@engine@session) 混入 session 维度+关系落库去重）——同组多
 // worker 同 role 同引擎不再撞 UNIQUE(group_id,member_id)，O10 shadow 对账全域零容忍
 //（notification 比对口径缺陷同期已修：read-mode compareDomain 改读两 JSON 源 distinct key）。
+// **随批适配备案**（本文件三处，均测试侧跟随生产语义、不改产线）：
+//   ① W-CARDLIFE-R2/R3 回执闸（commit 5ff5d2da）：O3③/O6② 收口断言卡翻 submitted——
+//      资格位按派单 prompt 约定回执路径读文件尾行军规行。ART 沙盒+夹具预置回执
+//      （w-orch-dep/w-orch-main.md），prompt 带路径引用（test-boardlife 同款范式）。
+//   ② O9① W-DELIVERCB 换流：主卡收口的交付直达会 resume Leader 换流（原流回调作废），
+//      值守挂点改打当前流记录（见 O9 段注）。
+//   ③ O10④ resolveDirs 显式钉 tasksDir 进沙盒：缺省回落 ~/.claude/tasks 会把生产两层
+//      任务树灌进沙盒库，task 域对账恒红（本机实锤 258 行全落 task 域）。
 // 跑法：env -u CCR_TOKEN -u CCR_ORG_DIR -u CCR_DATA_DIR -u CCR_PORT -u CCR_STUB_MODE npx tsx tests/test-m1-orchestration.ts
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -104,6 +112,7 @@ try {
   const ORG = mkdtempSync(join(tmpdir(), "ccr-org-orch-"));
   const anchor = mkdtempSync(join(tmpdir(), "ccr-anchor-orch-"));
   const ACC = mkdtempSync(join(tmpdir(), "ccr-acc-orch-"));
+  const ART = mkdtempSync(join(tmpdir(), "ccr-art-orch-")); // W-CARDLIFE-R2：回执根沙盒（缺省回落生产 artifacts——资格位读回执会读穿生产）
   // 验收单 md fixture（四段结构：标题/前置/验收表/备注——CLI 宽容解析取前三列）
   const mdPath = join(DATA, "orch-acceptance.md");
   writeFileSync(mdPath, [
@@ -123,10 +132,18 @@ try {
   const prevReadMode = process.env.CCR_STORAGE_READ_MODE;
   const prevDuty = process.env.CCR_PM_DUTY;
   const prevAcc = process.env.CCR_ACCEPTANCE_DIR;
+  const prevArt = process.env.CCR_ARTIFACTS_DIR;
   process.env.CCR_STORAGE_READ_MODE = "json"; // 主链全程 json 档（现状写路径）；SQLite 面走 ensureStore 直调不经读档位——显式钉档（SQLITE-FLIP 后缺省=sqlite，「delete env=json」旧假设失效）
   process.env.CCR_PM_DUTY = "0";            // 值守 O9 才开（W-DUTY-CHAIN 反转后缺省开——沙盒显式关）
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
+  process.env.CCR_ARTIFACTS_DIR = ART;
+  // W-CARDLIFE-R2 件③随批（test-boardlife 同款）：O3/O6 两收口单的约定回执派单前预置
+  //（prompt 内引用同路径——收口资格位按尾行军规行核文件，缺文件=板不动卡留 claimed）
+  try {
+    writeFileSync(join(ART, "w-orch-dep.md"), "# W-ORCH-DEP 回执（夹具预置）\n\n结果：环境勘察交付｜改动文件：survey.md\n");
+    writeFileSync(join(ART, "w-orch-main.md"), "# W-ORCH-MAIN 回执（夹具预置）\n\n结果：主活交付｜改动文件：main.ts\n");
+  } catch { /* 预置失败由 O3③/O6② 断言显形 */ }
   // 两端口径一致（acceptance.ts :55 备案：「任一单边设置都会读写分家」）——父进程
   // （relay 读侧 loadAcceptance/saveResult）与 CLI 子进程同指 ACC tmp
   process.env.CCR_ACCEPTANCE_DIR = ACC;
@@ -169,7 +186,7 @@ try {
     // ---------- O3 段②依赖卡先派先收：认领→回合 done→台账 done+卡自动 done+lesson 回流 ----------
     console.log("O3 依赖卡先派先收");
     const baseO3 = created.length;
-    const depDisp = send(mgr, "o3dep", "COMMAND_DISPATCH", { gid, prompt: "勘察走起", title: "依赖前置：环境勘察报告", entry_id: depId, role: "worker" }, "web-1");
+    const depDisp = send(mgr, "o3dep", "COMMAND_DISPATCH", { gid, prompt: "勘察走起（回执：~/.cc-deck/artifacts/w-orch-dep.md）", title: "依赖前置：环境勘察报告", entry_id: depId, role: "worker" }, "web-1");
     const depDispatchId = (depDisp.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(depDisp.ok === true && depDispatchId !== "" && created.length === baseO3 + 1
       && loadBoard(gid).entries.find((e) => e.id === depId)?.status === "claimed",
@@ -228,8 +245,10 @@ try {
     console.log("O6 主卡认领重派+收口");
     // boardlife 适配：依赖卡已在 O3④ 过审收割（done）——O6 无需重复收割（O3④ 已断言
     // 终态；此处重复 move 恒过属空断言，review-w-boardlife-a-1103 P3 清理）。
+    // W-CARDLIFE-R2 件③随批：收口翻 submitted 需回执尾行合规——prompt 带约定回执路径
+    //（w-orch-main.md 已在夹具预置段落盘）。
     const baseO6 = created.length;
-    const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续", title: "交付主活：全链编排验收", entry_id: mainId, role: "worker" }, "web-1");
+    const mainAck3 = send(mgr2, "o6main", "COMMAND_DISPATCH", { gid, prompt: "主卡活续（回执：~/.cc-deck/artifacts/w-orch-main.md）", title: "交付主活：全链编排验收", entry_id: mainId, role: "worker" }, "web-1");
     const mainDispatchId2 = (mainAck3.data as { dispatch_id?: string }).dispatch_id ?? "";
     assert(mainAck3.ok === true && mainDispatchId2 !== "" && created.length === baseO6 + 1,
       "O6① 重启后认领重派放行（依赖仍 done，computeReady 同口径；新 dispatch 单非复用悬挂 id）");
@@ -277,7 +296,15 @@ try {
     process.env.CCR_PM_DUTY = "1";
     const rounds0 = dutyRounds().length;
     const entries0 = loadBoard(gid).entries.length;
-    created[leaderIdx]?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[leaderIdx]?.cb.onTurnEnd(true, "leader 回合终态", 100); // 值守挂点：Leader 会话限定
+    // W-DELIVERCB 换流适配：O6 主卡收口的交付直达（deliverCallbackToPM→resumeAgent）会
+    // resume Leader 注入「[worker 已交付]」报告——Leader 流换代（streamGen++），O5
+    // ensureLeader 时留存的回调记录随旧流作废（onTurnEnd mine() 闸全 no-op——Leader 卡
+    // 悬挂 WORKING、duty-rounds 零行）。值守挂点必须打在**当前流**上：取 leaderIdx 之后
+    // 最新的交付直达 resume 记录（其回调=Leader 现役流回调），其回合终态即「Leader 回合
+    // 终态」——值守共存语义不变，打点位置跟流。
+    const leaderResumeIdx = [...created.keys()].filter((i) => i > leaderIdx
+      && String(created[i]?.prompt ?? "").startsWith("[worker 已交付]")).pop() ?? leaderIdx;
+    created[leaderResumeIdx]?.cb.onStats({ files_changed: 1, lines_added: 2, lines_deleted: 1 });     created[leaderResumeIdx]?.cb.onTurnEnd(true, "leader 回合终态", 100); // 值守挂点：Leader 会话限定
     const roundNew = dutyRounds()[dutyRounds().length - 1] ?? {};
     assert(dutyRounds().length === rounds0 + 1 && roundNew.kind === "PM_DUTY_ROUND",
       "O9① Leader 回合终态 → 值守检查审计一行（队列全 done 放行 sleep 零注入——细节 C12 已锁）");
@@ -287,7 +314,11 @@ try {
 
     // ---------- O10 SQLite 账实段（read-mode 裁定面：全链后重建+投影读回+shadow 对账） ----------
     console.log("O10 SQLite 账实（read-mode 裁定：切换后读 SQLite 不丢账）");
-    const dirs = resolveDirs({ dataDir: DATA, orgDir: ORG });
+    // tasksDir 显式钉进沙盒：resolveDirs 缺省回落 CCR_TASKS_DIR ?? ~/.claude/tasks
+    // （生产两层任务树）——夹具不动它会把生产任务灌进沙盒库，task 域对账「missing-in-json
+    // N 行」恒红（本机实锤 258 行全落 task 域）。本链不产雇员任务（无 employee_home），
+    // 沙盒空目录=task 域空对空（O10 账实段语义只对本链自有账负责）。
+    const dirs = resolveDirs({ dataDir: DATA, orgDir: ORG, tasksDir: join(DATA, "tasks") });
     const port = ensureStore(dirs);
     // 读前触发灌库（铁律 3；importAllForShadow 幂等快进）。P81-5 起审计写面（permission-audit
     // auditStore=ensureStore）会在链路中途建库+缓存端口，ensureStore 命中 portCache 零重扫——
@@ -339,10 +370,13 @@ try {
     else process.env.CCR_PM_DUTY = prevDuty;
     if (prevAcc === undefined) delete process.env.CCR_ACCEPTANCE_DIR;
     else process.env.CCR_ACCEPTANCE_DIR = prevAcc;
+    if (prevArt === undefined) delete process.env.CCR_ARTIFACTS_DIR;
+    else process.env.CCR_ARTIFACTS_DIR = prevArt;
     rmSync(DATA, { recursive: true, force: true });
     rmSync(ORG, { recursive: true, force: true });
     rmSync(anchor, { recursive: true, force: true });
     rmSync(ACC, { recursive: true, force: true });
+    rmSync(ART, { recursive: true, force: true });
   }
 } catch (e) {
   console.error(e);

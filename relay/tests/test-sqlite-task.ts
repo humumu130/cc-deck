@@ -68,6 +68,9 @@ console.log("§S 沙盒全链（导入产出非零+悬空零膨胀）：");
   mkdirSync(join(dataDir, "acceptances"), { recursive: true });
 
   const port = ensureStore({ dataDir, orgDir: join(dataDir, "org"), tasksDir });
+  // bootfast3：冷路径导入后台化——数据面断言前 flush 栅栏（「返回 port 即已灌」旧语义退役）
+  const { flushShadowImportForTest } = await import("../src/storage/read-mode.js");
+  await flushShadowImportForTest(dataDir);
   const q = (sql: string): number => port.query<{ n: number }>(sql, [])[0]?.n ?? -1;
   assert(q("SELECT COUNT(*) AS n FROM task") === 5, `S1 导入产出非零=文件数 5（实 ${q("SELECT COUNT(*) AS n FROM task")}——修前对不存在目录恒 0）`);
   assert(q("SELECT COUNT(*) AS n FROM task WHERE session_id IS NOT NULL") === 4, "S2 归因链：4 任务挂上 session（目录 sid→session 表行）");

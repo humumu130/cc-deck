@@ -101,6 +101,14 @@ const dataDir = mkdtempSync(join(tmpdir(), "cc-005-cloud-test-"));
 const oldCwd = process.cwd();
 process.chdir(dataDir);
 process.env.CCR_DATA_DIR = dataDir;
+// DEV-41：存储档钉 json 沙盒五键（test-ws 同款）——SQLITE-FLIP 后缺省=sqlite，
+// ensureStore 后台影子导入（bootfast3）占事件循环 → 设备2 hello 快照/8s 补发窗
+// 等待超时假红（CI json 形态不受影响，本机缺省档必钉）；显式 env 优先于灰度文件
+process.env.CCR_STORAGE_READ_MODE = "json";
+process.env.CCR_SESSION_WRITE_MODE = "off";
+process.env.CCR_SESSION_IMPORT = "off";
+process.env.CCR_BOOT_FROM = "events";
+process.env.CCR_EVENTS_ARCHIVE = "off";
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 process.env.CCR_CLOUD_URL = `ws://127.0.0.1:${BRIDGE_PORT}/cloud`;
