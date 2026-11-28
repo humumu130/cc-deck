@@ -3,7 +3,9 @@
     "CI 测试矩阵唯一事实源（DEV-38/R5①，2026-11-28 单源化：原 relay.yml matrix 行 + matrix-guard anchored 双手抄与键数抬锚废除）。",
     "matrix：CI 阻塞矩阵——只收自包含测试（进程内/回环网络/fake-injector/mkdtemp 沙盒，不依赖真实 Claude CLI 与 API 凭据）；test job 由 .github/workflows/relay.yml 从本文件 fromJSON 动态生成。",
     "quarantine：红基线定罪台账（DEV-38/R5③）——环境性红/需真凭据的键在此登记并给出处，不进 CI 矩阵；逐条定罪结论见 docs/night-audit/red-baseline-verdicts-2026-11-28.md。",
-    "增删矩阵键只改本文件 matrix 数组；新键必须同时在 relay/package.json scripts 注册（matrix-guard 校验拼写向）。quarantine 键同样须保持注册（测试仍在本地可跑，只是不进 CI）。"
+    "watch：迁出盯守层（DEV-53，2026-11-28）——语义＝「矩阵外但必须有人盯」：quarantine 修绿迁出的键在此登记。机械规则「迁出=入 watch」由 relay/scripts/check-ci-layers.mjs 逐 git 基线差集校验：键离开 quarantine 而不入 watch、不晋 matrix、也未连 npm 注册一并退役者，CI matrix-guard 闸红（不是口头约定）。",
+    "watch 键的运行腿＝本地闸：relay 目录 `npm run sweep:watch` 顺序全量跑 watch 键，任一红 exit 1（CI 不跑——含 test:ws 等需真 CLI 键，且避免矩阵分片时长增量）。键回绿稳定后由 leader 审入 matrix 即可从 watch 摘除（晋矩阵=更强的盯守）。",
+    "增删矩阵键只改本文件 matrix 数组；新键必须同时在 relay/package.json scripts 注册（matrix-guard 校验拼写向）。quarantine 键同样须保持注册（测试仍在本地可跑，只是不进 CI）。watch 键同样须保持注册（本地 sweep 依赖）。三层键两两互斥（同键只属一层）。"
   ],
   "matrix": [
     "test:alivelamp",
@@ -93,5 +95,37 @@
     "test:halfconn": "锚/预期漂移｜桩缺名：expo 源 downTextOfSid 缺桩崩溃（expo-app/scripts 件）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:approve-card": "环境性｜环境性：tmux E2E 需本机 tmux 会话（expo 豁免锚归刷新批）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md",
     "test:retired-live": "时限性·长周期设计态｜依赖 30min 巡检周期的真 relay 观测件（1200s 预算仍心跳等待；矩阵本不含）｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md §戊"
+  },
+  "watch": {
+    "test:ws": "DEV-41 迁出（#174，2026-11-28 回填）｜族：会话/活流｜处置：有意变更未跟测——SQLITE-FLIP 缺省档渗入（本键钉 json 沙盒五键）｜注：需真 CLI 键，仅本地 sweep 可跑｜出处 docs/night-audit/red-baseline-verdicts-2026-11-28.md 丙族处置总账",
+    "test:xmsg-e2e": "DEV-41 迁出（#174，2026-11-28 回填）｜族：跨端注入｜处置：有意变更未跟测——W-PMSEAT 值守任命卡化（claim+approve 新流）｜出处同上",
+    "test:005-cloud": "DEV-41 迁出（#174，2026-11-28 回填）｜族：跨端注入/云｜处置：有意变更未跟测——SQLITE-FLIP 缺省档渗入（钉 json 沙盒）｜出处同上",
+    "test:ui-followup": "DEV-41 迁出（#174，2026-11-28 回填）｜族：会话/活流｜处置：有意变更未跟测——U1 空闲不跳根修 v3（updated_at 四现族）｜出处同上",
+    "test:watchdog": "DEV-41 迁出（#174，2026-11-28 回填）｜族：会话/活流｜处置：有意变更未跟测——A2 消息进活流随新语义｜出处同上",
+    "test:boardfix": "DEV-41 迁出（#174，2026-11-28 回填）｜族：板生命周期/收口｜处置：有意变更未跟测——W-CARDLIFE-R2/R3 回执闸（板族补回执夹具）｜出处同上",
+    "test:board-mirror": "DEV-41 迁出（#174，2026-11-28 回填）｜族：板生命周期/收口｜处置：有意变更未跟测——task_ref 注入/搬卡随新语义｜出处同上",
+    "test:m1-orchestration": "DEV-41 迁出（#174，2026-11-28 回填）｜族：板生命周期/收口｜处置：有意变更未跟测——收口联动双写随新语义｜出处同上",
+    "test:m-board": "DEV-41 迁出（#174，2026-11-28 回填）｜族：板生命周期/收口｜处置：有意变更未跟测——活单在制随新语义｜出处同上",
+    "test:m1-foundation": "DEV-41 迁出（#174，2026-11-28 回填）｜族：导入/存储｜处置：有意变更未跟测——bootfast3 导入后台化/async 化（存储族 flush 栅栏＋await 化）｜出处同上",
+    "test:import-org": "DEV-41 迁出（#174，2026-11-28 回填）｜族：导入/存储｜处置：有意变更未跟测——bootfast3 async 化（坏 JSON 源导入面随新语义）｜出处同上",
+    "test:import-session-task": "DEV-41 迁出（#174，2026-11-28 回填）｜族：导入/存储｜处置：有意变更未跟测——appendOnly checkpoint 增量续读（重构 E/F 段）｜出处同上",
+    "test:sqlite-task": "DEV-41 迁出（#174，2026-11-28 回填）｜族：导入/存储｜处置：有意变更未跟测——bootfast3 async 化（导入产出行数随新语义）｜出处同上",
+    "test:m1-import-parity": "DEV-41 迁出（#174，2026-11-28 回填）｜族：导入/存储｜处置：有意变更未跟测——bootfast3 async 化（六域对账面随新语义）｜出处同上",
+    "test:read-mode": "DEV-41 迁出（#174，2026-11-28 回填）｜族：导入/存储｜处置：有意变更未跟测——bootfast3 async 化（对账/投影缺省面随新语义）｜出处同上",
+    "test:snapshot-parity": "DEV-41 迁出（#174，2026-11-28 回填）｜族：快照/端投影｜处置：真缺陷①已修——云通道 SNAPSHOT 补 acct_bound/pm_duty/relay_devices/design_docs 四 parity 字段（cloud-client.ts）｜出处同上",
+    "test:notify-overhaul": "DEV-41 迁出（#174，2026-11-28 回填）｜族：通知/值守｜处置：有意变更未跟测——W-NOTIFYPOLISH 视觉改版（锚随新形）｜出处同上",
+    "test:r1c-notify": "DEV-41 迁出（#174，2026-11-28 回填）｜族：通知/值守｜处置：有意变更未跟测——N11④/N14 悬账补记随新语义｜出处同上",
+    "test:x0": "DEV-41 迁出（#174，2026-11-28 回填）｜族：通知/值守｜处置：有意变更未跟测——W-PMSEAT 值守任命卡化（no-leader 接管走 claim+approve 新流）｜出处同上",
+    "test:pm-duty-product": "DEV-41 迁出（#174，2026-11-28 回填）｜族：通知/值守｜处置：有意变更未跟测——worker done 即唤醒链随新语义｜出处同上",
+    "test:pmresume": "DEV-41 迁出（#174，2026-11-28 回填）｜族：通知/值守｜处置：有意变更未跟测——逃生阀拉起随新语义｜出处同上",
+    "test:alive": "DEV-41 迁出（#174，2026-11-28 回填）｜族：会话/活流｜处置：有意变更未跟测——#275S 沙盒闸（fixture 挪非沙盒路径，孤儿收养/mtime 随新语义）｜出处同上",
+    "test:m12-commands": "DEV-41 迁出（#174，2026-11-28 回填）｜族：命令/权限｜处置：有意变更未跟测——W-BOARDV2 seat-scan 行（段链计数滤黑板行）｜出处同上",
+    "test:m13-delta": "DEV-41 迁出（#174，2026-11-28 回填）｜族：命令/权限｜处置：有意变更未跟测——轻立项 fixture 建组前置随新语义｜出处同上",
+    "test:m13-web-delta": "DEV-41 迁出（#174，2026-11-28 回填）｜族：命令/权限｜处置：有意变更未跟测——confirm 域 delta 随新语义｜出处同上",
+    "test:permission-compat": "DEV-41 迁出（#174，2026-11-28 回填）｜族：命令/权限｜处置：有意变更未跟测——轻立项 fixture 前置连坐面随新语义｜出处同上",
+    "test:wildonboard": "DEV-41 迁出（#174，2026-11-28 回填）｜族：命令/权限｜处置：有意变更未跟测——在岗=最近活跃 external 随新语义｜出处同上",
+    "test:codex-adoption": "DEV-41 迁出（#174，2026-11-28 回填）｜族：引擎收编｜处置：有意变更未跟测——#275S 沙盒闸（fixture 挪非沙盒路径，Codex 收编随新语义）｜出处同上",
+    "test:engine-rollouts": "DEV-41 迁出（#174，2026-11-28 回填）｜族：引擎收编｜处置：有意变更未跟测——#275S 沙盒闸（fixture 挪非沙盒路径，Trae rollout 收编随新语义）｜出处同上",
+    "test:005-blankset": "DEV-41 迁出（#174，2026-11-28 回填）｜族：CSS 兜底｜处置：真缺陷②已修——base.css color-mix 静态兜底全量 @supports 化（W-BLANKSET B1 换轨锁新形态）｜出处同上"
   }
 }

@@ -16,39 +16,34 @@ jobs:
   #   本文件。单源化后 anchored/键数抬锚废除：矩阵由本 job 从 ci.json 生成，test job
   #   fromJSON 消费；丢键=改 ci.json（reviewed diff 可见），不再是 YAML 手抄盲区。）
   # 前置闸：校验失败 test job 不启动（needs 依赖），拼写错/结构坏在第一分钟红。
+  # DEV-53（2026-11-28）：校验逻辑迁 relay/scripts/check-ci-layers.mjs（本地可同口径
+  #   运行），本 job 只留薄调用；新增 watch 层结构校验＋「迁出=入 watch」机械闸
+  #   （基线差集：PR 对 base 分支，push 对推送前 tip，merge-base 比对）。
   matrix-guard:
     runs-on: ubuntu-latest
     outputs:
       scripts: ${{ steps.gen.outputs.scripts }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 迁出闸需基线历史（github.event.before / HEAD~1 可解析）
       - uses: actions/setup-node@v4
-        with: { node-version: 22 } # DEV-25：与 test job 同源对齐（本 job 只跑 node -e 守卫，无包产物）
-      - name: 矩阵单源校验 + 生成（ci.json → test job matrix）
+        with: { node-version: 22 } # DEV-25：与 test job 同源对齐（本 job 只跑 node 守卫脚本，无包产物）
+      - name: 分层闸（结构＋迁出=入 watch）+ 矩阵生成（ci.json → test job matrix）
         id: gen
         run: |
-          node -e '
-            const fs = require("fs");
-            // 本 job 无 defaults working-directory，cwd=repo 根——路径用 repo 根视角
-            const ci = JSON.parse(fs.readFileSync("relay/tests/ci.json", "utf8"));
-            const matrix = ci.matrix, quarantine = Object.keys(ci.quarantine || {});
-            if (!Array.isArray(matrix) || matrix.length === 0) { console.error("ERR: ci.json matrix 必须为非空数组"); process.exit(1); }
-            if (matrix.some(k => typeof k !== "string")) { console.error("ERR: ci.json matrix 含非字符串键"); process.exit(1); }
-            if (new Set(matrix).size !== matrix.length) { console.error("ERR: ci.json matrix 含重复键"); process.exit(1); }
-            const overlap = matrix.filter(k => quarantine.includes(k));
-            if (overlap.length) { console.error("ERR: 键同时出现在 matrix 与 quarantine: [" + overlap.join(", ") + "]"); process.exit(1); }
-            const pkg = JSON.parse(fs.readFileSync("relay/package.json", "utf8"));
-            const scripts = new Set(Object.keys(pkg.scripts || {}));
-            // 拼写向（matrix + quarantine 键都必须在 package.json 注册——quarantine 键本地仍可跑）
-            const bad = [...matrix, ...quarantine].filter(k => !scripts.has(k));
-            if (bad.length) { console.error("ERR: ci.json 键未在 package.json 注册（拼写错/漂移）: [" + bad.join(", ") + "]"); process.exit(1); }
-            // 结构向：防止手抄矩阵行回归（单源化前的旧形态）
-            const yml = fs.readFileSync(".github/workflows/relay.yml", "utf8");
-            if (/script: *\[[^\]]/.test(yml)) { console.error("ERR: relay.yml 检出内联矩阵清单（旧手抄形态回归）——矩阵只能由 relay/tests/ci.json 生成"); process.exit(1); }
-            const out = JSON.stringify(matrix);
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, "scripts=" + out + "\n");
-            console.log("OK: 矩阵 " + matrix.length + " 键自 ci.json 生成，拼写向全注册，隔离台账 " + quarantine.length + " 键");
-          '
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags origin "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+            BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              BASE_REF="$BEFORE"
+            else
+              BASE_REF="HEAD~1"
+            fi
+          fi
+          node relay/scripts/check-ci-layers.mjs --base "$BASE_REF" --emit-matrix
 
   test:
     needs: [matrix-guard]
