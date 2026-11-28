@@ -71,7 +71,12 @@ const zhLen = (s: string) => [...s].reduce((n, ch) => n + (/[\u2E80-\u9FFF\uF900
   // 同特异度源序在后恒胜，正则两处各自命中=测试绿而运行时白雾。单源守卫：backdrop 的
   // background 声明全文件只允许 :231 一处（含 16% 档），bg0 混合档零残留。
   const bdBlocks = css.match(/\.pair-pop-backdrop \{[^}]*\}/g) ?? [];
-  ok(bdBlocks.filter((b) => /background/.test(b)).length === 1 && !/var\(--bg0\) 72%/.test(css), `C2 backdrop 单源守卫（含 background 的定义块=${bdBlocks.filter((b) => /background/.test(b)).length} 处，bg0 72% 旧档零残留）`);
+  // DEV-41 P1-1 @supports 化：background 定义块=2（块外 transparent 静态兜底＋@supports 内 16% modern）。
+  // 单源语义不变=每条渲染路径恰一个生效声明：16% 档全文件恰 1 处、块外恒 transparent、旧档零残留。
+  ok(bdBlocks.filter((b) => /background/.test(b)).length === 2
+    && bdBlocks.filter((b) => b.includes("background: transparent;")).length === 1
+    && (css.match(/var\(--text-strong\) 16%, transparent/g) ?? []).length === 1
+    && !/var\(--bg0\) 72%/.test(css), `C2 backdrop 单源守卫（含 background 的定义块=${bdBlocks.filter((b) => /background/.test(b)).length} 处=1 静态+1 @supports，16% 档恰 1，bg0 72% 旧档零残留）`);
   ok(/\.create-field:focus \{[^}]*border-color: var\(--brand-hover\);[^}]*box-shadow: 0 0 0 3px var\(--focus-ring\);/.test(css), "C3 焦点环：brand-hover 描边+focus-ring 3px（token 首消费）");
 }
 

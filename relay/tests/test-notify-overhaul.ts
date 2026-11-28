@@ -76,7 +76,7 @@ async function main() {
     assert(nbadgeBlock.includes(".nbadge"), "badge 中性单规则 .nbadge 在位（六色体系退役 W-NOTIFYPOLISH ④A2+B4）");
     for (const k of ["waiting", "confirm", "dispatch", "acceptance", "system", "alarm"]) assert(!css.includes(`.nbadge-${k} {`), `badge 六色规则退役 nbadge-${k}`);
     assert(css.includes("height: 18px") && css.includes("border-radius: 4px"), "badge 规格（高 18/radius 4/11px 500）");
-    assert(nbadgeBlock.includes("color: var(--dim)") && nbadgeBlock.includes("background: color-mix(in srgb, var(--text-strong) 6%, transparent)"), "badge 中性 dim+6% 底（14% alpha per-kind 着色随六色退役；dim 底降级声明对兼容）");
+    assert(nbadgeBlock.includes("color: var(--dim)") && css.includes("@supports (color: color-mix(in srgb, red, blue)) { .nbadge { background: color-mix(in srgb, var(--text-strong) 6%, transparent)"), "badge 中性 dim+6% 底（14% alpha per-kind 着色随六色退役；dim 底降级声明对兼容——DEV-41 P1-1 @supports 化：6% modern 层入块）");
     assert(!css.includes("rgba(245, 158, 11, .14)") && !css.includes("rgba(167, 139, 250, .14)") && !css.includes("html[data-theme=\"light\"] .nbadge-waiting"), "badge per-kind 着色/浅色适配随六色退役");
     assert(js.includes("nbadge nbadge-") && js.includes("+ km.badge +"), "行渲染带 kind badge（模板拼接，DOM 类保留）");
     assert(css.includes("-webkit-line-clamp: 2"), "标题 clamp2");
@@ -103,7 +103,7 @@ async function main() {
     // 组头的 blur=视觉死代码+WKWebView 冻结先例族），实底 color-mix 分层承担组头底。
     const ngrpBlock = css.slice(css.indexOf(".ngrp {"), css.indexOf("}", css.indexOf(".ngrp {")));
     assert(ngrpBlock.includes(".ngrp") && !ngrpBlock.includes("position: sticky") && !ngrpBlock.includes("backdrop-filter:"), "组头 sticky+blur 双退役（P1-1 sticky 撤/⑤C3 blur 死代码）");
-    assert(ngrpBlock.includes("background: color-mix(in srgb, var(--surface1) 86%, transparent)"), "组头实底 color-mix 分层（blur 退役后承担组头底）");
+    assert(css.includes("@supports (color: color-mix(in srgb, red, blue)) { .ngrp { background: color-mix(in srgb, var(--surface1) 86%, transparent)"), "组头实底 color-mix 分层（blur 退役后承担组头底——DEV-41 P1-1 @supports 化：86% modern 层入块）");
     assert(css.includes("font-weight: 600") && css.includes("letter-spacing: 0") && !css.includes("letter-spacing: .05em"), "组头 600/字距 0（W-NOTIFYPOLISH ⑦A8：CJK .05em→0，2px 错位根修）");
     assert(js.includes('data-notify-grp-clear'), "组级清空（hover 出现）");
     assert(html.includes('class="clr" type="button" data-notify-clear-soft') === false, "头部全局清空退役");
