@@ -111,10 +111,14 @@
 
 PC 端两种装法，**选一种即可**（也可以都用：桌面端检测到插件已在运行会自动让位，互不冲突）。
 
-### 装法 A · Claude Code 插件（终端流）
+### 装法 A · Claude Code 插件（终端流，从源码构建）
+
+插件的可执行产物（relay bundle、hooks、网页控制台等）**不入 git**（单源构建，见下方「从源码重建插件」说明）——`claude plugin marketplace add humumu130/cc-deck` 直接装的插件缺产物起不来，需先构建再装：
 
 ```bash
-claude plugin marketplace add humumu130/cc-deck
+git clone https://github.com/humumu130/cc-deck.git && cd cc-deck
+cd relay && npm ci && node scripts/build-plugin.mjs && cd ..
+claude plugin marketplace add "$(pwd)/cc-plugins"
 claude plugin install cc-deck@cc-deck-plugins
 ```
 
