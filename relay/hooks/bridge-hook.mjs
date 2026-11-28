@@ -47,7 +47,7 @@ function diag(line) {
 const STATE_FILE = "hook-post-fail.json";
 const STATE_THROTTLE_MS = 30_000;
 
-/** 纯函数：由上态推下态（测试直测——见 scripts/test-hookfail.ts） */
+/** 纯函数：由上态推下态（测试直测——见 tests/test-hookfail.ts） */
 export function nextState(prev, ok, now, errText) {
   const p = prev && typeof prev === "object" ? prev : {};
   if (ok) {

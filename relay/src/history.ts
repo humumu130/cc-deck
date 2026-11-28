@@ -196,7 +196,7 @@ export interface ReplayedSession {
 // 干等）：托管会话（带 relay_session_id）被重启中断时的分类标记——中断前 WORKING
 // 打 pre_reboot_status（boot 自愈链 resumeInterruptedByReboot 消费后即清，纯 boot
 // 瞬态不持久化）；WAITING/其余维持旧文案旧行为（半截权限流 resume 后无法自答，
-// 人工触发续）。独立导出=测试直吃（scripts/test-resume-reboot.ts）。
+// 人工触发续）。独立导出=测试直吃（tests/test-resume-reboot.ts）。
 // W-REBOOTTXT（1103 用户实锤）：承诺必须真实——autoResumable=false（revive 链注定
 // 拒续的类型，见 rebootAutoResumable）的 WORKING 中断**不打标不诺续**，如实走
 // 「发送消息即可继续」（打了标 boot 链也是空试+落空承诺）。

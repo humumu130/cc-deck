@@ -10,7 +10,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # DEV-38/R5①（2026-11-28）矩阵单源化：矩阵键唯一事实源 = relay/tests/ci.json
+  # （前史：W-P2BATCH4 矩阵漂移守卫——「矩阵键必须在 package.json 注册」拼写向 +
+  #   anchored 锚定集/键数抬锚丢键向，双登记手抄；46→65 十一次手动抬锚史见 git log
+  #   本文件。单源化后 anchored/键数抬锚废除：矩阵由本 job 从 ci.json 生成，test job
+  #   fromJSON 消费；丢键=改 ci.json（reviewed diff 可见），不再是 YAML 手抄盲区。）
+  # 前置闸：校验失败 test job 不启动（needs 依赖），拼写错/结构坏在第一分钟红。
+  matrix-guard:
+    runs-on: ubuntu-latest
+    outputs:
+      scripts: ${{ steps.gen.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 } # DEV-25：与 test job 同源对齐（本 job 只跑 node -e 守卫，无包产物）
+      - name: 矩阵单源校验 + 生成（ci.json → test job matrix）
+        id: gen
+        run: |
+          node -e '
+            const fs = require("fs");
+            // 本 job 无 defaults working-directory，cwd=repo 根——路径用 repo 根视角
+            const ci = JSON.parse(fs.readFileSync("relay/tests/ci.json", "utf8"));
+            const matrix = ci.matrix, quarantine = Object.keys(ci.quarantine || {});
+            if (!Array.isArray(matrix) || matrix.length === 0) { console.error("ERR: ci.json matrix 必须为非空数组"); process.exit(1); }
+            if (matrix.some(k => typeof k !== "string")) { console.error("ERR: ci.json matrix 含非字符串键"); process.exit(1); }
+            if (new Set(matrix).size !== matrix.length) { console.error("ERR: ci.json matrix 含重复键"); process.exit(1); }
+            const overlap = matrix.filter(k => quarantine.includes(k));
+            if (overlap.length) { console.error("ERR: 键同时出现在 matrix 与 quarantine: [" + overlap.join(", ") + "]"); process.exit(1); }
+            const pkg = JSON.parse(fs.readFileSync("relay/package.json", "utf8"));
+            const scripts = new Set(Object.keys(pkg.scripts || {}));
+            // 拼写向（matrix + quarantine 键都必须在 package.json 注册——quarantine 键本地仍可跑）
+            const bad = [...matrix, ...quarantine].filter(k => !scripts.has(k));
+            if (bad.length) { console.error("ERR: ci.json 键未在 package.json 注册（拼写错/漂移）: [" + bad.join(", ") + "]"); process.exit(1); }
+            // 结构向：防止手抄矩阵行回归（单源化前的旧形态）
+            const yml = fs.readFileSync(".github/workflows/relay.yml", "utf8");
+            if (/script: *\[[^\]]/.test(yml)) { console.error("ERR: relay.yml 检出内联矩阵清单（旧手抄形态回归）——矩阵只能由 relay/tests/ci.json 生成"); process.exit(1); }
+            const out = JSON.stringify(matrix);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, "scripts=" + out + "\n");
+            console.log("OK: 矩阵 " + matrix.length + " 键自 ci.json 生成，拼写向全注册，隔离台账 " + quarantine.length + " 键");
+          '
+
   test:
+    needs: [matrix-guard]
     name: relay tests (${{ matrix.script }})
     runs-on: ubuntu-latest
     # bridge 用例含大量真实定时器等待（重连退避/心跳/队列晋升），CI 上整体
@@ -18,38 +59,23 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # 矩阵键自唯一事实源 relay/tests/ci.json 生成（matrix-guard job）——增删键只改
+      # ci.json，本文件不再出现第二份清单。只收自包含测试（进程内/回环网络/
+      # fake-injector/mkdtemp 沙盒，不需要 Claude CLI 与 API 凭据）：
+      # test:sessions / test:ws 拉起真实 claude CLI 子进程并等待真实模型回合，
+      # CI 无 CLI/凭据必挂，属设计态排除（红基线定罪台账见 ci.json quarantine）。
+      # test:org / test:leader（#26 M1）纯 fs+假工厂；test:projects / test:dispatch
+      #   （#26 M2）mkdtemp 沙盒假工厂派单；test:routing（#26 M3）路由表纯 fs 单测；
+      # test:autorevive（#75/#17）假工厂+fs 夹具；test:settings（#17）三层合成纯单元；
+      # test:settings-ws（#17 补强）子进程真 relay ×3，CCR_NO_LEADER=1 保证不拉 CLI；
+      # test:codex（#27 P0）/bin/sh 桩脚本替真 codex CLI；test:artifacts-dead（#224）/
+      #   test:deliver-session（#227/#230）mkdtemp 沙盒纯单元；
+      # test:sqlite-resilience（#158 批1）驱动失败降级纯注入；
+      # test:lan-boot（CONNV4D-fix1）真子进程+真组播，CCR_MDNS_IP 私有组隔离+哑桥；
+      # DEV-21 批 A 五新套件（resume-degrade/patrol-escalate/cloud-hbthrottle/
+      #   data-guard/swapguard）假工厂/pinSandbox/纯函数自包含。
       matrix:
-        # 只跑自包含测试：进程内/回环网络/fake-injector，不需要 Claude CLI 与 API 凭据。
-        # test:sessions / test:ws 通过 agent SDK query() 拉起真实 claude CLI 子进程并
-        # 等待真实模型回合完成，CI 无 CLI/凭据必挂，故排除。
-        # test:org / test:leader（#26 矩阵式 M1）：纯 fs + agentFactory 假工厂，同为自包含
-        # test:projects / test:dispatch（#26 矩阵式 M2）：mkdtemp 沙盒 + 假工厂派单收口，同上
-        # test:routing（#26 矩阵式 M3）：路由表 store 纯 fs 单测，同上
-        # test:autorevive（#75/#17）：自动拉起纯单元（假工厂+fs 夹具，含雇员独立家读家锁），同上
-        # test:settings（#17 第二批）：设置三层合成纯单元（env>file>default + 热切换广播），同上
-        # test:settings-ws（#17 第二批补强）：子进程真 relay 起停 ×3（新装物化/存量收敛/env
-        #   锁定），纯协议断言不创建会话——CCR_NO_LEADER=1 显式关掉启动序的 Leader
-        #   首建（不设则无锚即真拉 Leader CLI，「不拉 CLI」靠开关保证而非碰巧），CI 可跑
-        # test:codex（#27 P0）：CodexAgentSession 用 /bin/sh 桩脚本替代真 codex CLI
-        #   （CCR_CODEX_PATH 注入），零 codex 二进制零 API key，CI 可跑
-        # test:artifacts-dead（#224）/ test:deliver-session（#227/#230，dev 0.6.1/0.6.2 线）：
-        #   输出物下发口径与会话身份挂账，均 mkdtemp 沙盒纯单元，CI 可跑
-        # test:sqlite-resilience（#158 批1）：better-sqlite3 驱动失败降级 json 档——纯
-        #   fs 夹具+驱动注入（不真换二进制），linux runner 上驱动本就可载，CI 可跑
-        # test:lan-boot（CONNV4D-fix1 P1-1）：真 index 子进程+真组播（bonjour-service）
-        #   的启动序 TXT 断言——CCR_MDNS_IP 隔离到私有组 239.192/14（同网不可见，#20
-        #   幽灵实例纪律不破）+CCR_CLOUD_URL 哑桥（零外联）+CCR_NO_LEADER=1，CI 可跑
-        # DEV-21 批 A（2026-11-28 随 P1-1 返修合入，leader 令）：五新套件进矩阵——
-        #   test:resume-degrade（DL-P1-1 降级链）/ test:patrol-escalate（DL-P1-5 升级）/
-        #   test:cloud-hbthrottle（DL-P1-6 纯函数+锚）/ test:data-guard（DL-P1-9 硬闸，
-        #   CI 无生产数据=静默分支自证）/ test:swapguard（DEV-18 守卫，沙盒跑真脚本）
-        #   均自包含（假工厂/pinSandbox/纯函数），CI 可跑
-        # W-CARDLIFE-R4 第二轮解并（1106）：dev 再进（aggregatev1 #44+inboxv1r1 #47）——全量并集任何一侧不丢
-        # W-MERGEFIX3 第三轮解并（1106）：dev 再进（resumebanner/seatlive/pmresourcev1 #52）——全量并集任何一侧不丢
-        # DEV-21×dev 解并（11-28）：dev 进 engwarm（#161/#164 线），批 A 五新套件并存——全量并集 59+5+1=65 任何一侧不丢
-        # DEV-39（11-28）：批测 test:dev39 进矩阵——boot-env 灰度文件/存储态画像/ABI 烙印
-        #   自比对/events 归档位四件（自包含：mkdtemp 沙盒+驱动注入，CI 可跑）
-        script: [test:alivelamp, test:boardtruth, test:cardterm, test:cardterm-review3, test:boardv2, test:laneflip, test:boardrecon, test:orphancard, test:pairloop, test:dutybackoffr2, test:277-team-create-redesign, test:artifacts-dead, test:autorevive, test:bridge, test:bus, test:cardlife, test:subagent, test:cardlifer2, test:cloud, test:codex, test:deliver-session, test:dispatch, test:dispatchbomb, test:dispatchfix, test:drainfix, test:engdistb, test:enginefix, test:engwarm, test:ghrepo, test:graceful-exit, test:dutywire, test:engsec, test:history, test:inboxv1, test:leader, test:linkquality, test:org, test:aggregatev2, test:org-defects, test:pmseat, test:pmappoint-gap, test:prbackflow, test:prchip, test:projects, test:prreview, test:reviewseat, test:routing, test:settings, test:settings-ws, test:sqlite-resilience, test:teampolish, test:teamdissolve, test:aggbug, test:engdista, test:zcode-c, test:leader-dispatch, test:connv4c1, test:lan-peers, test:lanpeers-web, test:lan-boot, test:resume-degrade, test:patrol-escalate, test:cloud-hbthrottle, test:data-guard, test:swapguard, test:dev39]
+        script: ${{ fromJSON(needs.matrix-guard.outputs.scripts) }}
     defaults:
       run:
         working-directory: relay
@@ -72,7 +98,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # relay 的 scripts/test-cloud.ts 进程内 import ../cloud-bridge 源码，
+      # relay 的 tests/test-cloud.ts 进程内 import ../cloud-bridge 源码，
       # tsc/tsx 都会从 cloud-bridge 向上解析 ws —— 必须同装其依赖
       - name: Install cloud-bridge dependencies
         run: npm ci
@@ -83,39 +109,3 @@ jobs:
 
       - name: Run ${{ matrix.script }}
         run: npm run ${{ matrix.script }}
-
-  # W-P2BATCH4 件2（矩阵漂移守卫，1106 同日第四咬的最小版治本）：矩阵是自包含测试的
-  # 白名单精选（package.json 158 个 test:* 大量是本地/需真 CLI 的设计态排除——双向差集
-  # 不可用），守卫单向：**矩阵键必须在 package.json 注册**（拼写错/键漂移即红）——今日
-  # 两轮收割各咬一次的并集解冲突（键错/丢）在 CI 前置拦截。生成式方案回执备案不实施。
-  # 注：job 必须完整独立成块——插在 test 的 defaults 与 steps 之间会把 steps 块错挂到
-  # 本 job（YAML 映射被兄弟键打断不可续写，重复 steps 键后者覆盖=测试主 job 静默失明）。
-  matrix-guard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 } # DEV-25：与 test job 同源对齐（本 job 只跑 node -e 守卫，无包产物）
-      - name: 矩阵键守卫（双向：拼写向+丢键向）
-        run: |
-          node -e '
-            const fs = require("fs");
-            // 本 job 无 defaults working-directory，cwd=repo 根——路径用 repo 根视角
-            const yml = fs.readFileSync(".github/workflows/relay.yml", "utf8");
-            const m = yml.match(/script: \[([^\]]+)\]/);
-            if (!m) { console.error("ERR: relay.yml 未找到 script: [...] 矩阵行"); process.exit(1); }
-            const matrix = m[1].split(",").map(s => s.trim()).filter(Boolean);
-            const pkg = JSON.parse(fs.readFileSync("relay/package.json", "utf8"));
-            const scripts = new Set(Object.keys(pkg.scripts || {}));
-            // 方向①（拼写向）：矩阵键必须在 package.json 注册
-            const bad = matrix.filter(k => !scripts.has(k));
-            if (bad.length) { console.error("ERR: 矩阵键未在 package.json 注册（拼写错/漂移）: [" + bad.join(", ") + "]"); process.exit(1); }
-            // W-P2BATCH4-R1 方向②（丢键向——A 审备案法）：核心键锚定+键数下限。
-            // 全量反向不可用（pkg 158 个 test:* 大量设计态排除≠精选矩阵）；键丢=CI 静默
-            // 少跑（#46 R4 实锤形态）——锚定集与上行 script: [...] 同源维护（键增改这里）。
-            const anchored = ["test:alivelamp","test:boardtruth","test:cardterm","test:cardterm-review3","test:boardv2","test:laneflip","test:boardrecon","test:orphancard","test:pairloop","test:dutybackoffr2","test:277-team-create-redesign","test:artifacts-dead","test:autorevive","test:bridge","test:bus","test:cardlife","test:subagent","test:cardlifer2","test:cloud","test:codex","test:deliver-session","test:dispatch","test:dispatchbomb","test:dispatchfix", "test:drainfix","test:engdistb","test:enginefix","test:engwarm","test:ghrepo","test:graceful-exit","test:dutywire","test:engsec","test:history","test:inboxv1","test:leader","test:linkquality","test:org","test:aggregatev2","test:org-defects","test:pmseat","test:pmappoint-gap","test:prbackflow","test:prchip","test:projects","test:prreview","test:reviewseat","test:routing","test:settings","test:settings-ws","test:sqlite-resilience","test:teampolish","test:teamdissolve","test:aggbug","test:engdista","test:zcode-c","test:leader-dispatch","test:connv4c1","test:lan-peers","test:lanpeers-web","test:lan-boot","test:resume-degrade","test:patrol-escalate","test:cloud-hbthrottle","test:data-guard","test:swapguard"];
-            const dropped = anchored.filter(k => !matrix.includes(k));
-            if (dropped.length) { console.error("ERR: 矩阵丢键（删整键盲区——键丢=测试静默不跑）: [" + dropped.join(", ") + "]（锚定集随 script 行同源维护）"); process.exit(1); }
-            if (matrix.length < 65) { console.error("ERR: 矩阵键数 " + matrix.length + " < 65 下限（批量丢键形式——键增同步抬锚定值；W-T11CIFIX 补 alivelamp 注册 46→47，W-ZCODE-C-R1 补 zcode-c anchored 双落点 47→48，W-CARDTERM 补 cardterm 48→49，W-ORPHANSWEEP 补 leader-dispatch 50→51，CONNV4C1 补 connv4c1 51→52，CONNV4D 补 lan-peers+lanpeers-web 52→54，CONNV4D-fix1 补 lan-boot 54→55，W-ENGINEFIX 补 enginefix 56→57，W-RELDEATH 补 ghrepo+graceful-exit 57→59，DEV-21 批 A 补五新套件 59→64，DEV-23 engwarm 解并 64→65）"); process.exit(1); }
-            console.log("OK: 矩阵 " + matrix.length + " 键双向守卫过（拼写向全注册+丢键向锚定键全在+键数下限 65——DEV-21 批 A 59→64 + DEV-23 engwarm 解并 64→65）");
-          '

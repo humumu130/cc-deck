@@ -4,7 +4,7 @@
 // 「fail-fast 硬闸」未落——本件就是那道闸。
 //
 // 判定（四条件同时成立即抛错拒跑）：
-//   ① 测试语境：主入口脚本名匹配 test-*（relay/scripts/test-*.ts 直跑、tsx/CI 同判）
+//   ① 测试语境：主入口脚本名匹配 test-*（relay/tests/test-*.ts 直跑、tsx/CI 同判）
 //      ——生产 relay 入口是 src/index.ts，永不匹配；
 //   ② 真实生产数据在场（P1-1 返修根修，2026-11-28）：生产家内存在**数据承载物**——
 //      data/cc-deck.sqlite3、data/events.ndjson、org 记账文件（dispatch-log.ndjson/
@@ -19,7 +19,7 @@
 //
 // 沙盒缺省（resolveDataDir 的 cwd/data、mkdtemp 夹具）不在 ~/.cc-deck 下——零波及：
 // 既有钉档测试全部照常。设计取舍：闸放在解析单点（config.resolveDataDir/org.orgDir），
-// 不做测试文件逐个改造（296 个 scripts/test-*.ts 的机械翻新不减少任何风险面——
+// 不做测试文件逐个改造（296 个 tests/test-*.ts 的机械翻新不减少任何风险面——
 // 单点闸一个不漏）。
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -84,6 +84,6 @@ export function assertTestNotTouchingProd(what: string, resolved: string): void 
   if (!insideProduction(resolved)) return;
   throw new Error(
     `[test-data-guard] 测试进程解析${what}到生产数据面：${resolved}——1122 生产库污染事故的复发通道，拒跑。` +
-      `测试请钉 CCR_DATA_DIR/CCR_ORG_DIR 到沙盒（mkdtemp 或 scripts/test-lib.ts 的 pinSandbox）；确需读生产数据的诊断工具请改名非 test-* 前缀或显式 CCR_TEST_PROD_DATA_OK=1。`,
+      `测试请钉 CCR_DATA_DIR/CCR_ORG_DIR 到沙盒（mkdtemp 或 tests/test-lib.ts 的 pinSandbox）；确需读生产数据的诊断工具请改名非 test-* 前缀或显式 CCR_TEST_PROD_DATA_OK=1。`,
   );
 }

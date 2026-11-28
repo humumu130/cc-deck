@@ -8,7 +8,7 @@
 // 新增时**必须**过本模块单点读取 `autoTierOf("<family>")` 判档：
 //   off     = 连研判都停（完全黑）；observe = 研判照常、动作只 recordWouldDo 不执行；
 //   auto    = 照常执行（现网默认，见下方默认映射）。
-// 静态锁：relay/scripts/test-observe3.ts 断言三族调用点均引用 autoTierOf——新增族请同步
+// 静态锁：relay/tests/test-observe3.ts 断言三族调用点均引用 autoTierOf——新增族请同步
 // AUTO_FAMILIES 与该锁，绕过单点直连执行=审查打回项。
 //
 // 三族三键（任务书拍板：不搞一个总开关一锅端，DS「少设置」与细粒度平衡）：
