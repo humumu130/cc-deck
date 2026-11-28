@@ -1378,6 +1378,10 @@ export class SessionManager {
     // 停滞对）。修=翻转即直写（W-SMIMPL③「直写收口」注释的真实兑现——挂点从帧面
     // 移到状态机单点，全部翻转路径覆盖，含 WAITING/自愈翻活）。幂等 REPLACE+频率
     // 低（状态翻转非帧级），失败自吞（shadowWriteSession 内建降级语义）。
+    // ⚠️ 审查返修注（P1-1a）：本笔只保 **status 新鲜度**——调用方常在 transition 后
+    // 才补写终态字段（done_reason/duration_ms/last_error），且那些路径无后续帧=无
+    // 帧尾补写。终态完整快照由各收口点字段补完后过 flushSessionRow 再刷一笔（末笔
+    // 带全量字段，REPLACE 幂等末笔赢）。
     try { shadowWriteSession(s.state); } catch { /* 直写自身已吞错降级，双保险 */ }
     // #291 turn 生命周期补清算：终态（DONE/ERROR）时清 turn_started_at——
     // 「WORKING ⟔ 活跃 turn」判活的主判据半边。不清的残留面：终态卡字段陈挂 +
@@ -2489,6 +2493,11 @@ export class SessionManager {
         updated_at: s.state.updated_at,
       });
     }
+    // DEV-39 返修（审查 P2-1e）：本口直赋 status 不走 transition、bus.emit 直发不经
+    // emitUpdated 帧尾挂点——外部会话状态迁移（bridge WAITING/ERROR/orphan-adopt）此前
+    // 恒不落库（import=off 后库行陈旧，BOOT_FROM=db 收养陈旧态）。changed 门内刷末笔
+    // （同值重报不写，对齐 1123 跳顶守卫）。
+    if (changed || summaryChanged) this.flushSessionRow(s);
   }
 
   // #363 上下文压缩状态：PreCompact 置位（压缩期转录静默，端上据此区分"卡死"与
@@ -3276,6 +3285,7 @@ export class SessionManager {
     s.state.waiting_request = undefined;
     s.state.waiting_started_at = undefined;
     this.touchIfChanged(s.state, at, true); // DEV-31 清件③：过单点（DONE 终态；force=sweep 收殓传真实死亡时刻需可回拨校正，#144 口径）
+    this.flushSessionRow(s); // DEV-39 返修：终态字段补完后末笔全量落库（done_reason/duration_ms 此刻才在 state 上）
     // #105：external 值守目标回合终态=统一值守检查点（对齐托管侧 onTurnEnd 的
     // Leader turn_end 语义——在岗证据重算行动位+worker_done 计数归零）。归零条件
     // 限定「本会话是当前值守目标」：其他 external 会话回合结束不碰值守账。compact
@@ -4005,6 +4015,7 @@ export class SessionManager {
               managed.state.done_reason = "待命（等待咨询）";
               managed.state.action_summary = "Leader · 待命";
               managed.state.turn_started_at = undefined;
+              this.flushSessionRow(managed); // DEV-39 返修：终态字段补完后末笔全量落库
             }
           }
           // P1FIX：init 到达 = 流已就绪，pre-init 期间入账的消息（hold:"init"）已
@@ -4355,6 +4366,7 @@ export class SessionManager {
           if (ok) {
             this.transition(managed.state.session_id, "DONE", "turn-end"); /* W-SMIMPL③ 直写收口 */
             managed.state.done_reason = reason;
+            this.flushSessionRow(managed); // DEV-39 返修：终态字段补完后末笔全量落库
             // W-RATELIMIT429：回合成功=限流解除，清退避账（streak 归零+摘可见态）
             if (managed.rateLimitStreak || managed.rateLimitBackoffUntil) {
               managed.rateLimitStreak = undefined;
@@ -4372,6 +4384,7 @@ export class SessionManager {
           } else {
             this.transition(managed.state.session_id, "ERROR", "turn-end"); /* W-SMIMPL③ 直写收口 */
             managed.state.last_error = reason;
+            this.flushSessionRow(managed); // DEV-39 返修：ERROR 终态字段补完后末笔全量落库（限流分支后续 emitUpdated 自带帧尾写，双保险幂等）
             // W-RATELIMIT429：429/1302 速率限制识别（分类器单点复用）→会话退避态：
             // 自愈链到点前跳过（reviveEligible 谓词）+端上可见（action_summary 带下次
             // 尝试时刻——用户不用再手动捞）+到点自清。指数退避+抖动防并发同窗共振。
@@ -4457,6 +4470,7 @@ export class SessionManager {
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             this.transition(managed.state.session_id, "DONE", "stream-close"); /* W-SMIMPL③ 直写收口 */
             managed.state.done_reason = reason;
+            this.flushSessionRow(managed); // DEV-39 返修：终态字段补完后末笔全量落库
             this.bus.emit(managed.state.session_id, "SESSION_DONE", {
               terminal_reason: reason,
               duration_ms: Date.now() - managed.state.started_at,
@@ -5108,6 +5122,7 @@ export class SessionManager {
           s.state.last_error = undefined;
           s.state.waiting_request = undefined;
           s.state.waiting_started_at = undefined;
+          this.flushSessionRow(s); // DEV-39 返修：was=true 时下方不发帧，终态字段补完后末笔全量落库
           saved++;
         }
         if (!was) this.emitUpdated(s, true);
@@ -13278,6 +13293,16 @@ ${lines.join("\n")}
     });
     // #292-B4：帧处理口 session 直写（影子模式起步——shadow 写库+比对，读面不动；
     // R4 单帧一小事务；off/json/降级=旁路零影响；详见 storage/session-write.ts 头注）
+    try { shadowWriteSession(s.state); } catch { /* 直写自身已吞错降级，双保险 */ }
+  }
+
+  /** DEV-39 审查返修（P1-1a/P2-1e）：终态/外部状态收口点的补写直写——transition 单点
+   *  写在字段补写前落库会定格不完整快照（done_reason/duration_ms/last_error 恒空，
+   *  BOOT_FROM=db 重启 adopt 整包替换抹掉回放本有值）；setExternalStatus 直赋不走
+   *  transition/emitUpdated。各收口点字段补完后过本口刷末笔（带全量字段，REPLACE
+   *  幂等末笔赢）。 */
+  private flushSessionRow(s: { state: SessionState } | undefined): void {
+    if (!s) return;
     try { shadowWriteSession(s.state); } catch { /* 直写自身已吞错降级，双保险 */ }
   }
 

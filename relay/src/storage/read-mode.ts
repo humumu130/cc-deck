@@ -1007,6 +1007,14 @@ export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
   let port: StoragePort;
   try {
     port = ensureStore(dirs);
+    // DEV-39 返修（审查 P2）：可恢复成因（建库/迁移/盘满类瞬时失败）的降级台账清账
+    // ——lastDegradation 此前 latch 后永不消，恢复后 /health 恒假报 json 档、patrol
+    // storage-degraded 告警永不闭。ensureStore 成功=恢复实证，清账+恢复行（驱动加载
+    // 失败类是进程级恒久，不会走到这里——driverCache 成败皆缓存，天然只清可恢复类）。
+    if (lastDegradation !== null) {
+      lastDegradation = null;
+      console.log("[read-mode] sqlite 已恢复（降级台账清账——ensureStore 成功，/health 与 patrol 面回正常）");
+    }
   } catch (err) {
     warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `配置档位 ${mode}，读域 ${domain}，sqlite 建库/迁移失败`);
     return io.json();

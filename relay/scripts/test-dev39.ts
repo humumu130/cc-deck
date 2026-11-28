@@ -4,7 +4,7 @@
 //   C. build-info（清单3）：unstamped 缺席语义 + 烙印比对 ok/mismatch 两态。
 //   D. events 归档位（清单2）：压缩丢弃段整段入档、seq 连续性、缺省 off 零行为。
 //   E. 接线锚：index 首位 import / /health 两段 / patrol 两键 / bundle defines。
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -138,11 +138,12 @@ async function main(): Promise<void> {
     const mm = c3.buildRuntimeMatch();
     assert(mm.match === "mismatch" && mm.mismatchKeys.includes("abi"), "C3 ABI 错配 → mismatch（报警路径入口）");
 
-    // C4 平台错配
+    // C4 平台错配（哨兵串——审查 P1：钉真实平台名会在 CI（linux-x64 runner）上
+    // 恰与运行时相等 → 断言恒假必红；用不存在于任何真实 runtime 的探针串）
     process.env.CCR_BUILD_NODE_ABI = process.versions.modules;
-    process.env.CCR_BUILD_PLATFORM = "linux-x64";
+    process.env.CCR_BUILD_PLATFORM = "ci-probe-mismatch-platform";
     const c4 = await import(`../src/build-info.js?d=${Date.now()}`);
-    assert(c4.buildRuntimeMatch().match === "mismatch" && c4.buildRuntimeMatch().mismatchKeys.includes("platform"), "C4 平台错配 → mismatch");
+    assert(c4.buildRuntimeMatch().match === "mismatch" && c4.buildRuntimeMatch().mismatchKeys.includes("platform"), "C4 平台错配 → mismatch（探针串，CI/本机同判）");
     clearGrayEnv();
   }
 
@@ -240,6 +241,61 @@ async function main(): Promise<void> {
     assert(body.includes("shadowWriteSession(s.state)"), "F1 transition 内直写收口在位（终态 DONE 不再漏库——import=off 后唯一写路径）");
     // emitUpdated 帧面挂点保留（内容更新路径不回归）
     assert(sm.includes("try { shadowWriteSession(s.state); } catch"), "F1 emitUpdated 帧面直写挂点保留（双路幂等）");
+    // 返修 P1-1a：终态收口点字段补写后的末笔全量落库（flushSessionRow）——六终态路径
+    // + setExternalStatus 旁路（返修 P2-1e）都必须过口（缺一个=不完整快照复发面）
+    const flushSites = (sm.match(/this\.flushSessionRow\(/g) ?? []).length;
+    assert(flushSites >= 7, `F2 终态/外部收口点 flushSessionRow ≥7 处（实测 ${flushSites}：finishExternal/turn-end ok/turn-end err/stream-close/stream-idle/boot-dim/setExternalStatus）`);
+    assert(sm.includes("private flushSessionRow"), "F2 flushSessionRow 单点定义在位");
+  }
+
+  console.log("G. 返修面：boot 归档重写/降级清账/暴露面收敛");
+  {
+    // G1 rewriteFileArchiving 行为：丢弃段入档、活文件=kept、seq 守恒
+    const { rewriteFileArchiving, loadEvents } = await import("../src/history.js");
+    const root = mkdtempSync(join(tmpdir(), "dev39-bootarch-"));
+    try {
+      const lines: string[] = [];
+      let seq = 0;
+      for (let s = 0; s < 40; s++) {
+        lines.push(JSON.stringify({ seq: ++seq, session_id: `b-${s}`, ts: seq, type: "SESSION_CREATED", payload: {} }));
+        lines.push(JSON.stringify({ seq: ++seq, session_id: `b-${s}`, ts: seq, type: "SESSION_LOG", payload: { text: "x" } }));
+      }
+      const live = join(root, "events.ndjson");
+      writeFileSync(live, lines.join("\n") + "\n");
+      const before = loadEvents(live);
+      // kept=后 30 会话（活跃序）——模拟 bootReplayFile 的 kept 形态
+      const kept = before.filter((e) => Number(e.session_id.slice(2)) >= 10);
+      await new Promise<void>((resolve) => {
+        rewriteFileArchiving(live, kept, join(root, "events-archive"));
+        // close 回调异步落重写——轮询活文件变短即成
+        const t0 = Date.now();
+        const poll = (): void => {
+          try {
+            if (statSync(live).size < lines.join("\n").length || Date.now() - t0 > 5000) resolve();
+            else setTimeout(poll, 50);
+          } catch { resolve(); }
+        };
+        setTimeout(poll, 50);
+      });
+      const after = loadEvents(live);
+      const { readdirSync } = await import("node:fs");
+      const arch = readdirSync(join(root, "events-archive")).flatMap((f) => loadEvents(join(root, "events-archive", f)));
+      assert(after.length === kept.length, `G1 活文件=kept（${after.length}=${kept.length}）`);
+      assert(arch.length === before.length - kept.length, `G1 丢弃段整段入档（${arch.length}=${before.length - kept.length}）`);
+      assert(arch.every((e) => !kept.some((k) => k.seq === e.seq)), "G1 归档段与 kept 无交集");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+    // G2 暴露面收敛（源锚）：/health 不泄绝对路径与超长错误串
+    const st = readFileSync(new URL("../src/storage/status.ts", import.meta.url), "utf8");
+    assert(st.includes("basename(envApplied.file)"), "G2 envFile 只出 basename");
+    assert(st.includes("degraded.reason.length > 160"), "G2 degraded.reason 截断 160");
+    // G3 降级清账（源锚）：viaReadMode ensureStore 成功后清 lastDegradation
+    const rmSrc = readFileSync(new URL("../src/storage/read-mode.ts", import.meta.url), "utf8");
+    assert(rmSrc.includes("降级台账清账"), "G3 恢复清账口在位（patrol storage-degraded 可闭合）");
+    // G4 boot 归档接线（源锚）
+    const idx = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+    assert(idx.includes("rewriteFileArchiving(persistPath, kept, eventsArchiveDir)"), "G4 boot 压缩走归档版重写");
   }
 
   console.log(`\n${fail === 0 ? "✅" : "❌"} DEV-39 批测：${pass} 过 / ${fail} 败`);

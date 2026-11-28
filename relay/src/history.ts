@@ -125,8 +125,15 @@ export function compactEventsFile(
       if (dropped.length) {
         mkdirSync(opts.archiveDir, { recursive: true });
         archiveFile = join(opts.archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
-        appendFileSync(archiveFile, dropped.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
-        archived = dropped.length;
+        // 审查返修（P2）：归档段单独 try——失败=本轮压缩中止（活文件原样、审计零
+        // 损失），但必须出声（原静默 return null=归档不可用时压缩无限静默停摆无人知）。
+        try {
+          appendFileSync(archiveFile, dropped.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+          archived = dropped.length;
+        } catch (archErr) {
+          console.warn(`[events] ⚠️  审计归档失败，本轮压缩中止（活文件原样，下轮重试）——${archErr instanceof Error ? archErr.message : String(archErr)}`);
+          return null;
+        }
       }
     }
     rewriteFile(path, kept);
@@ -134,6 +141,44 @@ export function compactEventsFile(
   } catch {
     return null;
   }
+}
+
+/** DEV-39 返修（审查 P2：boot 压缩是最大一刀，不能豁免归档）：boot 重写面的归档版——
+ *  kept 是流式重放产物（prior 不驻留），归档段用第二遍流式扫原文件按 keptSeq 滤出
+ *  （boot 压缩只在 compacted=true 时走，多一遍顺序读的可接受代价）。语义与
+ *  compactEventsFile 归档段一致：同日 append 合流、seq 原样、只追加不读回；归档/
+ *  重写失败=活文件原样保留（下轮 boot 或 6h tick 重试，审计零损失）。 */
+export function rewriteFileArchiving(path: string, kept: Envelope[], archiveDir: string): void {
+  const keptSeq = new Set(kept.map((e) => e.seq));
+  mkdirSync(archiveDir, { recursive: true });
+  const archFile = join(archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+  const rl = readline.createInterface({ input: createReadStream(path, { encoding: "utf-8" }), crlfDelay: Infinity });
+  let buf: string[] = [];
+  const flush = (): void => {
+    if (buf.length) {
+      appendFileSync(archFile, buf.join("\n") + "\n", "utf-8");
+      buf = [];
+    }
+  };
+  rl.on("line", (line: string) => {
+    const t = line.trim();
+    if (!t) return;
+    try {
+      const env = JSON.parse(t) as Envelope;
+      if (typeof env.seq === "number" && !keptSeq.has(env.seq)) {
+        buf.push(t);
+        if (buf.length >= 1000) flush();
+      }
+    } catch { /* 损坏行跳过（loadEvents 同口径——不进归档不复活） */ }
+  });
+  rl.on("close", () => {
+    try {
+      flush();
+      rewriteFile(path, kept);
+    } catch (err) {
+      console.warn(`[events] ⚠️  boot 归档/重写失败（活文件原样保留，下轮重试）——${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
 }
 
 export function appendLine(path: string, env: Envelope): void {

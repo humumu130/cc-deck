@@ -27,7 +27,7 @@ import { warmEngineAuthCacheAsync } from "./engine-auth.js";
 import { readDispatchLog } from "./org.js"; // M4：SIGTERM 退出诊断（活派单留档，graceful-restart 屏障的 relay 侧对称面）
 import { gracefulExitLines } from "./graceful-exit.js"; // W-RELDEATH：SIGTERM/SIGINT 告别行（治静默死排障盲区）
 import { readPluginConfig } from "./plugin-config.js";
-import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
+import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile, rewriteFileArchiving } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
@@ -342,17 +342,21 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 const boot = await bootReplayFile(persistPath);
 bootMark("replay-events");
 const kept = boot.kept;
-if (boot.compacted) rewriteFile(persistPath, kept); // 启动时压缩
+// R-9 审计归档位（DEV-39 清单2）：CCR_EVENTS_ARCHIVE=on 时压缩丢弃段先整段落
+// <dataDir>/events-archive/ 再重写活文件（boot 压缩与 6h tick 同口径——审查返修：
+// boot 是最大一刀压缩，不能豁免归档；机制与 seq 连续性取舍见 history.ts 头注）。
+// 缺省 off——行为与收口前逐字节同款。
+const eventsArchiveDir = process.env.CCR_EVENTS_ARCHIVE === "on" ? join(cfg.dataDir, "events-archive") : undefined;
+if (boot.compacted) {
+  // 归档版重写（流式二遍扫滤丢弃段；off 时=原 rewriteFile 同款）
+  if (eventsArchiveDir) rewriteFileArchiving(persistPath, kept, eventsArchiveDir);
+  else rewriteFile(persistPath, kept);
+}
 // #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
 // 月增 ~100MB（心跳+流式帧稳定供给）。每 6h 查大小，超阈值（CCR_EVENTS_COMPACT_MB
 // 缺省 64，下限 16 防误配 0）压一次——客户端重连走内存 replay 零感知，详见
 // history.ts compactEventsFile 注释
 const eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
-// R-9 审计归档位（DEV-39 清单2）：CCR_EVENTS_ARCHIVE=on 时压缩丢弃段先整段落
-// <dataDir>/events-archive/ 再重写活文件（按日分文件；机制与 seq 连续性取舍见
-// history.ts compactEventsFile 头注）。缺省 off——行为与收口前逐字节同款；收口
-// （BOOT_FROM=db）后随灰度 env 文件开启，events.ndjson 定格纯审计流+按期归档。
-const eventsArchiveDir = process.env.CCR_EVENTS_ARCHIVE === "on" ? join(cfg.dataDir, "events-archive") : undefined;
 const compactEventsTick = (): void => {
   const r = compactEventsFile(persistPath, eventsCompactBytes, eventsArchiveDir ? { archiveDir: eventsArchiveDir } : undefined);
   if (r) console.log(`[events] 运行期压缩：${(r.before / 1048576).toFixed(1)}MB → ${(r.after / 1048576).toFixed(1)}MB${r.archived ? `（审计归档 ${r.archived} 事件 → ${r.archiveFile}）` : ""}`);
