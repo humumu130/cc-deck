@@ -37,6 +37,13 @@ export function bundleOptions(outfile, relayVersion) {
     define: {
       "process.env.CC_DECK_PLUGIN": '"1"',
       ...(relayVersion ? { "process.env.CCR_RELAY_VERSION": JSON.stringify(relayVersion) } : {}),
+      // ABI 烙印（DEV-39 清单3 / arch R-7 根因面）：构建机 node 档位烙进 bundle——
+      // 运行时 src/build-info.ts 自比对（process.versions vs 烙印），mismatch=11-24
+      // 恒降级事故形态当场报警（/health + patrol + boot 横幅三面）。参数单源在此：
+      // build-plugin 与 rebuild-bundle 同参重建字节一致闸不破（同机同值恒等）。
+      "process.env.CCR_BUILD_NODE_VERSION": JSON.stringify(process.versions.node),
+      "process.env.CCR_BUILD_NODE_ABI": JSON.stringify(process.versions.modules),
+      "process.env.CCR_BUILD_PLATFORM": JSON.stringify(`${process.platform}-${process.arch}`),
     },
     // banner 里不声明 createRequire 标识符——源码（如 cli-path.ts）静态 import { createRequire }
     // 时 esbuild 会原样保留该 import，banner 再 import 一份 = 重复声明 SyntaxError，

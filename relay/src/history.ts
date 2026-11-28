@@ -1,6 +1,6 @@
 // 会话历史持久化：events.ndjson 追加写 + 重启时重放重建
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, appendFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Envelope, EventType, LogEntry, SessionEngine, SessionState } from "./types.js";
 import { contextLimitOfEffective, REPLAY_CONTEXT_MAX } from "./context-limit.js";
 
@@ -96,7 +96,20 @@ export function rewriteFile(path: string, events: Envelope[]): void {
 // 「每类型最后一条生效」）；客户端断线重连走 EventBus 内存 replay 不读文件，压缩
 // 零感知。同步整段执行：单线程事件循环内 emit 不会交错进来；低频触发（定时+阈值）
 // 数秒阻塞可接受。失败静默返回 null——审计面动作绝不影响主流程，下次再试
-export function compactEventsFile(path: string, minBytes: number): { before: number; after: number } | null {
+//
+// R-9 审计归档位（DEV-39 清单2，2026-11-28）：opts.archiveDir 传入时，压缩丢弃的
+// 事件先整段 append 进 <archiveDir>/events-arch-<yyyyMMdd>.ndjson 再重写活文件——
+// 压缩从「审计证据销毁」变「审计流按期归档」（收口后 events.ndjson 定格纯审计流的
+// 配套件）。设计取舍（为什么挂压缩而不是整文件轮转）：EventBus.seq 以活文件末行
+// 延续（event-bus.ts 构造器），整文件搬走=seq 归零与归档段冲突（重连补发/lastSeq
+// 守卫全乱）；挂压缩则保留事件原 seq 留在活文件、被弃事件带原 seq 进归档，连续性
+// 零破坏，收口前后（BOOT_FROM=events/db）皆安全。归档只追加不读回（审计终态，
+// 重放永不消费）；按日分文件（append 天然合流，无并发写者——同一定时器串行）。
+export function compactEventsFile(
+  path: string,
+  minBytes: number,
+  opts?: { archiveDir?: string },
+): { before: number; after: number; archived?: number; archiveFile?: string } | null {
   try {
     if (!existsSync(path)) return null;
     const size = statSync(path).size;
@@ -104,10 +117,65 @@ export function compactEventsFile(path: string, minBytes: number): { before: num
     const prior = loadEvents(path);
     const kept = compactEvents(prior);
     if (prior.length === kept.length) return null; // 已是最简，不白写一遍
+    let archived: number | undefined;
+    let archiveFile: string | undefined;
+    if (opts?.archiveDir) {
+      const keptSeq = new Set(kept.map((e) => e.seq)); // 持久化 envelope seq>0 唯一（瞬态不落盘）
+      const dropped = prior.filter((e) => !keptSeq.has(e.seq));
+      if (dropped.length) {
+        mkdirSync(opts.archiveDir, { recursive: true });
+        archiveFile = join(opts.archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+        // 审查返修（P2）：归档段单独 try——失败=本轮压缩中止（活文件原样、审计零
+        // 损失），但必须出声（原静默 return null=归档不可用时压缩无限静默停摆无人知）。
+        try {
+          appendFileSync(archiveFile, dropped.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+          archived = dropped.length;
+        } catch (archErr) {
+          console.warn(`[events] ⚠️  审计归档失败，本轮压缩中止（活文件原样，下轮重试）——${archErr instanceof Error ? archErr.message : String(archErr)}`);
+          return null;
+        }
+      }
+    }
     rewriteFile(path, kept);
-    return { before: size, after: statSync(path).size };
+    return { before: size, after: statSync(path).size, ...(archived !== undefined ? { archived, archiveFile } : {}) };
   } catch {
     return null;
+  }
+}
+
+/** DEV-39 返修（审查 P2：boot 压缩是最大一刀，不能豁免归档）：boot 重写面的归档版——
+ *  kept 是流式重放产物（prior 不驻留），归档段用第二遍扫原文件按 keptSeq 滤出。
+ *  **全程同步**（deck-reviewer P2-1 返修）：原版二遍扫走 readline 异步回调、重写落在
+ *  close 事件里——boot 中段 adopt 广播的同步 appendLine（index.ts）与异步重写之间无
+ *  顺序保证，追加行可被截断（boot 压缩触发=priorCount≠keptCount 非大小闸，长跑后几乎
+ *  每次重启都成立）。同步化后单线程事件循环内本函数返回即重写完毕，任何后续 append
+ *  只能落在重写后的活文件上——窗口由构造消除（与 compactEventsFile 同形；boot 本有
+ *  秒级同步工作先例）。归档失败=warn+重写中止（活文件原样，审计零损失，下轮重试）。 */
+export function rewriteFileArchiving(path: string, kept: Envelope[], archiveDir: string): void {
+  try {
+    const keptSeq = new Set(kept.map((e) => e.seq));
+    const dropped: string[] = [];
+    for (const line of readFileSync(path, "utf-8").split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      try {
+        const env = JSON.parse(t) as Envelope;
+        if (typeof env.seq === "number" && !keptSeq.has(env.seq)) dropped.push(t);
+      } catch { /* 损坏行跳过（loadEvents 同口径——不进归档不复活） */ }
+    }
+    if (dropped.length) {
+      mkdirSync(archiveDir, { recursive: true });
+      const archFile = join(archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+      try {
+        appendFileSync(archFile, dropped.join("\n") + "\n", "utf-8");
+      } catch (archErr) {
+        console.warn(`[events] ⚠️  boot 审计归档失败，本轮重写中止（活文件原样，下轮重试）——${archErr instanceof Error ? archErr.message : String(archErr)}`);
+        return;
+      }
+    }
+    rewriteFile(path, kept);
+  } catch (err) {
+    console.warn(`[events] ⚠️  boot 归档/重写失败（活文件原样保留，下轮重试）——${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

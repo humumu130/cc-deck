@@ -1,3 +1,7 @@
+// DEV-39 清单1：灰度 env 覆盖文件必须首位 import——模块体先于一切业务模块执行
+//（storage/config 各模块已核无顶层 env 读，函数内现读现用；文件补位后所有读点即见）。
+// 机制与白名单见 boot-env.ts 头注。
+import "./boot-env.js";
 import { bootMark, bootDone } from "./boot-time.js"; // W-BOOTFAST：boot 分段打点（首行锚定 t0）
 import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
@@ -23,7 +27,7 @@ import { warmEngineAuthCacheAsync } from "./engine-auth.js";
 import { readDispatchLog } from "./org.js"; // M4：SIGTERM 退出诊断（活派单留档，graceful-restart 屏障的 relay 侧对称面）
 import { gracefulExitLines } from "./graceful-exit.js"; // W-RELDEATH：SIGTERM/SIGINT 告别行（治静默死排障盲区）
 import { readPluginConfig } from "./plugin-config.js";
-import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
+import { bootReplayFile, compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile, rewriteFileArchiving } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
@@ -38,6 +42,8 @@ import { listAcceptances } from "./acceptance.js"; // [W-AWAITUSER] 推送扫描
 import { migrateLessonsToExperience, startExperienceGc } from "./experience.js";
 import { DecisionNotificationWatcher } from "./decision-notify.js";
 import { probeSqliteDriverAtBoot } from "./storage/read-mode.js";
+import { abiSentinelAtBoot } from "./build-info.js"; // DEV-39 清单3：ABI 烙印自比对（boot 横幅+/health/patrol）
+import { storageStatus } from "./storage/status.js"; // DEV-39 清单4：存储灰度态单点画像（boot 行+/health/patrol）
 
 // 内嵌模式（桌面壳 CCR_PARENT_PID 标记）：日志加时间戳——embedded-relay.log 此前
 // 全是裸行，云桥翻动/断连这类时序问题无从对表排障（2026-09-18 电脑端排查之痛）
@@ -301,6 +307,16 @@ if (cliArgs.has("--stop")) {
 probeSqliteDriverAtBoot();
 bootMark("probe-sqlite");
 
+// DEV-39 清单3（arch R-7 根因面）：ABI 烙印自比对——构建档位 vs 运行时档位错配
+// （11-24 恒降级事故形态）boot 即横幅报警 + /health/patrol 暴露；tsx 源码跑=无
+// 烙印静默跳过（同 verRelay 缺席降级语义）。清单4：存储灰度态 boot 一行可见
+//（降级细节/四键档位恒真面见 /health storage 段——patrol 轻探针持续盯）。
+abiSentinelAtBoot();
+{
+  const st = storageStatus();
+  console.log(`[storage-boot] 读=${st.readMode}${st.effectiveReadMode !== st.readMode ? `（实效 ${st.effectiveReadMode}）` : ""} 写=${st.writeMode} 导入=${st.sessionImport} boot=${st.bootFrom}${st.driver === "failed" ? " ⚠️ driver=failed" : ""}${st.envFile.keys.length ? `（env 文件应用 ${st.envFile.keys.length} 键）` : ""}`);
+}
+
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");
 
@@ -326,15 +342,24 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 const boot = await bootReplayFile(persistPath);
 bootMark("replay-events");
 const kept = boot.kept;
-if (boot.compacted) rewriteFile(persistPath, kept); // 启动时压缩
+// R-9 审计归档位（DEV-39 清单2）：CCR_EVENTS_ARCHIVE=on 时压缩丢弃段先整段落
+// <dataDir>/events-archive/ 再重写活文件（boot 压缩与 6h tick 同口径——审查返修：
+// boot 是最大一刀压缩，不能豁免归档；机制与 seq 连续性取舍见 history.ts 头注）。
+// 缺省 off——行为与收口前逐字节同款。
+const eventsArchiveDir = process.env.CCR_EVENTS_ARCHIVE === "on" ? join(cfg.dataDir, "events-archive") : undefined;
+if (boot.compacted) {
+  // 归档版重写（流式二遍扫滤丢弃段；off 时=原 rewriteFile 同款）
+  if (eventsArchiveDir) rewriteFileArchiving(persistPath, kept, eventsArchiveDir);
+  else rewriteFile(persistPath, kept);
+}
 // #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
 // 月增 ~100MB（心跳+流式帧稳定供给）。每 6h 查大小，超阈值（CCR_EVENTS_COMPACT_MB
 // 缺省 64，下限 16 防误配 0）压一次——客户端重连走内存 replay 零感知，详见
 // history.ts compactEventsFile 注释
 const eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
 const compactEventsTick = (): void => {
-  const r = compactEventsFile(persistPath, eventsCompactBytes);
-  if (r) console.log(`[events] 运行期压缩：${(r.before / 1048576).toFixed(1)}MB → ${(r.after / 1048576).toFixed(1)}MB`);
+  const r = compactEventsFile(persistPath, eventsCompactBytes, eventsArchiveDir ? { archiveDir: eventsArchiveDir } : undefined);
+  if (r) console.log(`[events] 运行期压缩：${(r.before / 1048576).toFixed(1)}MB → ${(r.after / 1048576).toFixed(1)}MB${r.archived ? `（审计归档 ${r.archived} 事件 → ${r.archiveFile}）` : ""}`);
 };
 setInterval(compactEventsTick, 6 * 3600_000).unref?.();
 const replayed = boot.sessions; // 单遍流式产物（= reduceHistory(kept) 等价）
