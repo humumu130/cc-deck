@@ -135,6 +135,10 @@ const TRUSTED_WEB_ORIGINS: readonly string[] = ["https://cc.humumu.online", "htt
 // #71 第五键 duty：值守总闸（019 §6.5 拍板），缺省 true 显式 false 才关（kill-switch）。
 import { PLUGIN_CFG_KEYS, pluginConfigPath, readPluginConfig } from "./plugin-config.js";
 export { readPluginConfig } from "./plugin-config.js";
+// DEV-39：/health storage 段（清单4/arch R-3 降级可见性）+ abi 段（清单3/arch R-7
+// 档位自比对）——两段定义见各自模块头注。
+import { storageStatus } from "./storage/status.js";
+import { buildRuntimeMatch } from "./build-info.js";
 
 // #138 回填通知（LAN 直提与 #175 云回流共用）：按出单时盖进记录的 cwd 归因到会话，
 // 推一条 system 行——「3✓ 1✗ 2未测」式摘要消掉人肉对账。归因不到（旧单没盖
@@ -1005,8 +1009,17 @@ export function startServer(
       // R1 随批②：热换逃逸——原启动快照（ver005/verLegacy 启动时一次）热换单件后 /health
       // 仍旧值。修=每请求现算（readVer 内一次 stat+读 ~µs 级——轻量取舍：不引入 mtime
       // 监视/文件 watch 的进程面，代价=每 /health 两次小文件读，换恒真指纹）。
+      //
+      // DEV-39 清单4（arch R-3）：storage 段——sqlite 降级态外部可见（11-24 降级多日
+      // 无人知的盲区本体；mode/degraded/原因/灰度四键档位）。清单3（arch R-7）：abi
+      // 段——构建烙印 vs 运行时档位自比对结果。两段均每请求现算（纯函数/缓存面，轻量）。
       res.writeHead(200, { "content-type": "application/json" }).end(
-        JSON.stringify({ ok: true, versions: { relay: verRelay, console005: ver005Live(), consoleLegacy: verLegacyLive() } }),
+        JSON.stringify({
+          ok: true,
+          versions: { relay: verRelay, console005: ver005Live(), consoleLegacy: verLegacyLive() },
+          storage: storageStatus(),
+          abi: buildRuntimeMatch(),
+        }),
       );
       return;
     }

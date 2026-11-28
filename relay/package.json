@@ -206,7 +206,8 @@
     "test:patrol-escalate": "tsx scripts/test-patrol-escalate.ts",
     "test:cloud-hbthrottle": "tsx scripts/test-cloud-hbthrottle.ts",
     "test:data-guard": "tsx scripts/test-data-guard.ts",
-    "test:swapguard": "node scripts/test-swapguard.mjs"
+    "test:swapguard": "node scripts/test-swapguard.mjs",
+    "test:dev39": "tsx scripts/test-dev39.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

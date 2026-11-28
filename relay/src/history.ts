@@ -1,6 +1,6 @@
 // 会话历史持久化：events.ndjson 追加写 + 重启时重放重建
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, appendFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Envelope, EventType, LogEntry, SessionEngine, SessionState } from "./types.js";
 import { contextLimitOfEffective, REPLAY_CONTEXT_MAX } from "./context-limit.js";
 
@@ -96,7 +96,20 @@ export function rewriteFile(path: string, events: Envelope[]): void {
 // 「每类型最后一条生效」）；客户端断线重连走 EventBus 内存 replay 不读文件，压缩
 // 零感知。同步整段执行：单线程事件循环内 emit 不会交错进来；低频触发（定时+阈值）
 // 数秒阻塞可接受。失败静默返回 null——审计面动作绝不影响主流程，下次再试
-export function compactEventsFile(path: string, minBytes: number): { before: number; after: number } | null {
+//
+// R-9 审计归档位（DEV-39 清单2，2026-11-28）：opts.archiveDir 传入时，压缩丢弃的
+// 事件先整段 append 进 <archiveDir>/events-arch-<yyyyMMdd>.ndjson 再重写活文件——
+// 压缩从「审计证据销毁」变「审计流按期归档」（收口后 events.ndjson 定格纯审计流的
+// 配套件）。设计取舍（为什么挂压缩而不是整文件轮转）：EventBus.seq 以活文件末行
+// 延续（event-bus.ts 构造器），整文件搬走=seq 归零与归档段冲突（重连补发/lastSeq
+// 守卫全乱）；挂压缩则保留事件原 seq 留在活文件、被弃事件带原 seq 进归档，连续性
+// 零破坏，收口前后（BOOT_FROM=events/db）皆安全。归档只追加不读回（审计终态，
+// 重放永不消费）；按日分文件（append 天然合流，无并发写者——同一定时器串行）。
+export function compactEventsFile(
+  path: string,
+  minBytes: number,
+  opts?: { archiveDir?: string },
+): { before: number; after: number; archived?: number; archiveFile?: string } | null {
   try {
     if (!existsSync(path)) return null;
     const size = statSync(path).size;
@@ -104,8 +117,20 @@ export function compactEventsFile(path: string, minBytes: number): { before: num
     const prior = loadEvents(path);
     const kept = compactEvents(prior);
     if (prior.length === kept.length) return null; // 已是最简，不白写一遍
+    let archived: number | undefined;
+    let archiveFile: string | undefined;
+    if (opts?.archiveDir) {
+      const keptSeq = new Set(kept.map((e) => e.seq)); // 持久化 envelope seq>0 唯一（瞬态不落盘）
+      const dropped = prior.filter((e) => !keptSeq.has(e.seq));
+      if (dropped.length) {
+        mkdirSync(opts.archiveDir, { recursive: true });
+        archiveFile = join(opts.archiveDir, `events-arch-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.ndjson`);
+        appendFileSync(archiveFile, dropped.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+        archived = dropped.length;
+      }
+    }
     rewriteFile(path, kept);
-    return { before: size, after: statSync(path).size };
+    return { before: size, after: statSync(path).size, ...(archived !== undefined ? { archived, archiveFile } : {}) };
   } catch {
     return null;
   }
