@@ -22,6 +22,9 @@ import { unclaimedStaleDispatches, unclaimedTtlMs, prStaleBoardActions, type PrT
 import { ghRepoFlag } from "./gh-repo.js"; // W-RELDEATH：gh pr list 显式 -R（治内嵌 cwd 非 git 仓库的裸 stderr）
 import { appendDispatch } from "./org.js"; // W-BOARDTRUTH 刀2：撤单台账收口行
 import { readDispatchLog, orgDir, dispatchLogPath } from "./org.js";
+// DEV-39：轻探针两检查（清单4 存储降级态 / 清单3 ABI 档位错配）——定义见各自模块头注
+import { storageStatus } from "./storage/status.js";
+import { buildRuntimeMatch } from "./build-info.js";
 import { drillDue, runDrill } from "./drill.js";
 import { autoTierOf, recordWouldDo, observeBucket } from "./auto-tiers.js"; // observe3：自主动作三档（patrol/converge 族挂档点，见 auto-tiers.ts 挂档纪律）
 import type { SessionManager } from "./session-manager.js";
@@ -184,6 +187,27 @@ export class PatrolModule {
     } catch {
       alerts.push({ key: "dataDir", text: "数据目录不可写（磁盘满或权限被收）" });
     }
+    // DEV-39 清单4（arch R-3）：sqlite 降级态巡检——降级此前只打进程内一次横幅，
+    // 外部无人知（11-24 生产降级多日才被夜审视出的盲区本体）。storageStatus 恒真
+    // 面进轻探针（5min 粒度 onset-only：发生/恢复都可见，复发当场触达）。
+    try {
+      const st = storageStatus();
+      if (st.degraded) {
+        alerts.push({ key: "storage-degraded", text: `sqlite 降级 json 档（${st.degraded.context}；错误码 ${st.degraded.code ?? "无"}；起于 ${new Date(st.degraded.at).toISOString()}）——原因：${st.degraded.reason}` });
+      } else {
+        alerts.push({ key: "storage-degraded", text: "" });
+      }
+    } catch { /* 判定失败不阻巡检（保守巡） */ }
+    // DEV-39 清单3（arch R-7 根因面）：ABI 档位错配巡检——产物烙印 vs 运行 node 不
+    // 一致（11-24 恒降级事故形态）当场触达；tsx 源码跑 unstamped 不告警（缺席≠错误）。
+    try {
+      const m = buildRuntimeMatch();
+      if (m.match === "mismatch") {
+        alerts.push({ key: "abi-mismatch", text: `构建烙印 node ${m.buildNode} ABI ${m.buildAbi} ${m.buildPlatform} vs 运行 node ${m.runtimeNode} ABI ${m.runtimeAbi} ${m.runtimePlatform}（错配面 ${m.mismatchKeys.join("/")}）——sqlite 恒降级事故形态，换构建档位 node 或重出包` });
+      } else {
+        alerts.push({ key: "abi-mismatch", text: "" });
+      }
+    } catch { /* 判定失败不阻巡检（保守巡） */ }
     // P0-B（DEV-19 2026-11-26）：hook 上报腿健康——bridge hook 的 post 失败此前只进
     // hook-debug.log（①无观察者 ②超 256KB 自截断灭证，relay 11-24 23:46 死后全量
     // post fail 无人知晓 26h+）。hook 现落 hook-post-fail.json 健康账（见

@@ -8,7 +8,7 @@
 //
 // ⚠️ 任务书给的 includes('"title"') 预过滤实测不命中：`"type":"ai-title"` 与
 // `"aiTitle"` 都不含带引号前缀的 `"title"` 子串——照抄会漏掉全部标题行。本模块
-// 用类型词 `"ai-title"` / `"custom-title"` 预过滤（实测命中，见 scripts/test-session-title.ts）。
+// 用类型词 `"ai-title"` / `"custom-title"` 预过滤（实测命中，见 tests/test-session-title.ts）。
 //
 // 优先级链（贯穿所有出口）：titleOverrides（用户 App 改名，session-manager 侧已有）>
 // customTitle（手动 /rename）> aiTitle（CLI 自动任务标题=终端标签名）> 派生标题

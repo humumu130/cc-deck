@@ -299,7 +299,7 @@ interface PendingPermission {
   created_at: number;
 }
 
-// #72 水位数据源（2026-09-19 生产探针取证，scripts/probe-assistant-usage.ts）：
+// #72 水位数据源（2026-09-19 生产探针取证，probes/probe-assistant-usage.ts）：
 // GLM 后端的 assistant 完整消息 usage 全零（{"input_tokens":0,"output_tokens":0}，
 // message_start 同），真实 per-call usage 只出现在两处——stream_event message_delta
 // （消息收尾帧，e.g. input 7046 + cache_read 11648）与回合 result（聚合）。水位挂

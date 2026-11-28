@@ -1,5 +1,5 @@
 // P0-B（DEV-19）：bridge hook（.mjs 运行态文件，不在 tsc 编译面）的纯函数签名——
-// 供 scripts/test-hookfail.ts import 类型收口（模块本体见 relay/hooks/bridge-hook.mjs）
+// 供 tests/test-hookfail.ts import 类型收口（模块本体见 relay/hooks/bridge-hook.mjs）
 declare module "*/bridge-hook.mjs" {
   export function nextState(
     prev: unknown,

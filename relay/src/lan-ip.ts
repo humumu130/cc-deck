@@ -1,5 +1,5 @@
 // 本机局域网地址探测（#25 抽纯函数）：给 /local-info、启动日志、--qr 共用，
-// 并配 scripts/test-lanip.mjs 用模拟网卡清单覆盖环境敏感分支（Hyper-V vEthernet
+// 并配 tests/test-lanip.mjs 用模拟网卡清单覆盖环境敏感分支（Hyper-V vEthernet
 // 宿主网、纯虚拟适配器机、VPN-only 等公司机形态——单一真机测不出的盲区）。
 import * as os from "node:os";
 

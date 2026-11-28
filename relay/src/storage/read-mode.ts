@@ -148,10 +148,21 @@ export function resolveDirs(override?: Partial<ReadModeDirs>): ReadModeDirs {
 
 let degradationNotified = false;
 
+/** R-3 降级可见性（DEV-39 清单4）：降级事实的结构化台账——此前降级只打一次 console
+ * 横幅（进程内可见），外部面（/health、patrol）无从得知「当前是否降级态、为何降级」
+ * ——11-24 生产降级多日才被夜审视出的盲区本体。warning 面与状态面同点写入，永不分离。 */
+let lastDegradation: { reason: string; code: string | null; context: string; at: number } | null = null;
+
+/** 降级事实读取口（storageStatus()/patrol 消费；测试面同用）。null=未降级。 */
+export function lastSqliteDegradation(): { reason: string; code: string | null; context: string; at: number } | null {
+  return lastDegradation;
+}
+
 /** 降级告警（每进程一次，防读入口高频触发刷屏）：醒目横幅含原因/错误码/平台/配置档位。 */
 function warnSqliteDegradedOnce(reason: string, code: string | null, context: string): void {
   if (degradationNotified) return;
   degradationNotified = true;
+  lastDegradation = { reason, code, context, at: Date.now() };
   console.error(`[read-mode] ⚠️  sqlite 不可用，已降级 json 档（${context}；错误码 ${code ?? "无"}；平台 ${process.platform}-${process.arch}）`);
   console.error(`[read-mode] ⚠️  原因: ${reason}`);
   console.error(`[read-mode] 读面行为同 CCR_STORAGE_READ_MODE=json，relay 继续启动（8787 照常监听）——修复原生二进制后自动恢复 sqlite 档`);
@@ -996,6 +1007,18 @@ export function viaReadMode<T>(domain: ShadowDomain, io: ViaReadModeIO<T>): T {
   let port: StoragePort;
   try {
     port = ensureStore(dirs);
+    // DEV-39 返修（审查 P2）：可恢复成因（建库/迁移/盘满类瞬时失败）的降级台账清账
+    // ——lastDegradation 此前 latch 后永不消，恢复后 /health 恒假报 json 档、patrol
+    // storage-degraded 告警永不闭。ensureStore 成功=恢复实证，清账+恢复行（驱动加载
+    // 失败类是进程级恒久，不会走到这里——driverCache 成败皆缓存，天然只清可恢复类）。
+    // deck-reviewer P2-2 返修：告警闩同步清——只清台账不清闩时，「降级→恢复→再降级」
+    // 的第二次降级被 warnSqliteDegradedOnce 早退吞掉（横幅/台账/patrol 全静默），
+    // 恰撞清单4「复发必须当场可见」口径。恢复=一个降级周期结束，闩随台账一起复位。
+    if (lastDegradation !== null) {
+      lastDegradation = null;
+      degradationNotified = false;
+      console.log("[read-mode] sqlite 已恢复（降级台账清账——ensureStore 成功，/health 与 patrol 面回正常）");
+    }
   } catch (err) {
     warnSqliteDegradedOnce(err instanceof Error ? err.message : String(err), null, `配置档位 ${mode}，读域 ${domain}，sqlite 建库/迁移失败`);
     return io.json();
@@ -1063,7 +1086,7 @@ export function diffProjection<T>(domain: ShadowDomain, jsonVal: T, sqliteVal: T
   return rows;
 }
 
-/** 测试隔离：清 port 单例与节流缓存（关开库）+ 降级告警标志 + 驱动加载缓存/注入。生产勿调。 */
+/** 测试隔离：清 port 单例与节流缓存（关开库）+ 降级告警标志与台账 + 驱动加载缓存/注入。生产勿调。 */
 export function resetReadModeForTest(): void {
   for (const port of portCache.values()) {
     try { if (port.isOpen) port.close(); } catch { /* 已关则跳过 */ }
@@ -1071,5 +1094,6 @@ export function resetReadModeForTest(): void {
   portCache.clear();
   shadowCooldown.clear();
   degradationNotified = false;
+  lastDegradation = null; // R-3 台账随隔离清零（生产面降级恒久=进程级事实，不清）
   resetSqliteDriverForTest(); // 清测试注入与驱动缓存（下次按真实环境重载）
 }

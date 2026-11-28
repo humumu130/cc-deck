@@ -32,8 +32,21 @@ await build(bundleOptions(join(out, "scripts", "relay.mjs"), ver));
 //    产物会带上旧版本号（test.1 预发首跑实锤，git status 无 diff 即症状）
 const pluginJsonPath = join(out, ".claude-plugin", "plugin.json");
 const pluginJsonRaw = readFileSync(pluginJsonPath, "utf-8");
-writeFileSync(pluginJsonPath, pluginJsonRaw.replace(/("version":\s*)"[^"]*"/, `$1"${ver}"`));
-const pluginName = JSON.parse(pluginJsonRaw).name; // 名字/描述仍以 plugin.json 为权威（与版本无关）
+const pluginJson = JSON.parse(pluginJsonRaw);
+pluginJson.version = ver;
+// ABI 烙印（DEV-39 清单3 / arch R-7 根因面）：构建机 node 档位烙进产物 manifest——
+// 不解 bundle 也能读出「这个包是哪个档位出的」。与 bundle define 三键
+// （bundle-options.mjs CCR_BUILD_*）同源同值（构建机 process.versions），运行时
+// src/build-info.ts 自比对的对照面。不带时间戳（同机重建值恒等，check-bundle-sync
+// 同参重建闸不受扰）；写入用 JSON 全量回写（原正则只换 version 的手法扩不了对象键，
+// 2 空格缩进+无尾换行与现存文件风格逐字对齐）。
+pluginJson.build = {
+  node: process.versions.node,
+  abi: Number(process.versions.modules),
+  platform: `${process.platform}-${process.arch}`,
+};
+writeFileSync(pluginJsonPath, JSON.stringify(pluginJson, null, 2));
+const pluginName = pluginJson.name; // 名字/描述仍以 plugin.json 为权威（与版本无关）
 const mktPath = join(root, ".claude-plugin", "marketplace.json");
 const mkt = JSON.parse(readFileSync(mktPath, "utf-8"));
 for (const p of mkt.plugins) {

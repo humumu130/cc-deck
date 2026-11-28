@@ -4,6 +4,15 @@
 // transcript 不在本单直接消费：SESSION_CREATED 首帧 payload 已承载所需元数据（cwd/title/model/
 // relay_session_id），正文（SESSION_LOG）一律不入库（冻结件 §1：transcript 是消息正文真相）。
 //
+// 【角色口径·DEV-39 存储收口（2026-11-28 定档）】#292 cutover 四步灰度走完后
+//（BOOT_FROM=db 起生效），本导入器的 **session 域**从「热态投影写者」降格为「迁移
+// 工具」：直写（session-write.ts）为唯一写者，CCR_SESSION_IMPORT=off 常态化（回退
+// 通道保留——去掉 off 即恢复投影互覆盖，REPLACE 幂等语义不变）。task 域照常灌
+//（任务清单与 session 实体解耦，非本口径范围）。events.ndjson 同时定格为纯审计流
+//（R5 审计≠实体），其 replay 职责由库行接管（dbRowsToReplayed）；归档配套见
+// history.ts compactEventsFile 的 R-9 归档位。灰度台账与回退演练记录：
+// docs/storage-cutover-w1-2026-11-28.md。
+//
 // importer 范式（沿用 C1 import-org.ts 五要点，D1 特化两点）：
 //   1. 入口 importSessionTask(port, sources, opts)——port 显式传入；段内事务（见 3）。
 //   2. 三源各持 B2 checkpoint 五元组：eventsFile 行级语义（offset=前 offset 行已处理，中断续跑

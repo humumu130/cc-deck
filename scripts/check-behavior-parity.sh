@@ -33,7 +33,7 @@ run_domain() {
 
 if [ "$MODE" = "record" ]; then
   mkdir -p "$BASE"
-  [ -z "$DOMAIN" ] || [ "$DOMAIN" = "relay" ] && run_domain relay relay "./node_modules/.bin/tsx" "relay/scripts/test-*.ts"
+  [ -z "$DOMAIN" ] || [ "$DOMAIN" = "relay" ] && run_domain relay relay "./node_modules/.bin/tsx" "relay/tests/test-*.ts"
   [ -z "$DOMAIN" ] || [ "$DOMAIN" = "expo" ]  && run_domain expo-app expo "./node_modules/.bin/tsx" "expo-app/scripts/test-*.ts"
   echo "基线已固化到 ${BASE}（$(ls $BASE | wc -l | tr -d ' ') 件）"
   exit 0
